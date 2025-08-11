@@ -4,5 +4,9 @@
   "editor.insertSpaces": true,
   "files.encoding": "utf8",
   "files.eol": "\n",
-  "cSpell.words": ["Jetpack", "MVVM", "Pathly", "Supabase"]
+  "cSpell.words": ["Jetpack", "MVVM", "Pathly", "Supabase"],
+  "markdownlint.config": {
+    "default": true,
+    "MD036": false
+  }
 }
