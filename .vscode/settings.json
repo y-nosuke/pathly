@@ -4,9 +4,24 @@
   "editor.insertSpaces": true,
   "files.encoding": "utf8",
   "files.eol": "\n",
-  "cSpell.words": ["Jetpack", "MVVM", "Pathly", "Supabase"],
+  "cSpell.words": [
+    "androidx",
+    "Jetpack",
+    "kapt",
+    "kotlinx",
+    "lateinit",
+    "Millis",
+    "mockk",
+    "MVVM",
+    "Pathly",
+    "proguard",
+    "Supabase",
+    "usecase",
+    "viewmodel"
+  ],
   "markdownlint.config": {
     "default": true,
-    "MD036": false
+    "MD036": false,
+    "MD024": false
   }
 }

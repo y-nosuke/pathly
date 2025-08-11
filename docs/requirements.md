@@ -40,7 +40,7 @@ erDiagram
         timestamp created_at
         timestamp updated_at
     }
-    
+
     dates {
         uuid date_id PK
         text title
@@ -48,13 +48,13 @@ erDiagram
         timestamp created_at
         timestamp updated_at
     }
-    
+
     date_participants {
         uuid date_id FK
         uuid user_id FK
         text role
     }
-    
+
     tracks {
         uuid track_id PK
         uuid date_id FK
@@ -62,7 +62,7 @@ erDiagram
         timestamp end_time
         timestamp created_at
     }
-    
+
     gps_points {
         uuid point_id PK
         uuid track_id FK
@@ -74,7 +74,7 @@ erDiagram
         decimal accuracy
         decimal speed
     }
-    
+
     stops {
         uuid stop_id PK
         uuid track_id FK
@@ -87,7 +87,7 @@ erDiagram
         decimal cost
         text weather
     }
-    
+
     media {
         uuid media_id PK
         text file_url
@@ -97,23 +97,23 @@ erDiagram
         decimal longitude
         text thumbnail_url
     }
-    
+
     stop_media {
         uuid stop_id FK
         uuid media_id FK
     }
-    
+
     tags {
         uuid tag_id PK
         text tag_name
         text color
     }
-    
+
     stop_tags {
         uuid stop_id FK
         uuid tag_id FK
     }
-    
+
     %% リレーション定義
     users ||--o{ date_participants : participates
     dates ||--o{ date_participants : has
