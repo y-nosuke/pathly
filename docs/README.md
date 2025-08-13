@@ -65,19 +65,22 @@ docs/
 
 ## 🎯 開発フェーズと文書
 
-### **現在（MVP開発前）**
+### **現在（データベース設計完了）**
 
 - ✅ 要件定義（01-requirements）
+- ✅ 基本データベース設計（02-design）
 - ✅ 実装指針（03-implementation）
 
-### **MVP開発中**
+### **次のステップ（Android実装）**
 
+- 📝 Android Room実装
+- 📝 GPS記録機能実装
 - 📝 実装詳細の追記
-- 📝 コーディング規約の策定
 
-### **MVP完了後**
+### **将来（クラウド連携）**
 
-- 📋 設計文書の作成（02-design）
+- 📋 Supabase設計詳細化（02-design）
+- 📋 API設計（02-design）
 - 📋 デプロイ文書の作成（04-deployment）
 
 ## 📖 文書の読み方
@@ -91,13 +94,14 @@ docs/
 ### **実装者向け**
 
 1. `01-requirements/user-stories/mvp-stories.md` - MVP詳細仕様
-2. `03-implementation/android-project-structure.md` - Android構成
-3. `03-implementation/gps-feature-analysis.md` - GPS機能詳細
+2. `02-design/android-database-design.md` - データベース設計
+3. `03-implementation/android-project-structure.md` - Android構成
+4. `03-implementation/gps-feature-analysis.md` - GPS機能詳細
 
 ### **設計者向け（将来）**
 
-1. `02-design/system-architecture.md` - システム全体設計
-2. `02-design/database-design.md` - データベース設計
+1. `02-design/database-design.md` - データベース全体設計
+2. `02-design/system-architecture.md` - システム全体設計
 3. `02-design/api-design.md` - API仕様
 
 ## 🔄 文書の更新方針
