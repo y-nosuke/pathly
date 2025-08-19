@@ -23,5 +23,6 @@
     "default": true,
     "MD036": false,
     "MD024": false
-  }
+  },
+  "java.configuration.updateBuildConfiguration": "automatic"
 }
