@@ -36,6 +36,13 @@ android {
   buildFeatures {
     compose = true
   }
+
+  packaging {
+    resources {
+      excludes += "META-INF/LICENSE.md"
+      excludes += "META-INF/LICENSE-notice.md"
+    }
+  }
 }
 
 dependencies {
@@ -85,6 +92,10 @@ dependencies {
   androidTestImplementation("androidx.arch.core:core-testing:2.2.0")
   androidTestImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.7.3")
   androidTestImplementation("androidx.room:room-testing:2.6.1")
+
+  // UI Test dependencies
+  androidTestImplementation("io.mockk:mockk-android:1.13.8")
+  androidTestImplementation("androidx.compose.ui:ui-test-manifest")
 
   debugImplementation(libs.androidx.ui.tooling)
   debugImplementation(libs.androidx.ui.test.manifest)
