@@ -23,7 +23,7 @@ interface GpsTrackDao {
   @Query("SELECT * FROM gps_tracks WHERE id = :trackId")
   suspend fun getTrackById(trackId: Long): GpsTrackEntity?
 
-  @Query("SELECT * FROM gps_tracks WHERE isActive = 1 LIMIT 1")
+  @Query("SELECT * FROM gps_tracks WHERE isActive = 1 ORDER BY startTime DESC LIMIT 1")
   suspend fun getActiveTrack(): GpsTrackEntity?
 
   @Insert
