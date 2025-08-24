@@ -17,6 +17,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **Android：** Kotlin + コルーチン + Jetpack Compose
 - **状態管理：** ViewModel + StateFlow（コルーチン対応）
 - **アーキテクチャ：** MVVM + Clean Architecture
+- **依存性注入：** Hilt (Dagger)
+- **データベース：** Room (SQLite)
+- **非同期処理：** Kotlin Coroutines + StateFlow
 
 ### バックエンド・インフラ
 
@@ -71,6 +74,39 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - メディアファイルは位置情報付きで管理
 - タグシステムによる柔軟な分類
 
+## アーキテクチャ構造
+
+### Clean Architecture レイヤー構成
+
+```
+app/src/main/java/com/pathly/
+├── di/                     # 依存性注入（Hilt modules）
+├── data/                   # データ層
+│   ├── local/             # Room database, DAOs, entities
+│   └── repository/        # Repository実装
+├── domain/                # ドメイン層
+│   ├── model/             # ドメインモデル
+│   └── repository/        # Repository interface
+├── presentation/          # プレゼンテーション層
+│   └── tracking/          # 画面別のViewModel, State, Screen
+├── service/               # Androidサービス（GPS追跡など）
+└── ui/theme/             # Compose UIテーマ
+```
+
+### データフロー
+
+1. **UI (Compose Screen)** ← StateFlow ← **ViewModel**
+2. **ViewModel** → Repository Interface → **Repository Implementation**  
+3. **Repository** → Room DAO → **Local Database**
+4. **Service** → Repository → GPS位置データの永続化
+
+### 重要な実装パターン
+
+- **依存性注入：** `@AndroidEntryPoint`, `@HiltViewModel`使用
+- **状態管理：** StateFlow + collectAsState()でリアクティブUI
+- **データ変換：** Entity ↔ Domain Model の変換層
+- **権限管理：** Compose + ActivityResultLauncher統合
+
 ## 主要機能概要
 
 ### Phase 1（MVP）機能
@@ -90,30 +126,40 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## 開発環境・コマンド
 
-### 初期セットアップ（予定）
+### Android開発コマンド
 
 ```bash
-# Android開発環境
-# TODO: Kotlin + Jetpack Composeプロジェクト初期化
-# TODO: Supabaseクライアント設定
-# TODO: Google Maps SDK設定
+# プロジェクトビルド
+./gradlew build
 
-# Web管理画面
-# TODO: Next.jsプロジェクト初期化
-# TODO: Vercelデプロイ設定
+# デバッグAPKビルド
+./gradlew assembleDebug
 
-# データベース
-# TODO: Supabaseプロジェクト作成
-# TODO: テーブルスキーマ適用
+# リリースAPKビルド  
+./gradlew assembleRelease
+
+# アプリインストール（デバッグ）
+./gradlew installDebug
+
+# テスト実行
+./gradlew test                    # ユニットテスト
+./gradlew connectedAndroidTest    # インストルメンテーションテスト
+
+# リント・静的解析
+./gradlew lint
+./gradlew lintDebug
+
+# プロジェクトクリーン
+./gradlew clean
 ```
 
-### 開発コマンド（将来追加予定）
+### 将来追加予定のセットアップ
 
 ```bash
-# TODO: Android build/test commands
-# TODO: Web build/test commands
-# TODO: Database migration commands
-# TODO: Linting/formatting commands
+# TODO: Supabaseクライアント設定
+# TODO: Google Maps SDK設定
+# TODO: Next.jsプロジェクト初期化（Web管理画面）
+# TODO: Vercelデプロイ設定
 ```
 
 ## セキュリティ・パフォーマンス考慮事項
@@ -165,6 +211,29 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - Supabase: $25（Proプラン）
 - Vercel: $0（Hobbyプラン）
 - Google Maps: $10-20
+
+## 開発時の重要事項
+
+### プロジェクト固有の考慮事項
+
+- **位置権限：** ACCESS_FINE_LOCATION + ACCESS_COARSE_LOCATION必須
+- **バックグラウンド実行：** LocationTrackingService使用
+- **データベースバージョン：** Room v1、マイグレーション未実装（fallbackToDestructiveMigration）
+- **最小SDK：** API 34（Android 14）以上
+- **コルーチン：** すべての非同期処理でKotlin Coroutines使用
+
+### コーディング規約
+
+- **パッケージ構造：** Clean Architecture厳守
+- **DIパターン：** Hilt使用、手動DIは避ける
+- **State管理：** StateFlow使用、LiveData非推奨
+- **Composeテーマ：** PathlyAndroidTheme統一使用
+
+### テストアプローチ
+
+- **ユニットテスト：** JUnit4 (app/src/test/)
+- **UIテスト：** Compose Testing + Espresso (app/src/androidTest/)
+- **ViewModel：** Repository をモック化してテスト
 
 ## その他重要な開発指針
 
