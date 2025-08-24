@@ -78,7 +78,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ### Clean Architecture レイヤー構成
 
-```
+```bash
 app/src/main/java/com/pathly/
 ├── di/                     # 依存性注入（Hilt modules）
 ├── data/                   # データ層
