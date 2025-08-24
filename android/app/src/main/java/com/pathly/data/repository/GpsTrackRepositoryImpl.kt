@@ -19,9 +19,10 @@ class GpsTrackRepositoryImpl @Inject constructor(
 ) : GpsTrackRepository {
 
   override fun getAllTracks(): Flow<List<GpsTrack>> {
-    return gpsTrackDao.getAllTracks().map { entities ->
-      entities.map { entity ->
-        entity.toGpsTrack()
+    return gpsTrackDao.getAllTracksWithPoints().map { tracksWithPoints ->
+      tracksWithPoints.map { trackWithPoints ->
+        val points = trackWithPoints.points.map { it.toGpsPoint() }
+        trackWithPoints.track.toGpsTrack(points)
       }
     }
   }

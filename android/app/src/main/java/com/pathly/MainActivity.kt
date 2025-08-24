@@ -8,13 +8,38 @@ import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.List
+import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
+import androidx.compose.material3.NavigationBar
+import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.pathly.domain.model.GpsTrack
+import com.pathly.presentation.history.HistoryScreen
+import com.pathly.presentation.history.TrackDetailScreen
 import com.pathly.presentation.tracking.TrackingScreen
 import com.pathly.presentation.tracking.TrackingViewModel
 import com.pathly.ui.theme.PathlyAndroidTheme
 import dagger.hilt.android.AndroidEntryPoint
+
+enum class BottomNavItem(
+    val title: String,
+    val icon: ImageVector
+) {
+    TRACKING("記録", Icons.Filled.PlayArrow),
+    HISTORY("履歴", Icons.Filled.List)
+}
 
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
@@ -34,19 +59,67 @@ class MainActivity : ComponentActivity() {
         setContent {
             PathlyAndroidTheme {
                 viewModel = hiltViewModel()
-                Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
-                    TrackingScreen(
-                        modifier = Modifier.padding(innerPadding),
-                        onRequestPermission = {
-                            locationPermissionLauncher.launch(
-                                arrayOf(
-                                    Manifest.permission.ACCESS_FINE_LOCATION,
-                                    Manifest.permission.ACCESS_COARSE_LOCATION
-                                )
+                MainScreen(
+                    onRequestPermission = {
+                        locationPermissionLauncher.launch(
+                            arrayOf(
+                                Manifest.permission.ACCESS_FINE_LOCATION,
+                                Manifest.permission.ACCESS_COARSE_LOCATION
                             )
-                        }
-                    )
+                        )
+                    }
+                )
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun MainScreen(
+    onRequestPermission: () -> Unit
+) {
+    var selectedTab by remember { mutableStateOf(BottomNavItem.TRACKING) }
+    var selectedTrack by remember { mutableStateOf<GpsTrack?>(null) }
+
+    Scaffold(
+        modifier = Modifier.fillMaxSize(),
+        bottomBar = {
+            if (selectedTrack == null) {
+                NavigationBar {
+                    BottomNavItem.values().forEach { item ->
+                        NavigationBarItem(
+                            selected = selectedTab == item,
+                            onClick = { selectedTab = item },
+                            label = { Text(item.title) },
+                            icon = { Icon(item.icon, contentDescription = item.title) }
+                        )
+                    }
                 }
+            }
+        }
+    ) { innerPadding ->
+        when {
+            selectedTrack != null -> {
+                TrackDetailScreen(
+                    track = selectedTrack!!,
+                    onBackClick = { selectedTrack = null },
+                    modifier = Modifier.padding(innerPadding)
+                )
+            }
+
+            selectedTab == BottomNavItem.TRACKING -> {
+                TrackingScreen(
+                    modifier = Modifier.padding(innerPadding),
+                    onRequestPermission = onRequestPermission
+                )
+            }
+
+            selectedTab == BottomNavItem.HISTORY -> {
+                HistoryScreen(
+                    modifier = Modifier.padding(innerPadding),
+                    onTrackClick = { track -> selectedTrack = track }
+                )
             }
         }
     }

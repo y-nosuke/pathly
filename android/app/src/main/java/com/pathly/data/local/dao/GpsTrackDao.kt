@@ -4,8 +4,10 @@ import androidx.room.Dao
 import androidx.room.Delete
 import androidx.room.Insert
 import androidx.room.Query
+import androidx.room.Transaction
 import androidx.room.Update
 import com.pathly.data.local.entity.GpsTrackEntity
+import com.pathly.data.local.entity.GpsTrackWithPoints
 import kotlinx.coroutines.flow.Flow
 
 @Dao
@@ -13,6 +15,10 @@ interface GpsTrackDao {
 
   @Query("SELECT * FROM gps_tracks ORDER BY startTime DESC")
   fun getAllTracks(): Flow<List<GpsTrackEntity>>
+
+  @Transaction
+  @Query("SELECT * FROM gps_tracks ORDER BY startTime DESC")
+  fun getAllTracksWithPoints(): Flow<List<GpsTrackWithPoints>>
 
   @Query("SELECT * FROM gps_tracks WHERE id = :trackId")
   suspend fun getTrackById(trackId: Long): GpsTrackEntity?
