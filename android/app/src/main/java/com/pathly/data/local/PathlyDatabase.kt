@@ -12,34 +12,34 @@ import com.pathly.data.local.entity.GpsPointEntity
 import com.pathly.data.local.entity.GpsTrackEntity
 
 @Database(
-  entities = [GpsTrackEntity::class, GpsPointEntity::class],
-  version = 1,
-  exportSchema = false
+    entities = [GpsTrackEntity::class, GpsPointEntity::class],
+    version = 1,
+    exportSchema = false
 )
 @TypeConverters(DateConverter::class)
 abstract class PathlyDatabase : RoomDatabase() {
 
-  abstract fun gpsTrackDao(): GpsTrackDao
-  abstract fun gpsPointDao(): GpsPointDao
+    abstract fun gpsTrackDao(): GpsTrackDao
+    abstract fun gpsPointDao(): GpsPointDao
 
-  companion object {
-    const val DATABASE_NAME = "pathly_database"
+    companion object {
+        const val DATABASE_NAME = "pathly_database"
 
-    @Volatile
-    private var INSTANCE: PathlyDatabase? = null
+        @Volatile
+        private var INSTANCE: PathlyDatabase? = null
 
-    fun getInstance(context: Context): PathlyDatabase {
-      return INSTANCE ?: synchronized(this) {
-        val instance = Room.databaseBuilder(
-          context.applicationContext,
-          PathlyDatabase::class.java,
-          DATABASE_NAME
-        )
-          .fallbackToDestructiveMigration()
-          .build()
-        INSTANCE = instance
-        instance
-      }
+        fun getInstance(context: Context): PathlyDatabase {
+            return INSTANCE ?: synchronized(this) {
+                val instance = Room.databaseBuilder(
+                    context.applicationContext,
+                    PathlyDatabase::class.java,
+                    DATABASE_NAME
+                )
+                    .fallbackToDestructiveMigration(false)
+                    .build()
+                INSTANCE = instance
+                instance
+            }
+        }
     }
-  }
 }

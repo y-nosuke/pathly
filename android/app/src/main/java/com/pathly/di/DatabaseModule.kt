@@ -15,19 +15,19 @@ import javax.inject.Singleton
 @InstallIn(SingletonComponent::class)
 object DatabaseModule {
 
-  @Provides
-  @Singleton
-  fun providePathlyDatabase(@ApplicationContext context: Context): PathlyDatabase {
-    return PathlyDatabase.getInstance(context)
-  }
+    @Provides
+    @Singleton
+    fun providePathlyDatabase(@ApplicationContext context: Context): PathlyDatabase {
+        return PathlyDatabase.getInstance(context)
+    }
 
-  @Provides
-  fun provideGpsTrackDao(database: PathlyDatabase): GpsTrackDao {
-    return database.gpsTrackDao()
-  }
+    @Provides
+    fun provideGpsTrackDao(database: PathlyDatabase): GpsTrackDao {
+        return database.gpsTrackDao()
+    }
 
-  @Provides
-  fun provideGpsPointDao(database: PathlyDatabase): GpsPointDao {
-    return database.gpsPointDao()
-  }
+    @Provides
+    fun provideGpsPointDao(database: PathlyDatabase): GpsPointDao {
+        return database.gpsPointDao()
+    }
 }

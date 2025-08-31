@@ -9,7 +9,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.List
+import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -38,7 +38,7 @@ enum class BottomNavItem(
     val icon: ImageVector
 ) {
     TRACKING("記録", Icons.Filled.PlayArrow),
-    HISTORY("履歴", Icons.Filled.List)
+    HISTORY("履歴", Icons.AutoMirrored.Filled.List)
 }
 
 @AndroidEntryPoint
@@ -87,7 +87,7 @@ private fun MainScreen(
         bottomBar = {
             if (selectedTrack == null) {
                 NavigationBar {
-                    BottomNavItem.values().forEach { item ->
+                    BottomNavItem.entries.forEach { item ->
                         NavigationBarItem(
                             selected = selectedTab == item,
                             onClick = { selectedTab = item },

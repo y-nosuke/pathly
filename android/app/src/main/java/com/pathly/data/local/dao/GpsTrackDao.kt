@@ -13,32 +13,32 @@ import kotlinx.coroutines.flow.Flow
 @Dao
 interface GpsTrackDao {
 
-  @Query("SELECT * FROM gps_tracks ORDER BY startTime DESC")
-  fun getAllTracks(): Flow<List<GpsTrackEntity>>
+    @Query("SELECT * FROM gps_tracks ORDER BY startTime DESC")
+    fun getAllTracks(): Flow<List<GpsTrackEntity>>
 
-  @Transaction
-  @Query("SELECT * FROM gps_tracks ORDER BY startTime DESC")
-  fun getAllTracksWithPoints(): Flow<List<GpsTrackWithPoints>>
+    @Transaction
+    @Query("SELECT * FROM gps_tracks ORDER BY startTime DESC")
+    fun getAllTracksWithPoints(): Flow<List<GpsTrackWithPoints>>
 
-  @Query("SELECT * FROM gps_tracks WHERE id = :trackId")
-  suspend fun getTrackById(trackId: Long): GpsTrackEntity?
+    @Query("SELECT * FROM gps_tracks WHERE id = :trackId")
+    suspend fun getTrackById(trackId: Long): GpsTrackEntity?
 
-  @Query("SELECT * FROM gps_tracks WHERE isActive = 1 ORDER BY startTime DESC LIMIT 1")
-  suspend fun getActiveTrack(): GpsTrackEntity?
+    @Query("SELECT * FROM gps_tracks WHERE isActive = 1 ORDER BY startTime DESC LIMIT 1")
+    suspend fun getActiveTrack(): GpsTrackEntity?
 
-  @Insert
-  suspend fun insertTrack(track: GpsTrackEntity): Long
+    @Insert
+    suspend fun insertTrack(track: GpsTrackEntity): Long
 
-  @Update
-  suspend fun updateTrack(track: GpsTrackEntity)
+    @Update
+    suspend fun updateTrack(track: GpsTrackEntity)
 
-  @Delete
-  suspend fun deleteTrack(track: GpsTrackEntity)
+    @Delete
+    suspend fun deleteTrack(track: GpsTrackEntity)
 
-  @Query("UPDATE gps_tracks SET isActive = 0, endTime = :endTime, updatedAt = :updatedAt WHERE id = :trackId")
-  suspend fun finishTrack(
-    trackId: Long,
-    endTime: java.util.Date,
-    updatedAt: java.util.Date = java.util.Date()
-  )
+    @Query("UPDATE gps_tracks SET isActive = 0, endTime = :endTime, updatedAt = :updatedAt WHERE id = :trackId")
+    suspend fun finishTrack(
+        trackId: Long,
+        endTime: java.util.Date,
+        updatedAt: java.util.Date = java.util.Date()
+    )
 }

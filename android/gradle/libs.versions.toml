@@ -1,16 +1,18 @@
 [versions]
-agp = "8.12.1"
-kotlin = "2.2.0"
+agp = "8.12.2"
+kotlin = "2.2.10"
 coreKtx = "1.17.0"
 junit = "4.13.2"
 junitVersion = "1.3.0"
 espressoCore = "3.7.0"
-lifecycleRuntimeKtx = "2.9.2"
+lifecycleRuntimeKtx = "2.9.3"
 activityCompose = "1.10.1"
-composeBom = "2025.08.00"
+composeBom = "2025.08.01"
 room = "2.7.2"
-hilt = "2.57"
+hilt = "2.57.1"
 playServicesLocation = "21.3.0"
+playServicesMaps = "19.2.0"
+mapsCompose = "6.7.2"
 accompanistPermissions = "0.37.3"
 kotlinxCoroutines = "1.10.2"
 hiltNavigationCompose = "1.2.0"
@@ -43,6 +45,10 @@ hilt-navigation-compose = { group = "androidx.hilt", name = "hilt-navigation-com
 
 # Location Services
 play-services-location = { group = "com.google.android.gms", name = "play-services-location", version.ref = "playServicesLocation" }
+
+# Maps
+play-services-maps = { group = "com.google.android.gms", name = "play-services-maps", version.ref = "playServicesMaps" }
+maps-compose = { group = "com.google.maps.android", name = "maps-compose", version.ref = "mapsCompose" }
 
 # Permissions
 accompanist-permissions = { group = "com.google.accompanist", name = "accompanist-permissions", version.ref = "accompanistPermissions" }

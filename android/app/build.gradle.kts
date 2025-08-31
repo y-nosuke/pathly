@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
   alias(libs.plugins.android.application)
   alias(libs.plugins.kotlin.android)
@@ -18,6 +20,24 @@ android {
     versionName = "1.0"
 
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+
+    // local.propertiesからGoogle Maps APIキーを読み込み
+    val localProperties = Properties()
+    val localPropertiesFile = rootProject.file("local.properties")
+    if (localPropertiesFile.exists()) {
+      localProperties.load(localPropertiesFile.inputStream())
+    }
+
+    // AndroidManifest.xmlのプレースホルダーに値を注入
+    manifestPlaceholders["GOOGLE_MAPS_API_KEY"] = 
+      localProperties.getProperty("GOOGLE_MAPS_API_KEY", "")
+
+    // BuildConfigにAPIキーを埋め込み（オプション）
+    buildConfigField(
+      "String", 
+      "GOOGLE_MAPS_API_KEY", 
+      "\"${localProperties.getProperty("GOOGLE_MAPS_API_KEY", "")}\""
+    )
   }
 
   buildTypes {
@@ -35,6 +55,7 @@ android {
   }
   buildFeatures {
     compose = true
+    buildConfig = true // BuildConfig生成を有効化
   }
 
   packaging {
@@ -68,6 +89,10 @@ dependencies {
 
   // Location Services
   implementation(libs.play.services.location)
+
+  // Maps
+  implementation(libs.play.services.maps)
+  implementation(libs.maps.compose)
 
   // Permissions
   implementation(libs.accompanist.permissions)
