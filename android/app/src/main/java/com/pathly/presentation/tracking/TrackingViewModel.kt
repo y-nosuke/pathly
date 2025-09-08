@@ -1,27 +1,24 @@
 package com.pathly.presentation.tracking
 
-import android.Manifest
 import android.app.Application
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.content.ServiceConnection
-import android.content.pm.PackageManager
 import android.os.IBinder
 import android.util.Log
-import androidx.core.content.ContextCompat
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.pathly.domain.repository.GpsTrackRepository
 import com.pathly.service.LocationTrackingService
+import com.pathly.util.DateFormatters
+import com.pathly.util.PermissionUtils
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
-import java.text.SimpleDateFormat
-import java.util.Locale
 import javax.inject.Inject
 
 @HiltViewModel
@@ -36,7 +33,6 @@ class TrackingViewModel @Inject constructor(
   private var locationService: LocationTrackingService? = null
   private var isServiceBound = false
 
-  private val dateFormatter = SimpleDateFormat("HH:mm:ss", Locale.getDefault())
 
   private val serviceConnection = object : ServiceConnection {
     override fun onServiceConnected(name: ComponentName?, service: IBinder?) {
@@ -151,19 +147,7 @@ class TrackingViewModel @Inject constructor(
   }
 
   fun checkLocationPermission() {
-    val hasPermission = ContextCompat.checkSelfPermission(
-      application,
-      Manifest.permission.ACCESS_FINE_LOCATION
-    ) == PackageManager.PERMISSION_GRANTED &&
-            ContextCompat.checkSelfPermission(
-              application,
-              Manifest.permission.ACCESS_COARSE_LOCATION
-            ) == PackageManager.PERMISSION_GRANTED &&
-            ContextCompat.checkSelfPermission(
-              application,
-              Manifest.permission.POST_NOTIFICATIONS
-            ) == PackageManager.PERMISSION_GRANTED
-
+    val hasPermission = PermissionUtils.hasAllRequiredPermissions(application)
     updateLocationPermission(hasPermission)
   }
 
@@ -195,7 +179,7 @@ class TrackingViewModel @Inject constructor(
               latitude = loc.latitude,
               longitude = loc.longitude,
               accuracy = loc.accuracy,
-              timestamp = dateFormatter.format(java.util.Date(loc.time))
+              timestamp = DateFormatters.TIME_FORMAT.format(java.util.Date(loc.time))
             )
 
             _uiState.value = _uiState.value.copy(

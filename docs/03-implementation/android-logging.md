@@ -123,7 +123,7 @@ Logger.verbose("LocationService", "Very detailed debug info") // DEBUGビルド�
    // ❌ 避ける
    Logger.d("LocationService", "Permission check - Fine: true, Coarse: true")
    Logger.d("LocationService", "Location: lat=35.123456, lon=139.654321")
-   
+
    // ✅ 必要な場合のみ
    Logger.verbose("LocationService", "Location: lat=${lat}, lon=${lon}, accuracy=${accuracy}")
    ```

@@ -82,25 +82,25 @@ FOREIGN KEY (track_id) REFERENCES tracks(id) ON DELETE CASCADE
 data class Track(
     @PrimaryKey
     val id: String = UUID.randomUUID().toString(),
-    
+
     @ColumnInfo(name = "start_time")
     val startTime: Long,
-    
+
     @ColumnInfo(name = "end_time")
     val endTime: Long? = null,
-    
+
     @ColumnInfo(name = "is_active")
     val isActive: Boolean = true,
-    
+
     @ColumnInfo(name = "total_distance")
     val totalDistance: Float? = null,
-    
+
     @ColumnInfo(name = "total_duration")
     val totalDuration: Long? = null,
-    
+
     @ColumnInfo(name = "created_at")
     val createdAt: Long = System.currentTimeMillis(),
-    
+
     @ColumnInfo(name = "updated_at")
     val updatedAt: Long = System.currentTimeMillis()
 )
@@ -127,10 +127,10 @@ data class Track(
 data class GpsPoint(
     @PrimaryKey
     val id: String = UUID.randomUUID().toString(),
-    
+
     @ColumnInfo(name = "track_id")
     val trackId: String,
-    
+
     val latitude: Double,
     val longitude: Double,
     val accuracy: Float? = null,
@@ -138,7 +138,7 @@ data class GpsPoint(
     val speed: Float? = null,
     val bearing: Float? = null,
     val timestamp: Long,
-    
+
     @ColumnInfo(name = "created_at")
     val createdAt: Long = System.currentTimeMillis()
 )
@@ -153,25 +153,25 @@ data class GpsPoint(
 interface TrackDao {
     @Insert
     suspend fun insertTrack(track: Track): Long
-    
+
     @Update
     suspend fun updateTrack(track: Track)
-    
+
     @Delete
     suspend fun deleteTrack(track: Track)
-    
+
     @Query("SELECT * FROM tracks WHERE id = :trackId")
     suspend fun getTrackById(trackId: String): Track?
-    
+
     @Query("SELECT * FROM tracks ORDER BY start_time DESC")
     fun getAllTracks(): Flow<List<Track>>
-    
+
     @Query("SELECT * FROM tracks WHERE is_active = 1 LIMIT 1")
     suspend fun getActiveTrack(): Track?
-    
+
     @Query("UPDATE tracks SET end_time = :endTime, is_active = 0, total_distance = :distance, total_duration = :duration, updated_at = :updatedAt WHERE id = :trackId")
     suspend fun finishTrack(trackId: String, endTime: Long, distance: Float, duration: Long, updatedAt: Long)
-    
+
     @Query("SELECT COUNT(*) FROM tracks")
     suspend fun getTrackCount(): Int
 }
@@ -184,25 +184,25 @@ interface TrackDao {
 interface GpsPointDao {
     @Insert
     suspend fun insertGpsPoint(gpsPoint: GpsPoint): Long
-    
+
     @Insert
     suspend fun insertGpsPoints(gpsPoints: List<GpsPoint>)
-    
+
     @Delete
     suspend fun deleteGpsPoint(gpsPoint: GpsPoint)
-    
+
     @Query("SELECT * FROM gps_points WHERE track_id = :trackId ORDER BY timestamp ASC")
     suspend fun getGpsPointsByTrackId(trackId: String): List<GpsPoint>
-    
+
     @Query("SELECT * FROM gps_points WHERE track_id = :trackId ORDER BY timestamp ASC")
     fun getGpsPointsByTrackIdFlow(trackId: String): Flow<List<GpsPoint>>
-    
+
     @Query("DELETE FROM gps_points WHERE track_id = :trackId")
     suspend fun deleteGpsPointsByTrackId(trackId: String)
-    
+
     @Query("SELECT COUNT(*) FROM gps_points WHERE track_id = :trackId")
     suspend fun getGpsPointCount(trackId: String): Int
-    
+
     @Query("SELECT * FROM gps_points WHERE track_id = :trackId ORDER BY timestamp DESC LIMIT 1")
     suspend fun getLatestGpsPoint(trackId: String): GpsPoint?
 }
@@ -218,14 +218,14 @@ interface GpsPointDao {
 )
 @TypeConverters(DateConverter::class)
 abstract class PathlyDatabase : RoomDatabase() {
-    
+
     abstract fun trackDao(): TrackDao
     abstract fun gpsPointDao(): GpsPointDao
-    
+
     companion object {
         @Volatile
         private var INSTANCE: PathlyDatabase? = null
-        
+
         fun getDatabase(context: Context): PathlyDatabase {
             return INSTANCE ?: synchronized(this) {
                 val instance = Room.databaseBuilder(
@@ -252,7 +252,7 @@ class DateConverter {
     fun fromTimestamp(value: Long?): Date? {
         return value?.let { Date(it) }
     }
-    
+
     @TypeConverter
     fun dateToTimestamp(date: Date?): Long? {
         return date?.time
@@ -300,7 +300,7 @@ suspend fun finishTracking(trackId: String) {
     val distance = calculateTotalDistance(gpsPoints)
     val startTime = trackDao.getTrackById(trackId)?.startTime ?: 0
     val duration = System.currentTimeMillis() - startTime
-    
+
     trackDao.finishTrack(
         trackId = trackId,
         endTime = System.currentTimeMillis(),

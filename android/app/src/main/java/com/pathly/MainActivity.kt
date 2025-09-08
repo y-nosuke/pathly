@@ -1,6 +1,5 @@
 package com.pathly
 
-import android.Manifest
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -31,6 +30,7 @@ import com.pathly.presentation.history.TrackDetailScreen
 import com.pathly.presentation.tracking.TrackingScreen
 import com.pathly.presentation.tracking.TrackingViewModel
 import com.pathly.ui.theme.PathlyAndroidTheme
+import com.pathly.util.PermissionUtils
 import dagger.hilt.android.AndroidEntryPoint
 
 enum class BottomNavItem(
@@ -62,11 +62,7 @@ class MainActivity : ComponentActivity() {
         MainScreen(
           onRequestPermission = {
             locationPermissionLauncher.launch(
-              arrayOf(
-                Manifest.permission.ACCESS_FINE_LOCATION,
-                Manifest.permission.ACCESS_COARSE_LOCATION,
-                Manifest.permission.POST_NOTIFICATIONS,
-              )
+              PermissionUtils.PermissionGroups.ALL_REQUIRED_PERMISSIONS
             )
           }
         )

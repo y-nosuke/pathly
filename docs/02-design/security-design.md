@@ -53,7 +53,7 @@ Room.databaseBuilder(context, PathlyDatabase::class.java, "pathly_database")
 // セキュアなキー生成・保存
 class SecureKeyManager {
     private val keyAlias = "pathly_db_key"
-    
+
     fun generateOrGetKey(): SecretKey {
         val keyGenerator = KeyGenerator.getInstance(KeyProperties.KEY_ALGORITHM_AES, "AndroidKeyStore")
         val keyGenParameterSpec = KeyGenParameterSpec.Builder(
@@ -64,7 +64,7 @@ class SecureKeyManager {
         .setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE)
         .setUserAuthenticationRequired(false)
         .build()
-        
+
         keyGenerator.init(keyGenParameterSpec)
         return keyGenerator.generateKey()
     }
@@ -87,19 +87,19 @@ class SecureDataDeletion {
     fun securelyDeleteTrack(trackId: String) {
         // 1. データベースからの削除
         trackDao.deleteTrack(trackId)
-        
+
         // 2. メモリからのクリア
         Runtime.getRuntime().gc()
-        
+
         // 3. 一時ファイルの削除
         clearTempFiles()
     }
-    
+
     // ユーザーによる全データ削除
     fun deleteAllUserData() {
         // データベース完全削除
         context.deleteDatabase("pathly_database")
-        
+
         // 設定データ削除
         PreferenceManager.getDefaultSharedPreferences(context)
             .edit()
@@ -120,17 +120,17 @@ class LocationPermissionManager {
     // 1. 基本的な位置情報権限
     private val fineLocationPermission = Manifest.permission.ACCESS_FINE_LOCATION
     private val coarseLocationPermission = Manifest.permission.ACCESS_COARSE_LOCATION
-    
+
     // 2. バックグラウンド位置情報権限（API 29+）
     private val backgroundLocationPermission = Manifest.permission.ACCESS_BACKGROUND_LOCATION
-    
+
     suspend fun requestLocationPermissions(activity: ComponentActivity): PermissionResult {
         // Step 1: 基本権限要求
         val basicResult = requestBasicLocationPermission(activity)
         if (basicResult != PermissionResult.GRANTED) {
             return basicResult
         }
-        
+
         // Step 2: バックグラウンド権限要求（必要時のみ）
         return requestBackgroundLocationPermission(activity)
     }
@@ -168,11 +168,11 @@ class LocationAccuracyManager {
             AccuracyLevel.HIGH -> LocationRequest.Builder(30_000) // 30秒間隔
                 .setPriority(Priority.PRIORITY_HIGH_ACCURACY)
                 .build()
-                
+
             AccuracyLevel.BALANCED -> LocationRequest.Builder(60_000) // 60秒間隔
                 .setPriority(Priority.PRIORITY_BALANCED_POWER_ACCURACY)
                 .build()
-                
+
             AccuracyLevel.LOW_POWER -> LocationRequest.Builder(300_000) // 5分間隔
                 .setPriority(Priority.PRIORITY_LOW_POWER)
                 .build()
@@ -191,13 +191,13 @@ class LocationAccuracyManager {
 data class GpsPoint(
     val id: String,
     val trackId: String,
-    
+
     // 必要最小限の位置情報
     val latitude: Double,
     val longitude: Double,
     val accuracy: Float? = null,
     val timestamp: Long,
-    
+
     // 収集しない情報
     // - 詳細な住所情報
     // - デバイス固有ID
@@ -217,7 +217,7 @@ class LocationPrivacyFilter {
             if (accuracy > 100f) {
                 accuracy = 100f
             }
-            
+
             // 不要な詳細情報を削除
             extras = null
             provider = null
@@ -234,15 +234,15 @@ class LocationPrivacyFilter {
 class DataRetentionManager {
     // デフォルト保持期間：1年
     private val defaultRetentionDays = 365L
-    
+
     suspend fun cleanupOldData() {
         val cutoffTime = System.currentTimeMillis() - (defaultRetentionDays * 24 * 60 * 60 * 1000)
-        
+
         // 古いトラッキングデータを削除
         trackDao.deleteTracksOlderThan(cutoffTime)
         gpsPointDao.deletePointsOlderThan(cutoffTime)
     }
-    
+
     // ユーザー設定による保持期間変更
     fun setRetentionPeriod(days: Long) {
         preferences.edit()
@@ -262,17 +262,17 @@ class UserDataControl {
     suspend fun deleteTrack(trackId: String) {
         secureDataDeletion.securelyDeleteTrack(trackId)
     }
-    
+
     // 期間指定削除
     suspend fun deleteDataByDateRange(startDate: Long, endDate: Long) {
         trackDao.deleteTracksByDateRange(startDate, endDate)
     }
-    
+
     // 全データ削除
     suspend fun deleteAllData() {
         secureDataDeletion.deleteAllUserData()
     }
-    
+
     // データエクスポート（ユーザーの権利）
     suspend fun exportUserData(): String {
         val tracks = trackDao.getAllTracks()
@@ -294,13 +294,13 @@ class SecurityMonitor {
     fun monitorLocationAccess() {
         val accessCount = getLocationAccessCount()
         val timeWindow = 3600_000L // 1時間
-        
+
         if (accessCount > 1000) { // 1時間に1000回以上のアクセス
             logSecurityEvent("Abnormal location access detected")
             // 必要に応じてアクセス制限
         }
     }
-    
+
     // 権限変更監視
     fun monitorPermissionChanges() {
         if (!hasLocationPermission()) {
@@ -324,11 +324,11 @@ class SecurityLogger {
             event = event,
             details = details.filterKeys { !isSensitiveKey(it) } // 機密情報除外
         )
-        
+
         // ローカルログに記録（個人情報は含めない）
         localLogger.log(logEntry)
     }
-    
+
     private fun isSensitiveKey(key: String): Boolean {
         val sensitiveKeys = setOf("latitude", "longitude", "address", "user_id")
         return sensitiveKeys.contains(key.lowercase())

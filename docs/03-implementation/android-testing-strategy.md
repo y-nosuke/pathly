@@ -129,7 +129,7 @@ fun setup() {
 class TrackingViewModelTest {
     @get:Rule
     val instantTaskExecutorRule = InstantTaskExecutorRule()
-    
+
     private val testDispatcher = StandardTestDispatcher()
     private val mockRepository = mockk<GpsTrackRepository>(relaxed = true)
 }
@@ -201,17 +201,17 @@ packaging {
 @OptIn(ExperimentalCoroutinesApi::class)
 class ViewModelTest {
     private val testDispatcher = StandardTestDispatcher()
-    
+
     @Before
     fun setup() {
         Dispatchers.setMain(testDispatcher)
     }
-    
+
     @After
     fun tearDown() {
         Dispatchers.resetMain()
     }
-    
+
     @Test
     fun someAsyncFunction() = runTest {
         // コルーチンを使ったテスト
@@ -280,14 +280,14 @@ val composeTestRule = createComposeRule()
 fun screenTest() {
     // Given - テストデータ準備
     val testData = createTestData()
-    
+
     // When - UIをセットアップ
     composeTestRule.setContent {
         PathlyAndroidTheme {
             TestScreen(data = testData)
         }
     }
-    
+
     // Then - UI要素を検証
     composeTestRule
         .onNodeWithText("期待されるテキスト")
@@ -318,7 +318,7 @@ fun stateChangeTest() {
     composeTestRule.runOnUiThread {
         uiStateFlow.value = newState
     }
-    
+
     // 変更後のUIを検証
     composeTestRule
         .onNodeWithText("新しい状態")
@@ -370,10 +370,10 @@ fun someTest() {
     // Given - テストの前提条件
     val inputData = createTestData()
     val mockBehavior = setupMockBehavior()
-    
+
     // When - テスト対象の実行
     val result = targetFunction(inputData)
-    
+
     // Then - 結果の検証
     assertEquals(expectedResult, result)
     verify { mockObject.expectedCall() }
@@ -407,10 +407,10 @@ fun asyncTest() = runTest {
     val job = launch {
         viewModel.uiState.collect { stateValues.add(it) }
     }
-    
+
     // 処理実行
     viewModel.performAction()
-    
+
     // 状態変更を検証
     assertEquals(expectedState, stateValues.last())
     job.cancel()

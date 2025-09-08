@@ -1,13 +1,11 @@
 package com.pathly.service
 
-import android.Manifest
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.app.Service
 import android.content.Intent
-import android.content.pm.PackageManager
 import android.location.Location
 import android.location.LocationManager
 import android.os.Binder
@@ -16,7 +14,6 @@ import android.os.IBinder
 import android.os.Looper
 import android.util.Log
 import androidx.core.app.NotificationCompat
-import androidx.core.content.ContextCompat
 import com.google.android.gms.location.FusedLocationProviderClient
 import com.google.android.gms.location.LocationCallback
 import com.google.android.gms.location.LocationRequest
@@ -29,6 +26,7 @@ import com.pathly.data.local.dao.GpsPointDao
 import com.pathly.data.local.dao.GpsTrackDao
 import com.pathly.data.local.entity.GpsPointEntity
 import com.pathly.data.local.entity.GpsTrackEntity
+import com.pathly.util.PermissionUtils
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -39,9 +37,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
-import java.text.SimpleDateFormat
 import java.util.Date
-import java.util.Locale
 import javax.inject.Inject
 
 @AndroidEntryPoint
@@ -76,7 +72,6 @@ class LocationTrackingService : Service() {
   private val _locationCount = MutableStateFlow(0)
   val locationCount: StateFlow<Int> = _locationCount.asStateFlow()
 
-  private val dateFormatter = SimpleDateFormat("HH:mm:ss", Locale.getDefault())
 
   private var lastLocationTime = 0L
   private var locationTimeoutJob: kotlinx.coroutines.Job? = null
@@ -320,17 +315,7 @@ class LocationTrackingService : Service() {
   }
 
   private fun hasLocationPermission(): Boolean {
-    val fineLocationGranted = ContextCompat.checkSelfPermission(
-      this,
-      Manifest.permission.ACCESS_FINE_LOCATION
-    ) == PackageManager.PERMISSION_GRANTED
-
-    val coarseLocationGranted = ContextCompat.checkSelfPermission(
-      this,
-      Manifest.permission.ACCESS_COARSE_LOCATION
-    ) == PackageManager.PERMISSION_GRANTED
-
-    return fineLocationGranted && coarseLocationGranted
+    return PermissionUtils.hasLocationPermissions(this)
   }
 
   private fun isLocationEnabled(): Boolean {

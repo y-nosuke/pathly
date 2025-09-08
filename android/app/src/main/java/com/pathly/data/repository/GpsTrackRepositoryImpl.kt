@@ -27,9 +27,6 @@ class GpsTrackRepositoryImpl @Inject constructor(
     }
   }
 
-  override fun getAllTracksWithPoints(): Flow<List<GpsTrack>> {
-    return getAllTracks()
-  }
 
   override suspend fun getTrackById(trackId: Long): GpsTrack? {
     val trackEntity = gpsTrackDao.getTrackById(trackId) ?: return null

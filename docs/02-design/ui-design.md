@@ -288,11 +288,11 @@ graph TD
     B --> C[記録中]
     C --> D[記録停止]
     D --> A
-    
+
     A --> E[履歴画面]
     E --> F[地図画面]
     F --> A
-    
+
     A --> G[設定画面]
     G --> A
 ```
@@ -350,7 +350,7 @@ fun MediumLayout() {
 @Composable
 fun PathlyApp() {
     val navController = rememberNavController()
-    
+
     Scaffold(
         topBar = { PathlyTopBar() },
         bottomBar = { 
