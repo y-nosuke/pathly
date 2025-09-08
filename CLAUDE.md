@@ -228,6 +228,7 @@ app/src/main/java/com/pathly/
 - **DIパターン：** Hilt使用、手動DIは避ける
 - **State管理：** StateFlow使用、LiveData非推奨
 - **Composeテーマ：** PathlyAndroidTheme統一使用
+- **ログ管理：** `com.pathly.util.Logger`使用、詳細は`android-logging.md`参照
 
 ### テストアプローチ
 

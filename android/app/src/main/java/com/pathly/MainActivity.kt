@@ -34,93 +34,94 @@ import com.pathly.ui.theme.PathlyAndroidTheme
 import dagger.hilt.android.AndroidEntryPoint
 
 enum class BottomNavItem(
-    val title: String,
-    val icon: ImageVector
+  val title: String,
+  val icon: ImageVector
 ) {
-    TRACKING("記録", Icons.Filled.PlayArrow),
-    HISTORY("履歴", Icons.AutoMirrored.Filled.List)
+  TRACKING("記録", Icons.Filled.PlayArrow),
+  HISTORY("履歴", Icons.AutoMirrored.Filled.List)
 }
 
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
 
-    private lateinit var viewModel: TrackingViewModel
+  private lateinit var viewModel: TrackingViewModel
 
-    private val locationPermissionLauncher = registerForActivityResult(
-        ActivityResultContracts.RequestMultiplePermissions()
-    ) { permissions ->
-        val allGranted = permissions.values.all { it }
-        viewModel.updateLocationPermission(allGranted)
-    }
+  private val locationPermissionLauncher = registerForActivityResult(
+    ActivityResultContracts.RequestMultiplePermissions()
+  ) { permissions ->
+    val allGranted = permissions.values.all { it }
+    viewModel.updateLocationPermission(allGranted)
+  }
 
-    override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState)
-        enableEdgeToEdge()
-        setContent {
-            PathlyAndroidTheme {
-                viewModel = hiltViewModel()
-                MainScreen(
-                    onRequestPermission = {
-                        locationPermissionLauncher.launch(
-                            arrayOf(
-                                Manifest.permission.ACCESS_FINE_LOCATION,
-                                Manifest.permission.ACCESS_COARSE_LOCATION
-                            )
-                        )
-                    }
-                )
-            }
-        }
+  override fun onCreate(savedInstanceState: Bundle?) {
+    super.onCreate(savedInstanceState)
+    enableEdgeToEdge()
+    setContent {
+      PathlyAndroidTheme {
+        viewModel = hiltViewModel()
+        MainScreen(
+          onRequestPermission = {
+            locationPermissionLauncher.launch(
+              arrayOf(
+                Manifest.permission.ACCESS_FINE_LOCATION,
+                Manifest.permission.ACCESS_COARSE_LOCATION,
+                Manifest.permission.POST_NOTIFICATIONS,
+              )
+            )
+          }
+        )
+      }
     }
+  }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun MainScreen(
-    onRequestPermission: () -> Unit
+  onRequestPermission: () -> Unit
 ) {
-    var selectedTab by remember { mutableStateOf(BottomNavItem.TRACKING) }
-    var selectedTrack by remember { mutableStateOf<GpsTrack?>(null) }
+  var selectedTab by remember { mutableStateOf(BottomNavItem.TRACKING) }
+  var selectedTrack by remember { mutableStateOf<GpsTrack?>(null) }
 
-    Scaffold(
-        modifier = Modifier.fillMaxSize(),
-        bottomBar = {
-            if (selectedTrack == null) {
-                NavigationBar {
-                    BottomNavItem.entries.forEach { item ->
-                        NavigationBarItem(
-                            selected = selectedTab == item,
-                            onClick = { selectedTab = item },
-                            label = { Text(item.title) },
-                            icon = { Icon(item.icon, contentDescription = item.title) }
-                        )
-                    }
-                }
-            }
+  Scaffold(
+    modifier = Modifier.fillMaxSize(),
+    bottomBar = {
+      if (selectedTrack == null) {
+        NavigationBar {
+          BottomNavItem.entries.forEach { item ->
+            NavigationBarItem(
+              selected = selectedTab == item,
+              onClick = { selectedTab = item },
+              label = { Text(item.title) },
+              icon = { Icon(item.icon, contentDescription = item.title) }
+            )
+          }
         }
-    ) { innerPadding ->
-        when {
-            selectedTrack != null -> {
-                TrackDetailScreen(
-                    track = selectedTrack!!,
-                    onBackClick = { selectedTrack = null },
-                    modifier = Modifier.padding(innerPadding)
-                )
-            }
-
-            selectedTab == BottomNavItem.TRACKING -> {
-                TrackingScreen(
-                    modifier = Modifier.padding(innerPadding),
-                    onRequestPermission = onRequestPermission
-                )
-            }
-
-            selectedTab == BottomNavItem.HISTORY -> {
-                HistoryScreen(
-                    modifier = Modifier.padding(innerPadding),
-                    onTrackClick = { track -> selectedTrack = track }
-                )
-            }
-        }
+      }
     }
+  ) { innerPadding ->
+    when {
+      selectedTrack != null -> {
+        TrackDetailScreen(
+          track = selectedTrack!!,
+          onBackClick = { selectedTrack = null },
+          modifier = Modifier.padding(innerPadding)
+        )
+      }
+
+      selectedTab == BottomNavItem.TRACKING -> {
+        TrackingScreen(
+          modifier = Modifier.padding(innerPadding),
+          onRequestPermission = onRequestPermission
+        )
+      }
+
+      selectedTab == BottomNavItem.HISTORY -> {
+        HistoryScreen(
+          modifier = Modifier.padding(innerPadding),
+          onTrackClick = { track -> selectedTrack = track }
+        )
+      }
+    }
+  }
 }

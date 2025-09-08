@@ -9,10 +9,12 @@ import android.app.Service
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.location.Location
+import android.location.LocationManager
 import android.os.Binder
 import android.os.Build
 import android.os.IBinder
 import android.os.Looper
+import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
 import com.google.android.gms.location.FusedLocationProviderClient
@@ -32,8 +34,14 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import java.text.SimpleDateFormat
 import java.util.Date
+import java.util.Locale
 import javax.inject.Inject
 
 @AndroidEntryPoint
@@ -45,8 +53,8 @@ class LocationTrackingService : Service() {
     const val ACTION_START_TRACKING = "START_TRACKING"
     const val ACTION_STOP_TRACKING = "STOP_TRACKING"
 
-    private const val LOCATION_REQUEST_INTERVAL = 30000L // 30秒
-    private const val LOCATION_REQUEST_FASTEST_INTERVAL = 15000L // 15秒
+    private const val LOCATION_REQUEST_INTERVAL = 3000L // 3秒
+    private const val LOCATION_REQUEST_FASTEST_INTERVAL = 1000L // 1秒
   }
 
   @Inject
@@ -61,6 +69,17 @@ class LocationTrackingService : Service() {
   private var currentTrackId: Long? = null
 
   private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
+  private val _currentLocation = MutableStateFlow<Location?>(null)
+  val currentLocation: StateFlow<Location?> = _currentLocation.asStateFlow()
+
+  private val _locationCount = MutableStateFlow(0)
+  val locationCount: StateFlow<Int> = _locationCount.asStateFlow()
+
+  private val dateFormatter = SimpleDateFormat("HH:mm:ss", Locale.getDefault())
+
+  private var lastLocationTime = 0L
+  private var locationTimeoutJob: kotlinx.coroutines.Job? = null
 
   inner class LocationTrackingBinder : Binder() {
     fun getService(): LocationTrackingService = this@LocationTrackingService
@@ -83,10 +102,21 @@ class LocationTrackingService : Service() {
   }
 
   private fun startLocationTracking() {
+    Log.d("LocationService", "startLocationTracking() called")
+
     if (!hasLocationPermission()) {
+      Log.e("LocationService", "Location permission not granted")
       stopSelf()
       return
     }
+
+    if (!isLocationEnabled()) {
+      Log.e("LocationService", "Location services are disabled")
+      stopSelf()
+      return
+    }
+
+    Log.d("LocationService", "Location permission granted, starting foreground service")
 
     val notification = createNotification("GPS位置を記録中...")
     startForeground(NOTIFICATION_ID, notification)
@@ -98,6 +128,7 @@ class LocationTrackingService : Service() {
         isActive = true
       )
       currentTrackId = gpsTrackDao.insertTrack(track)
+      Log.d("LocationService", "Created new track with ID: $currentTrackId")
     }
 
     startLocationUpdates()
@@ -118,14 +149,21 @@ class LocationTrackingService : Service() {
   }
 
   private fun startLocationUpdates() {
-    if (!hasLocationPermission()) return
+    Log.d("LocationService", "startLocationUpdates() called")
+
+    if (!hasLocationPermission()) {
+      Log.e("LocationService", "Permission check failed in startLocationUpdates")
+      return
+    }
 
     val locationRequest = LocationRequest.Builder(
       Priority.PRIORITY_BALANCED_POWER_ACCURACY,
       LOCATION_REQUEST_INTERVAL
     )
       .setMinUpdateIntervalMillis(LOCATION_REQUEST_FASTEST_INTERVAL)
+      .setMaxUpdateDelayMillis(LOCATION_REQUEST_INTERVAL)
       .build()
+
 
     locationCallback = object : LocationCallback() {
       override fun onLocationResult(locationResult: LocationResult) {
@@ -134,24 +172,83 @@ class LocationTrackingService : Service() {
         locationResult.lastLocation?.let { location ->
           saveLocationToDatabase(location)
 
+          // 位置情報とカウントを更新
+          _currentLocation.value = location
+          _locationCount.value = _locationCount.value + 1
+          lastLocationTime = System.currentTimeMillis()
+
+          // タイムアウト監視をリセット
+          restartLocationTimeout()
+
           // 通知を更新
           val notification = createNotification(
-            "GPS位置を記録中... (${location.latitude}, ${location.longitude})"
+            "GPS位置を記録中... (${
+              String.format(
+                "%.6f",
+                location.latitude
+              )
+            }, ${String.format("%.6f", location.longitude)})"
           )
-          val notificationManager = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
+          val notificationManager =
+            getSystemService(NOTIFICATION_SERVICE) as NotificationManager
           notificationManager.notify(NOTIFICATION_ID, notification)
+        } ?: run {
+          Log.w("LocationService", "Location result was null")
         }
       }
     }
 
+    // 最後の既知位置を即座に取得
     try {
+      Log.d("LocationService", "Getting last known location...")
+      fusedLocationClient.lastLocation.addOnSuccessListener { lastLocation ->
+        lastLocation?.let { location ->
+          Log.d(
+            "LocationService",
+            "Last known location found: lat=${location.latitude}, lon=${location.longitude}"
+          )
+
+          // 即座に表示用に更新（データベースには保存しない）
+          _currentLocation.value = location
+
+          // 通知を更新
+          val notification = createNotification(
+            "GPS位置を記録中... 最後の既知位置 (${
+              String.format(
+                "%.6f",
+                location.latitude
+              )
+            }, ${String.format("%.6f", location.longitude)})"
+          )
+          val notificationManager =
+            getSystemService(NOTIFICATION_SERVICE) as NotificationManager
+          notificationManager.notify(NOTIFICATION_ID, notification)
+        } ?: run {
+          Log.w("LocationService", "No last known location available")
+        }
+      }.addOnFailureListener { exception ->
+        Log.w("LocationService", "Failed to get last known location", exception)
+      }
+    } catch (e: SecurityException) {
+      Log.e("LocationService", "SecurityException when getting last known location", e)
+    }
+
+    try {
+      Log.d("LocationService", "Requesting location updates...")
       fusedLocationClient.requestLocationUpdates(
         locationRequest,
         locationCallback!!,
         Looper.getMainLooper()
       )
+      Log.d("LocationService", "Location updates requested successfully")
+
+      // 30秒後に位置情報が取得できていない場合の監視タイマーを開始
+      startLocationTimeout()
     } catch (e: SecurityException) {
-      // 権限がない場合
+      Log.e("LocationService", "SecurityException when requesting location updates", e)
+      stopSelf()
+    } catch (e: Exception) {
+      Log.e("LocationService", "Exception when requesting location updates", e)
       stopSelf()
     }
   }
@@ -160,6 +257,46 @@ class LocationTrackingService : Service() {
     locationCallback?.let {
       fusedLocationClient.removeLocationUpdates(it)
       locationCallback = null
+    }
+    locationTimeoutJob?.cancel()
+    locationTimeoutJob = null
+  }
+
+  private fun startLocationTimeout() {
+    locationTimeoutJob?.cancel()
+    locationTimeoutJob = serviceScope.launch {
+      delay(30000L) // 30秒待機
+
+      if (_locationCount.value == 0) {
+        Log.w("LocationService", "No location received after 30 seconds")
+
+        // 通知を更新して状態を知らせる
+        val notification = createNotification("GPS位置を記録中... （位置情報を取得中です）")
+        val notificationManager =
+          getSystemService(NOTIFICATION_SERVICE) as NotificationManager
+        notificationManager.notify(NOTIFICATION_ID, notification)
+      }
+    }
+  }
+
+  private fun restartLocationTimeout() {
+    locationTimeoutJob?.cancel()
+    locationTimeoutJob = serviceScope.launch {
+      delay(30000L) // 30秒間隔で監視
+
+      val timeSinceLastLocation = System.currentTimeMillis() - lastLocationTime
+      if (timeSinceLastLocation > 60000L) { // 1分以上位置情報がない場合
+        Log.w(
+          "LocationService",
+          "No location received for ${timeSinceLastLocation / 1000} seconds"
+        )
+
+        val notification =
+          createNotification("GPS位置を記録中... （位置情報の取得が遅延しています）")
+        val notificationManager =
+          getSystemService(NOTIFICATION_SERVICE) as NotificationManager
+        notificationManager.notify(NOTIFICATION_ID, notification)
+      }
     }
   }
 
@@ -183,10 +320,25 @@ class LocationTrackingService : Service() {
   }
 
   private fun hasLocationPermission(): Boolean {
-    return ContextCompat.checkSelfPermission(
+    val fineLocationGranted = ContextCompat.checkSelfPermission(
       this,
       Manifest.permission.ACCESS_FINE_LOCATION
     ) == PackageManager.PERMISSION_GRANTED
+
+    val coarseLocationGranted = ContextCompat.checkSelfPermission(
+      this,
+      Manifest.permission.ACCESS_COARSE_LOCATION
+    ) == PackageManager.PERMISSION_GRANTED
+
+    return fineLocationGranted && coarseLocationGranted
+  }
+
+  private fun isLocationEnabled(): Boolean {
+    val locationManager = getSystemService(LOCATION_SERVICE) as LocationManager
+    val gpsEnabled = locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER)
+    val networkEnabled = locationManager.isProviderEnabled(LocationManager.NETWORK_PROVIDER)
+
+    return gpsEnabled || networkEnabled
   }
 
   private fun createNotificationChannel() {

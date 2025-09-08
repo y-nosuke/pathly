@@ -57,7 +57,9 @@ fun TrackingScreen(
 
       uiState.isTracking -> {
         TrackingActiveContent(
-          onStopTracking = viewModel::stopTracking
+          onStopTracking = viewModel::stopTracking,
+          currentLocation = uiState.currentLocation,
+          locationCount = uiState.locationCount
         )
       }
 
@@ -117,7 +119,9 @@ private fun LocationPermissionContent(
 
 @Composable
 private fun TrackingActiveContent(
-  onStopTracking: () -> Unit
+  onStopTracking: () -> Unit,
+  currentLocation: LocationInfo? = null,
+  locationCount: Int = 0
 ) {
   Column(
     horizontalAlignment = Alignment.CenterHorizontally,
@@ -142,6 +146,51 @@ private fun TrackingActiveContent(
           style = MaterialTheme.typography.bodyMedium,
           color = MaterialTheme.colorScheme.onPrimaryContainer
         )
+
+        Text(
+          text = "記録回数: ${locationCount}回",
+          style = MaterialTheme.typography.bodySmall,
+          color = MaterialTheme.colorScheme.onPrimaryContainer
+        )
+      }
+    }
+
+    // 現在の位置情報を表示
+    currentLocation?.let { location ->
+      Card(
+        colors = CardDefaults.cardColors(
+          containerColor = MaterialTheme.colorScheme.surface
+        )
+      ) {
+        Column(
+          modifier = Modifier.padding(16.dp)
+        ) {
+          Text(
+            text = "最新の位置情報",
+            style = MaterialTheme.typography.titleSmall,
+            color = MaterialTheme.colorScheme.onSurface
+          )
+          Text(
+            text = "緯度: ${String.format("%.6f", location.latitude)}",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurface
+          )
+          Text(
+            text = "経度: ${String.format("%.6f", location.longitude)}",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurface
+          )
+          Text(
+            text = "精度: ${String.format("%.1f", location.accuracy)}m",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurface
+          )
+          Text(
+            text = "時刻: ${location.timestamp}",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurface
+          )
+        }
       }
     }
 

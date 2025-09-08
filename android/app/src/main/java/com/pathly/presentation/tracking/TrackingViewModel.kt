@@ -1,6 +1,7 @@
 package com.pathly.presentation.tracking
 
 import android.Manifest
+import android.app.ActivityManager
 import android.app.Application
 import android.content.ComponentName
 import android.content.Context
@@ -8,6 +9,7 @@ import android.content.Intent
 import android.content.ServiceConnection
 import android.content.pm.PackageManager
 import android.os.IBinder
+import android.util.Log
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
@@ -17,7 +19,10 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
+import java.text.SimpleDateFormat
+import java.util.Locale
 import javax.inject.Inject
 
 @HiltViewModel
@@ -32,14 +37,21 @@ class TrackingViewModel @Inject constructor(
   private var locationService: LocationTrackingService? = null
   private var isServiceBound = false
 
+  private val dateFormatter = SimpleDateFormat("HH:mm:ss", Locale.getDefault())
+
   private val serviceConnection = object : ServiceConnection {
     override fun onServiceConnected(name: ComponentName?, service: IBinder?) {
+      Log.d("TrackingViewModel", "Service connected")
       val binder = service as LocationTrackingService.LocationTrackingBinder
       locationService = binder.getService()
       isServiceBound = true
+
+      // サービスに接続したら、位置情報を監視開始
+      observeLocationUpdates()
     }
 
     override fun onServiceDisconnected(name: ComponentName?) {
+      Log.d("TrackingViewModel", "Service disconnected")
       locationService = null
       isServiceBound = false
     }
@@ -53,15 +65,40 @@ class TrackingViewModel @Inject constructor(
   private fun checkActiveTracking() {
     viewModelScope.launch {
       val activeTrack = gpsTrackRepository.getActiveTrack()
-      _uiState.value = _uiState.value.copy(
-        isTracking = activeTrack != null,
-        currentTrackId = activeTrack?.id
-      )
+
+      if (activeTrack != null) {
+        // アクティブなトラックが見つかった場合、サービスが実際に動作しているかチェック
+        if (isLocationTrackingServiceRunning()) {
+          // サービスが動作している場合は記録中状態を継続
+          _uiState.value = _uiState.value.copy(
+            isTracking = true,
+            currentTrackId = activeTrack.id
+          )
+          bindToService()
+        } else {
+          // サービスが動作していない場合は、アクティブなトラックを完了状態にする
+          Log.d("TrackingViewModel", "Found active track but service not running, finishing track")
+          gpsTrackRepository.finishTrack(activeTrack.id, java.util.Date())
+          _uiState.value = _uiState.value.copy(
+            isTracking = false,
+            currentTrackId = null
+          )
+        }
+      } else {
+        // アクティブなトラックがない場合
+        _uiState.value = _uiState.value.copy(
+          isTracking = false,
+          currentTrackId = null
+        )
+      }
     }
   }
 
   fun startTracking() {
+    Log.d("TrackingViewModel", "startTracking() called")
+
     if (!_uiState.value.hasLocationPermission) {
+      Log.e("TrackingViewModel", "Location permission not granted")
       _uiState.value = _uiState.value.copy(
         errorMessage = "位置情報の権限が必要です"
       )
@@ -106,10 +143,14 @@ class TrackingViewModel @Inject constructor(
       application,
       Manifest.permission.ACCESS_FINE_LOCATION
     ) == PackageManager.PERMISSION_GRANTED &&
-        ContextCompat.checkSelfPermission(
-          application,
-          Manifest.permission.ACCESS_COARSE_LOCATION
-        ) == PackageManager.PERMISSION_GRANTED
+            ContextCompat.checkSelfPermission(
+              application,
+              Manifest.permission.ACCESS_COARSE_LOCATION
+            ) == PackageManager.PERMISSION_GRANTED &&
+            ContextCompat.checkSelfPermission(
+              application,
+              Manifest.permission.POST_NOTIFICATIONS
+            ) == PackageManager.PERMISSION_GRANTED
 
     updateLocationPermission(hasPermission)
   }
@@ -128,6 +169,45 @@ class TrackingViewModel @Inject constructor(
       application.unbindService(serviceConnection)
       isServiceBound = false
     }
+  }
+
+  private fun observeLocationUpdates() {
+    locationService?.let { service ->
+      viewModelScope.launch {
+        combine(
+          service.currentLocation,
+          service.locationCount
+        ) { location, count ->
+          location?.let { loc ->
+            val locationInfo = LocationInfo(
+              latitude = loc.latitude,
+              longitude = loc.longitude,
+              accuracy = loc.accuracy,
+              timestamp = dateFormatter.format(java.util.Date(loc.time))
+            )
+
+            _uiState.value = _uiState.value.copy(
+              currentLocation = locationInfo,
+              locationCount = count
+            )
+          }
+        }.collect { }
+      }
+    } ?: run {
+      Log.w("TrackingViewModel", "Location service is null in observeLocationUpdates")
+    }
+  }
+
+  private fun isLocationTrackingServiceRunning(): Boolean {
+    val activityManager = application.getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
+    val services = activityManager.getRunningServices(Integer.MAX_VALUE)
+
+    for (serviceInfo in services) {
+      if (LocationTrackingService::class.java.name == serviceInfo.service.className) {
+        return true
+      }
+    }
+    return false
   }
 
   override fun onCleared() {
