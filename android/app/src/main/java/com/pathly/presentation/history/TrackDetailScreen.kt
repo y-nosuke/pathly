@@ -21,6 +21,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -294,16 +295,22 @@ private fun TrackMapView(
 
             // Add start marker (green)
             val startPoint = track.points.first()
+            val startMarkerState = remember(startPoint) {
+                MarkerState(position = LatLng(startPoint.latitude, startPoint.longitude))
+            }
             Marker(
-                state = MarkerState(position = LatLng(startPoint.latitude, startPoint.longitude)),
+                state = startMarkerState,
                 title = "開始",
                 snippet = "記録開始地点"
             )
 
             // Add end marker (red) 
             val endPoint = track.points.last()
+            val endMarkerState = remember(endPoint) {
+                MarkerState(position = LatLng(endPoint.latitude, endPoint.longitude))
+            }
             Marker(
-                state = MarkerState(position = LatLng(endPoint.latitude, endPoint.longitude)),
+                state = endMarkerState,
                 title = "終了",
                 snippet = "記録終了地点"
             )
