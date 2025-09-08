@@ -1,7 +1,6 @@
 package com.pathly.presentation.tracking
 
 import android.Manifest
-import android.app.ActivityManager
 import android.app.Application
 import android.content.ComponentName
 import android.content.Context
@@ -46,6 +45,17 @@ class TrackingViewModel @Inject constructor(
       locationService = binder.getService()
       isServiceBound = true
 
+      // サービスに接続できた場合、追跡状態を確認・更新
+      viewModelScope.launch {
+        val activeTrack = gpsTrackRepository.getActiveTrack()
+        if (activeTrack != null) {
+          _uiState.value = _uiState.value.copy(
+            isTracking = true,
+            currentTrackId = activeTrack.id
+          )
+        }
+      }
+
       // サービスに接続したら、位置情報を監視開始
       observeLocationUpdates()
     }
@@ -54,6 +64,19 @@ class TrackingViewModel @Inject constructor(
       Log.d("TrackingViewModel", "Service disconnected")
       locationService = null
       isServiceBound = false
+
+      // サービスが予期せず切断された場合、追跡状態をリセット
+      viewModelScope.launch {
+        val activeTrack = gpsTrackRepository.getActiveTrack()
+        if (activeTrack != null) {
+          Log.d("TrackingViewModel", "Service disconnected unexpectedly, finishing track")
+          gpsTrackRepository.finishTrack(activeTrack.id, java.util.Date())
+        }
+        _uiState.value = _uiState.value.copy(
+          isTracking = false,
+          currentTrackId = null
+        )
+      }
     }
   }
 
@@ -67,23 +90,12 @@ class TrackingViewModel @Inject constructor(
       val activeTrack = gpsTrackRepository.getActiveTrack()
 
       if (activeTrack != null) {
-        // アクティブなトラックが見つかった場合、サービスが実際に動作しているかチェック
-        if (isLocationTrackingServiceRunning()) {
-          // サービスが動作している場合は記録中状態を継続
-          _uiState.value = _uiState.value.copy(
-            isTracking = true,
-            currentTrackId = activeTrack.id
-          )
-          bindToService()
-        } else {
-          // サービスが動作していない場合は、アクティブなトラックを完了状態にする
-          Log.d("TrackingViewModel", "Found active track but service not running, finishing track")
-          gpsTrackRepository.finishTrack(activeTrack.id, java.util.Date())
-          _uiState.value = _uiState.value.copy(
-            isTracking = false,
-            currentTrackId = null
-          )
-        }
+        // アクティブなトラックが見つかった場合、サービスに接続を試行
+        _uiState.value = _uiState.value.copy(
+          isTracking = true,
+          currentTrackId = activeTrack.id
+        )
+        bindToService()
       } else {
         // アクティブなトラックがない場合
         _uiState.value = _uiState.value.copy(
@@ -198,17 +210,6 @@ class TrackingViewModel @Inject constructor(
     }
   }
 
-  private fun isLocationTrackingServiceRunning(): Boolean {
-    val activityManager = application.getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
-    val services = activityManager.getRunningServices(Integer.MAX_VALUE)
-
-    for (serviceInfo in services) {
-      if (LocationTrackingService::class.java.name == serviceInfo.service.className) {
-        return true
-      }
-    }
-    return false
-  }
 
   override fun onCleared() {
     super.onCleared()
