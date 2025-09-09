@@ -26,7 +26,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 fun TrackingScreen(
   modifier: Modifier = Modifier,
   onRequestPermission: () -> Unit,
-  viewModel: TrackingViewModel = hiltViewModel()
+  viewModel: TrackingViewModel = hiltViewModel(),
 ) {
   val uiState by viewModel.uiState.collectAsStateWithLifecycle()
 
@@ -39,19 +39,18 @@ fun TrackingScreen(
       .fillMaxSize()
       .padding(16.dp),
     horizontalAlignment = Alignment.CenterHorizontally,
-    verticalArrangement = Arrangement.spacedBy(16.dp, Alignment.CenterVertically)
+    verticalArrangement = Arrangement.spacedBy(16.dp, Alignment.CenterVertically),
   ) {
-
     Text(
       text = "Pathly - GPS記録",
       style = MaterialTheme.typography.headlineMedium,
-      textAlign = TextAlign.Center
+      textAlign = TextAlign.Center,
     )
 
     when {
       !uiState.hasLocationPermission -> {
         LocationPermissionContent(
-          onRequestPermission = onRequestPermission
+          onRequestPermission = onRequestPermission,
         )
       }
 
@@ -59,13 +58,13 @@ fun TrackingScreen(
         TrackingActiveContent(
           onStopTracking = viewModel::stopTracking,
           currentLocation = uiState.currentLocation,
-          locationCount = uiState.locationCount
+          locationCount = uiState.locationCount,
         )
       }
 
       else -> {
         TrackingInactiveContent(
-          onStartTracking = viewModel::startTracking
+          onStartTracking = viewModel::startTracking,
         )
       }
     }
@@ -73,13 +72,13 @@ fun TrackingScreen(
     uiState.errorMessage?.let { error ->
       Card(
         colors = CardDefaults.cardColors(
-          containerColor = MaterialTheme.colorScheme.errorContainer
-        )
+          containerColor = MaterialTheme.colorScheme.errorContainer,
+        ),
       ) {
         Text(
           text = error,
           modifier = Modifier.padding(16.dp),
-          color = MaterialTheme.colorScheme.onErrorContainer
+          color = MaterialTheme.colorScheme.onErrorContainer,
         )
       }
     }
@@ -88,29 +87,29 @@ fun TrackingScreen(
 
 @Composable
 private fun LocationPermissionContent(
-  onRequestPermission: () -> Unit
+  onRequestPermission: () -> Unit,
 ) {
   Column(
     horizontalAlignment = Alignment.CenterHorizontally,
-    verticalArrangement = Arrangement.spacedBy(16.dp)
+    verticalArrangement = Arrangement.spacedBy(16.dp),
   ) {
     Text(
       text = "位置情報の権限が必要です",
       style = MaterialTheme.typography.bodyLarge,
-      textAlign = TextAlign.Center
+      textAlign = TextAlign.Center,
     )
 
     Text(
       text = "GPS記録機能を使用するため、位置情報へのアクセスを許可してください。",
       style = MaterialTheme.typography.bodyMedium,
-      textAlign = TextAlign.Center
+      textAlign = TextAlign.Center,
     )
 
     Button(
       onClick = {
         Log.d("TrackingScreen", "Permission button clicked")
         onRequestPermission()
-      }
+      },
     ) {
       Text("位置情報を許可")
     }
@@ -121,36 +120,36 @@ private fun LocationPermissionContent(
 private fun TrackingActiveContent(
   onStopTracking: () -> Unit,
   currentLocation: LocationInfo? = null,
-  locationCount: Int = 0
+  locationCount: Int = 0,
 ) {
   Column(
     horizontalAlignment = Alignment.CenterHorizontally,
-    verticalArrangement = Arrangement.spacedBy(24.dp)
+    verticalArrangement = Arrangement.spacedBy(24.dp),
   ) {
     Card(
       colors = CardDefaults.cardColors(
-        containerColor = MaterialTheme.colorScheme.primaryContainer
-      )
+        containerColor = MaterialTheme.colorScheme.primaryContainer,
+      ),
     ) {
       Column(
         modifier = Modifier.padding(24.dp),
-        horizontalAlignment = Alignment.CenterHorizontally
+        horizontalAlignment = Alignment.CenterHorizontally,
       ) {
         Text(
           text = "📍 記録中",
           style = MaterialTheme.typography.headlineSmall,
-          color = MaterialTheme.colorScheme.onPrimaryContainer
+          color = MaterialTheme.colorScheme.onPrimaryContainer,
         )
         Text(
           text = "GPS位置を記録しています",
           style = MaterialTheme.typography.bodyMedium,
-          color = MaterialTheme.colorScheme.onPrimaryContainer
+          color = MaterialTheme.colorScheme.onPrimaryContainer,
         )
 
         Text(
           text = "記録回数: ${locationCount}回",
           style = MaterialTheme.typography.bodySmall,
-          color = MaterialTheme.colorScheme.onPrimaryContainer
+          color = MaterialTheme.colorScheme.onPrimaryContainer,
         )
       }
     }
@@ -159,36 +158,36 @@ private fun TrackingActiveContent(
     currentLocation?.let { location ->
       Card(
         colors = CardDefaults.cardColors(
-          containerColor = MaterialTheme.colorScheme.surface
-        )
+          containerColor = MaterialTheme.colorScheme.surface,
+        ),
       ) {
         Column(
-          modifier = Modifier.padding(16.dp)
+          modifier = Modifier.padding(16.dp),
         ) {
           Text(
             text = "最新の位置情報",
             style = MaterialTheme.typography.titleSmall,
-            color = MaterialTheme.colorScheme.onSurface
+            color = MaterialTheme.colorScheme.onSurface,
           )
           Text(
             text = "緯度: ${String.format("%.6f", location.latitude)}",
             style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurface
+            color = MaterialTheme.colorScheme.onSurface,
           )
           Text(
             text = "経度: ${String.format("%.6f", location.longitude)}",
             style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurface
+            color = MaterialTheme.colorScheme.onSurface,
           )
           Text(
             text = "精度: ${String.format("%.1f", location.accuracy)}m",
             style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurface
+            color = MaterialTheme.colorScheme.onSurface,
           )
           Text(
             text = "時刻: ${location.timestamp}",
             style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurface
+            color = MaterialTheme.colorScheme.onSurface,
           )
         }
       }
@@ -197,13 +196,13 @@ private fun TrackingActiveContent(
     Button(
       onClick = onStopTracking,
       colors = ButtonDefaults.buttonColors(
-        containerColor = MaterialTheme.colorScheme.error
+        containerColor = MaterialTheme.colorScheme.error,
       ),
-      modifier = Modifier.size(width = 200.dp, height = 60.dp)
+      modifier = Modifier.size(width = 200.dp, height = 60.dp),
     ) {
       Text(
         text = "記録停止",
-        style = MaterialTheme.typography.titleMedium
+        style = MaterialTheme.typography.titleMedium,
       )
     }
   }
@@ -211,25 +210,25 @@ private fun TrackingActiveContent(
 
 @Composable
 private fun TrackingInactiveContent(
-  onStartTracking: () -> Unit
+  onStartTracking: () -> Unit,
 ) {
   Column(
     horizontalAlignment = Alignment.CenterHorizontally,
-    verticalArrangement = Arrangement.spacedBy(24.dp)
+    verticalArrangement = Arrangement.spacedBy(24.dp),
   ) {
     Text(
       text = "お出掛けの記録を開始しましょう",
       style = MaterialTheme.typography.bodyLarge,
-      textAlign = TextAlign.Center
+      textAlign = TextAlign.Center,
     )
 
     Button(
       onClick = onStartTracking,
-      modifier = Modifier.size(width = 200.dp, height = 60.dp)
+      modifier = Modifier.size(width = 200.dp, height = 60.dp),
     ) {
       Text(
         text = "記録開始",
-        style = MaterialTheme.typography.titleMedium
+        style = MaterialTheme.typography.titleMedium,
       )
     }
 
@@ -237,7 +236,7 @@ private fun TrackingInactiveContent(
       text = "ボタンを押すと、30秒間隔でGPS位置を記録します",
       style = MaterialTheme.typography.bodySmall,
       textAlign = TextAlign.Center,
-      color = MaterialTheme.colorScheme.onSurfaceVariant
+      color = MaterialTheme.colorScheme.onSurfaceVariant,
     )
   }
 }

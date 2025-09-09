@@ -115,7 +115,7 @@ class DateConverterTest {
     assertEquals(
       "元のタイムスタンプと変換後のタイムスタンプが一致",
       originalTimestamp,
-      convertedTimestamp
+      convertedTimestamp,
     )
   }
 

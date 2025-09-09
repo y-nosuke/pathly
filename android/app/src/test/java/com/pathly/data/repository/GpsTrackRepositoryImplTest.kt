@@ -74,15 +74,15 @@ class GpsTrackRepositoryImplTest {
 
     val pointEntities1 = listOf(
       createGpsPointEntity(id = 1L, trackId = 1L, latitude = 35.6762, longitude = 139.6503),
-      createGpsPointEntity(id = 2L, trackId = 1L, latitude = 35.6896, longitude = 139.7006)
+      createGpsPointEntity(id = 2L, trackId = 1L, latitude = 35.6896, longitude = 139.7006),
     )
     val pointEntities2 = listOf(
-      createGpsPointEntity(id = 3L, trackId = 2L, latitude = 35.7000, longitude = 139.8000)
+      createGpsPointEntity(id = 3L, trackId = 2L, latitude = 35.7000, longitude = 139.8000),
     )
 
     val tracksWithPoints = listOf(
       GpsTrackWithPoints(trackEntity1, pointEntities1),
-      GpsTrackWithPoints(trackEntity2, pointEntities2)
+      GpsTrackWithPoints(trackEntity2, pointEntities2),
     )
 
     coEvery { mockGpsTrackDao.getAllTracksWithPoints() } returns flowOf(tracksWithPoints)
@@ -114,8 +114,8 @@ class GpsTrackRepositoryImplTest {
         id = 1L,
         trackId = trackId,
         latitude = 35.6762,
-        longitude = 139.6503
-      )
+        longitude = 139.6503,
+      ),
     )
 
     coEvery { mockGpsTrackDao.getTrackById(trackId) } returns trackEntity
@@ -150,7 +150,7 @@ class GpsTrackRepositoryImplTest {
     // Given
     val trackEntity = createGpsTrackEntity(id = 1L, isActive = true)
     val pointEntities = listOf(
-      createGpsPointEntity(id = 1L, trackId = 1L, latitude = 35.6762, longitude = 139.6503)
+      createGpsPointEntity(id = 1L, trackId = 1L, latitude = 35.6762, longitude = 139.6503),
     )
 
     coEvery { mockGpsTrackDao.getActiveTrack() } returns trackEntity
@@ -191,7 +191,7 @@ class GpsTrackRepositoryImplTest {
       isActive = false,
       points = emptyList(),
       createdAt = Date(),
-      updatedAt = Date()
+      updatedAt = Date(),
     )
 
     coEvery { mockGpsTrackDao.deleteTrack(any()) } returns Unit
@@ -204,10 +204,10 @@ class GpsTrackRepositoryImplTest {
       mockGpsTrackDao.deleteTrack(
         match<GpsTrackEntity> { entity ->
           entity.id == 1L &&
-                  entity.startTime == startTime &&
-                  entity.endTime == endTime &&
-                  entity.isActive == false
-        }
+            entity.startTime == startTime &&
+            entity.endTime == endTime &&
+            entity.isActive == false
+        },
       )
     }
   }
@@ -226,7 +226,7 @@ class GpsTrackRepositoryImplTest {
       endTime = endTime,
       isActive = false,
       createdAt = createdAt,
-      updatedAt = updatedAt
+      updatedAt = updatedAt,
     )
     val points = listOf(
       GpsPoint(
@@ -239,13 +239,13 @@ class GpsTrackRepositoryImplTest {
         speed = 5f,
         bearing = 90f,
         timestamp = Date(),
-        createdAt = Date()
-      )
+        createdAt = Date(),
+      ),
     )
 
     coEvery { mockGpsTrackDao.getTrackById(1L) } returns trackEntity
     coEvery { mockGpsPointDao.getPointsByTrackIdSync(1L) } returns listOf(
-      createGpsPointEntity(id = 1L, trackId = 1L, latitude = 35.6762, longitude = 139.6503)
+      createGpsPointEntity(id = 1L, trackId = 1L, latitude = 35.6762, longitude = 139.6503),
     )
 
     // When
@@ -270,7 +270,7 @@ class GpsTrackRepositoryImplTest {
     endTime: Date? = null,
     isActive: Boolean = false,
     createdAt: Date = Date(),
-    updatedAt: Date = Date()
+    updatedAt: Date = Date(),
   ): GpsTrackEntity {
     return GpsTrackEntity(
       id = id,
@@ -278,7 +278,7 @@ class GpsTrackRepositoryImplTest {
       endTime = endTime,
       isActive = isActive,
       createdAt = createdAt,
-      updatedAt = updatedAt
+      updatedAt = updatedAt,
     )
   }
 
@@ -292,7 +292,7 @@ class GpsTrackRepositoryImplTest {
     speed: Float? = null,
     bearing: Float? = null,
     timestamp: Date = Date(),
-    createdAt: Date = Date()
+    createdAt: Date = Date(),
   ): GpsPointEntity {
     return GpsPointEntity(
       id = id,
@@ -304,7 +304,7 @@ class GpsTrackRepositoryImplTest {
       speed = speed,
       bearing = bearing,
       timestamp = timestamp,
-      createdAt = createdAt
+      createdAt = createdAt,
     )
   }
 }

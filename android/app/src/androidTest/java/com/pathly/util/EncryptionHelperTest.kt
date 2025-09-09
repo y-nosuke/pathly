@@ -164,17 +164,17 @@ class EncryptionHelperTest {
     assertEquals(
       "Track data should match",
       trackData,
-      encryptionHelper.getSecureString("track_data")
+      encryptionHelper.getSecureString("track_data"),
     )
     assertEquals(
       "Location data should match",
       locationData,
-      encryptionHelper.getSecureString("location_data")
+      encryptionHelper.getSecureString("location_data"),
     )
     assertEquals(
       "Settings data should match",
       settingsData,
-      encryptionHelper.getSecureString("settings_data")
+      encryptionHelper.getSecureString("settings_data"),
     )
   }
 

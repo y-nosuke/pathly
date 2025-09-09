@@ -13,10 +13,10 @@ import java.util.Date
       entity = GpsTrackEntity::class,
       parentColumns = ["id"],
       childColumns = ["trackId"],
-      onDelete = ForeignKey.CASCADE
-    )
+      onDelete = ForeignKey.CASCADE,
+    ),
   ],
-  indices = [Index("trackId")]
+  indices = [Index("trackId")],
 )
 data class GpsPointEntity(
   @PrimaryKey(autoGenerate = true)
@@ -29,5 +29,5 @@ data class GpsPointEntity(
   val speed: Float? = null,
   val bearing: Float? = null,
   val timestamp: Date,
-  val createdAt: Date = Date()
+  val createdAt: Date = Date(),
 )

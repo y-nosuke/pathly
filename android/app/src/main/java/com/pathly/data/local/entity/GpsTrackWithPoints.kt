@@ -9,7 +9,7 @@ data class GpsTrackWithPoints(
 
   @Relation(
     parentColumn = "id",
-    entityColumn = "trackId"
+    entityColumn = "trackId",
   )
-  val points: List<GpsPointEntity>
+  val points: List<GpsPointEntity>,
 )

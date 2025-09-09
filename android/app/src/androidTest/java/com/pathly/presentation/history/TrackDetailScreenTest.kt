@@ -41,7 +41,7 @@ class TrackDetailScreenTest {
       PathlyAndroidTheme {
         TrackDetailScreen(
           track = track,
-          onBackClick = mockOnBackClick
+          onBackClick = mockOnBackClick,
         )
       }
     }
@@ -61,7 +61,7 @@ class TrackDetailScreenTest {
       PathlyAndroidTheme {
         TrackDetailScreen(
           track = track,
-          onBackClick = mockOnBackClick
+          onBackClick = mockOnBackClick,
         )
       }
     }
@@ -84,7 +84,7 @@ class TrackDetailScreenTest {
       PathlyAndroidTheme {
         TrackDetailScreen(
           track = track,
-          onBackClick = mockOnBackClick
+          onBackClick = mockOnBackClick,
         )
       }
     }
@@ -100,7 +100,7 @@ class TrackDetailScreenTest {
   fun trackDetailScreen_displaysBasicInformation() {
     // Given
     val startTime = Date(1640995200000L) // 2022-01-01 00:00:00 UTC
-    val endTime = Date(1640998800000L)   // 2022-01-01 01:00:00 UTC
+    val endTime = Date(1640998800000L) // 2022-01-01 01:00:00 UTC
 
     val track = GpsTrack(
       id = 123L,
@@ -109,7 +109,7 @@ class TrackDetailScreenTest {
       isActive = false,
       points = createSamplePoints(5),
       createdAt = startTime,
-      updatedAt = endTime
+      updatedAt = endTime,
     )
 
     // When
@@ -117,7 +117,7 @@ class TrackDetailScreenTest {
       PathlyAndroidTheme {
         TrackDetailScreen(
           track = track,
-          onBackClick = mockOnBackClick
+          onBackClick = mockOnBackClick,
         )
       }
     }
@@ -158,7 +158,7 @@ class TrackDetailScreenTest {
       PathlyAndroidTheme {
         TrackDetailScreen(
           track = track,
-          onBackClick = mockOnBackClick
+          onBackClick = mockOnBackClick,
         )
       }
     }
@@ -195,7 +195,7 @@ class TrackDetailScreenTest {
       isActive = true,
       points = createSamplePoints(3),
       createdAt = Date(),
-      updatedAt = Date()
+      updatedAt = Date(),
     )
 
     // When
@@ -203,7 +203,7 @@ class TrackDetailScreenTest {
       PathlyAndroidTheme {
         TrackDetailScreen(
           track = track,
-          onBackClick = mockOnBackClick
+          onBackClick = mockOnBackClick,
         )
       }
     }
@@ -237,7 +237,7 @@ class TrackDetailScreenTest {
       PathlyAndroidTheme {
         TrackDetailScreen(
           track = track,
-          onBackClick = mockOnBackClick
+          onBackClick = mockOnBackClick,
         )
       }
     }
@@ -262,7 +262,7 @@ class TrackDetailScreenTest {
       isActive = false,
       points = createSamplePoints(8),
       createdAt = Date(),
-      updatedAt = Date()
+      updatedAt = Date(),
     )
 
     // When
@@ -270,7 +270,7 @@ class TrackDetailScreenTest {
       PathlyAndroidTheme {
         TrackDetailScreen(
           track = track,
-          onBackClick = mockOnBackClick
+          onBackClick = mockOnBackClick,
         )
       }
     }
@@ -296,7 +296,7 @@ class TrackDetailScreenTest {
       isActive = false,
       points = emptyList(), // 0点
       createdAt = Date(),
-      updatedAt = Date()
+      updatedAt = Date(),
     )
 
     // When
@@ -304,7 +304,7 @@ class TrackDetailScreenTest {
       PathlyAndroidTheme {
         TrackDetailScreen(
           track = track,
-          onBackClick = mockOnBackClick
+          onBackClick = mockOnBackClick,
         )
       }
     }
@@ -325,7 +325,7 @@ class TrackDetailScreenTest {
       isActive = false,
       points = createSamplePoints(1), // 1点のみ
       createdAt = Date(),
-      updatedAt = Date()
+      updatedAt = Date(),
     )
 
     // When
@@ -333,7 +333,7 @@ class TrackDetailScreenTest {
       PathlyAndroidTheme {
         TrackDetailScreen(
           track = track,
-          onBackClick = mockOnBackClick
+          onBackClick = mockOnBackClick,
         )
       }
     }
@@ -357,7 +357,7 @@ class TrackDetailScreenTest {
       isActive = false,
       points = createSamplePoints(2),
       createdAt = startTime,
-      updatedAt = endTime
+      updatedAt = endTime,
     )
 
     // When
@@ -365,7 +365,7 @@ class TrackDetailScreenTest {
       PathlyAndroidTheme {
         TrackDetailScreen(
           track = track,
-          onBackClick = mockOnBackClick
+          onBackClick = mockOnBackClick,
         )
       }
     }
@@ -389,7 +389,7 @@ class TrackDetailScreenTest {
       isActive = false,
       points = createSamplePoints(2),
       createdAt = startTime,
-      updatedAt = endTime
+      updatedAt = endTime,
     )
 
     // When
@@ -397,7 +397,7 @@ class TrackDetailScreenTest {
       PathlyAndroidTheme {
         TrackDetailScreen(
           track = track,
-          onBackClick = mockOnBackClick
+          onBackClick = mockOnBackClick,
         )
       }
     }
@@ -410,7 +410,7 @@ class TrackDetailScreenTest {
 
   private fun createSampleTrack(
     id: Long = 123L,
-    isActive: Boolean = false
+    isActive: Boolean = false,
   ): GpsTrack {
     val startTime = Date(1640995200000L)
     return GpsTrack(
@@ -420,7 +420,7 @@ class TrackDetailScreenTest {
       isActive = isActive,
       points = createSamplePoints(5),
       createdAt = startTime,
-      updatedAt = Date(1640998800000L)
+      updatedAt = Date(1640998800000L),
     )
   }
 
@@ -436,7 +436,7 @@ class TrackDetailScreenTest {
         speed = null,
         bearing = null,
         timestamp = Date(1640995200000L + index * 60000), // 1分間隔
-        createdAt = Date()
+        createdAt = Date(),
       )
     }
   }

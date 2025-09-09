@@ -15,6 +15,6 @@ abstract class RepositoryModule {
   @Binds
   @Singleton
   abstract fun bindGpsTrackRepository(
-    gpsTrackRepositoryImpl: GpsTrackRepositoryImpl
+    gpsTrackRepositoryImpl: GpsTrackRepositoryImpl,
   ): GpsTrackRepository
 }

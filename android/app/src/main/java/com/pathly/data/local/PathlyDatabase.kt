@@ -18,7 +18,7 @@ import com.pathly.util.Logger
 @Database(
   entities = [GpsTrackEntity::class, GpsPointEntity::class],
   version = 1,
-  exportSchema = false
+  exportSchema = false,
 )
 @TypeConverters(DateConverter::class)
 abstract class PathlyDatabase : RoomDatabase() {
@@ -54,14 +54,12 @@ abstract class PathlyDatabase : RoomDatabase() {
       return Room.databaseBuilder(
         context.applicationContext,
         PathlyDatabase::class.java,
-        DATABASE_NAME
+        DATABASE_NAME,
       )
         // マイグレーション設定
         .addMigrations(*DatabaseMigrations.ALL_MIGRATIONS)
-
         // マイグレーション失敗時の処理（全テーブル削除）
         .fallbackToDestructiveMigration(true)
-
         // データベースコールバック設定
         .addCallback(object : RoomDatabase.Callback() {
           override fun onCreate(db: SupportSQLiteDatabase) {
@@ -94,8 +92,6 @@ abstract class PathlyDatabase : RoomDatabase() {
             logDatabaseStats(db)
           }
         })
-
-
         .build()
     }
 
@@ -106,18 +102,18 @@ abstract class PathlyDatabase : RoomDatabase() {
       try {
         // GPS軌跡用インデックス
         db.execSQL(
-          "CREATE INDEX IF NOT EXISTS index_gps_tracks_created_at ON gps_tracks(created_at DESC)"
+          "CREATE INDEX IF NOT EXISTS index_gps_tracks_created_at ON gps_tracks(created_at DESC)",
         )
         db.execSQL(
-          "CREATE INDEX IF NOT EXISTS index_gps_tracks_is_active ON gps_tracks(is_active)"
+          "CREATE INDEX IF NOT EXISTS index_gps_tracks_is_active ON gps_tracks(is_active)",
         )
 
         // GPS座標用インデックス
         db.execSQL(
-          "CREATE INDEX IF NOT EXISTS index_gps_points_track_id_timestamp ON gps_points(track_id, timestamp)"
+          "CREATE INDEX IF NOT EXISTS index_gps_points_track_id_timestamp ON gps_points(track_id, timestamp)",
         )
         db.execSQL(
-          "CREATE INDEX IF NOT EXISTS index_gps_points_location ON gps_points(latitude, longitude)"
+          "CREATE INDEX IF NOT EXISTS index_gps_points_location ON gps_points(latitude, longitude)",
         )
 
         logger.i("Optimal indexes created successfully")

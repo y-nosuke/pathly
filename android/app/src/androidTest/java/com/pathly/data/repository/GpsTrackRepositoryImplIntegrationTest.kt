@@ -37,7 +37,7 @@ class GpsTrackRepositoryImplIntegrationTest {
   fun setup() {
     database = Room.inMemoryDatabaseBuilder(
       ApplicationProvider.getApplicationContext(),
-      PathlyDatabase::class.java
+      PathlyDatabase::class.java,
     )
       .allowMainThreadQueries()
       .build()
@@ -47,7 +47,7 @@ class GpsTrackRepositoryImplIntegrationTest {
     repository = GpsTrackRepositoryImpl(
       database.gpsTrackDao(),
       database.gpsPointDao(),
-      encryptionHelper
+      encryptionHelper,
     )
   }
 
@@ -77,7 +77,7 @@ class GpsTrackRepositoryImplIntegrationTest {
       endTime = Date(startTime1.time + 300000), // 5分後
       isActive = false,
       createdAt = startTime1,
-      updatedAt = Date()
+      updatedAt = Date(),
     )
 
     // Track2 (進行中)
@@ -86,7 +86,7 @@ class GpsTrackRepositoryImplIntegrationTest {
       endTime = null,
       isActive = true,
       createdAt = startTime2,
-      updatedAt = startTime2
+      updatedAt = startTime2,
     )
 
     val track1Id = database.gpsTrackDao().insertTrack(track1)
@@ -100,7 +100,7 @@ class GpsTrackRepositoryImplIntegrationTest {
         longitude = 139.6503, // 東京駅
         accuracy = 10f,
         timestamp = startTime1,
-        createdAt = startTime1
+        createdAt = startTime1,
       ),
       GpsPointEntity(
         trackId = track1Id,
@@ -108,8 +108,8 @@ class GpsTrackRepositoryImplIntegrationTest {
         longitude = 139.7006, // 新宿駅
         accuracy = 8f,
         timestamp = Date(startTime1.time + 120000),
-        createdAt = startTime1
-      )
+        createdAt = startTime1,
+      ),
     )
 
     // Track2のポイント（1点のみ）
@@ -119,7 +119,7 @@ class GpsTrackRepositoryImplIntegrationTest {
       longitude = 139.8000,
       accuracy = 12f,
       timestamp = startTime2,
-      createdAt = startTime2
+      createdAt = startTime2,
     )
 
     track1Points.forEach { database.gpsPointDao().insertPoint(it) }
@@ -143,7 +143,7 @@ class GpsTrackRepositoryImplIntegrationTest {
     // 東京駅→新宿駅の距離は約3-6km
     assertTrue(
       "Track1の距離が現実的な範囲",
-      retrievedTrack1.totalDistanceMeters in 3000.0..6000.0
+      retrievedTrack1.totalDistanceMeters in 3000.0..6000.0,
     )
 
     // Track2の検証
@@ -162,7 +162,7 @@ class GpsTrackRepositoryImplIntegrationTest {
       endTime = null,
       isActive = true,
       createdAt = startTime,
-      updatedAt = startTime
+      updatedAt = startTime,
     )
 
     val trackId = database.gpsTrackDao().insertTrack(track)
@@ -177,7 +177,7 @@ class GpsTrackRepositoryImplIntegrationTest {
         speed = 5f,
         bearing = 90f,
         timestamp = startTime,
-        createdAt = startTime
+        createdAt = startTime,
       ),
       GpsPointEntity(
         trackId = trackId,
@@ -185,8 +185,8 @@ class GpsTrackRepositoryImplIntegrationTest {
         longitude = 139.6600,
         accuracy = 8f,
         timestamp = Date(startTime.time + 60000),
-        createdAt = startTime
-      )
+        createdAt = startTime,
+      ),
     )
 
     points.forEach { database.gpsPointDao().insertPoint(it) }
@@ -225,7 +225,7 @@ class GpsTrackRepositoryImplIntegrationTest {
       endTime = Date(),
       isActive = false,
       createdAt = Date(),
-      updatedAt = Date()
+      updatedAt = Date(),
     )
     database.gpsTrackDao().insertTrack(track)
 
@@ -244,7 +244,7 @@ class GpsTrackRepositoryImplIntegrationTest {
       endTime = null,
       isActive = true,
       createdAt = Date(),
-      updatedAt = Date()
+      updatedAt = Date(),
     )
 
     val trackId = database.gpsTrackDao().insertTrack(activeTrack)
@@ -255,7 +255,7 @@ class GpsTrackRepositoryImplIntegrationTest {
       longitude = 139.6503,
       accuracy = 10f,
       timestamp = Date(),
-      createdAt = Date()
+      createdAt = Date(),
     )
 
     database.gpsPointDao().insertPoint(point)
@@ -280,7 +280,7 @@ class GpsTrackRepositoryImplIntegrationTest {
       endTime = null,
       isActive = false,
       createdAt = startTime,
-      updatedAt = startTime
+      updatedAt = startTime,
     )
 
     val trackId = database.gpsTrackDao().insertTrack(track)
@@ -291,7 +291,7 @@ class GpsTrackRepositoryImplIntegrationTest {
       longitude = 139.6503,
       accuracy = 10f,
       timestamp = startTime,
-      createdAt = startTime
+      createdAt = startTime,
     )
 
     database.gpsPointDao().insertPoint(point)
@@ -304,14 +304,15 @@ class GpsTrackRepositoryImplIntegrationTest {
       isActive = false,
       points = emptyList(), // deleteTrackでは使用されない
       createdAt = startTime,
-      updatedAt = startTime
+      updatedAt = startTime,
     )
 
     // Verify existence before deletion
     assertNotNull("削除前にトラックが存在", database.gpsTrackDao().getTrackById(trackId))
     assertEquals(
-      "削除前にポイントが存在", 1,
-      database.gpsPointDao().getPointsByTrackIdSync(trackId).size
+      "削除前にポイントが存在",
+      1,
+      database.gpsPointDao().getPointsByTrackIdSync(trackId).size,
     )
 
     // When
@@ -321,7 +322,7 @@ class GpsTrackRepositoryImplIntegrationTest {
     assertNull("トラックが削除される", database.gpsTrackDao().getTrackById(trackId))
     assertTrue(
       "関連ポイントも削除される（CASCADE）",
-      database.gpsPointDao().getPointsByTrackIdSync(trackId).isEmpty()
+      database.gpsPointDao().getPointsByTrackIdSync(trackId).isEmpty(),
     )
 
     // Repository経由でも確認
@@ -340,7 +341,7 @@ class GpsTrackRepositoryImplIntegrationTest {
       endTime = null,
       isActive = true,
       createdAt = startTime,
-      updatedAt = startTime
+      updatedAt = startTime,
     )
 
     val trackId = database.gpsTrackDao().insertTrack(newTrack)
@@ -356,7 +357,7 @@ class GpsTrackRepositoryImplIntegrationTest {
         speed = 0f,
         bearing = null,
         timestamp = startTime,
-        createdAt = startTime
+        createdAt = startTime,
       ),
       GpsPointEntity(
         trackId = trackId,
@@ -367,7 +368,7 @@ class GpsTrackRepositoryImplIntegrationTest {
         speed = 2.5f,
         bearing = 45f,
         timestamp = Date(startTime.time + 30000),
-        createdAt = startTime
+        createdAt = startTime,
       ),
       GpsPointEntity(
         trackId = trackId,
@@ -378,8 +379,8 @@ class GpsTrackRepositoryImplIntegrationTest {
         speed = 3.0f,
         bearing = 60f,
         timestamp = Date(startTime.time + 60000),
-        createdAt = startTime
-      )
+        createdAt = startTime,
+      ),
     )
 
     gpsPoints.forEach { database.gpsPointDao().insertPoint(it) }
@@ -390,7 +391,7 @@ class GpsTrackRepositoryImplIntegrationTest {
       id = trackId,
       endTime = endTime,
       isActive = false,
-      updatedAt = endTime
+      updatedAt = endTime,
     )
 
     database.gpsTrackDao().updateTrack(completedTrack)
@@ -425,11 +426,11 @@ class GpsTrackRepositoryImplIntegrationTest {
     val points = track.points
     assertTrue(
       "1番目 <= 2番目のタイムスタンプ",
-      points[0].timestamp.time <= points[1].timestamp.time
+      points[0].timestamp.time <= points[1].timestamp.time,
     )
     assertTrue(
       "2番目 <= 3番目のタイムスタンプ",
-      points[1].timestamp.time <= points[2].timestamp.time
+      points[1].timestamp.time <= points[2].timestamp.time,
     )
 
     // GPSデータの詳細確認

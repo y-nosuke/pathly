@@ -24,7 +24,7 @@ class GpsTrackTest {
   fun `totalDistanceMeters_1つの座標点_0を返す`() {
     // Given
     val points = listOf(
-      createGpsPoint(latitude = 35.6762, longitude = 139.6503) // 東京駅
+      createGpsPoint(latitude = 35.6762, longitude = 139.6503), // 東京駅
     )
     val track = createGpsTrack(points = points)
 
@@ -40,7 +40,7 @@ class GpsTrackTest {
     // Given
     val points = listOf(
       createGpsPoint(latitude = 35.6762, longitude = 139.6503), // 東京駅
-      createGpsPoint(latitude = 35.6896, longitude = 139.7006)  // 新宿駅
+      createGpsPoint(latitude = 35.6896, longitude = 139.7006), // 新宿駅
     )
     val track = createGpsTrack(points = points)
 
@@ -51,7 +51,7 @@ class GpsTrackTest {
     // 東京駅から新宿駅は約4-5km
     assertTrue(
       "計算された距離が3-6kmの範囲にある (実際: ${distance}m)",
-      distance in 3000.0..6000.0
+      distance in 3000.0..6000.0,
     )
   }
 
@@ -61,7 +61,7 @@ class GpsTrackTest {
     val points = listOf(
       createGpsPoint(latitude = 35.0000, longitude = 139.0000),
       createGpsPoint(latitude = 35.0009, longitude = 139.0000), // 約100m北
-      createGpsPoint(latitude = 35.0018, longitude = 139.0000)  // さらに約100m北
+      createGpsPoint(latitude = 35.0018, longitude = 139.0000), // さらに約100m北
     )
     val track = createGpsTrack(points = points)
 
@@ -92,7 +92,7 @@ class GpsTrackTest {
     // Given - 赤道上の1度の移動（約111km）
     val points = listOf(
       createGpsPoint(latitude = 0.0, longitude = 0.0),
-      createGpsPoint(latitude = 0.0, longitude = 1.0)
+      createGpsPoint(latitude = 0.0, longitude = 1.0),
     )
     val track = createGpsTrack(points = points)
 
@@ -105,7 +105,7 @@ class GpsTrackTest {
     val tolerance = 1000.0 // 1km の誤差許容
     assertTrue(
       "Haversine公式の計算精度が正しい (${distance}m, 期待値: ${expectedDistance}m)",
-      abs(distance - expectedDistance) < tolerance
+      abs(distance - expectedDistance) < tolerance,
     )
   }
 
@@ -116,7 +116,7 @@ class GpsTrackTest {
     endTime: Date? = null,
     isActive: Boolean = false,
     createdAt: Date = Date(),
-    updatedAt: Date = Date()
+    updatedAt: Date = Date(),
   ): GpsTrack {
     return GpsTrack(
       id = id,
@@ -125,7 +125,7 @@ class GpsTrackTest {
       isActive = isActive,
       points = points,
       createdAt = createdAt,
-      updatedAt = updatedAt
+      updatedAt = updatedAt,
     )
   }
 
@@ -139,7 +139,7 @@ class GpsTrackTest {
     speed: Float? = null,
     bearing: Float? = null,
     timestamp: Date = Date(),
-    createdAt: Date = Date()
+    createdAt: Date = Date(),
   ): GpsPoint {
     return GpsPoint(
       id = id,
@@ -151,7 +151,7 @@ class GpsTrackTest {
       speed = speed,
       bearing = bearing,
       timestamp = timestamp,
-      createdAt = createdAt
+      createdAt = createdAt,
     )
   }
 }

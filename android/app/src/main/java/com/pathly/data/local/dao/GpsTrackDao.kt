@@ -42,7 +42,7 @@ interface GpsTrackDao {
   suspend fun finishTrack(
     trackId: Long,
     endTime: java.util.Date,
-    updatedAt: java.util.Date = java.util.Date()
+    updatedAt: java.util.Date = java.util.Date(),
   )
 
   @Query("SELECT COUNT(*) FROM gps_tracks")
@@ -60,6 +60,6 @@ interface GpsTrackDao {
   @Query("SELECT * FROM gps_tracks WHERE createdAt BETWEEN :startDate AND :endDate ORDER BY startTime DESC")
   suspend fun getTracksByDateRange(
     startDate: java.util.Date,
-    endDate: java.util.Date
+    endDate: java.util.Date,
   ): List<GpsTrackEntity>
 }

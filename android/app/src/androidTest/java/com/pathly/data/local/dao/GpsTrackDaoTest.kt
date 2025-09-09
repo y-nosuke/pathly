@@ -35,7 +35,7 @@ class GpsTrackDaoTest {
   fun setup() {
     database = Room.inMemoryDatabaseBuilder(
       ApplicationProvider.getApplicationContext(),
-      PathlyDatabase::class.java
+      PathlyDatabase::class.java,
     )
       .allowMainThreadQueries()
       .build()
@@ -58,7 +58,7 @@ class GpsTrackDaoTest {
       endTime = null,
       isActive = true,
       createdAt = startTime,
-      updatedAt = startTime
+      updatedAt = startTime,
     )
 
     // When
@@ -92,7 +92,7 @@ class GpsTrackDaoTest {
       endTime = Date(),
       isActive = false,
       createdAt = startTime1,
-      updatedAt = Date()
+      updatedAt = Date(),
     )
 
     val track2 = GpsTrackEntity(
@@ -100,7 +100,7 @@ class GpsTrackDaoTest {
       endTime = null,
       isActive = true,
       createdAt = startTime2,
-      updatedAt = startTime2
+      updatedAt = startTime2,
     )
 
     val trackId1 = gpsTrackDao.insertTrack(track1)
@@ -113,7 +113,7 @@ class GpsTrackDaoTest {
       longitude = 139.6503,
       accuracy = 10f,
       timestamp = startTime1,
-      createdAt = startTime1
+      createdAt = startTime1,
     )
 
     val point2 = GpsPointEntity(
@@ -122,7 +122,7 @@ class GpsTrackDaoTest {
       longitude = 139.7006,
       accuracy = 8f,
       timestamp = Date(startTime1.time + 60000),
-      createdAt = startTime1
+      createdAt = startTime1,
     )
 
     val point3 = GpsPointEntity(
@@ -131,7 +131,7 @@ class GpsTrackDaoTest {
       longitude = 139.8000,
       accuracy = 12f,
       timestamp = startTime2,
-      createdAt = startTime2
+      createdAt = startTime2,
     )
 
     gpsPointDao.insertPoint(point1)
@@ -169,7 +169,7 @@ class GpsTrackDaoTest {
       endTime = Date(),
       isActive = false,
       createdAt = Date(),
-      updatedAt = Date()
+      updatedAt = Date(),
     )
     gpsTrackDao.insertTrack(track)
 
@@ -188,7 +188,7 @@ class GpsTrackDaoTest {
       endTime = Date(),
       isActive = false,
       createdAt = Date(),
-      updatedAt = Date()
+      updatedAt = Date(),
     )
 
     val activeTrack = GpsTrackEntity(
@@ -196,7 +196,7 @@ class GpsTrackDaoTest {
       endTime = null,
       isActive = true,
       createdAt = Date(),
-      updatedAt = Date()
+      updatedAt = Date(),
     )
 
     gpsTrackDao.insertTrack(inactiveTrack)
@@ -220,7 +220,7 @@ class GpsTrackDaoTest {
       endTime = null,
       isActive = false,
       createdAt = Date(),
-      updatedAt = Date()
+      updatedAt = Date(),
     )
 
     val trackId = gpsTrackDao.insertTrack(track)
@@ -231,7 +231,7 @@ class GpsTrackDaoTest {
       longitude = 139.6503,
       accuracy = 10f,
       timestamp = Date(),
-      createdAt = Date()
+      createdAt = Date(),
     )
 
     gpsPointDao.insertPoint(point)
@@ -247,7 +247,7 @@ class GpsTrackDaoTest {
     assertNull("トラックが削除される", gpsTrackDao.getTrackById(trackId))
     assertTrue(
       "関連ポイントも削除される（CASCADE）",
-      gpsPointDao.getPointsByTrackIdSync(trackId).isEmpty()
+      gpsPointDao.getPointsByTrackIdSync(trackId).isEmpty(),
     )
   }
 
@@ -259,7 +259,7 @@ class GpsTrackDaoTest {
       endTime = null,
       isActive = true,
       createdAt = Date(),
-      updatedAt = Date()
+      updatedAt = Date(),
     )
 
     val track2 = GpsTrackEntity(
@@ -267,7 +267,7 @@ class GpsTrackDaoTest {
       endTime = null,
       isActive = true,
       createdAt = Date(),
-      updatedAt = Date()
+      updatedAt = Date(),
     )
 
     gpsTrackDao.insertTrack(track1)
@@ -294,7 +294,7 @@ class GpsTrackDaoTest {
       endTime = null,
       isActive = true,
       createdAt = Date(),
-      updatedAt = Date()
+      updatedAt = Date(),
     )
     gpsTrackDao.insertTrack(track)
 

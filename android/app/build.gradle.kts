@@ -6,6 +6,7 @@ plugins {
   alias(libs.plugins.kotlin.compose)
   alias(libs.plugins.hilt)
   alias(libs.plugins.kotlin.kapt)
+  id("com.diffplug.spotless")
 }
 
 android {
@@ -36,7 +37,7 @@ android {
     buildConfigField(
       "String",
       "GOOGLE_MAPS_API_KEY",
-      "\"${localProperties.getProperty("GOOGLE_MAPS_API_KEY", "")}\""
+      "\"${localProperties.getProperty("GOOGLE_MAPS_API_KEY", "")}\"",
     )
   }
 
@@ -135,4 +136,23 @@ dependencies {
 
   debugImplementation(libs.androidx.ui.tooling)
   debugImplementation(libs.androidx.ui.test.manifest)
+}
+
+spotless {
+  kotlin {
+    target("**/*.kt")
+    ktlint("0.50.0").editorConfigOverride(
+      mapOf(
+        "indent_size" to "2",
+      ),
+    )
+  }
+  kotlinGradle {
+    target("*.gradle.kts")
+    ktlint("0.50.0").editorConfigOverride(
+      mapOf(
+        "indent_size" to "2",
+      ),
+    )
+  }
 }

@@ -48,7 +48,7 @@ class HistoryViewModelTest {
     // Given
     val tracks = listOf(
       createTrack(id = 1, isActive = true, endTime = null),
-      createTrack(id = 2, isActive = false, endTime = Date())
+      createTrack(id = 2, isActive = false, endTime = Date()),
     )
     coEvery { mockRepository.getAllTracks() } returns flowOf(tracks)
 
@@ -115,7 +115,7 @@ class HistoryViewModelTest {
     id: Long,
     startTime: Date = Date(),
     endTime: Date? = null,
-    isActive: Boolean = false
+    isActive: Boolean = false,
   ): GpsTrack {
     return GpsTrack(
       id = id,
@@ -124,7 +124,7 @@ class HistoryViewModelTest {
       isActive = isActive,
       points = emptyList(),
       createdAt = Date(),
-      updatedAt = Date()
+      updatedAt = Date(),
     )
   }
 }

@@ -6,12 +6,12 @@ data class TrackingState(
   val currentTrackId: Long? = null,
   val errorMessage: String? = null,
   val currentLocation: LocationInfo? = null,
-  val locationCount: Int = 0
+  val locationCount: Int = 0,
 )
 
 data class LocationInfo(
   val latitude: Double,
   val longitude: Double,
   val accuracy: Float,
-  val timestamp: String
+  val timestamp: String,
 )

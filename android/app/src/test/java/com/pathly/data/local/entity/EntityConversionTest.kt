@@ -24,7 +24,7 @@ class EntityConversionTest {
       endTime = endTime,
       isActive = false,
       createdAt = createdAt,
-      updatedAt = updatedAt
+      updatedAt = updatedAt,
     )
 
     val points = listOf(
@@ -38,8 +38,8 @@ class EntityConversionTest {
         speed = 5f,
         bearing = 90f,
         timestamp = Date(),
-        createdAt = Date()
-      )
+        createdAt = Date(),
+      ),
     )
 
     // When - GpsTrackRepositoryImplの変換ロジックを模擬
@@ -65,7 +65,7 @@ class EntityConversionTest {
       endTime = null,
       isActive = true,
       createdAt = Date(),
-      updatedAt = Date()
+      updatedAt = Date(),
     )
 
     // When
@@ -87,7 +87,7 @@ class EntityConversionTest {
       endTime = null,
       isActive = true,
       createdAt = Date(),
-      updatedAt = Date()
+      updatedAt = Date(),
     )
 
     // When - points パラメータを省略（デフォルト値使用）
@@ -114,7 +114,7 @@ class EntityConversionTest {
       speed = 12.5f,
       bearing = 45f,
       timestamp = timestamp,
-      createdAt = createdAt
+      createdAt = createdAt,
     )
 
     // When - GpsTrackRepositoryImplの変換ロジックを模擬
@@ -146,7 +146,7 @@ class EntityConversionTest {
       speed = null,
       bearing = null,
       timestamp = Date(),
-      createdAt = Date()
+      createdAt = Date(),
     )
 
     // When
@@ -178,7 +178,7 @@ class EntityConversionTest {
       isActive = false,
       points = emptyList(), // Entity変換では points は使用されない
       createdAt = createdAt,
-      updatedAt = updatedAt
+      updatedAt = updatedAt,
     )
 
     // When - GpsTrackRepositoryImpl.deleteTrackの変換ロジックを模擬
@@ -188,7 +188,7 @@ class EntityConversionTest {
       endTime = track.endTime,
       isActive = track.isActive,
       createdAt = track.createdAt,
-      updatedAt = track.updatedAt
+      updatedAt = track.updatedAt,
     )
 
     // Then
@@ -214,7 +214,7 @@ class EntityConversionTest {
       endTime = endTime,
       isActive = true,
       createdAt = createdAt,
-      updatedAt = updatedAt
+      updatedAt = updatedAt,
     )
 
     // When
@@ -225,7 +225,7 @@ class EntityConversionTest {
       endTime = domainModel.endTime,
       isActive = domainModel.isActive,
       createdAt = domainModel.createdAt,
-      updatedAt = domainModel.updatedAt
+      updatedAt = domainModel.updatedAt,
     )
 
     // Then
@@ -235,7 +235,7 @@ class EntityConversionTest {
     assertEquals(
       "アクティブ状態変換の整合性",
       originalEntity.isActive,
-      convertedEntity.isActive
+      convertedEntity.isActive,
     )
     assertEquals("作成日時変換の整合性", originalEntity.createdAt, convertedEntity.createdAt)
     assertEquals("更新日時変換の整合性", originalEntity.updatedAt, convertedEntity.updatedAt)
@@ -250,7 +250,7 @@ class EntityConversionTest {
       isActive = this.isActive,
       points = points,
       createdAt = this.createdAt,
-      updatedAt = this.updatedAt
+      updatedAt = this.updatedAt,
     )
   }
 
@@ -265,7 +265,7 @@ class EntityConversionTest {
       speed = this.speed,
       bearing = this.bearing,
       timestamp = this.timestamp,
-      createdAt = this.createdAt
+      createdAt = this.createdAt,
     )
   }
 }

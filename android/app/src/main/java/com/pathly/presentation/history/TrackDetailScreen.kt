@@ -48,11 +48,10 @@ import kotlin.math.roundToInt
 fun TrackDetailScreen(
   track: GpsTrack,
   onBackClick: () -> Unit,
-  modifier: Modifier = Modifier
+  modifier: Modifier = Modifier,
 ) {
-
   Column(
-    modifier = modifier.fillMaxSize()
+    modifier = modifier.fillMaxSize(),
   ) {
     TopAppBar(
       title = { Text("外出記録詳細") },
@@ -60,49 +59,49 @@ fun TrackDetailScreen(
         IconButton(onClick = onBackClick) {
           Icon(
             imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-            contentDescription = "戻る"
+            contentDescription = "戻る",
           )
         }
-      }
+      },
     )
 
     Column(
       modifier = Modifier
         .fillMaxSize()
         .padding(16.dp),
-      verticalArrangement = Arrangement.spacedBy(16.dp)
+      verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
       Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(8.dp),
         colors = CardDefaults.cardColors(
-          containerColor = MaterialTheme.colorScheme.surfaceVariant
-        )
+          containerColor = MaterialTheme.colorScheme.surfaceVariant,
+        ),
       ) {
         Column(
           modifier = Modifier.padding(16.dp),
-          verticalArrangement = Arrangement.spacedBy(8.dp)
+          verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
           Text(
             text = "基本情報",
             style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.Bold
+            fontWeight = FontWeight.Bold,
           )
 
           DetailRow(
             label = "日付",
-            value = DateFormatters.DATE_FORMAT.format(track.startTime)
+            value = DateFormatters.DATE_FORMAT.format(track.startTime),
           )
 
           DetailRow(
             label = "開始時刻",
-            value = DateFormatters.TIME_FORMAT.format(track.startTime)
+            value = DateFormatters.TIME_FORMAT.format(track.startTime),
           )
 
           track.endTime?.let { endTime ->
             DetailRow(
               label = "終了時刻",
-              value = DateFormatters.TIME_FORMAT.format(endTime)
+              value = DateFormatters.TIME_FORMAT.format(endTime),
             )
 
             val durationMs = endTime.time - track.startTime.time
@@ -112,7 +111,7 @@ fun TrackDetailScreen(
 
             DetailRow(
               label = "所要時間",
-              value = if (hours > 0) "${hours}時間${minutes}分" else "${minutes}分"
+              value = if (hours > 0) "${hours}時間${minutes}分" else "${minutes}分",
             )
           }
 
@@ -120,7 +119,7 @@ fun TrackDetailScreen(
           val distanceKm = (track.totalDistanceMeters / 1000.0 * 100).roundToInt() / 100.0
           DetailRow(
             label = "総移動距離",
-            value = "${distanceKm}km (${track.points.size}点)"
+            value = "${distanceKm}km (${track.points.size}点)",
           )
         }
       }
@@ -129,27 +128,27 @@ fun TrackDetailScreen(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(8.dp),
         colors = CardDefaults.cardColors(
-          containerColor = MaterialTheme.colorScheme.surfaceVariant
-        )
+          containerColor = MaterialTheme.colorScheme.surfaceVariant,
+        ),
       ) {
         Column(
           modifier = Modifier.padding(16.dp),
-          verticalArrangement = Arrangement.spacedBy(8.dp)
+          verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
           Text(
             text = "記録状態",
             style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.Bold
+            fontWeight = FontWeight.Bold,
           )
 
           DetailRow(
             label = "状態",
-            value = if (track.isActive) "記録中" else "完了"
+            value = if (track.isActive) "記録中" else "完了",
           )
 
           DetailRow(
             label = "トラックID",
-            value = track.id.toString()
+            value = track.id.toString(),
           )
         }
       }
@@ -160,24 +159,24 @@ fun TrackDetailScreen(
           modifier = Modifier.fillMaxWidth(),
           shape = RoundedCornerShape(8.dp),
           colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant
-          )
+            containerColor = MaterialTheme.colorScheme.surfaceVariant,
+          ),
         ) {
           Column(
             modifier = Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
+            verticalArrangement = Arrangement.spacedBy(8.dp),
           ) {
             Text(
               text = "軌跡地図",
               style = MaterialTheme.typography.titleMedium,
-              fontWeight = FontWeight.Bold
+              fontWeight = FontWeight.Bold,
             )
 
             TrackMapView(
               track = track,
               modifier = Modifier
                 .fillMaxWidth()
-                .height(200.dp)
+                .height(200.dp),
             )
           }
         }
@@ -188,20 +187,20 @@ fun TrackDetailScreen(
           modifier = Modifier.fillMaxWidth(),
           shape = RoundedCornerShape(8.dp),
           colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.primaryContainer
-          )
+            containerColor = MaterialTheme.colorScheme.primaryContainer,
+          ),
         ) {
           Box(
             modifier = Modifier
               .fillMaxWidth()
               .padding(16.dp),
-            contentAlignment = Alignment.Center
+            contentAlignment = Alignment.Center,
           ) {
             Text(
               text = "この記録は現在進行中です",
               style = MaterialTheme.typography.bodyMedium,
               color = MaterialTheme.colorScheme.onPrimaryContainer,
-              fontWeight = FontWeight.Medium
+              fontWeight = FontWeight.Medium,
             )
           }
         }
@@ -214,22 +213,22 @@ fun TrackDetailScreen(
 private fun DetailRow(
   label: String,
   value: String,
-  modifier: Modifier = Modifier
+  modifier: Modifier = Modifier,
 ) {
   Row(
     modifier = modifier.fillMaxWidth(),
     horizontalArrangement = Arrangement.SpaceBetween,
-    verticalAlignment = Alignment.CenterVertically
+    verticalAlignment = Alignment.CenterVertically,
   ) {
     Text(
       text = label,
       style = MaterialTheme.typography.bodyMedium,
-      color = MaterialTheme.colorScheme.onSurfaceVariant
+      color = MaterialTheme.colorScheme.onSurfaceVariant,
     )
     Text(
       text = value,
       style = MaterialTheme.typography.bodyMedium,
-      fontWeight = FontWeight.Medium
+      fontWeight = FontWeight.Medium,
     )
   }
 }
@@ -237,7 +236,7 @@ private fun DetailRow(
 @Composable
 private fun TrackMapView(
   track: GpsTrack,
-  modifier: Modifier = Modifier
+  modifier: Modifier = Modifier,
 ) {
   val cameraPositionState = rememberCameraPositionState()
   val defaultPosition = LatLng(35.6762, 139.6503) // Tokyo Station as default
@@ -254,7 +253,7 @@ private fun TrackMapView(
       // Animate camera to show the track with padding
       val padding = 50 // padding in pixels
       cameraPositionState.animate(
-        CameraUpdateFactory.newLatLngBounds(bounds, padding)
+        CameraUpdateFactory.newLatLngBounds(bounds, padding),
       )
     } else {
       cameraPositionState.position = CameraPosition.fromLatLngZoom(defaultPosition, 12f)
@@ -266,7 +265,7 @@ private fun TrackMapView(
     cameraPositionState = cameraPositionState,
     properties = MapProperties(
       mapType = MapType.NORMAL,
-      isMyLocationEnabled = false
+      isMyLocationEnabled = false,
     ),
     uiSettings = MapUiSettings(
       zoomControlsEnabled = false,
@@ -274,8 +273,8 @@ private fun TrackMapView(
       myLocationButtonEnabled = false,
       mapToolbarEnabled = false,
       zoomGesturesEnabled = true,
-      scrollGesturesEnabled = true
-    )
+      scrollGesturesEnabled = true,
+    ),
   ) {
     if (track.points.size >= 2) {
       // Convert GPS points to LatLng
@@ -287,7 +286,7 @@ private fun TrackMapView(
       Polyline(
         points = polylinePoints,
         color = Color.Blue,
-        width = 4f
+        width = 4f,
       )
 
       // Add start marker (green)
@@ -298,7 +297,7 @@ private fun TrackMapView(
       Marker(
         state = startMarkerState,
         title = "開始",
-        snippet = "記録開始地点"
+        snippet = "記録開始地点",
       )
 
       // Add end marker (red)
@@ -309,7 +308,7 @@ private fun TrackMapView(
       Marker(
         state = endMarkerState,
         title = "終了",
-        snippet = "記録終了地点"
+        snippet = "記録終了地点",
       )
     }
   }

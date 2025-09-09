@@ -134,6 +134,10 @@ app/src/main/java/com/pathly/
 
 # テストカバレッジ
 ./gradlew jacocoTestReport
+
+# コードフォーマット
+./gradlew spotlessCheck    # フォーマット違反をチェック
+./gradlew spotlessApply    # コードを自動フォーマット
 ```
 
 ## 📖 ドキュメント

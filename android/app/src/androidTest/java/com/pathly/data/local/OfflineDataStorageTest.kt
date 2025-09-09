@@ -47,7 +47,7 @@ class OfflineDataStorageTest {
     // テスト用のインメモリデータベースを作成
     database = Room.inMemoryDatabaseBuilder(
       context,
-      PathlyDatabase::class.java
+      PathlyDatabase::class.java,
     ).allowMainThreadQueries().build()
 
     gpsTrackDao = database.gpsTrackDao()
@@ -71,7 +71,7 @@ class OfflineDataStorageTest {
       endTime = null,
       isActive = true,
       createdAt = Date(),
-      updatedAt = Date()
+      updatedAt = Date(),
     )
 
     // When: ローカルデータベースに保存
@@ -92,7 +92,7 @@ class OfflineDataStorageTest {
       endTime = null,
       isActive = true,
       createdAt = Date(),
-      updatedAt = Date()
+      updatedAt = Date(),
     )
     val trackId = gpsTrackDao.insertTrack(track)
 
@@ -107,7 +107,7 @@ class OfflineDataStorageTest {
         speed = 0.0f,
         bearing = 0.0f,
         timestamp = Date(System.currentTimeMillis()),
-        createdAt = Date()
+        createdAt = Date(),
       ),
       GpsPointEntity(
         id = 0,
@@ -119,8 +119,8 @@ class OfflineDataStorageTest {
         speed = 1.5f,
         bearing = 45.0f,
         timestamp = Date(System.currentTimeMillis() + 30000),
-        createdAt = Date()
-      )
+        createdAt = Date(),
+      ),
     )
 
     // When: ポイントデータを保存
@@ -185,7 +185,7 @@ class OfflineDataStorageTest {
     // 新しいデータベースインスタンスを作成
     database = Room.inMemoryDatabaseBuilder(
       context,
-      PathlyDatabase::class.java
+      PathlyDatabase::class.java,
     ).allowMainThreadQueries().build()
     gpsTrackDao = database.gpsTrackDao()
 
@@ -211,7 +211,7 @@ class OfflineDataStorageTest {
       speed = 0.0f,
       bearing = 0.0f,
       timestamp = Date(System.currentTimeMillis()),
-      createdAt = Date()
+      createdAt = Date(),
     )
     gpsPointDao.insertPoint(point)
 
@@ -283,7 +283,7 @@ class OfflineDataStorageTest {
       speed = 0.0f,
       bearing = 0.0f,
       timestamp = Date(System.currentTimeMillis()),
-      createdAt = Date()
+      createdAt = Date(),
     )
     gpsPointDao.insertPoint(orphanedPoint)
 
@@ -302,7 +302,7 @@ class OfflineDataStorageTest {
 
   private fun createTestTrack(
     isActive: Boolean = false,
-    createdAt: Date = Date()
+    createdAt: Date = Date(),
   ): GpsTrackEntity {
     return GpsTrackEntity(
       id = 0,
@@ -310,7 +310,7 @@ class OfflineDataStorageTest {
       endTime = if (!isActive) Date() else null,
       isActive = isActive,
       createdAt = createdAt,
-      updatedAt = Date()
+      updatedAt = Date(),
     )
   }
 }

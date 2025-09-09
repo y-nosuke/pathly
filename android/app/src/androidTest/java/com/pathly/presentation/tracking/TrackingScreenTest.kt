@@ -35,8 +35,8 @@ class TrackingScreenTest {
       TrackingState(
         hasLocationPermission = true,
         isTracking = false,
-        errorMessage = null
-      )
+        errorMessage = null,
+      ),
     )
 
     // ViewModelのuiStateをモック
@@ -53,7 +53,7 @@ class TrackingScreenTest {
       PathlyAndroidTheme {
         TrackingScreen(
           onRequestPermission = mockOnRequestPermission,
-          viewModel = mockViewModel
+          viewModel = mockViewModel,
         )
       }
     }
@@ -70,7 +70,7 @@ class TrackingScreenTest {
     uiStateFlow.value = TrackingState(
       hasLocationPermission = false,
       isTracking = false,
-      errorMessage = null
+      errorMessage = null,
     )
 
     // When
@@ -78,7 +78,7 @@ class TrackingScreenTest {
       PathlyAndroidTheme {
         TrackingScreen(
           onRequestPermission = mockOnRequestPermission,
-          viewModel = mockViewModel
+          viewModel = mockViewModel,
         )
       }
     }
@@ -104,14 +104,14 @@ class TrackingScreenTest {
     uiStateFlow.value = TrackingState(
       hasLocationPermission = false,
       isTracking = false,
-      errorMessage = null
+      errorMessage = null,
     )
 
     composeTestRule.setContent {
       PathlyAndroidTheme {
         TrackingScreen(
           onRequestPermission = mockOnRequestPermission,
-          viewModel = mockViewModel
+          viewModel = mockViewModel,
         )
       }
     }
@@ -131,7 +131,7 @@ class TrackingScreenTest {
     uiStateFlow.value = TrackingState(
       hasLocationPermission = true,
       isTracking = false,
-      errorMessage = null
+      errorMessage = null,
     )
 
     // When
@@ -139,7 +139,7 @@ class TrackingScreenTest {
       PathlyAndroidTheme {
         TrackingScreen(
           onRequestPermission = mockOnRequestPermission,
-          viewModel = mockViewModel
+          viewModel = mockViewModel,
         )
       }
     }
@@ -165,14 +165,14 @@ class TrackingScreenTest {
     uiStateFlow.value = TrackingState(
       hasLocationPermission = true,
       isTracking = false,
-      errorMessage = null
+      errorMessage = null,
     )
 
     composeTestRule.setContent {
       PathlyAndroidTheme {
         TrackingScreen(
           onRequestPermission = mockOnRequestPermission,
-          viewModel = mockViewModel
+          viewModel = mockViewModel,
         )
       }
     }
@@ -192,7 +192,7 @@ class TrackingScreenTest {
     uiStateFlow.value = TrackingState(
       hasLocationPermission = true,
       isTracking = true,
-      errorMessage = null
+      errorMessage = null,
     )
 
     // When
@@ -200,7 +200,7 @@ class TrackingScreenTest {
       PathlyAndroidTheme {
         TrackingScreen(
           onRequestPermission = mockOnRequestPermission,
-          viewModel = mockViewModel
+          viewModel = mockViewModel,
         )
       }
     }
@@ -226,14 +226,14 @@ class TrackingScreenTest {
     uiStateFlow.value = TrackingState(
       hasLocationPermission = true,
       isTracking = true,
-      errorMessage = null
+      errorMessage = null,
     )
 
     composeTestRule.setContent {
       PathlyAndroidTheme {
         TrackingScreen(
           onRequestPermission = mockOnRequestPermission,
-          viewModel = mockViewModel
+          viewModel = mockViewModel,
         )
       }
     }
@@ -254,7 +254,7 @@ class TrackingScreenTest {
     uiStateFlow.value = TrackingState(
       hasLocationPermission = true,
       isTracking = false,
-      errorMessage = errorMessage
+      errorMessage = errorMessage,
     )
 
     // When
@@ -262,7 +262,7 @@ class TrackingScreenTest {
       PathlyAndroidTheme {
         TrackingScreen(
           onRequestPermission = mockOnRequestPermission,
-          viewModel = mockViewModel
+          viewModel = mockViewModel,
         )
       }
     }
@@ -285,7 +285,7 @@ class TrackingScreenTest {
     uiStateFlow.value = TrackingState(
       hasLocationPermission = false,
       isTracking = false,
-      errorMessage = errorMessage
+      errorMessage = errorMessage,
     )
 
     // When
@@ -293,7 +293,7 @@ class TrackingScreenTest {
       PathlyAndroidTheme {
         TrackingScreen(
           onRequestPermission = mockOnRequestPermission,
-          viewModel = mockViewModel
+          viewModel = mockViewModel,
         )
       }
     }
@@ -315,7 +315,7 @@ class TrackingScreenTest {
       PathlyAndroidTheme {
         TrackingScreen(
           onRequestPermission = mockOnRequestPermission,
-          viewModel = mockViewModel
+          viewModel = mockViewModel,
         )
       }
     }
@@ -330,7 +330,7 @@ class TrackingScreenTest {
       uiStateFlow.value = TrackingState(
         hasLocationPermission = true,
         isTracking = true,
-        errorMessage = null
+        errorMessage = null,
       )
     }
 
@@ -351,14 +351,14 @@ class TrackingScreenTest {
     uiStateFlow.value = TrackingState(
       hasLocationPermission = false,
       isTracking = false,
-      errorMessage = null
+      errorMessage = null,
     )
 
     composeTestRule.setContent {
       PathlyAndroidTheme {
         TrackingScreen(
           onRequestPermission = mockOnRequestPermission,
-          viewModel = mockViewModel
+          viewModel = mockViewModel,
         )
       }
     }
@@ -373,7 +373,7 @@ class TrackingScreenTest {
       uiStateFlow.value = TrackingState(
         hasLocationPermission = true,
         isTracking = false,
-        errorMessage = null
+        errorMessage = null,
       )
     }
 

@@ -35,10 +35,10 @@ import dagger.hilt.android.AndroidEntryPoint
 
 enum class BottomNavItem(
   val title: String,
-  val icon: ImageVector
+  val icon: ImageVector,
 ) {
   TRACKING("記録", Icons.Filled.PlayArrow),
-  HISTORY("履歴", Icons.AutoMirrored.Filled.List)
+  HISTORY("履歴", Icons.AutoMirrored.Filled.List),
 }
 
 @AndroidEntryPoint
@@ -47,7 +47,7 @@ class MainActivity : ComponentActivity() {
   private lateinit var viewModel: TrackingViewModel
 
   private val locationPermissionLauncher = registerForActivityResult(
-    ActivityResultContracts.RequestMultiplePermissions()
+    ActivityResultContracts.RequestMultiplePermissions(),
   ) { permissions ->
     val allGranted = permissions.values.all { it }
     viewModel.updateLocationPermission(allGranted)
@@ -62,9 +62,9 @@ class MainActivity : ComponentActivity() {
         MainScreen(
           onRequestPermission = {
             locationPermissionLauncher.launch(
-              PermissionUtils.PermissionGroups.ALL_REQUIRED_PERMISSIONS
+              PermissionUtils.PermissionGroups.ALL_REQUIRED_PERMISSIONS,
             )
-          }
+          },
         )
       }
     }
@@ -74,7 +74,7 @@ class MainActivity : ComponentActivity() {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun MainScreen(
-  onRequestPermission: () -> Unit
+  onRequestPermission: () -> Unit,
 ) {
   var selectedTab by remember { mutableStateOf(BottomNavItem.TRACKING) }
   var selectedTrack by remember { mutableStateOf<GpsTrack?>(null) }
@@ -89,33 +89,33 @@ private fun MainScreen(
               selected = selectedTab == item,
               onClick = { selectedTab = item },
               label = { Text(item.title) },
-              icon = { Icon(item.icon, contentDescription = item.title) }
+              icon = { Icon(item.icon, contentDescription = item.title) },
             )
           }
         }
       }
-    }
+    },
   ) { innerPadding ->
     when {
       selectedTrack != null -> {
         TrackDetailScreen(
           track = selectedTrack!!,
           onBackClick = { selectedTrack = null },
-          modifier = Modifier.padding(innerPadding)
+          modifier = Modifier.padding(innerPadding),
         )
       }
 
       selectedTab == BottomNavItem.TRACKING -> {
         TrackingScreen(
           modifier = Modifier.padding(innerPadding),
-          onRequestPermission = onRequestPermission
+          onRequestPermission = onRequestPermission,
         )
       }
 
       selectedTab == BottomNavItem.HISTORY -> {
         HistoryScreen(
           modifier = Modifier.padding(innerPadding),
-          onTrackClick = { track -> selectedTrack = track }
+          onTrackClick = { track -> selectedTrack = track },
         )
       }
     }

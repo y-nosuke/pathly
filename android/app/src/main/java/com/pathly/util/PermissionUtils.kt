@@ -22,14 +22,14 @@ object PermissionUtils {
       arrayOf(
         Permissions.FINE_LOCATION,
         Permissions.COARSE_LOCATION,
-        Permissions.POST_NOTIFICATIONS
+        Permissions.POST_NOTIFICATIONS,
       )
   }
 
   /** 単一権限をチェック */
   fun hasPermission(context: Context, permission: String): Boolean {
     return ContextCompat.checkSelfPermission(context, permission) ==
-            PackageManager.PERMISSION_GRANTED
+      PackageManager.PERMISSION_GRANTED
   }
 
   /** 複数権限をすべてチェック */

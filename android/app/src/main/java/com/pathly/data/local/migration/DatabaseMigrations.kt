@@ -81,7 +81,7 @@ object DatabaseMigrations {
    */
   val ALL_MIGRATIONS = arrayOf(
     MIGRATION_1_2,
-    MIGRATION_2_3
+    MIGRATION_2_3,
     // 将来のマイグレーションをここに追加
   )
 
@@ -102,7 +102,7 @@ object DatabaseMigrations {
     val isValid = currentVersion == expectedVersion
     Logger.i(
       TAG,
-      "Database version validation: current=$currentVersion, expected=$expectedVersion, valid=$isValid"
+      "Database version validation: current=$currentVersion, expected=$expectedVersion, valid=$isValid",
     )
     return isValid
   }

@@ -37,5 +37,4 @@ object DatabaseModule {
   fun provideGpsPointDao(database: PathlyDatabase): GpsPointDao {
     return database.gpsPointDao()
   }
-
 }

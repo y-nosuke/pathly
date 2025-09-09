@@ -43,7 +43,7 @@ class DataPersistenceTest {
     database = Room.databaseBuilder(
       context,
       PathlyDatabase::class.java,
-      TEST_DB_NAME
+      TEST_DB_NAME,
     )
       .allowMainThreadQueries()
       .build()
@@ -75,7 +75,7 @@ class DataPersistenceTest {
       endTime = null,
       isActive = true,
       createdAt = Date(),
-      updatedAt = Date()
+      updatedAt = Date(),
     )
 
     val trackId = database.gpsTrackDao().insertTrack(originalTrack)
@@ -93,7 +93,7 @@ class DataPersistenceTest {
         speed = 0.0f,
         bearing = 0.0f,
         timestamp = Date(System.currentTimeMillis()),
-        createdAt = Date()
+        createdAt = Date(),
       ),
       GpsPointEntity(
         id = 0,
@@ -105,8 +105,8 @@ class DataPersistenceTest {
         speed = 1.5f,
         bearing = 45.0f,
         timestamp = Date(System.currentTimeMillis() + 30000),
-        createdAt = Date()
-      )
+        createdAt = Date(),
+      ),
     )
 
     database.gpsPointDao().insertPoints(gpsPoints)
@@ -137,7 +137,7 @@ class DataPersistenceTest {
     database = Room.databaseBuilder(
       context,
       PathlyDatabase::class.java,
-      TEST_DB_NAME
+      TEST_DB_NAME,
     )
       .allowMainThreadQueries()
       .build()
@@ -171,7 +171,7 @@ class DataPersistenceTest {
       endTime = Date(),
       isActive = false,
       createdAt = Date(),
-      updatedAt = Date()
+      updatedAt = Date(),
     )
 
     val trackId = database.gpsTrackDao().insertTrack(testTrack)
@@ -199,7 +199,7 @@ class DataPersistenceTest {
     database = Room.databaseBuilder(
       context,
       PathlyDatabase::class.java,
-      TEST_DB_NAME
+      TEST_DB_NAME,
     )
       .allowMainThreadQueries()
       .build()
@@ -225,7 +225,7 @@ class DataPersistenceTest {
       endTime = null,
       isActive = true,
       createdAt = Date(),
-      updatedAt = Date()
+      updatedAt = Date(),
     )
 
     database.gpsTrackDao().insertTrack(validTrack)
@@ -240,7 +240,7 @@ class DataPersistenceTest {
       database = Room.databaseBuilder(
         context,
         PathlyDatabase::class.java,
-        TEST_DB_NAME
+        TEST_DB_NAME,
       )
         .fallbackToDestructiveMigration()
         .allowMainThreadQueries()
@@ -260,18 +260,17 @@ class DataPersistenceTest {
         endTime = null,
         isActive = true,
         createdAt = Date(),
-        updatedAt = Date()
+        updatedAt = Date(),
       )
 
       val newTrackId = database.gpsTrackDao().insertTrack(newTrack)
       assertTrue("再作成されたデータベースにデータを保存できない", newTrackId > 0)
-
     } catch (e: Exception) {
       // データベース破損の検出は想定される動作
       assertTrue(
         "データベース破損が適切にハンドリングされていない",
         e.message?.contains("database") == true ||
-                e.message?.contains("corrupt") == true
+          e.message?.contains("corrupt") == true,
       )
     }
   }
@@ -314,8 +313,8 @@ class DataPersistenceTest {
           endTime = Date(startTime + (i * 60000) + 30000),
           isActive = false,
           createdAt = Date(startTime + (i * 60000)),
-          updatedAt = Date(startTime + (i * 60000))
-        )
+          updatedAt = Date(startTime + (i * 60000)),
+        ),
       )
     }
 
@@ -338,8 +337,8 @@ class DataPersistenceTest {
             speed = j * 0.1f,
             bearing = j * 7.2f,
             timestamp = Date(startTime + (index * 60000) + (j * 1000)),
-            createdAt = Date()
-          )
+            createdAt = Date(),
+          ),
         )
       }
       database.gpsPointDao().insertPoints(points)
@@ -351,7 +350,7 @@ class DataPersistenceTest {
     database = Room.databaseBuilder(
       context,
       PathlyDatabase::class.java,
-      TEST_DB_NAME
+      TEST_DB_NAME,
     )
       .allowMainThreadQueries()
       .build()

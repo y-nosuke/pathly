@@ -24,7 +24,7 @@ import javax.inject.Inject
 @HiltViewModel
 class TrackingViewModel @Inject constructor(
   private val application: Application,
-  private val gpsTrackRepository: GpsTrackRepository
+  private val gpsTrackRepository: GpsTrackRepository,
 ) : AndroidViewModel(application) {
 
   private val _uiState = MutableStateFlow(TrackingState())
@@ -32,7 +32,6 @@ class TrackingViewModel @Inject constructor(
 
   private var locationService: LocationTrackingService? = null
   private var isServiceBound = false
-
 
   private val serviceConnection = object : ServiceConnection {
     override fun onServiceConnected(name: ComponentName?, service: IBinder?) {
@@ -47,7 +46,7 @@ class TrackingViewModel @Inject constructor(
         if (activeTrack != null) {
           _uiState.value = _uiState.value.copy(
             isTracking = true,
-            currentTrackId = activeTrack.id
+            currentTrackId = activeTrack.id,
           )
         }
       }
@@ -70,7 +69,7 @@ class TrackingViewModel @Inject constructor(
         }
         _uiState.value = _uiState.value.copy(
           isTracking = false,
-          currentTrackId = null
+          currentTrackId = null,
         )
       }
     }
@@ -89,14 +88,14 @@ class TrackingViewModel @Inject constructor(
         // アクティブなトラックが見つかった場合、サービスに接続を試行
         _uiState.value = _uiState.value.copy(
           isTracking = true,
-          currentTrackId = activeTrack.id
+          currentTrackId = activeTrack.id,
         )
         bindToService()
       } else {
         // アクティブなトラックがない場合
         _uiState.value = _uiState.value.copy(
           isTracking = false,
-          currentTrackId = null
+          currentTrackId = null,
         )
       }
     }
@@ -108,7 +107,7 @@ class TrackingViewModel @Inject constructor(
     if (!_uiState.value.hasLocationPermission) {
       Log.e("TrackingViewModel", "Location permission not granted")
       _uiState.value = _uiState.value.copy(
-        errorMessage = "位置情報の権限が必要です"
+        errorMessage = "位置情報の権限が必要です",
       )
       return
     }
@@ -122,7 +121,7 @@ class TrackingViewModel @Inject constructor(
 
     _uiState.value = _uiState.value.copy(
       isTracking = true,
-      errorMessage = null
+      errorMessage = null,
     )
   }
 
@@ -136,13 +135,13 @@ class TrackingViewModel @Inject constructor(
 
     _uiState.value = _uiState.value.copy(
       isTracking = false,
-      currentTrackId = null
+      currentTrackId = null,
     )
   }
 
   fun updateLocationPermission(hasPermission: Boolean) {
     _uiState.value = _uiState.value.copy(
-      hasLocationPermission = hasPermission
+      hasLocationPermission = hasPermission,
     )
   }
 
@@ -172,19 +171,19 @@ class TrackingViewModel @Inject constructor(
       viewModelScope.launch {
         combine(
           service.currentLocation,
-          service.locationCount
+          service.locationCount,
         ) { location, count ->
           location?.let { loc ->
             val locationInfo = LocationInfo(
               latitude = loc.latitude,
               longitude = loc.longitude,
               accuracy = loc.accuracy,
-              timestamp = DateFormatters.TIME_FORMAT.format(java.util.Date(loc.time))
+              timestamp = DateFormatters.TIME_FORMAT.format(java.util.Date(loc.time)),
             )
 
             _uiState.value = _uiState.value.copy(
               currentLocation = locationInfo,
-              locationCount = count
+              locationCount = count,
             )
           }
         }.collect { }
@@ -193,7 +192,6 @@ class TrackingViewModel @Inject constructor(
       Log.w("TrackingViewModel", "Location service is null in observeLocationUpdates")
     }
   }
-
 
   override fun onCleared() {
     super.onCleared()

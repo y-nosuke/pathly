@@ -9,7 +9,7 @@ data class GpsTrack(
   val isActive: Boolean,
   val points: List<GpsPoint> = emptyList(),
   val createdAt: Date,
-  val updatedAt: Date
+  val updatedAt: Date,
 ) {
   val totalDistanceMeters: Double
     get() = calculateDistance()
@@ -23,7 +23,7 @@ data class GpsTrack(
       val currPoint = points[i]
       totalDistance += distanceBetween(
         prevPoint.latitude, prevPoint.longitude,
-        currPoint.latitude, currPoint.longitude
+        currPoint.latitude, currPoint.longitude,
       )
     }
     return totalDistance
@@ -34,8 +34,8 @@ data class GpsTrack(
     val dLat = Math.toRadians(lat2 - lat1)
     val dLon = Math.toRadians(lon2 - lon1)
     val a = kotlin.math.sin(dLat / 2) * kotlin.math.sin(dLat / 2) +
-            kotlin.math.cos(Math.toRadians(lat1)) * kotlin.math.cos(Math.toRadians(lat2)) *
-            kotlin.math.sin(dLon / 2) * kotlin.math.sin(dLon / 2)
+      kotlin.math.cos(Math.toRadians(lat1)) * kotlin.math.cos(Math.toRadians(lat2)) *
+      kotlin.math.sin(dLon / 2) * kotlin.math.sin(dLon / 2)
     val c = 2 * kotlin.math.atan2(kotlin.math.sqrt(a), kotlin.math.sqrt(1 - a))
     return earthRadius * c
   }

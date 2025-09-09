@@ -12,5 +12,5 @@ data class GpsTrackEntity(
   val endTime: Date? = null,
   val isActive: Boolean = true,
   val createdAt: Date = Date(),
-  val updatedAt: Date = Date()
+  val updatedAt: Date = Date(),
 )

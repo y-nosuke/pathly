@@ -37,7 +37,7 @@ class EncryptionHelper(private val context: Context) {
         PREFS_FILENAME,
         masterKey,
         EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
-        EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
+        EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM,
       )
     } catch (e: Exception) {
       logger.e("Failed to create encrypted preferences", e)

@@ -41,8 +41,8 @@ class HistoryScreenTest {
       HistoryState(
         tracks = emptyList(),
         isLoading = false,
-        errorMessage = null
-      )
+        errorMessage = null,
+      ),
     )
 
     // ViewModelのuiStateをモック
@@ -58,7 +58,7 @@ class HistoryScreenTest {
       PathlyAndroidTheme {
         HistoryScreen(
           viewModel = mockViewModel,
-          onTrackClick = mockOnTrackClick
+          onTrackClick = mockOnTrackClick,
         )
       }
     }
@@ -75,7 +75,7 @@ class HistoryScreenTest {
     uiStateFlow.value = HistoryState(
       tracks = emptyList(),
       isLoading = true,
-      errorMessage = null
+      errorMessage = null,
     )
 
     // When
@@ -83,7 +83,7 @@ class HistoryScreenTest {
       PathlyAndroidTheme {
         HistoryScreen(
           viewModel = mockViewModel,
-          onTrackClick = mockOnTrackClick
+          onTrackClick = mockOnTrackClick,
         )
       }
     }
@@ -102,7 +102,7 @@ class HistoryScreenTest {
     uiStateFlow.value = HistoryState(
       tracks = emptyList(),
       isLoading = false,
-      errorMessage = null
+      errorMessage = null,
     )
 
     // When
@@ -110,7 +110,7 @@ class HistoryScreenTest {
       PathlyAndroidTheme {
         HistoryScreen(
           viewModel = mockViewModel,
-          onTrackClick = mockOnTrackClick
+          onTrackClick = mockOnTrackClick,
         )
       }
     }
@@ -144,7 +144,7 @@ class HistoryScreenTest {
             speed = null,
             bearing = null,
             timestamp = startTime,
-            createdAt = startTime
+            createdAt = startTime,
           ),
           GpsPoint(
             id = 2L,
@@ -156,18 +156,18 @@ class HistoryScreenTest {
             speed = null,
             bearing = null,
             timestamp = endTime,
-            createdAt = startTime
-          )
+            createdAt = startTime,
+          ),
         ),
         createdAt = startTime,
-        updatedAt = endTime
-      )
+        updatedAt = endTime,
+      ),
     )
 
     uiStateFlow.value = HistoryState(
       tracks = tracks,
       isLoading = false,
-      errorMessage = null
+      errorMessage = null,
     )
 
     // When
@@ -175,7 +175,7 @@ class HistoryScreenTest {
       PathlyAndroidTheme {
         HistoryScreen(
           viewModel = mockViewModel,
-          onTrackClick = mockOnTrackClick
+          onTrackClick = mockOnTrackClick,
         )
       }
     }
@@ -206,14 +206,14 @@ class HistoryScreenTest {
     uiStateFlow.value = HistoryState(
       tracks = listOf(track),
       isLoading = false,
-      errorMessage = null
+      errorMessage = null,
     )
 
     composeTestRule.setContent {
       PathlyAndroidTheme {
         HistoryScreen(
           viewModel = mockViewModel,
-          onTrackClick = mockOnTrackClick
+          onTrackClick = mockOnTrackClick,
         )
       }
     }
@@ -233,14 +233,14 @@ class HistoryScreenTest {
     uiStateFlow.value = HistoryState(
       tracks = listOf(track),
       isLoading = false,
-      errorMessage = null
+      errorMessage = null,
     )
 
     composeTestRule.setContent {
       PathlyAndroidTheme {
         HistoryScreen(
           viewModel = mockViewModel,
-          onTrackClick = mockOnTrackClick
+          onTrackClick = mockOnTrackClick,
         )
       }
     }
@@ -260,13 +260,13 @@ class HistoryScreenTest {
     val tracks = listOf(
       createSampleTrack(id = 1L, pointsCount = 5),
       createSampleTrack(id = 2L, pointsCount = 3),
-      createSampleTrack(id = 3L, pointsCount = 0) // 0点のトラック
+      createSampleTrack(id = 3L, pointsCount = 0), // 0点のトラック
     )
 
     uiStateFlow.value = HistoryState(
       tracks = tracks,
       isLoading = false,
-      errorMessage = null
+      errorMessage = null,
     )
 
     // When
@@ -274,7 +274,7 @@ class HistoryScreenTest {
       PathlyAndroidTheme {
         HistoryScreen(
           viewModel = mockViewModel,
-          onTrackClick = mockOnTrackClick
+          onTrackClick = mockOnTrackClick,
         )
       }
     }
@@ -309,13 +309,13 @@ class HistoryScreenTest {
       isActive = true,
       points = createSamplePoints(2),
       createdAt = Date(),
-      updatedAt = Date()
+      updatedAt = Date(),
     )
 
     uiStateFlow.value = HistoryState(
       tracks = listOf(track),
       isLoading = false,
-      errorMessage = null
+      errorMessage = null,
     )
 
     // When
@@ -323,7 +323,7 @@ class HistoryScreenTest {
       PathlyAndroidTheme {
         HistoryScreen(
           viewModel = mockViewModel,
-          onTrackClick = mockOnTrackClick
+          onTrackClick = mockOnTrackClick,
         )
       }
     }
@@ -358,17 +358,17 @@ class HistoryScreenTest {
           speed = null,
           bearing = null,
           timestamp = Date(),
-          createdAt = Date()
-        )
+          createdAt = Date(),
+        ),
       ),
       createdAt = Date(),
-      updatedAt = Date()
+      updatedAt = Date(),
     )
 
     uiStateFlow.value = HistoryState(
       tracks = listOf(track),
       isLoading = false,
-      errorMessage = null
+      errorMessage = null,
     )
 
     // When
@@ -376,7 +376,7 @@ class HistoryScreenTest {
       PathlyAndroidTheme {
         HistoryScreen(
           viewModel = mockViewModel,
-          onTrackClick = mockOnTrackClick
+          onTrackClick = mockOnTrackClick,
         )
       }
     }
@@ -394,7 +394,7 @@ class HistoryScreenTest {
       PathlyAndroidTheme {
         HistoryScreen(
           viewModel = mockViewModel,
-          onTrackClick = mockOnTrackClick
+          onTrackClick = mockOnTrackClick,
         )
       }
     }
@@ -410,7 +410,7 @@ class HistoryScreenTest {
       uiStateFlow.value = HistoryState(
         tracks = listOf(track),
         isLoading = false,
-        errorMessage = null
+        errorMessage = null,
       )
     }
 
@@ -427,7 +427,7 @@ class HistoryScreenTest {
 
   private fun createSampleTrack(
     id: Long = 1L,
-    pointsCount: Int = 2
+    pointsCount: Int = 2,
   ): GpsTrack {
     return GpsTrack(
       id = id,
@@ -436,7 +436,7 @@ class HistoryScreenTest {
       isActive = false,
       points = createSamplePoints(pointsCount, trackId = id),
       createdAt = Date(),
-      updatedAt = Date()
+      updatedAt = Date(),
     )
   }
 
@@ -452,7 +452,7 @@ class HistoryScreenTest {
         speed = null,
         bearing = null,
         timestamp = Date(System.currentTimeMillis() - (3600000 - index * 1000)),
-        createdAt = Date()
+        createdAt = Date(),
       )
     }
   }

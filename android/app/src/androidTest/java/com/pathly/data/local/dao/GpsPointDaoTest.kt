@@ -35,7 +35,7 @@ class GpsPointDaoTest {
   fun setup() = runTest {
     database = Room.inMemoryDatabaseBuilder(
       ApplicationProvider.getApplicationContext(),
-      PathlyDatabase::class.java
+      PathlyDatabase::class.java,
     )
       .allowMainThreadQueries()
       .build()
@@ -49,7 +49,7 @@ class GpsPointDaoTest {
       endTime = null,
       isActive = true,
       createdAt = Date(),
-      updatedAt = Date()
+      updatedAt = Date(),
     )
     testTrackId = gpsTrackDao.insertTrack(track)
   }
@@ -72,7 +72,7 @@ class GpsPointDaoTest {
       speed = 5.5f,
       bearing = 90f,
       timestamp = timestamp,
-      createdAt = timestamp
+      createdAt = timestamp,
     )
 
     // When
@@ -106,7 +106,7 @@ class GpsPointDaoTest {
       speed = null,
       bearing = null,
       timestamp = Date(),
-      createdAt = Date()
+      createdAt = Date(),
     )
 
     // When
@@ -145,7 +145,7 @@ class GpsPointDaoTest {
         longitude = 139.6503,
         accuracy = 10f,
         timestamp = Date(baseTime),
-        createdAt = Date()
+        createdAt = Date(),
       ),
       GpsPointEntity(
         trackId = testTrackId,
@@ -153,7 +153,7 @@ class GpsPointDaoTest {
         longitude = 139.6600,
         accuracy = 8f,
         timestamp = Date(baseTime + 30000), // 30秒後
-        createdAt = Date()
+        createdAt = Date(),
       ),
       GpsPointEntity(
         trackId = testTrackId,
@@ -161,8 +161,8 @@ class GpsPointDaoTest {
         longitude = 139.6700,
         accuracy = 12f,
         timestamp = Date(baseTime + 60000), // 60秒後
-        createdAt = Date()
-      )
+        createdAt = Date(),
+      ),
     )
 
     // When
@@ -175,11 +175,11 @@ class GpsPointDaoTest {
     // 時系列順（timestamp ASC）で並んでいることを確認
     assertTrue(
       "1番目のポイントが最も古い",
-      retrievedPoints[0].timestamp.time <= retrievedPoints[1].timestamp.time
+      retrievedPoints[0].timestamp.time <= retrievedPoints[1].timestamp.time,
     )
     assertTrue(
       "2番目のポイントが中間",
-      retrievedPoints[1].timestamp.time <= retrievedPoints[2].timestamp.time
+      retrievedPoints[1].timestamp.time <= retrievedPoints[2].timestamp.time,
     )
 
     // 座標値の確認
@@ -208,7 +208,7 @@ class GpsPointDaoTest {
       endTime = null,
       isActive = false,
       createdAt = Date(),
-      updatedAt = Date()
+      updatedAt = Date(),
     )
     val track2Id = gpsTrackDao.insertTrack(track2)
 
@@ -219,7 +219,7 @@ class GpsPointDaoTest {
       longitude = 139.6503,
       accuracy = 10f,
       timestamp = Date(),
-      createdAt = Date()
+      createdAt = Date(),
     )
 
     // Track2にポイントを追加
@@ -229,7 +229,7 @@ class GpsPointDaoTest {
       longitude = 139.8000,
       accuracy = 8f,
       timestamp = Date(),
-      createdAt = Date()
+      createdAt = Date(),
     )
 
     gpsPointDao.insertPoint(track1Point)
@@ -263,7 +263,7 @@ class GpsPointDaoTest {
       longitude = 139.6503,
       accuracy = 10f,
       timestamp = Date(),
-      createdAt = Date()
+      createdAt = Date(),
     )
     gpsPointDao.insertPoint(point)
 
@@ -281,7 +281,7 @@ class GpsPointDaoTest {
       longitude = 139.6503,
       accuracy = 10f,
       timestamp = Date(),
-      createdAt = Date()
+      createdAt = Date(),
     )
 
     // When & Then - 外部キー制約によりエラーが発生する
@@ -292,7 +292,7 @@ class GpsPointDaoTest {
       assertTrue(
         "外部キー制約エラー",
         e.message?.contains("FOREIGN KEY constraint failed") == true ||
-                e.message?.contains("foreign key") == true
+          e.message?.contains("foreign key") == true,
       )
     }
   }
@@ -308,7 +308,7 @@ class GpsPointDaoTest {
         longitude = 139.6503,
         accuracy = 10f,
         timestamp = Date(baseTime),
-        createdAt = Date()
+        createdAt = Date(),
       ),
       GpsPointEntity(
         trackId = testTrackId,
@@ -316,7 +316,7 @@ class GpsPointDaoTest {
         longitude = 139.6600,
         accuracy = 8f,
         timestamp = Date(baseTime + 30000),
-        createdAt = Date()
+        createdAt = Date(),
       ),
       GpsPointEntity(
         trackId = testTrackId,
@@ -324,8 +324,8 @@ class GpsPointDaoTest {
         longitude = 139.6700,
         accuracy = 12f,
         timestamp = Date(baseTime + 60000),
-        createdAt = Date()
-      )
+        createdAt = Date(),
+      ),
     )
 
     // When
@@ -340,15 +340,21 @@ class GpsPointDaoTest {
       val retrievedPoint = retrievedPoints[index]
       assertEquals(
         "${index + 1}番目のポイントの緯度",
-        originalPoint.latitude, retrievedPoint.latitude, 0.0001
+        originalPoint.latitude,
+        retrievedPoint.latitude,
+        0.0001,
       )
       assertEquals(
         "${index + 1}番目のポイントの経度",
-        originalPoint.longitude, retrievedPoint.longitude, 0.0001
+        originalPoint.longitude,
+        retrievedPoint.longitude,
+        0.0001,
       )
       assertEquals(
         "${index + 1}番目のポイントの精度",
-        originalPoint.accuracy, retrievedPoint.accuracy, 0.1f
+        originalPoint.accuracy,
+        retrievedPoint.accuracy,
+        0.1f,
       )
     }
   }

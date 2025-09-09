@@ -13,7 +13,7 @@ import javax.inject.Inject
 
 @HiltViewModel
 class HistoryViewModel @Inject constructor(
-  private val gpsTrackRepository: GpsTrackRepository
+  private val gpsTrackRepository: GpsTrackRepository,
 ) : ViewModel() {
 
   private val _uiState = MutableStateFlow(HistoryState())
@@ -33,13 +33,13 @@ class HistoryViewModel @Inject constructor(
           _uiState.value = _uiState.value.copy(
             tracks = completedTracks,
             isLoading = false,
-            errorMessage = null
+            errorMessage = null,
           )
         }
       } catch (e: Exception) {
         _uiState.value = _uiState.value.copy(
           isLoading = false,
-          errorMessage = "データの読み込みに失敗しました: ${e.message}"
+          errorMessage = "データの読み込みに失敗しました: ${e.message}",
         )
       }
     }
@@ -51,7 +51,7 @@ class HistoryViewModel @Inject constructor(
         gpsTrackRepository.deleteTrack(track)
       } catch (e: Exception) {
         _uiState.value = _uiState.value.copy(
-          errorMessage = "削除に失敗しました: ${e.message}"
+          errorMessage = "削除に失敗しました: ${e.message}",
         )
       }
     }

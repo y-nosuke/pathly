@@ -48,7 +48,7 @@ class TrackingViewModelTest {
     every {
       androidx.core.content.ContextCompat.checkSelfPermission(
         any<Context>(),
-        any<String>()
+        any<String>(),
       )
     } returns PackageManager.PERMISSION_GRANTED
   }

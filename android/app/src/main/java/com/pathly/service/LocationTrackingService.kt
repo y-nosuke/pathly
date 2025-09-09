@@ -72,7 +72,6 @@ class LocationTrackingService : Service() {
   private val _locationCount = MutableStateFlow(0)
   val locationCount: StateFlow<Int> = _locationCount.asStateFlow()
 
-
   private var lastLocationTime = 0L
   private var locationTimeoutJob: kotlinx.coroutines.Job? = null
 
@@ -120,7 +119,7 @@ class LocationTrackingService : Service() {
       // 新しいトラックを作成
       val track = GpsTrackEntity(
         startTime = Date(),
-        isActive = true
+        isActive = true,
       )
       currentTrackId = gpsTrackDao.insertTrack(track)
       Log.d("LocationService", "Created new track with ID: $currentTrackId")
@@ -153,12 +152,11 @@ class LocationTrackingService : Service() {
 
     val locationRequest = LocationRequest.Builder(
       Priority.PRIORITY_BALANCED_POWER_ACCURACY,
-      LOCATION_REQUEST_INTERVAL
+      LOCATION_REQUEST_INTERVAL,
     )
       .setMinUpdateIntervalMillis(LOCATION_REQUEST_FASTEST_INTERVAL)
       .setMaxUpdateDelayMillis(LOCATION_REQUEST_INTERVAL)
       .build()
-
 
     locationCallback = object : LocationCallback() {
       override fun onLocationResult(locationResult: LocationResult) {
@@ -180,9 +178,9 @@ class LocationTrackingService : Service() {
             "GPS位置を記録中... (${
               String.format(
                 "%.6f",
-                location.latitude
+                location.latitude,
               )
-            }, ${String.format("%.6f", location.longitude)})"
+            }, ${String.format("%.6f", location.longitude)})",
           )
           val notificationManager =
             getSystemService(NOTIFICATION_SERVICE) as NotificationManager
@@ -200,7 +198,7 @@ class LocationTrackingService : Service() {
         lastLocation?.let { location ->
           Log.d(
             "LocationService",
-            "Last known location found: lat=${location.latitude}, lon=${location.longitude}"
+            "Last known location found: lat=${location.latitude}, lon=${location.longitude}",
           )
 
           // 即座に表示用に更新（データベースには保存しない）
@@ -211,9 +209,9 @@ class LocationTrackingService : Service() {
             "GPS位置を記録中... 最後の既知位置 (${
               String.format(
                 "%.6f",
-                location.latitude
+                location.latitude,
               )
-            }, ${String.format("%.6f", location.longitude)})"
+            }, ${String.format("%.6f", location.longitude)})",
           )
           val notificationManager =
             getSystemService(NOTIFICATION_SERVICE) as NotificationManager
@@ -233,7 +231,7 @@ class LocationTrackingService : Service() {
       fusedLocationClient.requestLocationUpdates(
         locationRequest,
         locationCallback!!,
-        Looper.getMainLooper()
+        Looper.getMainLooper(),
       )
       Log.d("LocationService", "Location updates requested successfully")
 
@@ -283,7 +281,7 @@ class LocationTrackingService : Service() {
       if (timeSinceLastLocation > 60000L) { // 1分以上位置情報がない場合
         Log.w(
           "LocationService",
-          "No location received for ${timeSinceLastLocation / 1000} seconds"
+          "No location received for ${timeSinceLastLocation / 1000} seconds",
         )
 
         val notification =
@@ -306,7 +304,7 @@ class LocationTrackingService : Service() {
           accuracy = location.accuracy,
           speed = if (location.hasSpeed()) location.speed else null,
           bearing = if (location.hasBearing()) location.bearing else null,
-          timestamp = Date(location.time)
+          timestamp = Date(location.time),
         )
 
         gpsPointDao.insertPoint(gpsPoint)
@@ -331,7 +329,7 @@ class LocationTrackingService : Service() {
       val channel = NotificationChannel(
         CHANNEL_ID,
         "位置情報記録",
-        NotificationManager.IMPORTANCE_LOW
+        NotificationManager.IMPORTANCE_LOW,
       ).apply {
         description = "GPS位置情報を記録中です"
         setShowBadge(false)
@@ -345,8 +343,10 @@ class LocationTrackingService : Service() {
   private fun createNotification(contentText: String): Notification {
     val intent = Intent(this, MainActivity::class.java)
     val pendingIntent = PendingIntent.getActivity(
-      this, 0, intent,
-      PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+      this,
+      0,
+      intent,
+      PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
     )
 
     return NotificationCompat.Builder(this, CHANNEL_ID)

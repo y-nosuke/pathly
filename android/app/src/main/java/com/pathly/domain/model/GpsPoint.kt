@@ -12,5 +12,5 @@ data class GpsPoint(
   val speed: Float?,
   val bearing: Float?,
   val timestamp: Date,
-  val createdAt: Date
+  val createdAt: Date,
 )

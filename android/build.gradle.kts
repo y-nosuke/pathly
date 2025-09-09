@@ -5,4 +5,5 @@ plugins {
   alias(libs.plugins.kotlin.compose) apply false
   alias(libs.plugins.hilt) apply false
   alias(libs.plugins.kotlin.kapt) apply false
+  id("com.diffplug.spotless") version "7.2.1" apply false
 }

@@ -20,7 +20,7 @@ import javax.inject.Singleton
 class GpsTrackRepositoryImpl @Inject constructor(
   private val gpsTrackDao: GpsTrackDao,
   private val gpsPointDao: GpsPointDao,
-  private val encryptionHelper: EncryptionHelper
+  private val encryptionHelper: EncryptionHelper,
 ) : GpsTrackRepository {
 
   private val logger = Logger("GpsTrackRepositoryImpl")
@@ -41,7 +41,6 @@ class GpsTrackRepositoryImpl @Inject constructor(
         emit(emptyList()) // オフライン時は空リストを返す
       }
   }
-
 
   override suspend fun getTrackById(trackId: Long): GpsTrack? {
     return try {
@@ -83,7 +82,7 @@ class GpsTrackRepositoryImpl @Inject constructor(
         endTime = track.endTime,
         isActive = track.isActive,
         createdAt = track.createdAt,
-        updatedAt = track.updatedAt
+        updatedAt = track.updatedAt,
       )
       gpsTrackDao.deleteTrack(entity)
       logger.i("Successfully deleted track ${track.id}")
@@ -220,7 +219,7 @@ class GpsTrackRepositoryImpl @Inject constructor(
       isActive = this.isActive,
       points = points,
       createdAt = this.createdAt,
-      updatedAt = this.updatedAt
+      updatedAt = this.updatedAt,
     )
   }
 
@@ -235,7 +234,7 @@ class GpsTrackRepositoryImpl @Inject constructor(
       speed = this.speed,
       bearing = this.bearing,
       timestamp = this.timestamp,
-      createdAt = this.createdAt
+      createdAt = this.createdAt,
     )
   }
 }
