@@ -6,10 +6,12 @@
   "files.eol": "\n",
   "cSpell.words": [
     "androidx",
+    "diffplug",
     "gradlew",
     "Jetpack",
     "kapt",
     "kotlinx",
+    "ktlint",
     "lateinit",
     "Millis",
     "mockk",
