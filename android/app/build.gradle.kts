@@ -29,13 +29,13 @@ android {
     }
 
     // AndroidManifest.xmlのプレースホルダーに値を注入
-    manifestPlaceholders["GOOGLE_MAPS_API_KEY"] = 
+    manifestPlaceholders["GOOGLE_MAPS_API_KEY"] =
       localProperties.getProperty("GOOGLE_MAPS_API_KEY", "")
 
     // BuildConfigにAPIキーを埋め込み（オプション）
     buildConfigField(
-      "String", 
-      "GOOGLE_MAPS_API_KEY", 
+      "String",
+      "GOOGLE_MAPS_API_KEY",
       "\"${localProperties.getProperty("GOOGLE_MAPS_API_KEY", "")}\""
     )
   }
@@ -64,6 +64,12 @@ android {
     resources {
       excludes += "META-INF/LICENSE.md"
       excludes += "META-INF/LICENSE-notice.md"
+    }
+  }
+
+  testOptions {
+    unitTests {
+      isReturnDefaultValues = true
     }
   }
 }
@@ -102,15 +108,18 @@ dependencies {
   // Coroutines
   implementation(libs.kotlinx.coroutines.android)
 
+  // Security - Encrypted SharedPreferences
+  implementation("androidx.security:security-crypto:1.1.0-alpha06")
+
   testImplementation(libs.junit)
 
-    // Unit Test dependencies
-    testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.7.3")
-    testImplementation("androidx.arch.core:core-testing:2.2.0")
-    testImplementation("io.mockk:mockk:1.13.8")
-    testImplementation("app.cash.turbine:turbine:1.0.0")
+  // Unit Test dependencies
+  testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.7.3")
+  testImplementation("androidx.arch.core:core-testing:2.2.0")
+  testImplementation("io.mockk:mockk:1.13.8")
+  testImplementation("app.cash.turbine:turbine:1.0.0")
 
-    androidTestImplementation(libs.androidx.junit)
+  androidTestImplementation(libs.androidx.junit)
   androidTestImplementation(libs.androidx.espresso.core)
   androidTestImplementation(platform(libs.androidx.compose.bom))
   androidTestImplementation(libs.androidx.ui.test.junit4)

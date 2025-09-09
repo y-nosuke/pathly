@@ -46,8 +46,8 @@ fun HistoryScreen(
 
   Column(
     modifier = modifier
-        .fillMaxSize()
-        .padding(16.dp)
+      .fillMaxSize()
+      .padding(16.dp)
   ) {
     Text(
       text = "外出履歴",
@@ -122,8 +122,8 @@ private fun TrackItem(
   ) {
     Row(
       modifier = Modifier
-          .fillMaxWidth()
-          .padding(16.dp),
+        .fillMaxWidth()
+        .padding(16.dp),
       horizontalArrangement = Arrangement.SpaceBetween,
       verticalAlignment = Alignment.CenterVertically
     ) {

@@ -8,6 +8,7 @@ import com.pathly.data.local.PathlyDatabase
 import com.pathly.data.local.entity.GpsPointEntity
 import com.pathly.data.local.entity.GpsTrackEntity
 import com.pathly.domain.model.GpsTrack
+import com.pathly.util.EncryptionHelper
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import org.junit.After
@@ -30,6 +31,7 @@ class GpsTrackRepositoryImplIntegrationTest {
 
   private lateinit var database: PathlyDatabase
   private lateinit var repository: GpsTrackRepositoryImpl
+  private lateinit var encryptionHelper: EncryptionHelper
 
   @Before
   fun setup() {
@@ -40,9 +42,12 @@ class GpsTrackRepositoryImplIntegrationTest {
       .allowMainThreadQueries()
       .build()
 
+    encryptionHelper = EncryptionHelper(ApplicationProvider.getApplicationContext())
+
     repository = GpsTrackRepositoryImpl(
       database.gpsTrackDao(),
-      database.gpsPointDao()
+      database.gpsPointDao(),
+      encryptionHelper
     )
   }
 

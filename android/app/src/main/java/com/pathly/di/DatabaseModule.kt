@@ -4,6 +4,7 @@ import android.content.Context
 import com.pathly.data.local.PathlyDatabase
 import com.pathly.data.local.dao.GpsPointDao
 import com.pathly.data.local.dao.GpsTrackDao
+import com.pathly.util.EncryptionHelper
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -15,19 +16,26 @@ import javax.inject.Singleton
 @InstallIn(SingletonComponent::class)
 object DatabaseModule {
 
-    @Provides
-    @Singleton
-    fun providePathlyDatabase(@ApplicationContext context: Context): PathlyDatabase {
-        return PathlyDatabase.getInstance(context)
-    }
+  @Provides
+  @Singleton
+  fun providePathlyDatabase(@ApplicationContext context: Context): PathlyDatabase {
+    return PathlyDatabase.getInstance(context)
+  }
 
-    @Provides
-    fun provideGpsTrackDao(database: PathlyDatabase): GpsTrackDao {
-        return database.gpsTrackDao()
-    }
+  @Provides
+  @Singleton
+  fun provideEncryptionHelper(@ApplicationContext context: Context): EncryptionHelper {
+    return EncryptionHelper(context)
+  }
 
-    @Provides
-    fun provideGpsPointDao(database: PathlyDatabase): GpsPointDao {
-        return database.gpsPointDao()
-    }
+  @Provides
+  fun provideGpsTrackDao(database: PathlyDatabase): GpsTrackDao {
+    return database.gpsTrackDao()
+  }
+
+  @Provides
+  fun provideGpsPointDao(database: PathlyDatabase): GpsPointDao {
+    return database.gpsPointDao()
+  }
+
 }

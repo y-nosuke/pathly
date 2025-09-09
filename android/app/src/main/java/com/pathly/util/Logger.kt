@@ -4,7 +4,7 @@ import android.util.Log
 import com.pathly.BuildConfig
 
 object Logger {
-  private const val TAG_PREFIX = "Pathly"
+  const val TAG_PREFIX = "Pathly"
 
   fun d(tag: String, message: String) {
     if (BuildConfig.DEBUG) {
@@ -28,6 +28,10 @@ object Logger {
     Log.e("$TAG_PREFIX-$tag", message, throwable)
   }
 
+  fun e(tag: String, throwable: Throwable) {
+    Log.e("$TAG_PREFIX-$tag", throwable.message ?: "Unknown error", throwable)
+  }
+
   // 詳細デバッグ用（デバッグビルドでのみ表示）
   fun verbose(tag: String, message: String) {
     if (BuildConfig.DEBUG) {
@@ -35,3 +39,33 @@ object Logger {
     }
   }
 }
+
+// 従来のクラススタイルloggerとの互換性のために追加
+class InstanceLogger(private val tag: String) {
+  fun d(message: String) {
+    Logger.d(tag, message)
+  }
+
+  fun i(message: String) {
+    Logger.i(tag, message)
+  }
+
+  fun w(message: String) {
+    Logger.w(tag, message)
+  }
+
+  fun w(message: String, throwable: Throwable) {
+    Log.w("${Logger.TAG_PREFIX}-$tag", message, throwable)
+  }
+
+  fun e(message: String) {
+    Logger.e(tag, message)
+  }
+
+  fun e(message: String, throwable: Throwable) {
+    Logger.e(tag, message, throwable)
+  }
+}
+
+// 互換性のためのファクトリ関数
+fun Logger(tag: String): InstanceLogger = InstanceLogger(tag)

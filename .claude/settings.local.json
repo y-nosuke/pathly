@@ -4,7 +4,8 @@
       "Bash(mkdir:*)",
       "Bash(./gradlew:*)",
       "Bash(.gradlew test:*)",
-      "Bash(.gradlew:*)"
+      "Bash(.gradlew:*)",
+      "Bash(find:*)"
     ],
     "defaultMode": "acceptEdits",
     "additionalDirectories": [

@@ -68,8 +68,8 @@ fun TrackDetailScreen(
 
     Column(
       modifier = Modifier
-          .fillMaxSize()
-          .padding(16.dp),
+        .fillMaxSize()
+        .padding(16.dp),
       verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
       Card(
@@ -176,8 +176,8 @@ fun TrackDetailScreen(
             TrackMapView(
               track = track,
               modifier = Modifier
-                  .fillMaxWidth()
-                  .height(200.dp)
+                .fillMaxWidth()
+                .height(200.dp)
             )
           }
         }
@@ -193,8 +193,8 @@ fun TrackDetailScreen(
         ) {
           Box(
             modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
+              .fillMaxWidth()
+              .padding(16.dp),
             contentAlignment = Alignment.Center
           ) {
             Text(
