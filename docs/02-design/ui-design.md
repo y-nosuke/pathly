@@ -3,7 +3,26 @@
 ## 概要
 
 Jetpack Composeを使用したAndroid MVPアプリのUI設計。
-GPS記録・履歴表示・地図表示・基本設定の4つの機能を提供する。
+**現在実装済み**: GPS記録・履歴表示・地図表示（TrackDetailScreen内）
+**Phase 2以降**: 独立した地図画面・設定画面
+
+## 🎯 現在のMVP実装状況（2025/01現在）
+
+### ✅ 実装完了
+
+- **記録画面**: GPS記録開始/停止、リアルタイム位置表示
+- **履歴画面**: 過去記録の一覧表示、削除機能
+- **詳細画面**: GPS軌跡の地図表示（Google Maps連携）
+- **BottomNavigationBar**: 記録・履歴タブ切り替え
+- **権限管理**: 位置情報権限の要求・管理
+
+### 🔄 UI改善提案（本ドキュメントの主要更新内容）
+
+1. **カスタムカラーパレット**: 現在のPurple系から暖色系へ
+2. **アイコン強化**: Material Iconsの活用
+3. **アニメーション追加**: トランジション効果
+4. **統計情報可視化**: 簡単なチャート表示
+5. **ダークモード最適化**: カスタムカラーでの調整
 
 ## 🗺️ ナビゲーション構成
 
@@ -225,21 +244,45 @@ fun SettingsScreen() {
 
 ### カラーパレット
 
-```kotlin
-// Primary Colors
-val PrimaryBlue = Color(0xFF2196F3)      // メインカラー
-val PrimaryDark = Color(0xFF1976D2)      // ダークブルー
-val Accent = Color(0xFF03DAC6)           // アクセントカラー
+#### 🆕 改善提案: 暖色系パレット（お出掛けアプリらしい親しみやすい色調）
 
-// Status Colors  
-val TrackingGreen = Color(0xFF4CAF50)    // 記録中
-val StoppedGray = Color(0xFF9E9E9E)      // 停止中
-val ErrorRed = Color(0xFFF44336)         // エラー・削除
+```kotlin
+// Primary Colors (改善提案)
+val PathlyOrange = Color(0xFFFF6B35)     // メインオレンジ（お出掛け感）
+val PathlyDarkOrange = Color(0xFFE55A2B) // ダークオレンジ
+val PathlyGreen = Color(0xFF2ECC71)      // アクセントグリーン（自然・健康）
+val PathlyLightGreen = Color(0xFF58D68D) // ライトグリーン
+
+// Status Colors
+val TrackingActive = Color(0xFF27AE60)   // 記録中（グリーン）
+val TrackingInactive = Color(0xFF95A5A6) // 停止中（グレー）
+val ErrorRed = Color(0xFFE74C3C)         // エラー・削除
 
 // Map Colors
-val TrackLineBlue = Color(0xFF2196F3)    // 軌跡線
-val StartMarkerGreen = Color(0xFF4CAF50) // 開始地点
-val EndMarkerRed = Color(0xFFF44336)     // 終了地点
+val TrackLineOrange = Color(0xFFFF6B35)  // 軌跡線（オレンジ）
+val StartMarkerGreen = Color(0xFF2ECC71) // 開始地点（グリーン）
+val EndMarkerRed = Color(0xFFE74C3C)     // 終了地点（レッド）
+
+// Surface Colors
+val SurfaceWarm = Color(0xFFFDF6F0)      // 暖かい背景色
+val SurfaceVariantWarm = Color(0xFFF8EDE3) // 暖かいカード背景
+```
+
+#### 📱 現在の実装（Material3 Dynamic Color）
+
+```kotlin
+// Current implementation in Theme.kt
+private val DarkColorScheme = darkColorScheme(
+  primary = Purple80,    // → PathlyOrange に変更提案
+  secondary = PurpleGrey80,
+  tertiary = Pink80,
+)
+
+private val LightColorScheme = lightColorScheme(
+  primary = Purple40,    // → PathlyOrange に変更提案
+  secondary = PurpleGrey40,
+  tertiary = Pink40,
+)
 ```
 
 ### タイポグラフィ
@@ -317,7 +360,7 @@ fun CompactLayout() {
 }
 
 // Medium: タブレット・横持ち（将来対応）
-@Composable  
+@Composable
 fun MediumLayout() {
     // NavigationRail（左サイドバー）
     // 2カラムレイアウト
@@ -326,41 +369,97 @@ fun MediumLayout() {
 
 ## 🚀 実装優先順位
 
-### Phase 1: MVP実装
+### ✅ Phase 1: MVP実装（完了済み）
 
-1. **記録画面** - GPS記録機能の基本UI
-2. **履歴画面** - データベースからの一覧表示
-3. **BottomNavigationBar** - タブ切り替え
+1. ✅ **記録画面** - GPS記録機能の基本UI
+2. ✅ **履歴画面** - データベースからの一覧表示
+3. ✅ **BottomNavigationBar** - タブ切り替え
+4. ✅ **地図表示** - TrackDetailScreen内でGoogle Maps SDK連携・Polyline描画
 
-### Phase 2: 地図機能
+### 🎨 Phase 2: UI改善（次のフェーズ）
 
-4. **地図画面** - Google Maps SDK連携
-5. **軌跡表示** - Polyline描画
+**優先度高**
 
-### Phase 3: 設定機能
+1. **カスタムカラーパレット導入** - Purple系→暖色系への変更
+2. **アイコン強化** - 記録開始/停止ボタンのアイコン追加
+3. **TrackingScreen レイアウト改善** - より視覚的に分かりやすい記録状態表示
 
-6. **設定画面** - 基本的な設定項目
+**優先度中**
+4. **アニメーション追加** - 記録開始/停止時のトランジション
+5. **統計情報の可視化** - 簡単なチャート（週次/月次サマリー）
+6. **地図表示強化** - より良いマーカーデザイン、軌跡の色分け
+
+### 🚀 Phase 3: 機能拡張（将来実装）
+
+1. **独立した地図画面** - 全軌跡表示・軌跡選択UI
+2. **設定画面** - GPS精度・記録間隔の設定
+3. **ダークモード最適化** - カスタムカラーでの調整
+4. **インタラクティブ要素** - Pull-to-refresh、スワイプアクション
 
 ## 💡 実装のポイント
 
-### Jetpack Compose実装
+### 📱 現在の実装構成（MainActivity.kt）
 
 ```kotlin
-// メインアクティビティ構成例
+// 実際の実装（Jetpack Navigation不使用、シンプルなState管理）
 @Composable
-fun PathlyApp() {
-    val navController = rememberNavController()
+private fun MainScreen(onRequestPermission: () -> Unit) {
+    var selectedTab by remember { mutableStateOf(BottomNavItem.TRACKING) }
+    var selectedTrack by remember { mutableStateOf<GpsTrack?>(null) }
 
     Scaffold(
-        topBar = { PathlyTopBar() },
-        bottomBar = { 
-            PathlyBottomNavigation(navController) 
+        bottomBar = {
+            if (selectedTrack == null) {  // 詳細画面では非表示
+                NavigationBar {
+                    BottomNavItem.entries.forEach { item ->
+                        NavigationBarItem(
+                            selected = selectedTab == item,
+                            onClick = { selectedTab = item },
+                            label = { Text(item.title) },
+                            icon = { Icon(item.icon, contentDescription = item.title) }
+                        )
+                    }
+                }
+            }
         }
-    ) { paddingValues ->
-        PathlyNavGraph(
-            navController = navController,
-            modifier = Modifier.padding(paddingValues)
-        )
+    ) { innerPadding ->
+        when {
+            selectedTrack != null -> TrackDetailScreen(...)  // 詳細画面
+            selectedTab == BottomNavItem.TRACKING -> TrackingScreen(...)
+            selectedTab == BottomNavItem.HISTORY -> HistoryScreen(...)
+        }
+    }
+}
+
+// 現在のタブ構成（2タブのみ）
+enum class BottomNavItem(val title: String, val icon: ImageVector) {
+    TRACKING("記録", Icons.Filled.PlayArrow),     // 🎯 → 記録アイコン変更提案
+    HISTORY("履歴", Icons.AutoMirrored.Filled.List), // 📅 → 履歴アイコン変更提案
+}
+```
+
+### 🎨 UI改善提案の具体的実装
+
+#### 1. アイコン改善提案
+
+```kotlin
+// 現在 → 提案
+TRACKING("記録", Icons.Filled.PlayArrow),        // → Icons.Filled.LocationOn
+HISTORY("履歴", Icons.AutoMirrored.Filled.List), // → Icons.Filled.History
+```
+
+#### 2. 記録ボタンのアイコン化
+
+```kotlin
+// TrackingScreen.kt の改善提案
+Button(
+    onClick = onStartTracking,
+    modifier = Modifier.size(width = 200.dp, height = 60.dp)
+) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Icon(Icons.Filled.PlayArrow, contentDescription = null)  // 🆕
+        Spacer(modifier = Modifier.width(8.dp))
+        Text("記録開始", style = MaterialTheme.typography.titleMedium)
     }
 }
 ```
@@ -368,7 +467,7 @@ fun PathlyApp() {
 ### 状態管理
 
 - **記録状態**: `TrackingViewModel`でStateFlow管理
-- **履歴データ**: `HistoryViewModel`でFlow使用  
+- **履歴データ**: `HistoryViewModel`でFlow使用
 - **地図状態**: `MapViewModel`で軌跡選択管理
 
 ### パフォーマンス考慮
@@ -377,7 +476,35 @@ fun PathlyApp() {
 - **remember**: 地図状態の保持
 - **CompositionLocal**: テーマ・設定の共有
 
+## 📋 次のアクションプラン
+
+### 🎯 即座に実装可能（Phase 2優先度高）
+
+1. **カラーパレット変更**
+   - `Color.kt`: 新しい暖色系カラー定義
+   - `Theme.kt`: LightColorScheme/DarkColorScheme更新
+
+2. **アイコン改善**
+   - `MainActivity.kt`: BottomNavItemのアイコン変更
+   - `TrackingScreen.kt`: 記録開始/停止ボタンにアイコン追加
+
+3. **TrackingScreen UI改善**
+   - 記録状態カードのデザイン強化
+   - より視覚的に分かりやすいレイアウト
+
+### 🔄 段階的実装（Phase 2優先度中）
+
+1. **アニメーション追加**: 記録開始/停止時のスムーズなトランジション
+2. **統計情報**: 週次/月次の簡単なサマリー表示
+3. **地図強化**: マーカーデザイン改善、軌跡の色分け
+
 ---
 
-この設計をベースに、段階的にUI実装を進めることができます。
-まずは記録画面とBottomNavigationBarから実装開始することを推奨します。
+## 📝 更新履歴
+
+**2025/01/09**:
+
+- MVP実装完了を反映
+- UI改善提案を具体的に追加
+- 現在の実装状況との差分を明確化
+- 次のフェーズの実装優先順位を整理
