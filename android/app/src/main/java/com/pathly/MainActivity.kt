@@ -9,7 +9,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.List
-import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.NavigationBar
@@ -37,7 +37,7 @@ enum class BottomNavItem(
   val title: String,
   val icon: ImageVector,
 ) {
-  TRACKING("記録", Icons.Filled.PlayArrow),
+  TRACKING("記録", Icons.Filled.LocationOn),
   HISTORY("履歴", Icons.AutoMirrored.Filled.List),
 }
 

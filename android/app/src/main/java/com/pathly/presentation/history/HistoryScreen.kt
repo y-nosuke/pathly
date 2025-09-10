@@ -84,6 +84,11 @@ fun HistoryScreen(
         LazyColumn(
           verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
+          item {
+            StatisticsSummaryCard(tracks = uiState.tracks)
+            Spacer(modifier = Modifier.height(16.dp))
+          }
+
           items(uiState.tracks) { track ->
             TrackItem(
               track = track,
@@ -100,6 +105,90 @@ fun HistoryScreen(
         viewModel.clearError()
       }
     }
+  }
+}
+
+@Composable
+private fun StatisticsSummaryCard(
+  tracks: List<GpsTrack>,
+  modifier: Modifier = Modifier,
+) {
+  val totalTracks = tracks.size
+  val totalDistance = tracks.sumOf { it.totalDistanceMeters } / 1000.0
+  val totalDuration = tracks.mapNotNull { track ->
+    track.endTime?.let { endTime ->
+      (endTime.time - track.startTime.time) / (1000 * 60) // minutes
+    }
+  }.sum()
+
+  Card(
+    modifier = modifier.fillMaxWidth(),
+    shape = RoundedCornerShape(8.dp),
+    colors = CardDefaults.cardColors(
+      containerColor = MaterialTheme.colorScheme.primaryContainer,
+    ),
+  ) {
+    Column(
+      modifier = Modifier.padding(16.dp),
+      verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+      Text(
+        text = "📊 お出掛け統計",
+        style = MaterialTheme.typography.titleMedium,
+        fontWeight = FontWeight.Bold,
+        color = MaterialTheme.colorScheme.onPrimaryContainer,
+      )
+
+      Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceEvenly,
+      ) {
+        StatisticItem(
+          icon = "🗓️",
+          label = "記録数",
+          value = "${totalTracks}回",
+        )
+        StatisticItem(
+          icon = "📏",
+          label = "総距離",
+          value = "${String.format("%.1f", totalDistance)}km",
+        )
+        StatisticItem(
+          icon = "⏱️",
+          label = "総時間",
+          value = "${totalDuration}分",
+        )
+      }
+    }
+  }
+}
+
+@Composable
+private fun StatisticItem(
+  icon: String,
+  label: String,
+  value: String,
+  modifier: Modifier = Modifier,
+) {
+  Column(
+    modifier = modifier,
+    horizontalAlignment = Alignment.CenterHorizontally,
+  ) {
+    Text(
+      text = icon,
+      style = MaterialTheme.typography.headlineSmall,
+    )
+    Text(
+      text = value,
+      style = MaterialTheme.typography.titleMedium,
+      fontWeight = FontWeight.Bold,
+      color = MaterialTheme.colorScheme.secondary,
+    )
+    Text(
+      text = label,
+      style = MaterialTheme.typography.bodySmall,
+      color = MaterialTheme.colorScheme.onPrimaryContainer,
+    )
   }
 }
 

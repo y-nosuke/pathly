@@ -24,10 +24,10 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.google.android.gms.maps.CameraUpdateFactory
+import com.google.android.gms.maps.model.BitmapDescriptorFactory
 import com.google.android.gms.maps.model.CameraPosition
 import com.google.android.gms.maps.model.LatLng
 import com.google.android.gms.maps.model.LatLngBounds
@@ -40,6 +40,7 @@ import com.google.maps.android.compose.MarkerState
 import com.google.maps.android.compose.Polyline
 import com.google.maps.android.compose.rememberCameraPositionState
 import com.pathly.domain.model.GpsTrack
+import com.pathly.ui.theme.TrackLineOrange
 import com.pathly.util.DateFormatters
 import kotlin.math.roundToInt
 
@@ -282,33 +283,35 @@ private fun TrackMapView(
         LatLng(it.latitude, it.longitude)
       }
 
-      // Draw polyline for the track
+      // Draw polyline for the track with custom color
       Polyline(
         points = polylinePoints,
-        color = Color.Blue,
-        width = 4f,
+        color = TrackLineOrange,
+        width = 6f,
       )
 
-      // Add start marker (green)
+      // Add start marker (green) with custom color
       val startPoint = track.points.first()
       val startMarkerState = remember(startPoint) {
         MarkerState(position = LatLng(startPoint.latitude, startPoint.longitude))
       }
       Marker(
         state = startMarkerState,
-        title = "開始",
-        snippet = "記録開始地点",
+        title = "🚀 開始",
+        snippet = "記録開始地点 - ${DateFormatters.TIME_FORMAT.format(track.startTime)}",
+        icon = BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_GREEN),
       )
 
-      // Add end marker (red)
+      // Add end marker (red) with custom color
       val endPoint = track.points.last()
       val endMarkerState = remember(endPoint) {
         MarkerState(position = LatLng(endPoint.latitude, endPoint.longitude))
       }
       Marker(
         state = endMarkerState,
-        title = "終了",
-        snippet = "記録終了地点",
+        title = "🏁 終了",
+        snippet = track.endTime?.let { "記録終了地点 - ${DateFormatters.TIME_FORMAT.format(it)}" } ?: "記録終了地点",
+        icon = BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_RED),
       )
     }
   }

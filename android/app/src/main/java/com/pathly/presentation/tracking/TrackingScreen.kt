@@ -1,15 +1,25 @@
 package com.pathly.presentation.tracking
 
 import android.util.Log
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.LocationOn
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -17,6 +27,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -122,35 +133,69 @@ private fun TrackingActiveContent(
   currentLocation: LocationInfo? = null,
   locationCount: Int = 0,
 ) {
+  // アニメーション状態
+  val buttonScale by animateFloatAsState(
+    targetValue = 1f,
+    animationSpec = tween(300),
+    label = "buttonScale",
+  )
+
+  val cardBackgroundColor by animateColorAsState(
+    targetValue = MaterialTheme.colorScheme.primaryContainer,
+    animationSpec = tween(500),
+    label = "cardBackgroundColor",
+  )
   Column(
     horizontalAlignment = Alignment.CenterHorizontally,
     verticalArrangement = Arrangement.spacedBy(24.dp),
   ) {
     Card(
       colors = CardDefaults.cardColors(
-        containerColor = MaterialTheme.colorScheme.primaryContainer,
+        containerColor = cardBackgroundColor,
       ),
     ) {
       Column(
         modifier = Modifier.padding(24.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
       ) {
-        Text(
-          text = "📍 記録中",
-          style = MaterialTheme.typography.headlineSmall,
-          color = MaterialTheme.colorScheme.onPrimaryContainer,
-        )
+        Row(
+          verticalAlignment = Alignment.CenterVertically,
+          horizontalArrangement = Arrangement.Center,
+        ) {
+          Icon(
+            imageVector = Icons.Filled.LocationOn,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.secondary,
+            modifier = Modifier.size(24.dp),
+          )
+          Spacer(modifier = Modifier.width(8.dp))
+          Text(
+            text = "記録中",
+            style = MaterialTheme.typography.headlineSmall,
+            color = MaterialTheme.colorScheme.onPrimaryContainer,
+          )
+        }
         Text(
           text = "GPS位置を記録しています",
           style = MaterialTheme.typography.bodyMedium,
           color = MaterialTheme.colorScheme.onPrimaryContainer,
         )
 
-        Text(
-          text = "記録回数: ${locationCount}回",
-          style = MaterialTheme.typography.bodySmall,
-          color = MaterialTheme.colorScheme.onPrimaryContainer,
-        )
+        Row(
+          verticalAlignment = Alignment.CenterVertically,
+        ) {
+          Text(
+            text = "📊 記録回数: ",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onPrimaryContainer,
+          )
+          Text(
+            text = "${locationCount}回",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.secondary,
+            fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
+          )
+        }
       }
     }
 
@@ -198,12 +243,24 @@ private fun TrackingActiveContent(
       colors = ButtonDefaults.buttonColors(
         containerColor = MaterialTheme.colorScheme.error,
       ),
-      modifier = Modifier.size(width = 200.dp, height = 60.dp),
+      modifier = Modifier
+        .size(width = 200.dp, height = 60.dp)
+        .scale(buttonScale),
     ) {
-      Text(
-        text = "記録停止",
-        style = MaterialTheme.typography.titleMedium,
-      )
+      Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.Center,
+      ) {
+        Text(
+          text = "⏸",
+          style = MaterialTheme.typography.titleMedium,
+        )
+        Spacer(modifier = Modifier.width(8.dp))
+        Text(
+          text = "記録停止",
+          style = MaterialTheme.typography.titleMedium,
+        )
+      }
     }
   }
 }
@@ -212,6 +269,12 @@ private fun TrackingActiveContent(
 private fun TrackingInactiveContent(
   onStartTracking: () -> Unit,
 ) {
+  // アニメーション状態
+  val buttonScale by animateFloatAsState(
+    targetValue = 1f,
+    animationSpec = tween(300),
+    label = "buttonScale",
+  )
   Column(
     horizontalAlignment = Alignment.CenterHorizontally,
     verticalArrangement = Arrangement.spacedBy(24.dp),
@@ -224,12 +287,24 @@ private fun TrackingInactiveContent(
 
     Button(
       onClick = onStartTracking,
-      modifier = Modifier.size(width = 200.dp, height = 60.dp),
+      modifier = Modifier
+        .size(width = 200.dp, height = 60.dp)
+        .scale(buttonScale),
     ) {
-      Text(
-        text = "記録開始",
-        style = MaterialTheme.typography.titleMedium,
-      )
+      Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.Center,
+      ) {
+        Icon(
+          imageVector = Icons.Filled.PlayArrow,
+          contentDescription = null,
+        )
+        Spacer(modifier = Modifier.width(8.dp))
+        Text(
+          text = "記録開始",
+          style = MaterialTheme.typography.titleMedium,
+        )
+      }
     }
 
     Text(

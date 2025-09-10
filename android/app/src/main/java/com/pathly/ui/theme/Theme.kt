@@ -8,28 +8,61 @@ import androidx.compose.material3.dynamicDarkColorScheme
 import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 
 private val DarkColorScheme = darkColorScheme(
-  primary = Purple80,
-  secondary = PurpleGrey80,
-  tertiary = Pink80,
+  primary = PathlyOrange,
+  onPrimary = Color.White,
+  primaryContainer = PathlyDarkOrange,
+  onPrimaryContainer = Color.White,
+
+  secondary = PathlyGreen,
+  onSecondary = Color.White,
+  secondaryContainer = PathlyDarkGreen,
+  onSecondaryContainer = Color.White,
+
+  tertiary = PathlyLightGreen,
+  onTertiary = Color.Black,
+
+  background = SurfaceWarmDark,
+  onBackground = OnSurfaceWarmDark,
+  surface = SurfaceWarmDark,
+  onSurface = OnSurfaceWarmDark,
+  surfaceVariant = SurfaceVariantWarmDark,
+  onSurfaceVariant = OnSurfaceWarmDark,
+
+  error = ErrorRed,
+  onError = Color.White,
+  errorContainer = Color(0xFF93000A),
+  onErrorContainer = Color(0xFFFFDAD6),
 )
 
 private val LightColorScheme = lightColorScheme(
-  primary = Purple40,
-  secondary = PurpleGrey40,
-  tertiary = Pink40,
+  primary = PathlyOrange,
+  onPrimary = Color.White,
+  primaryContainer = PathlyLightOrange,
+  onPrimaryContainer = OnSurfaceWarm,
 
-  /* Other default colors to override
-    background = Color(0xFFFFFBFE),
-    surface = Color(0xFFFFFBFE),
-    onPrimary = Color.White,
-    onSecondary = Color.White,
-    onTertiary = Color.White,
-    onBackground = Color(0xFF1C1B1F),
-    onSurface = Color(0xFF1C1B1F),
-   */
+  secondary = PathlyGreen,
+  onSecondary = Color.White,
+  secondaryContainer = PathlyLightGreen,
+  onSecondaryContainer = OnSurfaceWarm,
+
+  tertiary = PathlyDarkGreen,
+  onTertiary = Color.White,
+
+  background = SurfaceWarm,
+  onBackground = OnSurfaceWarm,
+  surface = SurfaceWarm,
+  onSurface = OnSurfaceWarm,
+  surfaceVariant = SurfaceVariantWarm,
+  onSurfaceVariant = OnSurfaceWarm,
+
+  error = ErrorRed,
+  onError = Color.White,
+  errorContainer = Color(0xFFFFDAD6),
+  onErrorContainer = Color(0xFF410002),
 )
 
 @Composable
