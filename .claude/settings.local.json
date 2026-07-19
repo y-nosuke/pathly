@@ -5,7 +5,13 @@
       "Bash(./gradlew:*)",
       "Bash(.gradlew test:*)",
       "Bash(.gradlew:*)",
-      "Bash(find:*)"
+      "Bash(find:*)",
+      "Bash(adb:*)",
+      "Bash(where adb)",
+      "Read(//c/Users/yoichi/AppData/Local/Android//**)",
+      "Bash(\"/c/Users/yoichi/AppData/Local/Android/Sdk/platform-tools/adb.exe\" devices)",
+      "Bash(export:*)",
+      "Bash(git add *)"
     ],
     "defaultMode": "acceptEdits",
     "additionalDirectories": [
