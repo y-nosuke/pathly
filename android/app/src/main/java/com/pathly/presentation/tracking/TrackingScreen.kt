@@ -23,8 +23,10 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.painterResource
@@ -36,6 +38,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.google.android.gms.maps.CameraUpdateFactory
 import com.google.android.gms.maps.model.CameraPosition
 import com.google.android.gms.maps.model.LatLng
+import com.google.maps.android.compose.CameraMoveStartedReason
 import com.google.maps.android.compose.GoogleMap
 import com.google.maps.android.compose.MapProperties
 import com.google.maps.android.compose.MapType
@@ -139,13 +142,26 @@ private fun TrackingMapView(
   val cameraPositionState = rememberCameraPositionState {
     position = CameraPosition.fromLatLngZoom(LatLng(35.6762, 139.6503), 15f)
   }
+  var followUser by remember { mutableStateOf(true) }
 
-  // 現在地に追従
-  LaunchedEffect(currentLocation) {
-    currentLocation?.let { loc ->
-      cameraPositionState.animate(
-        CameraUpdateFactory.newLatLng(LatLng(loc.latitude, loc.longitude)),
-      )
+  // ユーザーが地図を手で操作したら追従を止める（現在地ボタンで再センター可能）
+  LaunchedEffect(cameraPositionState) {
+    snapshotFlow { cameraPositionState.cameraMoveStartedReason }
+      .collect { reason ->
+        if (reason == CameraMoveStartedReason.GESTURE) {
+          followUser = false
+        }
+      }
+  }
+
+  // 追従中のみ現在地へカメラを移動
+  LaunchedEffect(currentLocation, followUser) {
+    if (followUser) {
+      currentLocation?.let { loc ->
+        cameraPositionState.animate(
+          CameraUpdateFactory.newLatLng(LatLng(loc.latitude, loc.longitude)),
+        )
+      }
     }
   }
 
@@ -158,7 +174,7 @@ private fun TrackingMapView(
     ),
     uiSettings = MapUiSettings(
       zoomControlsEnabled = false,
-      myLocationButtonEnabled = false,
+      myLocationButtonEnabled = hasPermission,
       mapToolbarEnabled = false,
       compassEnabled = false,
     ),

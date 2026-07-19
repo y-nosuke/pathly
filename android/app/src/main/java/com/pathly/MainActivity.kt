@@ -2,6 +2,7 @@ package com.pathly
 
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
@@ -76,6 +77,15 @@ private fun MainScreen(
 ) {
   var selectedTab by remember { mutableStateOf(BottomNavItem.TRACKING) }
   var selectedTrack by remember { mutableStateOf<GpsTrack?>(null) }
+
+  // 詳細表示中は一覧へ戻す
+  BackHandler(enabled = selectedTrack != null) {
+    selectedTrack = null
+  }
+  // ホーム以外のタブではホーム（記録）へ戻す。ホームで何もなければ既定動作でアプリ終了。
+  BackHandler(enabled = selectedTrack == null && selectedTab != BottomNavItem.TRACKING) {
+    selectedTab = BottomNavItem.TRACKING
+  }
 
   Scaffold(
     modifier = Modifier.fillMaxSize(),
