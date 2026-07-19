@@ -12,9 +12,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.LocationOn
-import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -28,10 +25,12 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.scale
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.pathly.R
 import com.pathly.domain.model.GpsTrack
 
 @Composable
@@ -169,7 +168,7 @@ private fun TrackingActiveContent(
           horizontalArrangement = Arrangement.Center,
         ) {
           Icon(
-            imageVector = Icons.Filled.LocationOn,
+            painter = painterResource(R.drawable.ic_location_on),
             contentDescription = null,
             tint = MaterialTheme.colorScheme.secondary,
             modifier = Modifier.size(24.dp),
@@ -258,7 +257,7 @@ private fun TrackingActiveContent(
           verticalAlignment = Alignment.CenterVertically,
         ) {
           Icon(
-            imageVector = Icons.Filled.LocationOn,
+            painter = painterResource(R.drawable.ic_location_on),
             contentDescription = null,
           )
           Spacer(modifier = Modifier.width(8.dp))
@@ -328,7 +327,7 @@ private fun TrackingInactiveContent(
         horizontalArrangement = Arrangement.Center,
       ) {
         Icon(
-          imageVector = Icons.Filled.PlayArrow,
+          painter = painterResource(R.drawable.ic_play_arrow),
           contentDescription = null,
         )
         Spacer(modifier = Modifier.width(8.dp))

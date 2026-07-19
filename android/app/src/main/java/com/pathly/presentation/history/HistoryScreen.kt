@@ -12,10 +12,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.LocationOn
-import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -29,11 +25,13 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.pathly.R
 import com.pathly.domain.model.GpsTrack
 import com.pathly.util.DateFormatters
 import kotlin.math.roundToInt
@@ -235,7 +233,7 @@ private fun ActiveTrackItem(
           horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
           Icon(
-            imageVector = Icons.Default.PlayArrow,
+            painter = painterResource(R.drawable.ic_play_arrow),
             contentDescription = null,
             tint = MaterialTheme.colorScheme.secondary,
           )
@@ -267,7 +265,7 @@ private fun ActiveTrackItem(
       }
 
       Icon(
-        imageVector = Icons.Default.LocationOn,
+        painter = painterResource(R.drawable.ic_location_on),
         contentDescription = "地図で表示",
         tint = MaterialTheme.colorScheme.secondary,
       )
@@ -347,7 +345,7 @@ private fun TrackItem(
         onClick = onDeleteClick,
       ) {
         Icon(
-          imageVector = Icons.Default.Delete,
+          painter = painterResource(R.drawable.ic_delete),
           contentDescription = "削除",
           tint = MaterialTheme.colorScheme.error,
         )

@@ -79,8 +79,6 @@ dependencies {
   implementation(libs.androidx.ui.graphics)
   implementation(libs.androidx.ui.tooling.preview)
   implementation(libs.androidx.material3)
-  // Material Icons: 非推奨化されCompose BOM(1.8.0以降)から除外されたため、最終公開版1.7.8を明示的にピン
-  implementation("androidx.compose.material:material-icons-core:1.7.8")
 
   // Room
   implementation(libs.androidx.room.runtime)

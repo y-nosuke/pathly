@@ -5,11 +5,9 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.annotation.DrawableRes
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.List
-import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.NavigationBar
@@ -22,7 +20,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.res.painterResource
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.pathly.domain.model.GpsTrack
 import com.pathly.presentation.history.HistoryScreen
@@ -35,10 +33,10 @@ import dagger.hilt.android.AndroidEntryPoint
 
 enum class BottomNavItem(
   val title: String,
-  val icon: ImageVector,
+  @DrawableRes val icon: Int,
 ) {
-  TRACKING("記録", Icons.Filled.LocationOn),
-  HISTORY("履歴", Icons.AutoMirrored.Filled.List),
+  TRACKING("記録", R.drawable.ic_location_on),
+  HISTORY("履歴", R.drawable.ic_list),
 }
 
 @AndroidEntryPoint
@@ -89,7 +87,7 @@ private fun MainScreen(
               selected = selectedTab == item,
               onClick = { selectedTab = item },
               label = { Text(item.title) },
-              icon = { Icon(item.icon, contentDescription = item.title) },
+              icon = { Icon(painterResource(item.icon), contentDescription = item.title) },
             )
           }
         }
