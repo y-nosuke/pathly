@@ -117,17 +117,15 @@ class GpsTrackTest {
     isActive: Boolean = false,
     createdAt: Date = Date(),
     updatedAt: Date = Date(),
-  ): GpsTrack {
-    return GpsTrack(
-      id = id,
-      startTime = startTime,
-      endTime = endTime,
-      isActive = isActive,
-      points = points,
-      createdAt = createdAt,
-      updatedAt = updatedAt,
-    )
-  }
+  ): GpsTrack = GpsTrack(
+    id = id,
+    startTime = startTime,
+    endTime = endTime,
+    isActive = isActive,
+    points = points,
+    createdAt = createdAt,
+    updatedAt = updatedAt,
+  )
 
   private fun createGpsPoint(
     id: Long = 1L,
@@ -140,18 +138,16 @@ class GpsTrackTest {
     bearing: Float? = null,
     timestamp: Date = Date(),
     createdAt: Date = Date(),
-  ): GpsPoint {
-    return GpsPoint(
-      id = id,
-      trackId = trackId,
-      latitude = latitude,
-      longitude = longitude,
-      altitude = altitude,
-      accuracy = accuracy ?: 10f,
-      speed = speed,
-      bearing = bearing,
-      timestamp = timestamp,
-      createdAt = createdAt,
-    )
-  }
+  ): GpsPoint = GpsPoint(
+    id = id,
+    trackId = trackId,
+    latitude = latitude,
+    longitude = longitude,
+    altitude = altitude,
+    accuracy = accuracy ?: 10f,
+    speed = speed,
+    bearing = bearing,
+    timestamp = timestamp,
+    createdAt = createdAt,
+  )
 }

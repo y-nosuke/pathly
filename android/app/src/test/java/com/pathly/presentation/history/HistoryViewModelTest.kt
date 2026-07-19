@@ -120,15 +120,13 @@ class HistoryViewModelTest {
     startTime: Date = Date(),
     endTime: Date? = null,
     isActive: Boolean = false,
-  ): GpsTrack {
-    return GpsTrack(
-      id = id,
-      startTime = startTime,
-      endTime = endTime,
-      isActive = isActive,
-      points = emptyList(),
-      createdAt = Date(),
-      updatedAt = Date(),
-    )
-  }
+  ): GpsTrack = GpsTrack(
+    id = id,
+    startTime = startTime,
+    endTime = endTime,
+    isActive = isActive,
+    points = emptyList(),
+    createdAt = Date(),
+    updatedAt = Date(),
+  )
 }

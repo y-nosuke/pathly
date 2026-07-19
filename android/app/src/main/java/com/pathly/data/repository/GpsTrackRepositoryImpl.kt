@@ -25,41 +25,37 @@ class GpsTrackRepositoryImpl @Inject constructor(
 
   private val logger = Logger("GpsTrackRepositoryImpl")
 
-  override fun getAllTracks(): Flow<List<GpsTrack>> {
-    return gpsTrackDao.getAllTracksWithPoints()
-      .map { tracksWithPoints ->
-        tracksWithPoints.map { trackWithPoints ->
-          val points = trackWithPoints.points.map { it.toGpsPoint() }
-          trackWithPoints.track.toGpsTrack(points)
-        }
+  override fun getAllTracks(): Flow<List<GpsTrack>> = gpsTrackDao.getAllTracksWithPoints()
+    .map { tracksWithPoints ->
+      tracksWithPoints.map { trackWithPoints ->
+        val points = trackWithPoints.points.map { it.toGpsPoint() }
+        trackWithPoints.track.toGpsTrack(points)
       }
-      .onEach { tracks ->
-        logger.d("Retrieved ${tracks.size} tracks from local database")
-      }
-      .catch { exception ->
-        logger.e("Failed to retrieve tracks from local database", exception)
-        emit(emptyList()) // オフライン時は空リストを返す
-      }
-  }
+    }
+    .onEach { tracks ->
+      logger.d("Retrieved ${tracks.size} tracks from local database")
+    }
+    .catch { exception ->
+      logger.e("Failed to retrieve tracks from local database", exception)
+      emit(emptyList()) // オフライン時は空リストを返す
+    }
 
-  override fun getActiveTrackRealtime(): Flow<GpsTrack?> {
-    return gpsTrackDao.getActiveTrackWithPoints()
-      .map { trackWithPoints ->
-        trackWithPoints?.let {
-          val points = it.points.map { point -> point.toGpsPoint() }
-          it.track.toGpsTrack(points)
-        }
+  override fun getActiveTrackRealtime(): Flow<GpsTrack?> = gpsTrackDao.getActiveTrackWithPoints()
+    .map { trackWithPoints ->
+      trackWithPoints?.let {
+        val points = it.points.map { point -> point.toGpsPoint() }
+        it.track.toGpsTrack(points)
       }
-      .onEach { track ->
-        if (track != null) {
-          logger.d("Retrieved active track ${track.id} with ${track.points.size} points")
-        }
+    }
+    .onEach { track ->
+      if (track != null) {
+        logger.d("Retrieved active track ${track.id} with ${track.points.size} points")
       }
-      .catch { exception ->
-        logger.e("Failed to retrieve active track", exception)
-        emit(null)
-      }
-  }
+    }
+    .catch { exception ->
+      logger.e("Failed to retrieve active track", exception)
+      emit(null)
+    }
 
   override suspend fun getTrackById(trackId: Long): GpsTrack? {
     return try {
@@ -127,24 +123,22 @@ class GpsTrackRepositoryImpl @Inject constructor(
   /**
    * ローカルデータの暗号化バックアップを作成
    */
-  suspend fun createEncryptedBackup(): Boolean {
-    return try {
-      logger.i("Creating encrypted backup of local data")
+  suspend fun createEncryptedBackup(): Boolean = try {
+    logger.i("Creating encrypted backup of local data")
 
-      val allTracks = gpsTrackDao.getAllTracksSync()
-      val allPoints = gpsPointDao.getAllPointsSync()
+    val allTracks = gpsTrackDao.getAllTracksSync()
+    val allPoints = gpsPointDao.getAllPointsSync()
 
-      // バックアップデータを暗号化して保存
-      val backupData = createBackupData(allTracks, allPoints)
-      encryptionHelper.saveSecureString("backup_data", backupData)
-      encryptionHelper.saveSecureString("backup_timestamp", System.currentTimeMillis().toString())
+    // バックアップデータを暗号化して保存
+    val backupData = createBackupData(allTracks, allPoints)
+    encryptionHelper.saveSecureString("backup_data", backupData)
+    encryptionHelper.saveSecureString("backup_timestamp", System.currentTimeMillis().toString())
 
-      logger.i("Encrypted backup created successfully")
-      true
-    } catch (e: Exception) {
-      logger.e("Repository operation failed", e)
-      false
-    }
+    logger.i("Encrypted backup created successfully")
+    true
+  } catch (e: Exception) {
+    logger.e("Repository operation failed", e)
+    false
   }
 
   /**
@@ -173,46 +167,42 @@ class GpsTrackRepositoryImpl @Inject constructor(
   /**
    * ローカルデータベースの健全性チェック
    */
-  suspend fun performDataIntegrityCheck(): Boolean {
-    return try {
-      logger.i("Performing data integrity check")
+  suspend fun performDataIntegrityCheck(): Boolean = try {
+    logger.i("Performing data integrity check")
 
-      val trackCount = gpsTrackDao.getTrackCount()
-      val pointCount = gpsPointDao.getPointCount()
-      val orphanedPoints = gpsPointDao.getOrphanedPointsCount()
+    val trackCount = gpsTrackDao.getTrackCount()
+    val pointCount = gpsPointDao.getPointCount()
+    val orphanedPoints = gpsPointDao.getOrphanedPointsCount()
 
-      logger.i("Data integrity: $trackCount tracks, $pointCount points, $orphanedPoints orphaned")
+    logger.i("Data integrity: $trackCount tracks, $pointCount points, $orphanedPoints orphaned")
 
-      val isHealthy = orphanedPoints == 0
-      if (!isHealthy) {
-        logger.w("Data integrity issues detected: $orphanedPoints orphaned points")
-      }
-
-      isHealthy
-    } catch (e: Exception) {
-      logger.e("Repository operation failed", e)
-      false
+    val isHealthy = orphanedPoints == 0
+    if (!isHealthy) {
+      logger.w("Data integrity issues detected: $orphanedPoints orphaned points")
     }
+
+    isHealthy
+  } catch (e: Exception) {
+    logger.e("Repository operation failed", e)
+    false
   }
 
   /**
    * オフライン専用データクリーンアップ
    */
-  suspend fun cleanupOldOfflineData(daysToKeep: Int = 30): Int {
-    return try {
-      logger.i("Cleaning up offline data older than $daysToKeep days")
+  suspend fun cleanupOldOfflineData(daysToKeep: Int = 30): Int = try {
+    logger.i("Cleaning up offline data older than $daysToKeep days")
 
-      val cutoffTime = System.currentTimeMillis() - (daysToKeep * 24 * 60 * 60 * 1000L)
-      val cutoffDate = java.util.Date(cutoffTime)
+    val cutoffTime = System.currentTimeMillis() - (daysToKeep * 24 * 60 * 60 * 1000L)
+    val cutoffDate = java.util.Date(cutoffTime)
 
-      val deletedCount = gpsTrackDao.deleteTracksOlderThan(cutoffDate)
-      logger.i("Cleaned up $deletedCount old tracks")
+    val deletedCount = gpsTrackDao.deleteTracksOlderThan(cutoffDate)
+    logger.i("Cleaned up $deletedCount old tracks")
 
-      deletedCount
-    } catch (e: Exception) {
-      logger.e("Repository operation failed", e)
-      0
-    }
+    deletedCount
+  } catch (e: Exception) {
+    logger.e("Repository operation failed", e)
+    0
   }
 
   private fun saveDeletedTrackId(trackId: Long) {
@@ -230,30 +220,26 @@ class GpsTrackRepositoryImpl @Inject constructor(
     return "tracks:${tracks.size},points:${points.size},timestamp:${System.currentTimeMillis()}"
   }
 
-  private fun GpsTrackEntity.toGpsTrack(points: List<GpsPoint> = emptyList()): GpsTrack {
-    return GpsTrack(
-      id = this.id,
-      startTime = this.startTime,
-      endTime = this.endTime,
-      isActive = this.isActive,
-      points = points,
-      createdAt = this.createdAt,
-      updatedAt = this.updatedAt,
-    )
-  }
+  private fun GpsTrackEntity.toGpsTrack(points: List<GpsPoint> = emptyList()): GpsTrack = GpsTrack(
+    id = this.id,
+    startTime = this.startTime,
+    endTime = this.endTime,
+    isActive = this.isActive,
+    points = points,
+    createdAt = this.createdAt,
+    updatedAt = this.updatedAt,
+  )
 
-  private fun GpsPointEntity.toGpsPoint(): GpsPoint {
-    return GpsPoint(
-      id = this.id,
-      trackId = this.trackId,
-      latitude = this.latitude,
-      longitude = this.longitude,
-      altitude = this.altitude,
-      accuracy = this.accuracy,
-      speed = this.speed,
-      bearing = this.bearing,
-      timestamp = this.timestamp,
-      createdAt = this.createdAt,
-    )
-  }
+  private fun GpsPointEntity.toGpsPoint(): GpsPoint = GpsPoint(
+    id = this.id,
+    trackId = this.trackId,
+    latitude = this.latitude,
+    longitude = this.longitude,
+    altitude = this.altitude,
+    accuracy = this.accuracy,
+    speed = this.speed,
+    bearing = this.bearing,
+    timestamp = this.timestamp,
+    createdAt = this.createdAt,
+  )
 }

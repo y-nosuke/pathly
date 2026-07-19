@@ -428,32 +428,28 @@ class HistoryScreenTest {
   private fun createSampleTrack(
     id: Long = 1L,
     pointsCount: Int = 2,
-  ): GpsTrack {
-    return GpsTrack(
-      id = id,
-      startTime = Date(System.currentTimeMillis() - 3600000),
-      endTime = Date(),
-      isActive = false,
-      points = createSamplePoints(pointsCount, trackId = id),
-      createdAt = Date(),
-      updatedAt = Date(),
-    )
-  }
+  ): GpsTrack = GpsTrack(
+    id = id,
+    startTime = Date(System.currentTimeMillis() - 3600000),
+    endTime = Date(),
+    isActive = false,
+    points = createSamplePoints(pointsCount, trackId = id),
+    createdAt = Date(),
+    updatedAt = Date(),
+  )
 
-  private fun createSamplePoints(count: Int, trackId: Long = 1L): List<GpsPoint> {
-    return (1..count).map { index ->
-      GpsPoint(
-        id = index.toLong(),
-        trackId = trackId,
-        latitude = 35.6762 + (index * 0.001), // 少しずつ異なる位置
-        longitude = 139.6503 + (index * 0.001),
-        altitude = null,
-        accuracy = 10f,
-        speed = null,
-        bearing = null,
-        timestamp = Date(System.currentTimeMillis() - (3600000 - index * 1000)),
-        createdAt = Date(),
-      )
-    }
+  private fun createSamplePoints(count: Int, trackId: Long = 1L): List<GpsPoint> = (1..count).map { index ->
+    GpsPoint(
+      id = index.toLong(),
+      trackId = trackId,
+      latitude = 35.6762 + (index * 0.001), // 少しずつ異なる位置
+      longitude = 139.6503 + (index * 0.001),
+      altitude = null,
+      accuracy = 10f,
+      speed = null,
+      bearing = null,
+      timestamp = Date(System.currentTimeMillis() - (3600000 - index * 1000)),
+      createdAt = Date(),
+    )
   }
 }

@@ -68,4 +68,5 @@ class InstanceLogger(private val tag: String) {
 }
 
 // 互換性のためのファクトリ関数
+@Suppress("ktlint:standard:function-naming")
 fun Logger(tag: String): InstanceLogger = InstanceLogger(tag)

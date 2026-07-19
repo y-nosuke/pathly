@@ -27,33 +27,21 @@ object PermissionUtils {
   }
 
   /** 単一権限をチェック */
-  fun hasPermission(context: Context, permission: String): Boolean {
-    return ContextCompat.checkSelfPermission(context, permission) ==
-      PackageManager.PERMISSION_GRANTED
-  }
+  fun hasPermission(context: Context, permission: String): Boolean = ContextCompat.checkSelfPermission(context, permission) ==
+    PackageManager.PERMISSION_GRANTED
 
   /** 複数権限をすべてチェック */
-  fun hasAllPermissions(context: Context, permissions: Array<String>): Boolean {
-    return permissions.all { permission -> hasPermission(context, permission) }
-  }
+  fun hasAllPermissions(context: Context, permissions: Array<String>): Boolean = permissions.all { permission -> hasPermission(context, permission) }
 
   /** 位置権限（FINE_LOCATION + COARSE_LOCATION）をチェック */
-  fun hasLocationPermissions(context: Context): Boolean {
-    return hasAllPermissions(context, PermissionGroups.LOCATION_PERMISSIONS)
-  }
+  fun hasLocationPermissions(context: Context): Boolean = hasAllPermissions(context, PermissionGroups.LOCATION_PERMISSIONS)
 
   /** アプリで必要なすべての権限をチェック (FINE_LOCATION + COARSE_LOCATION + POST_NOTIFICATIONS) */
-  fun hasAllRequiredPermissions(context: Context): Boolean {
-    return hasAllPermissions(context, PermissionGroups.ALL_REQUIRED_PERMISSIONS)
-  }
+  fun hasAllRequiredPermissions(context: Context): Boolean = hasAllPermissions(context, PermissionGroups.ALL_REQUIRED_PERMISSIONS)
 
   /** 欠けている権限のリストを取得 */
-  fun getMissingPermissions(context: Context, permissions: Array<String>): List<String> {
-    return permissions.filter { permission -> !hasPermission(context, permission) }
-  }
+  fun getMissingPermissions(context: Context, permissions: Array<String>): List<String> = permissions.filter { permission -> !hasPermission(context, permission) }
 
   /** 欠けている権限のリストを取得（すべての必須権限対象） */
-  fun getMissingRequiredPermissions(context: Context): List<String> {
-    return getMissingPermissions(context, PermissionGroups.ALL_REQUIRED_PERMISSIONS)
-  }
+  fun getMissingRequiredPermissions(context: Context): List<String> = getMissingPermissions(context, PermissionGroups.ALL_REQUIRED_PERMISSIONS)
 }

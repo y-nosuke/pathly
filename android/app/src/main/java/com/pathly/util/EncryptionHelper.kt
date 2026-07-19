@@ -48,13 +48,11 @@ class EncryptionHelper(private val context: Context) {
   /**
    * 暗号化機能が有効かどうかを確認
    */
-  fun isEncryptionEnabled(): Boolean {
-    return try {
-      encryptedSharedPreferences.getBoolean(KEY_ENCRYPTION_ENABLED, true)
-    } catch (e: Exception) {
-      logger.e("Encryption operation failed", e)
-      true // デフォルトで暗号化を有効にする
-    }
+  fun isEncryptionEnabled(): Boolean = try {
+    encryptedSharedPreferences.getBoolean(KEY_ENCRYPTION_ENABLED, true)
+  } catch (e: Exception) {
+    logger.e("Encryption operation failed", e)
+    true // デフォルトで暗号化を有効にする
   }
 
   /**
@@ -74,24 +72,22 @@ class EncryptionHelper(private val context: Context) {
   /**
    * データベース用のパスフレーズを生成・保存
    */
-  fun getOrCreateDatabasePassphrase(): String {
-    return try {
-      val existingPassphrase = encryptedSharedPreferences.getString(KEY_DB_PASSPHRASE, null)
-      if (existingPassphrase != null) {
-        logger.d("Using existing database passphrase")
-        existingPassphrase
-      } else {
-        val newPassphrase = generateSecurePassphrase()
-        encryptedSharedPreferences.edit()
-          .putString(KEY_DB_PASSPHRASE, newPassphrase)
-          .apply()
-        logger.i("Created new database passphrase")
-        newPassphrase
-      }
-    } catch (e: Exception) {
-      logger.e("Encryption operation failed", e)
-      throw SecurityException("Passphrase generation failed", e)
+  fun getOrCreateDatabasePassphrase(): String = try {
+    val existingPassphrase = encryptedSharedPreferences.getString(KEY_DB_PASSPHRASE, null)
+    if (existingPassphrase != null) {
+      logger.d("Using existing database passphrase")
+      existingPassphrase
+    } else {
+      val newPassphrase = generateSecurePassphrase()
+      encryptedSharedPreferences.edit()
+        .putString(KEY_DB_PASSPHRASE, newPassphrase)
+        .apply()
+      logger.i("Created new database passphrase")
+      newPassphrase
     }
+  } catch (e: Exception) {
+    logger.e("Encryption operation failed", e)
+    throw SecurityException("Passphrase generation failed", e)
   }
 
   /**
@@ -111,17 +107,15 @@ class EncryptionHelper(private val context: Context) {
   /**
    * 暗号化されたデータを取得
    */
-  fun getSecureString(key: String, defaultValue: String? = null): String? {
-    return try {
-      val value = encryptedSharedPreferences.getString(key, defaultValue)
-      if (value != null) {
-        logger.d("Retrieved secure string for key: $key")
-      }
-      value
-    } catch (e: Exception) {
-      logger.e("Encryption operation failed", e)
-      defaultValue
+  fun getSecureString(key: String, defaultValue: String? = null): String? = try {
+    val value = encryptedSharedPreferences.getString(key, defaultValue)
+    if (value != null) {
+      logger.d("Retrieved secure string for key: $key")
     }
+    value
+  } catch (e: Exception) {
+    logger.e("Encryption operation failed", e)
+    defaultValue
   }
 
   /**
@@ -166,26 +160,24 @@ class EncryptionHelper(private val context: Context) {
   /**
    * 暗号化システムの健全性をチェック
    */
-  fun verifyEncryptionIntegrity(): Boolean {
-    return try {
-      val testKey = "integrity_test"
-      val testValue = "test_encryption_${System.currentTimeMillis()}"
+  fun verifyEncryptionIntegrity(): Boolean = try {
+    val testKey = "integrity_test"
+    val testValue = "test_encryption_${System.currentTimeMillis()}"
 
-      // 書き込みテスト
-      saveSecureString(testKey, testValue)
+    // 書き込みテスト
+    saveSecureString(testKey, testValue)
 
-      // 読み取りテスト
-      val retrievedValue = getSecureString(testKey)
+    // 読み取りテスト
+    val retrievedValue = getSecureString(testKey)
 
-      // クリーンアップ
-      removeSecureString(testKey)
+    // クリーンアップ
+    removeSecureString(testKey)
 
-      val isValid = testValue == retrievedValue
-      logger.i("Encryption integrity check: ${if (isValid) "PASSED" else "FAILED"}")
-      isValid
-    } catch (e: Exception) {
-      logger.e("Encryption operation failed", e)
-      false
-    }
+    val isValid = testValue == retrievedValue
+    logger.i("Encryption integrity check: ${if (isValid) "PASSED" else "FAILED"}")
+    isValid
+  } catch (e: Exception) {
+    logger.e("Encryption operation failed", e)
+    false
   }
 }

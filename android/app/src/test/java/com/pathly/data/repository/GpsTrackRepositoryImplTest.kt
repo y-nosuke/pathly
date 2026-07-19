@@ -271,16 +271,14 @@ class GpsTrackRepositoryImplTest {
     isActive: Boolean = false,
     createdAt: Date = Date(),
     updatedAt: Date = Date(),
-  ): GpsTrackEntity {
-    return GpsTrackEntity(
-      id = id,
-      startTime = startTime,
-      endTime = endTime,
-      isActive = isActive,
-      createdAt = createdAt,
-      updatedAt = updatedAt,
-    )
-  }
+  ): GpsTrackEntity = GpsTrackEntity(
+    id = id,
+    startTime = startTime,
+    endTime = endTime,
+    isActive = isActive,
+    createdAt = createdAt,
+    updatedAt = updatedAt,
+  )
 
   private fun createGpsPointEntity(
     id: Long,
@@ -293,18 +291,16 @@ class GpsTrackRepositoryImplTest {
     bearing: Float? = null,
     timestamp: Date = Date(),
     createdAt: Date = Date(),
-  ): GpsPointEntity {
-    return GpsPointEntity(
-      id = id,
-      trackId = trackId,
-      latitude = latitude,
-      longitude = longitude,
-      altitude = altitude,
-      accuracy = accuracy,
-      speed = speed,
-      bearing = bearing,
-      timestamp = timestamp,
-      createdAt = createdAt,
-    )
-  }
+  ): GpsPointEntity = GpsPointEntity(
+    id = id,
+    trackId = trackId,
+    latitude = latitude,
+    longitude = longitude,
+    altitude = altitude,
+    accuracy = accuracy,
+    speed = speed,
+    bearing = bearing,
+    timestamp = timestamp,
+    createdAt = createdAt,
+  )
 }

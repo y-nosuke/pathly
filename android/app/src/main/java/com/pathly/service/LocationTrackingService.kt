@@ -312,9 +312,7 @@ class LocationTrackingService : Service() {
     }
   }
 
-  private fun hasLocationPermission(): Boolean {
-    return PermissionUtils.hasLocationPermissions(this)
-  }
+  private fun hasLocationPermission(): Boolean = PermissionUtils.hasLocationPermissions(this)
 
   private fun isLocationEnabled(): Boolean {
     val locationManager = getSystemService(LOCATION_SERVICE) as LocationManager

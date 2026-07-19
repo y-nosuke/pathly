@@ -424,20 +424,18 @@ class TrackDetailScreenTest {
     )
   }
 
-  private fun createSamplePoints(count: Int): List<GpsPoint> {
-    return (1..count).map { index ->
-      GpsPoint(
-        id = index.toLong(),
-        trackId = 1L,
-        latitude = 35.6762 + (index * 0.001),
-        longitude = 139.6503 + (index * 0.001),
-        altitude = null,
-        accuracy = 10f,
-        speed = null,
-        bearing = null,
-        timestamp = Date(1640995200000L + index * 60000), // 1分間隔
-        createdAt = Date(),
-      )
-    }
+  private fun createSamplePoints(count: Int): List<GpsPoint> = (1..count).map { index ->
+    GpsPoint(
+      id = index.toLong(),
+      trackId = 1L,
+      latitude = 35.6762 + (index * 0.001),
+      longitude = 139.6503 + (index * 0.001),
+      altitude = null,
+      accuracy = 10f,
+      speed = null,
+      bearing = null,
+      timestamp = Date(1640995200000L + index * 60000), // 1分間隔
+      createdAt = Date(),
+    )
   }
 }
