@@ -2,16 +2,15 @@ import java.util.Properties
 
 plugins {
   alias(libs.plugins.android.application)
-  alias(libs.plugins.kotlin.android)
   alias(libs.plugins.kotlin.compose)
   alias(libs.plugins.hilt)
-  alias(libs.plugins.kotlin.kapt)
+  alias(libs.plugins.ksp)
   id("com.diffplug.spotless")
 }
 
 android {
   namespace = "com.pathly"
-  compileSdk = 36
+  compileSdk = 37
 
   defaultConfig {
     applicationId = "com.pathly"
@@ -51,11 +50,6 @@ android {
     sourceCompatibility = JavaVersion.VERSION_17
     targetCompatibility = JavaVersion.VERSION_17
   }
-  kotlin {
-    compilerOptions {
-      jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17)
-    }
-  }
   buildFeatures {
     compose = true
     buildConfig = true // BuildConfig生成を有効化
@@ -85,16 +79,18 @@ dependencies {
   implementation(libs.androidx.ui.graphics)
   implementation(libs.androidx.ui.tooling.preview)
   implementation(libs.androidx.material3)
+  // Material Icons: 非推奨化されCompose BOM(1.8.0以降)から除外されたため、最終公開版1.7.8を明示的にピン
+  implementation("androidx.compose.material:material-icons-core:1.7.8")
 
   // Room
   implementation(libs.androidx.room.runtime)
   implementation(libs.androidx.room.ktx)
-  kapt(libs.androidx.room.compiler)
+  ksp(libs.androidx.room.compiler)
 
   // Hilt
   implementation(libs.hilt.android)
   implementation(libs.hilt.navigation.compose)
-  kapt(libs.hilt.compiler)
+  ksp(libs.hilt.compiler)
 
   // Location Services
   implementation(libs.play.services.location)
@@ -110,15 +106,15 @@ dependencies {
   implementation(libs.kotlinx.coroutines.android)
 
   // Security - Encrypted SharedPreferences
-  implementation("androidx.security:security-crypto:1.1.0-alpha06")
+  implementation("androidx.security:security-crypto:1.1.0")
 
   testImplementation(libs.junit)
 
   // Unit Test dependencies
-  testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.7.3")
+  testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.11.0")
   testImplementation("androidx.arch.core:core-testing:2.2.0")
-  testImplementation("io.mockk:mockk:1.13.8")
-  testImplementation("app.cash.turbine:turbine:1.0.0")
+  testImplementation("io.mockk:mockk:1.14.11")
+  testImplementation("app.cash.turbine:turbine:1.2.1")
 
   androidTestImplementation(libs.androidx.junit)
   androidTestImplementation(libs.androidx.espresso.core)
@@ -127,11 +123,11 @@ dependencies {
 
   // Android Integration Test dependencies
   androidTestImplementation("androidx.arch.core:core-testing:2.2.0")
-  androidTestImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.7.3")
-  androidTestImplementation("androidx.room:room-testing:2.6.1")
+  androidTestImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.11.0")
+  androidTestImplementation(libs.androidx.room.testing)
 
   // UI Test dependencies
-  androidTestImplementation("io.mockk:mockk-android:1.13.8")
+  androidTestImplementation("io.mockk:mockk-android:1.14.11")
   androidTestImplementation("androidx.compose.ui:ui-test-manifest")
 
   debugImplementation(libs.androidx.ui.tooling)
