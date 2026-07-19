@@ -21,7 +21,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.painterResource
-import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import com.pathly.domain.model.GpsTrack
 import com.pathly.presentation.history.HistoryScreen
 import com.pathly.presentation.history.TrackDetailScreen
@@ -33,7 +33,7 @@ import dagger.hilt.android.AndroidEntryPoint
 
 enum class BottomNavItem(
   val title: String,
-  @DrawableRes val icon: Int,
+  @param:DrawableRes val icon: Int,
 ) {
   TRACKING("記録", R.drawable.ic_location_on),
   HISTORY("履歴", R.drawable.ic_list),
