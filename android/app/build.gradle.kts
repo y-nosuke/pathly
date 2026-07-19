@@ -40,6 +40,17 @@ android {
     )
   }
 
+  signingConfigs {
+    // CI とローカルで同一のデバッグ鍵を使い、実行ごとに署名が変わらないようにする。
+    // デバッグ鍵はパスワードが公知（android）で秘密情報ではないためリポジトリに含める。
+    getByName("debug") {
+      storeFile = file("pathly-debug.keystore")
+      storePassword = "android"
+      keyAlias = "androiddebugkey"
+      keyPassword = "android"
+    }
+  }
+
   buildTypes {
     release {
       isMinifyEnabled = false
