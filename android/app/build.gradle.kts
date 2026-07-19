@@ -16,8 +16,13 @@ android {
     applicationId = "com.pathly"
     minSdk = 34
     targetSdk = 36
-    versionCode = 1
-    versionName = "1.0"
+
+    // CI（GitHub Actions）の run 番号から versionCode を自動採番する。
+    // run_number はリポジトリ横断で単調増加するため、後にビルドしたものほど
+    // versionCode が大きくなり、常に更新インストールできる。ローカルは 1。
+    val ciRunNumber = System.getenv("GITHUB_RUN_NUMBER")?.toIntOrNull() ?: 0
+    versionCode = 1 + ciRunNumber
+    versionName = if (ciRunNumber > 0) "1.0.$ciRunNumber" else "1.0"
 
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
