@@ -21,6 +21,7 @@ class HistoryViewModel @Inject constructor(
 
   init {
     loadTracks()
+    observeActiveTrack()
   }
 
   private fun loadTracks() {
@@ -59,5 +60,13 @@ class HistoryViewModel @Inject constructor(
 
   fun clearError() {
     _uiState.value = _uiState.value.copy(errorMessage = null)
+  }
+
+  private fun observeActiveTrack() {
+    viewModelScope.launch {
+      gpsTrackRepository.getActiveTrackRealtime().collect { activeTrack ->
+        _uiState.value = _uiState.value.copy(activeTrack = activeTrack)
+      }
+    }
   }
 }

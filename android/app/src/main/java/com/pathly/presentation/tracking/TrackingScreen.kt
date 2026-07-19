@@ -32,11 +32,13 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.pathly.domain.model.GpsTrack
 
 @Composable
 fun TrackingScreen(
   modifier: Modifier = Modifier,
   onRequestPermission: () -> Unit,
+  onNavigateToMap: (GpsTrack) -> Unit = {},
   viewModel: TrackingViewModel = hiltViewModel(),
 ) {
   val uiState by viewModel.uiState.collectAsStateWithLifecycle()
@@ -68,8 +70,10 @@ fun TrackingScreen(
       uiState.isTracking -> {
         TrackingActiveContent(
           onStopTracking = viewModel::stopTracking,
+          onNavigateToMap = { uiState.currentTrack?.let(onNavigateToMap) },
           currentLocation = uiState.currentLocation,
           locationCount = uiState.locationCount,
+          showMapButton = uiState.currentTrack?.let { it.points.isNotEmpty() } ?: false,
         )
       }
 
@@ -130,8 +134,10 @@ private fun LocationPermissionContent(
 @Composable
 private fun TrackingActiveContent(
   onStopTracking: () -> Unit,
+  onNavigateToMap: () -> Unit = {},
   currentLocation: LocationInfo? = null,
   locationCount: Int = 0,
+  showMapButton: Boolean = false,
 ) {
   // アニメーション状態
   val buttonScale by animateFloatAsState(
@@ -233,6 +239,32 @@ private fun TrackingActiveContent(
             text = "時刻: ${location.timestamp}",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurface,
+          )
+        }
+      }
+    }
+
+    // 地図ボタン（記録中の経路がある場合のみ表示）
+    if (showMapButton) {
+      Button(
+        onClick = onNavigateToMap,
+        colors = ButtonDefaults.buttonColors(
+          containerColor = MaterialTheme.colorScheme.tertiary,
+        ),
+        modifier = Modifier
+          .size(width = 200.dp, height = 50.dp),
+      ) {
+        Row(
+          verticalAlignment = Alignment.CenterVertically,
+        ) {
+          Icon(
+            imageVector = Icons.Filled.LocationOn,
+            contentDescription = null,
+          )
+          Spacer(modifier = Modifier.width(8.dp))
+          Text(
+            text = "経路を地図で確認",
+            style = MaterialTheme.typography.labelMedium,
           )
         }
       }

@@ -26,6 +26,10 @@ interface GpsTrackDao {
   @Query("SELECT * FROM gps_tracks WHERE isActive = 1 ORDER BY startTime DESC LIMIT 1")
   suspend fun getActiveTrack(): GpsTrackEntity?
 
+  @Transaction
+  @Query("SELECT * FROM gps_tracks WHERE isActive = 1 ORDER BY startTime DESC LIMIT 1")
+  fun getActiveTrackWithPoints(): Flow<GpsTrackWithPoints?>
+
   @Insert
   suspend fun insertTrack(track: GpsTrackEntity): Long
 

@@ -51,6 +51,7 @@ class HistoryViewModelTest {
       createTrack(id = 2, isActive = false, endTime = Date()),
     )
     coEvery { mockRepository.getAllTracks() } returns flowOf(tracks)
+    coEvery { mockRepository.getActiveTrackRealtime() } returns flowOf(null)
 
     // When
     viewModel = HistoryViewModel(mockRepository)
@@ -67,6 +68,7 @@ class HistoryViewModelTest {
   fun `記録なしの場合_空リスト`() = runTest {
     // Given
     coEvery { mockRepository.getAllTracks() } returns flowOf(emptyList())
+    coEvery { mockRepository.getActiveTrackRealtime() } returns flowOf(null)
 
     // When
     viewModel = HistoryViewModel(mockRepository)
@@ -83,6 +85,7 @@ class HistoryViewModelTest {
     // Given
     val track = createTrack(id = 1, isActive = false, endTime = Date())
     coEvery { mockRepository.getAllTracks() } returns flowOf(listOf(track))
+    coEvery { mockRepository.getActiveTrackRealtime() } returns flowOf(null)
     coEvery { mockRepository.deleteTrack(track) } returns Unit
 
     viewModel = HistoryViewModel(mockRepository)
@@ -100,6 +103,7 @@ class HistoryViewModelTest {
   fun `updateLocationPermission_権限状態が更新される`() = runTest {
     // Given
     coEvery { mockRepository.getAllTracks() } returns flowOf(emptyList())
+    coEvery { mockRepository.getActiveTrackRealtime() } returns flowOf(null)
     viewModel = HistoryViewModel(mockRepository)
     testDispatcher.scheduler.advanceUntilIdle()
 

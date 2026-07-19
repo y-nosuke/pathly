@@ -42,6 +42,25 @@ class GpsTrackRepositoryImpl @Inject constructor(
       }
   }
 
+  override fun getActiveTrackRealtime(): Flow<GpsTrack?> {
+    return gpsTrackDao.getActiveTrackWithPoints()
+      .map { trackWithPoints ->
+        trackWithPoints?.let {
+          val points = it.points.map { point -> point.toGpsPoint() }
+          it.track.toGpsTrack(points)
+        }
+      }
+      .onEach { track ->
+        if (track != null) {
+          logger.d("Retrieved active track ${track.id} with ${track.points.size} points")
+        }
+      }
+      .catch { exception ->
+        logger.e("Failed to retrieve active track", exception)
+        emit(null)
+      }
+  }
+
   override suspend fun getTrackById(trackId: Long): GpsTrack? {
     return try {
       val trackEntity = gpsTrackDao.getTrackById(trackId) ?: run {

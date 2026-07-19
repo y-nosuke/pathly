@@ -5,6 +5,7 @@ import kotlinx.coroutines.flow.Flow
 
 interface GpsTrackRepository {
   fun getAllTracks(): Flow<List<GpsTrack>>
+  fun getActiveTrackRealtime(): Flow<GpsTrack?>
   suspend fun getTrackById(trackId: Long): GpsTrack?
   suspend fun getActiveTrack(): GpsTrack?
   suspend fun deleteTrack(track: GpsTrack)

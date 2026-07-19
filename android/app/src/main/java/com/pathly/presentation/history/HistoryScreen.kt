@@ -14,6 +14,8 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.LocationOn
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -66,7 +68,7 @@ fun HistoryScreen(
         }
       }
 
-      uiState.tracks.isEmpty() -> {
+      uiState.tracks.isEmpty() && uiState.activeTrack == null -> {
         Box(
           modifier = Modifier.fillMaxSize(),
           contentAlignment = Alignment.Center,
@@ -87,6 +89,17 @@ fun HistoryScreen(
           item {
             StatisticsSummaryCard(tracks = uiState.tracks)
             Spacer(modifier = Modifier.height(16.dp))
+          }
+
+          // 記録中のアクティブトラックを表示
+          uiState.activeTrack?.let { activeTrack ->
+            item {
+              ActiveTrackItem(
+                track = activeTrack,
+                onTrackClick = { onTrackClick(activeTrack) },
+              )
+              Spacer(modifier = Modifier.height(8.dp))
+            }
           }
 
           items(uiState.tracks) { track ->
@@ -189,6 +202,76 @@ private fun StatisticItem(
       style = MaterialTheme.typography.bodySmall,
       color = MaterialTheme.colorScheme.onPrimaryContainer,
     )
+  }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun ActiveTrackItem(
+  track: GpsTrack,
+  onTrackClick: () -> Unit,
+  modifier: Modifier = Modifier,
+) {
+  Card(
+    onClick = onTrackClick,
+    modifier = modifier.fillMaxWidth(),
+    shape = RoundedCornerShape(8.dp),
+    colors = CardDefaults.cardColors(
+      containerColor = MaterialTheme.colorScheme.primaryContainer,
+    ),
+  ) {
+    Row(
+      modifier = Modifier
+        .fillMaxWidth()
+        .padding(16.dp),
+      horizontalArrangement = Arrangement.SpaceBetween,
+      verticalAlignment = Alignment.CenterVertically,
+    ) {
+      Column(
+        modifier = Modifier.weight(1f),
+      ) {
+        Row(
+          verticalAlignment = Alignment.CenterVertically,
+          horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+          Icon(
+            imageVector = Icons.Default.PlayArrow,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.secondary,
+          )
+          Text(
+            text = "🟢 記録中",
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.secondary,
+          )
+        }
+
+        Spacer(modifier = Modifier.height(4.dp))
+
+        Text(
+          text = "開始: ${DateFormatters.SHORT_TIME_FORMAT.format(track.startTime)}",
+          style = MaterialTheme.typography.bodyMedium,
+          color = MaterialTheme.colorScheme.onPrimaryContainer,
+        )
+
+        Spacer(modifier = Modifier.height(4.dp))
+
+        val distanceKm = (track.totalDistanceMeters / 1000.0 * 100).roundToInt() / 100.0
+        Text(
+          text = "移動距離: ${distanceKm}km (${track.points.size}点)",
+          style = MaterialTheme.typography.bodyMedium,
+          color = MaterialTheme.colorScheme.secondary,
+          fontWeight = FontWeight.Medium,
+        )
+      }
+
+      Icon(
+        imageVector = Icons.Default.LocationOn,
+        contentDescription = "地図で表示",
+        tint = MaterialTheme.colorScheme.secondary,
+      )
+    }
   }
 }
 

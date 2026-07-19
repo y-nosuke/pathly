@@ -78,6 +78,7 @@ class TrackingViewModel @Inject constructor(
   init {
     checkActiveTracking()
     checkLocationPermission()
+    observeActiveTrack()
   }
 
   private fun checkActiveTracking() {
@@ -190,6 +191,17 @@ class TrackingViewModel @Inject constructor(
       }
     } ?: run {
       Log.w("TrackingViewModel", "Location service is null in observeLocationUpdates")
+    }
+  }
+
+  private fun observeActiveTrack() {
+    viewModelScope.launch {
+      gpsTrackRepository.getActiveTrackRealtime().collect { activeTrack ->
+        _uiState.value = _uiState.value.copy(
+          currentTrack = activeTrack,
+          currentTrackId = activeTrack?.id,
+        )
+      }
     }
   }
 

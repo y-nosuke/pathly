@@ -11,6 +11,7 @@ import io.mockk.mockk
 import io.mockk.mockkStatic
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
@@ -62,6 +63,7 @@ class TrackingViewModelTest {
   fun `updateLocationPermission_権限false設定`() = runTest {
     // Given
     coEvery { mockRepository.getActiveTrack() } returns null
+    coEvery { mockRepository.getActiveTrackRealtime() } returns flowOf(null)
     val viewModel = TrackingViewModel(mockApplication, mockRepository)
     testDispatcher.scheduler.advanceUntilIdle()
 
@@ -77,6 +79,7 @@ class TrackingViewModelTest {
   fun `updateLocationPermission_権限true設定`() = runTest {
     // Given
     coEvery { mockRepository.getActiveTrack() } returns null
+    coEvery { mockRepository.getActiveTrackRealtime() } returns flowOf(null)
     val viewModel = TrackingViewModel(mockApplication, mockRepository)
     testDispatcher.scheduler.advanceUntilIdle()
 
@@ -92,6 +95,7 @@ class TrackingViewModelTest {
   fun `clearError_エラーメッセージクリア`() = runTest {
     // Given
     coEvery { mockRepository.getActiveTrack() } returns null
+    coEvery { mockRepository.getActiveTrackRealtime() } returns flowOf(null)
     val viewModel = TrackingViewModel(mockApplication, mockRepository)
     testDispatcher.scheduler.advanceUntilIdle()
 

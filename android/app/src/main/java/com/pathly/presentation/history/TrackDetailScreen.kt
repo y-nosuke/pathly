@@ -168,7 +168,7 @@ fun TrackDetailScreen(
             verticalArrangement = Arrangement.spacedBy(8.dp),
           ) {
             Text(
-              text = "軌跡地図",
+              text = if (track.isActive) "軌跡地図（リアルタイム）" else "軌跡地図",
               style = MaterialTheme.typography.titleMedium,
               fontWeight = FontWeight.Bold,
             )
@@ -183,6 +183,7 @@ fun TrackDetailScreen(
         }
       }
 
+      // Status message for active tracks
       if (track.endTime == null && track.isActive) {
         Card(
           modifier = Modifier.fillMaxWidth(),
@@ -302,16 +303,18 @@ private fun TrackMapView(
         icon = BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_GREEN),
       )
 
-      // Add end marker (red) with custom color
+      // Add end marker (red for completed, blue for active)
       val endPoint = track.points.last()
       val endMarkerState = remember(endPoint) {
         MarkerState(position = LatLng(endPoint.latitude, endPoint.longitude))
       }
       Marker(
         state = endMarkerState,
-        title = "🏁 終了",
-        snippet = track.endTime?.let { "記録終了地点 - ${DateFormatters.TIME_FORMAT.format(it)}" } ?: "記録終了地点",
-        icon = BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_RED),
+        title = if (track.isActive) "📍 現在地" else "🏁 終了",
+        snippet = track.endTime?.let { "記録終了地点 - ${DateFormatters.TIME_FORMAT.format(it)}" } ?: "記録中の最新地点",
+        icon = BitmapDescriptorFactory.defaultMarker(
+          if (track.isActive) BitmapDescriptorFactory.HUE_BLUE else BitmapDescriptorFactory.HUE_RED,
+        ),
       )
     }
   }
