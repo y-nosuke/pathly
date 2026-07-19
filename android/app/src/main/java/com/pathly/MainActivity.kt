@@ -107,7 +107,6 @@ private fun MainScreen(
         TrackingScreen(
           modifier = Modifier.padding(innerPadding),
           onRequestPermission = onRequestPermission,
-          onNavigateToMap = { track -> selectedTrack = track },
         )
       }
 
