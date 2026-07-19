@@ -7,6 +7,8 @@
 /.idea/workspace.xml
 /.idea/navEditor.xml
 /.idea/assetWizardSettings.xml
+# gradleJvm などマシン固有の値が入り、Android Studio起動のたびに書き換わるため管理外にする
+/.idea/gradle.xml
 .DS_Store
 /build
 /captures
