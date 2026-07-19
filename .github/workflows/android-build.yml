@@ -6,63 +6,57 @@ on:
   pull_request:
     branches: [main]
 
+# 同一ブランチで新しい push があれば進行中の実行をキャンセル
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: android
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Set up JDK 17
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v6
         with:
           java-version: "17"
           distribution: "temurin"
 
       - name: Setup Android SDK
-        uses: android-actions/setup-android@v3
+        uses: android-actions/setup-android@v4
+
+      # Gradleの公式アクション。ラッパー検証＋インテリジェントなキャッシュを担う
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v6
 
       - name: Grant execute permission for gradlew
-        run: chmod +x android/gradlew
+        run: chmod +x gradlew
 
       - name: Create local.properties
-        run: |
-          echo "GOOGLE_MAPS_API_KEY=${{ secrets.GOOGLE_MAPS_API_KEY }}" > android/local.properties
+        run: echo "GOOGLE_MAPS_API_KEY=${{ secrets.GOOGLE_MAPS_API_KEY }}" > local.properties
 
-      - name: Cache Gradle packages
-        uses: actions/cache@v4
+      # buildタスクがtest・lint・assemble(debug/release)をまとめて実行する
+      - name: Build, test and lint
+        run: ./gradlew build
+
+      - name: Upload debug APK
+        uses: actions/upload-artifact@v7
         with:
-          path: |
-            ~/.gradle/caches
-            ~/.gradle/wrapper
-          key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
-          restore-keys: |
-            ${{ runner.os }}-gradle-
+          name: debug-apk
+          path: android/app/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
 
-      - name: Build with Gradle
-        run: |
-          cd android
-          ./gradlew build
-
-      - name: Run tests
-        run: |
-          cd android
-          ./gradlew test
-
-      - name: Run lint
-        run: |
-          cd android
-          ./gradlew lint
-
-      - name: Build debug APK
-        run: |
-          cd android
-          ./gradlew assembleDebug
-
-      - name: Upload build artifacts
-        uses: actions/upload-artifact@v4
+      # 失敗時もlint/testレポートを取得できるようにする
+      - name: Upload build reports
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v7
         with:
-          name: build-artifacts
-          path: |
-            android/app/build/outputs/apk/debug/*.apk
-            android/app/build/reports/
+          name: build-reports
+          path: android/app/build/reports/
+          if-no-files-found: ignore
