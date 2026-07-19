@@ -1,3 +1,3 @@
 {
-  "recommendations": ["fwcd.kotlin"]
+  "recommendations": ["fwcd.kotlin", "esbenp.prettier-vscode"]
 }

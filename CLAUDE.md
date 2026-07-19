@@ -97,7 +97,7 @@ app/src/main/java/com/pathly/
 ### データフロー
 
 1. **UI (Compose Screen)** ← StateFlow ← **ViewModel**
-2. **ViewModel** → Repository Interface → **Repository Implementation**  
+2. **ViewModel** → Repository Interface → **Repository Implementation**
 3. **Repository** → Room DAO → **Local Database**
 4. **Service** → Repository → GPS位置データの永続化
 
@@ -136,7 +136,7 @@ app/src/main/java/com/pathly/
 # デバッグAPKビルド
 ./gradlew assembleDebug
 
-# リリースAPKビルド  
+# リリースAPKビルド
 ./gradlew assembleRelease
 
 # アプリインストール（デバッグ）
@@ -232,7 +232,7 @@ app/src/main/java/com/pathly/
 - **DIパターン：** Hilt使用、手動DIは避ける
 - **State管理：** StateFlow使用、LiveData非推奨
 - **Composeテーマ：** PathlyAndroidTheme統一使用
-- **ログ管理：** `com.pathly.util.Logger`使用、詳細は`android-logging.md`参照
+- **ログ管理：** `com.pathly.util.Logger`使用、詳細は`docs/designs/logging.md`参照
 
 ### テストアプローチ
 
