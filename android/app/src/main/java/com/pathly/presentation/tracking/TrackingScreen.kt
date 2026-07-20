@@ -28,10 +28,12 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -40,9 +42,12 @@ import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.google.android.gms.location.LocationServices
+import com.google.android.gms.location.Priority
 import com.google.android.gms.maps.CameraUpdateFactory
 import com.google.android.gms.maps.model.CameraPosition
 import com.google.android.gms.maps.model.LatLng
+import com.google.android.gms.tasks.CancellationTokenSource
 import com.google.maps.android.compose.CameraMoveStartedReason
 import com.google.maps.android.compose.GoogleMap
 import com.google.maps.android.compose.MapProperties
@@ -54,6 +59,7 @@ import com.pathly.R
 import com.pathly.domain.model.GpsTrack
 import com.pathly.ui.theme.TrackLineOrange
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import java.util.Date
 import kotlin.math.roundToInt
 
@@ -180,6 +186,42 @@ private fun TrackingMapView(
   }
   var followUser by remember { mutableStateOf(true) }
 
+  val context = LocalContext.current
+  val scope = rememberCoroutineScope()
+  val fusedClient = remember { LocationServices.getFusedLocationProviderClient(context) }
+
+  // 現在地へリセンターして追従を再開する。
+  // 記録中はサービスの現在地、停止中は単発取得した現在地を使う。
+  fun recenterToCurrentLocation() {
+    followUser = true
+    val known = currentLocation
+    if (known != null) {
+      scope.launch {
+        cameraPositionState.animate(
+          CameraUpdateFactory.newLatLng(LatLng(known.latitude, known.longitude)),
+        )
+      }
+      return
+    }
+    if (!hasPermission) return
+    try {
+      fusedClient.getCurrentLocation(
+        Priority.PRIORITY_BALANCED_POWER_ACCURACY,
+        CancellationTokenSource().token,
+      ).addOnSuccessListener { location ->
+        location?.let {
+          scope.launch {
+            cameraPositionState.animate(
+              CameraUpdateFactory.newLatLng(LatLng(it.latitude, it.longitude)),
+            )
+          }
+        }
+      }
+    } catch (e: SecurityException) {
+      // 権限が無い場合は何もしない
+    }
+  }
+
   // ユーザーが地図を手で操作したら追従を止める（現在地ボタンで再センター可能）
   LaunchedEffect(cameraPositionState) {
     snapshotFlow { cameraPositionState.cameraMoveStartedReason }
@@ -231,7 +273,7 @@ private fun TrackingMapView(
     if (hasPermission) {
       FollowLocationButton(
         following = followUser,
-        onClick = { followUser = true },
+        onClick = { recenterToCurrentLocation() },
         modifier = Modifier
           .align(Alignment.TopEnd)
           .padding(12.dp),
