@@ -112,7 +112,7 @@ app/src/main/java/com/pathly/
 
 ### Phase 1（MVP）機能
 
-1. **GPS軌跡記録** - バックグラウンド動作、30秒間隔取得
+1. **GPS軌跡記録** - バックグラウンド動作、10秒間隔取得
 2. **軌跡一覧表示** - 日付別の記録一覧
 3. **地図表示** - Google Maps上での軌跡表示
 4. **ローカル保存** - オフライン対応
@@ -174,7 +174,7 @@ app/src/main/java/com/pathly/
 
 ### パフォーマンス
 
-- **GPS取得：** 30秒間隔、PRIORITY_BALANCED_POWER_ACCURACY
+- **GPS取得：** 10秒間隔（最大15秒バッチ許容）、PRIORITY_BALANCED_POWER_ACCURACY
 - **データ同期：** 差分同期、バッチ処理
 - **画像：** 最大2MB圧縮
 - **オフライン：** ローカル保存→後で同期
@@ -219,7 +219,7 @@ app/src/main/java/com/pathly/
 
 - **位置権限：** ACCESS_FINE_LOCATION + ACCESS_COARSE_LOCATION必須
 - **バックグラウンド実行：** LocationTrackingService使用
-- **データベースバージョン：** Room v1、マイグレーション未実装（fallbackToDestructiveMigration）
+- **データベースバージョン：** Room v1。破壊的フォールバックは無効。スキーマ変更時は `DatabaseMigrations` に正式なマイグレーションを追加すること
 - **最小SDK：** API 34（Android 14）以上 / compileSdk 37・targetSdk 36
 - **ビルド環境：** AGP 9.2 / Gradle 9.6 / Kotlin 2.3（AGP内蔵Kotlin）。KotlinはAGPバンドル版に連動するため独立に最新化しないこと
 - **アノテーション処理：** KSP使用（Room/Hilt）。kaptは廃止

@@ -55,10 +55,9 @@ abstract class PathlyDatabase : RoomDatabase() {
         PathlyDatabase::class.java,
         DATABASE_NAME,
       )
-        // マイグレーション設定
+        // マイグレーション設定（破壊的フォールバックは行わない。
+        // スキーマ変更時は DatabaseMigrations に正式なマイグレーションを追加すること）
         .addMigrations(*DatabaseMigrations.ALL_MIGRATIONS)
-        // マイグレーション失敗時の処理（全テーブル削除）
-        .fallbackToDestructiveMigration(true)
         // データベースコールバック設定
         .addCallback(object : RoomDatabase.Callback() {
           override fun onCreate(db: SupportSQLiteDatabase) {

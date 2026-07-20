@@ -52,8 +52,9 @@ class LocationTrackingService : Service() {
     const val ACTION_STOP_TRACKING = "STOP_TRACKING"
     const val EXTRA_TRACK_ID = "track_id"
 
-    private const val LOCATION_REQUEST_INTERVAL = 3000L // 3秒
-    private const val LOCATION_REQUEST_FASTEST_INTERVAL = 1000L // 1秒
+    private const val LOCATION_REQUEST_INTERVAL = 10000L // 10秒
+    private const val LOCATION_REQUEST_FASTEST_INTERVAL = 5000L // 5秒
+    private const val LOCATION_REQUEST_MAX_DELAY = 15000L // バッチ許容（最大15秒）で省電力化
 
     /**
      * サービスが実際に記録中かどうか。プロセス内の状態なので、アプリ更新・クラッシュ等で
@@ -201,7 +202,7 @@ class LocationTrackingService : Service() {
       LOCATION_REQUEST_INTERVAL,
     )
       .setMinUpdateIntervalMillis(LOCATION_REQUEST_FASTEST_INTERVAL)
-      .setMaxUpdateDelayMillis(LOCATION_REQUEST_INTERVAL)
+      .setMaxUpdateDelayMillis(LOCATION_REQUEST_MAX_DELAY)
       .build()
 
     locationCallback = object : LocationCallback() {
