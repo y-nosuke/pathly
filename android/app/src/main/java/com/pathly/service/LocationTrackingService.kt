@@ -47,10 +47,21 @@ class LocationTrackingService : Service() {
     const val NOTIFICATION_ID = 1001
     const val CHANNEL_ID = "LocationTrackingChannel"
     const val ACTION_START_TRACKING = "START_TRACKING"
+    const val ACTION_RESUME_TRACKING = "RESUME_TRACKING"
     const val ACTION_STOP_TRACKING = "STOP_TRACKING"
+    const val EXTRA_TRACK_ID = "track_id"
 
     private const val LOCATION_REQUEST_INTERVAL = 3000L // 3秒
     private const val LOCATION_REQUEST_FASTEST_INTERVAL = 1000L // 1秒
+
+    /**
+     * サービスが実際に記録中かどうか。プロセス内の状態なので、アプリ更新・クラッシュ等で
+     * プロセスが終了すると自動的に false に戻る。起動時に DB のアクティブトラックが
+     * 宙ぶらりん（サービス停止済み）かどうかの判定に使う。
+     */
+    @Volatile
+    var isTracking: Boolean = false
+      private set
   }
 
   @Inject
@@ -90,13 +101,17 @@ class LocationTrackingService : Service() {
   override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
     when (intent?.action) {
       ACTION_START_TRACKING -> startLocationTracking()
+      ACTION_RESUME_TRACKING -> {
+        val trackId = intent.getLongExtra(EXTRA_TRACK_ID, -1L).takeIf { it > 0 }
+        startLocationTracking(resumeTrackId = trackId)
+      }
       ACTION_STOP_TRACKING -> stopLocationTracking()
     }
     return START_STICKY
   }
 
-  private fun startLocationTracking() {
-    Log.d("LocationService", "startLocationTracking() called")
+  private fun startLocationTracking(resumeTrackId: Long? = null) {
+    Log.d("LocationService", "startLocationTracking() called (resume=$resumeTrackId)")
 
     if (!hasLocationPermission()) {
       Log.e("LocationService", "Location permission not granted")
@@ -114,21 +129,29 @@ class LocationTrackingService : Service() {
 
     val notification = createNotification("GPS位置を記録中...")
     startForeground(NOTIFICATION_ID, notification)
+    isTracking = true
 
-    serviceScope.launch {
-      // 新しいトラックを作成
-      val track = GpsTrackEntity(
-        startTime = Date(),
-        isActive = true,
-      )
-      currentTrackId = gpsTrackDao.insertTrack(track)
-      Log.d("LocationService", "Created new track with ID: $currentTrackId")
+    if (resumeTrackId != null) {
+      // 中断されたトラックに続けて記録する
+      currentTrackId = resumeTrackId
+      Log.d("LocationService", "Resuming existing track with ID: $resumeTrackId")
+    } else {
+      serviceScope.launch {
+        // 新しいトラックを作成
+        val track = GpsTrackEntity(
+          startTime = Date(),
+          isActive = true,
+        )
+        currentTrackId = gpsTrackDao.insertTrack(track)
+        Log.d("LocationService", "Created new track with ID: $currentTrackId")
+      }
     }
 
     startLocationUpdates()
   }
 
   private fun stopLocationTracking() {
+    isTracking = false
     stopLocationUpdates()
 
     serviceScope.launch {
@@ -312,9 +335,7 @@ class LocationTrackingService : Service() {
     }
   }
 
-  private fun hasLocationPermission(): Boolean {
-    return PermissionUtils.hasLocationPermissions(this)
-  }
+  private fun hasLocationPermission(): Boolean = PermissionUtils.hasLocationPermissions(this)
 
   private fun isLocationEnabled(): Boolean {
     val locationManager = getSystemService(LOCATION_SERVICE) as LocationManager
@@ -361,6 +382,7 @@ class LocationTrackingService : Service() {
 
   override fun onDestroy() {
     super.onDestroy()
+    isTracking = false
     stopLocationUpdates()
     serviceScope.cancel()
   }

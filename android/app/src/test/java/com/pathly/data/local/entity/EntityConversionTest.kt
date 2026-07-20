@@ -242,30 +242,26 @@ class EntityConversionTest {
   }
 
   // Extension functions to mimic the private methods in GpsTrackRepositoryImpl
-  private fun GpsTrackEntity.toGpsTrack(points: List<GpsPoint> = emptyList()): GpsTrack {
-    return GpsTrack(
-      id = this.id,
-      startTime = this.startTime,
-      endTime = this.endTime,
-      isActive = this.isActive,
-      points = points,
-      createdAt = this.createdAt,
-      updatedAt = this.updatedAt,
-    )
-  }
+  private fun GpsTrackEntity.toGpsTrack(points: List<GpsPoint> = emptyList()): GpsTrack = GpsTrack(
+    id = this.id,
+    startTime = this.startTime,
+    endTime = this.endTime,
+    isActive = this.isActive,
+    points = points,
+    createdAt = this.createdAt,
+    updatedAt = this.updatedAt,
+  )
 
-  private fun GpsPointEntity.toGpsPoint(): GpsPoint {
-    return GpsPoint(
-      id = this.id,
-      trackId = this.trackId,
-      latitude = this.latitude,
-      longitude = this.longitude,
-      altitude = this.altitude,
-      accuracy = this.accuracy,
-      speed = this.speed,
-      bearing = this.bearing,
-      timestamp = this.timestamp,
-      createdAt = this.createdAt,
-    )
-  }
+  private fun GpsPointEntity.toGpsPoint(): GpsPoint = GpsPoint(
+    id = this.id,
+    trackId = this.trackId,
+    latitude = this.latitude,
+    longitude = this.longitude,
+    altitude = this.altitude,
+    accuracy = this.accuracy,
+    speed = this.speed,
+    bearing = this.bearing,
+    timestamp = this.timestamp,
+    createdAt = this.createdAt,
+  )
 }

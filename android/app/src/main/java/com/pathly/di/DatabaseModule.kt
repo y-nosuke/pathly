@@ -18,23 +18,15 @@ object DatabaseModule {
 
   @Provides
   @Singleton
-  fun providePathlyDatabase(@ApplicationContext context: Context): PathlyDatabase {
-    return PathlyDatabase.getInstance(context)
-  }
+  fun providePathlyDatabase(@ApplicationContext context: Context): PathlyDatabase = PathlyDatabase.getInstance(context)
 
   @Provides
   @Singleton
-  fun provideEncryptionHelper(@ApplicationContext context: Context): EncryptionHelper {
-    return EncryptionHelper(context)
-  }
+  fun provideEncryptionHelper(@ApplicationContext context: Context): EncryptionHelper = EncryptionHelper(context)
 
   @Provides
-  fun provideGpsTrackDao(database: PathlyDatabase): GpsTrackDao {
-    return database.gpsTrackDao()
-  }
+  fun provideGpsTrackDao(database: PathlyDatabase): GpsTrackDao = database.gpsTrackDao()
 
   @Provides
-  fun provideGpsPointDao(database: PathlyDatabase): GpsPointDao {
-    return database.gpsPointDao()
-  }
+  fun provideGpsPointDao(database: PathlyDatabase): GpsPointDao = database.gpsPointDao()
 }

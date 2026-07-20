@@ -85,19 +85,33 @@ class TrackingViewModel @Inject constructor(
     viewModelScope.launch {
       val activeTrack = gpsTrackRepository.getActiveTrack()
 
-      if (activeTrack != null) {
-        // アクティブなトラックが見つかった場合、サービスに接続を試行
-        _uiState.value = _uiState.value.copy(
-          isTracking = true,
-          currentTrackId = activeTrack.id,
-        )
-        bindToService()
-      } else {
-        // アクティブなトラックがない場合
-        _uiState.value = _uiState.value.copy(
-          isTracking = false,
-          currentTrackId = null,
-        )
+      when {
+        activeTrack == null -> {
+          // アクティブなトラックがない場合
+          _uiState.value = _uiState.value.copy(
+            isTracking = false,
+            currentTrackId = null,
+          )
+        }
+
+        LocationTrackingService.isTracking -> {
+          // 記録中プロセスが生存している → サービスに再接続して継続
+          _uiState.value = _uiState.value.copy(
+            isTracking = true,
+            currentTrackId = activeTrack.id,
+          )
+          bindToService()
+        }
+
+        else -> {
+          // サービスが動いていないのにアクティブなトラックが残っている。
+          // 前回の記録がアプリ更新やクラッシュで中断されたもの。
+          // 再開するか完了にするかをユーザーに確認する。
+          _uiState.value = _uiState.value.copy(
+            isTracking = false,
+            interruptedTrack = activeTrack,
+          )
+        }
       }
     }
   }
@@ -138,6 +152,39 @@ class TrackingViewModel @Inject constructor(
       isTracking = false,
       currentTrackId = null,
     )
+  }
+
+  /** 中断されたトラックに続けて記録を再開する */
+  fun resumeTracking() {
+    val interrupted = _uiState.value.interruptedTrack ?: return
+
+    val intent = Intent(application, LocationTrackingService::class.java).apply {
+      action = LocationTrackingService.ACTION_RESUME_TRACKING
+      putExtra(LocationTrackingService.EXTRA_TRACK_ID, interrupted.id)
+    }
+    application.startForegroundService(intent)
+    bindToService()
+
+    _uiState.value = _uiState.value.copy(
+      isTracking = true,
+      currentTrackId = interrupted.id,
+      interruptedTrack = null,
+      errorMessage = null,
+    )
+  }
+
+  /** 中断されたトラックを完了として履歴に保存する */
+  fun finishInterruptedTracking() {
+    val interrupted = _uiState.value.interruptedTrack ?: return
+    viewModelScope.launch {
+      val endTime = interrupted.points.lastOrNull()?.timestamp ?: java.util.Date()
+      gpsTrackRepository.finishTrack(interrupted.id, endTime)
+      _uiState.value = _uiState.value.copy(
+        isTracking = false,
+        currentTrackId = null,
+        interruptedTrack = null,
+      )
+    }
   }
 
   fun updateLocationPermission(hasPermission: Boolean) {

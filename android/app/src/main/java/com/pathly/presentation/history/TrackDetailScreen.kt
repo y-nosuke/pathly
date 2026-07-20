@@ -3,20 +3,20 @@ package com.pathly.presentation.history
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.BottomSheetScaffold
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.rememberBottomSheetScaffoldState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
@@ -44,6 +44,8 @@ import com.pathly.ui.theme.TrackLineOrange
 import com.pathly.util.DateFormatters
 import kotlin.math.roundToInt
 
+private val sheetPeekHeight = 200.dp
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun TrackDetailScreen(
@@ -51,187 +53,157 @@ fun TrackDetailScreen(
   onBackClick: () -> Unit,
   modifier: Modifier = Modifier,
 ) {
-  Column(
-    modifier = modifier.fillMaxSize(),
-  ) {
-    TopAppBar(
-      title = { Text("外出記録詳細") },
-      navigationIcon = {
-        IconButton(onClick = onBackClick) {
-          Icon(
-            painter = painterResource(R.drawable.ic_arrow_back),
-            contentDescription = "戻る",
-          )
-        }
-      },
-    )
+  val scaffoldState = rememberBottomSheetScaffoldState()
 
-    Column(
+  BottomSheetScaffold(
+    modifier = modifier.fillMaxSize(),
+    scaffoldState = scaffoldState,
+    sheetPeekHeight = sheetPeekHeight,
+    sheetContent = {
+      TrackDetailSheet(track = track)
+    },
+  ) { innerPadding ->
+    Box(
       modifier = Modifier
         .fillMaxSize()
-        .padding(16.dp),
-      verticalArrangement = Arrangement.spacedBy(16.dp),
+        .padding(innerPadding),
     ) {
-      Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(8.dp),
-        colors = CardDefaults.cardColors(
-          containerColor = MaterialTheme.colorScheme.surfaceVariant,
-        ),
-      ) {
-        Column(
-          modifier = Modifier.padding(16.dp),
-          verticalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-          Text(
-            text = "基本情報",
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.Bold,
-          )
-
-          DetailRow(
-            label = "日付",
-            value = DateFormatters.DATE_FORMAT.format(track.startTime),
-          )
-
-          DetailRow(
-            label = "開始時刻",
-            value = DateFormatters.TIME_FORMAT.format(track.startTime),
-          )
-
-          track.endTime?.let { endTime ->
-            DetailRow(
-              label = "終了時刻",
-              value = DateFormatters.TIME_FORMAT.format(endTime),
-            )
-
-            val durationMs = endTime.time - track.startTime.time
-            val durationMinutes = (durationMs / 1000 / 60).toInt()
-            val hours = durationMinutes / 60
-            val minutes = durationMinutes % 60
-
-            DetailRow(
-              label = "所要時間",
-              value = if (hours > 0) "${hours}時間${minutes}分" else "${minutes}分",
-            )
-          }
-
-          // 総移動距離を常に表示（デバッグ用に座標点数も表示）
-          val distanceKm = (track.totalDistanceMeters / 1000.0 * 100).roundToInt() / 100.0
-          DetailRow(
-            label = "総移動距離",
-            value = "${distanceKm}km (${track.points.size}点)",
-          )
-        }
-      }
-
-      Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(8.dp),
-        colors = CardDefaults.cardColors(
-          containerColor = MaterialTheme.colorScheme.surfaceVariant,
-        ),
-      ) {
-        Column(
-          modifier = Modifier.padding(16.dp),
-          verticalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-          Text(
-            text = "記録状態",
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.Bold,
-          )
-
-          DetailRow(
-            label = "状態",
-            value = if (track.isActive) "記録中" else "完了",
-          )
-
-          DetailRow(
-            label = "トラックID",
-            value = track.id.toString(),
-          )
-        }
-      }
-
-      // Map display for tracks with GPS points
       if (track.points.isNotEmpty()) {
-        Card(
-          modifier = Modifier.fillMaxWidth(),
-          shape = RoundedCornerShape(8.dp),
-          colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant,
-          ),
+        TrackMapView(
+          track = track,
+          contentPadding = PaddingValues(bottom = sheetPeekHeight),
+          modifier = Modifier.fillMaxSize(),
+        )
+      } else {
+        Box(
+          modifier = Modifier.fillMaxSize(),
+          contentAlignment = Alignment.Center,
         ) {
-          Column(
-            modifier = Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-          ) {
-            Text(
-              text = if (track.isActive) "軌跡地図（リアルタイム）" else "軌跡地図",
-              style = MaterialTheme.typography.titleMedium,
-              fontWeight = FontWeight.Bold,
-            )
-
-            TrackMapView(
-              track = track,
-              modifier = Modifier
-                .fillMaxWidth()
-                .height(200.dp),
-            )
-          }
+          Text(
+            text = "GPSデータがありません",
+            style = MaterialTheme.typography.bodyLarge,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+          )
         }
       }
 
-      // Status message for active tracks
-      if (track.endTime == null && track.isActive) {
-        Card(
-          modifier = Modifier.fillMaxWidth(),
-          shape = RoundedCornerShape(8.dp),
-          colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.primaryContainer,
-          ),
-        ) {
-          Box(
-            modifier = Modifier
-              .fillMaxWidth()
-              .padding(16.dp),
-            contentAlignment = Alignment.Center,
-          ) {
-            Text(
-              text = "この記録は現在進行中です",
-              style = MaterialTheme.typography.bodyMedium,
-              color = MaterialTheme.colorScheme.onPrimaryContainer,
-              fontWeight = FontWeight.Medium,
-            )
-          }
-        }
+      Surface(
+        onClick = onBackClick,
+        modifier = Modifier.padding(12.dp),
+        shape = CircleShape,
+        color = MaterialTheme.colorScheme.surface,
+        shadowElevation = 4.dp,
+      ) {
+        Icon(
+          painter = painterResource(R.drawable.ic_arrow_back),
+          contentDescription = "戻る",
+          modifier = Modifier.padding(8.dp),
+        )
       }
     }
   }
 }
 
 @Composable
-private fun DetailRow(
-  label: String,
-  value: String,
+private fun TrackDetailSheet(
+  track: GpsTrack,
   modifier: Modifier = Modifier,
 ) {
-  Row(
-    modifier = modifier.fillMaxWidth(),
-    horizontalArrangement = Arrangement.SpaceBetween,
-    verticalAlignment = Alignment.CenterVertically,
+  Column(
+    modifier = modifier
+      .fillMaxWidth()
+      .padding(horizontal = 20.dp)
+      .padding(bottom = 24.dp),
+    verticalArrangement = Arrangement.spacedBy(12.dp),
   ) {
+    Row(
+      modifier = Modifier.fillMaxWidth(),
+      horizontalArrangement = Arrangement.SpaceBetween,
+      verticalAlignment = Alignment.CenterVertically,
+    ) {
+      Text(
+        text = DateFormatters.DATE_FORMAT.format(track.startTime),
+        style = MaterialTheme.typography.titleLarge,
+        fontWeight = FontWeight.Bold,
+      )
+      if (track.isActive) {
+        Surface(
+          shape = RoundedCornerShape(20.dp),
+          color = MaterialTheme.colorScheme.primaryContainer,
+        ) {
+          Text(
+            text = "● 記録中",
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onPrimaryContainer,
+            fontWeight = FontWeight.Medium,
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
+          )
+        }
+      }
+    }
+
+    val startText = DateFormatters.TIME_FORMAT.format(track.startTime)
+    val endTime = track.endTime
+    val subtitle = if (endTime != null) {
+      val durationMinutes = ((endTime.time - track.startTime.time) / 1000 / 60).toInt()
+      val hours = durationMinutes / 60
+      val minutes = durationMinutes % 60
+      val duration = if (hours > 0) "${hours}時間${minutes}分" else "${minutes}分"
+      "$startText – ${DateFormatters.TIME_FORMAT.format(endTime)} ・ $duration"
+    } else {
+      startText
+    }
     Text(
-      text = label,
+      text = subtitle,
       style = MaterialTheme.typography.bodyMedium,
       color = MaterialTheme.colorScheme.onSurfaceVariant,
     )
-    Text(
-      text = value,
-      style = MaterialTheme.typography.bodyMedium,
-      fontWeight = FontWeight.Medium,
-    )
+
+    val distanceKm = (track.totalDistanceMeters / 1000.0 * 100).roundToInt() / 100.0
+    Row(
+      modifier = Modifier.fillMaxWidth(),
+      horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+      StatTile(
+        value = "${distanceKm}km",
+        label = "移動距離",
+        modifier = Modifier.weight(1f),
+      )
+      StatTile(
+        value = "${track.points.size}",
+        label = "地点数",
+        modifier = Modifier.weight(1f),
+      )
+    }
+  }
+}
+
+@Composable
+private fun StatTile(
+  value: String,
+  label: String,
+  modifier: Modifier = Modifier,
+) {
+  Surface(
+    modifier = modifier,
+    shape = RoundedCornerShape(12.dp),
+    color = MaterialTheme.colorScheme.surfaceVariant,
+  ) {
+    Column(
+      modifier = Modifier.padding(vertical = 12.dp),
+      horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+      Text(
+        text = value,
+        style = MaterialTheme.typography.titleLarge,
+        fontWeight = FontWeight.Bold,
+      )
+      Text(
+        text = label,
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+      )
+    }
   }
 }
 
@@ -239,23 +211,19 @@ private fun DetailRow(
 private fun TrackMapView(
   track: GpsTrack,
   modifier: Modifier = Modifier,
+  contentPadding: PaddingValues = PaddingValues(0.dp),
 ) {
   val cameraPositionState = rememberCameraPositionState()
   val defaultPosition = LatLng(35.6762, 139.6503) // Tokyo Station as default
 
   LaunchedEffect(track) {
     if (track.points.isNotEmpty()) {
-      // Create bounds that include all GPS points in this track
       val boundsBuilder = LatLngBounds.Builder()
       track.points.forEach { point ->
         boundsBuilder.include(LatLng(point.latitude, point.longitude))
       }
-      val bounds = boundsBuilder.build()
-
-      // Animate camera to show the track with padding
-      val padding = 50 // padding in pixels
       cameraPositionState.animate(
-        CameraUpdateFactory.newLatLngBounds(bounds, padding),
+        CameraUpdateFactory.newLatLngBounds(boundsBuilder.build(), 80),
       )
     } else {
       cameraPositionState.position = CameraPosition.fromLatLngZoom(defaultPosition, 12f)
@@ -265,6 +233,7 @@ private fun TrackMapView(
   GoogleMap(
     modifier = modifier,
     cameraPositionState = cameraPositionState,
+    contentPadding = contentPadding,
     properties = MapProperties(
       mapType = MapType.NORMAL,
       isMyLocationEnabled = false,
@@ -279,39 +248,36 @@ private fun TrackMapView(
     ),
   ) {
     if (track.points.size >= 2) {
-      // Convert GPS points to LatLng
       val polylinePoints = track.points.map {
         LatLng(it.latitude, it.longitude)
       }
-
-      // Draw polyline for the track with custom color
       Polyline(
         points = polylinePoints,
         color = TrackLineOrange,
         width = 6f,
       )
 
-      // Add start marker (green) with custom color
       val startPoint = track.points.first()
       val startMarkerState = remember(startPoint) {
         MarkerState(position = LatLng(startPoint.latitude, startPoint.longitude))
       }
       Marker(
         state = startMarkerState,
-        title = "🚀 開始",
+        title = "開始",
         snippet = "記録開始地点 - ${DateFormatters.TIME_FORMAT.format(track.startTime)}",
         icon = BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_GREEN),
       )
 
-      // Add end marker (red for completed, blue for active)
       val endPoint = track.points.last()
       val endMarkerState = remember(endPoint) {
         MarkerState(position = LatLng(endPoint.latitude, endPoint.longitude))
       }
       Marker(
         state = endMarkerState,
-        title = if (track.isActive) "📍 現在地" else "🏁 終了",
-        snippet = track.endTime?.let { "記録終了地点 - ${DateFormatters.TIME_FORMAT.format(it)}" } ?: "記録中の最新地点",
+        title = if (track.isActive) "現在地" else "終了",
+        snippet = track.endTime?.let {
+          "記録終了地点 - ${DateFormatters.TIME_FORMAT.format(it)}"
+        } ?: "記録中の最新地点",
         icon = BitmapDescriptorFactory.defaultMarker(
           if (track.isActive) BitmapDescriptorFactory.HUE_BLUE else BitmapDescriptorFactory.HUE_RED,
         ),

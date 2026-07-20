@@ -303,14 +303,12 @@ class OfflineDataStorageTest {
   private fun createTestTrack(
     isActive: Boolean = false,
     createdAt: Date = Date(),
-  ): GpsTrackEntity {
-    return GpsTrackEntity(
-      id = 0,
-      startTime = createdAt,
-      endTime = if (!isActive) Date() else null,
-      isActive = isActive,
-      createdAt = createdAt,
-      updatedAt = Date(),
-    )
-  }
+  ): GpsTrackEntity = GpsTrackEntity(
+    id = 0,
+    startTime = createdAt,
+    endTime = if (!isActive) Date() else null,
+    isActive = isActive,
+    createdAt = createdAt,
+    updatedAt = Date(),
+  )
 }

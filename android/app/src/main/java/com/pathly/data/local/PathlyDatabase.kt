@@ -31,14 +31,13 @@ abstract class PathlyDatabase : RoomDatabase() {
     private val logger = Logger("PathlyDatabase")
 
     @Volatile
+    @Suppress("ktlint:standard:property-naming")
     private var INSTANCE: PathlyDatabase? = null
 
-    fun getInstance(context: Context): PathlyDatabase {
-      return INSTANCE ?: synchronized(this) {
-        val instance = createDatabase(context)
-        INSTANCE = instance
-        instance
-      }
+    fun getInstance(context: Context): PathlyDatabase = INSTANCE ?: synchronized(this) {
+      val instance = createDatabase(context)
+      INSTANCE = instance
+      instance
     }
 
     private fun createDatabase(context: Context): PathlyDatabase {
@@ -141,16 +140,14 @@ abstract class PathlyDatabase : RoomDatabase() {
     /**
      * データベースの手動削除（テスト用）
      */
-    fun deleteDatabase(context: Context): Boolean {
-      return try {
-        context.deleteDatabase(DATABASE_NAME)
-        INSTANCE = null
-        logger.i("Database deleted successfully")
-        true
-      } catch (e: Exception) {
-        logger.e("Failed to delete database", e)
-        false
-      }
+    fun deleteDatabase(context: Context): Boolean = try {
+      context.deleteDatabase(DATABASE_NAME)
+      INSTANCE = null
+      logger.i("Database deleted successfully")
+      true
+    } catch (e: Exception) {
+      logger.e("Failed to delete database", e)
+      false
     }
 
     /**
@@ -167,18 +164,16 @@ abstract class PathlyDatabase : RoomDatabase() {
     /**
      * データベースの健全性チェック
      */
-    suspend fun performIntegrityCheck(context: Context): Boolean {
-      return try {
-        val database = getInstance(context)
-        // 簡単な健全性チェックとして、データベースへの接続をテスト
-        val trackDao = database.gpsTrackDao()
-        trackDao.getTrackCount() // データベースアクセステスト
-        logger.i("Database integrity check: PASSED")
-        true
-      } catch (e: Exception) {
-        logger.e("Database integrity check failed", e)
-        false
-      }
+    suspend fun performIntegrityCheck(context: Context): Boolean = try {
+      val database = getInstance(context)
+      // 簡単な健全性チェックとして、データベースへの接続をテスト
+      val trackDao = database.gpsTrackDao()
+      trackDao.getTrackCount() // データベースアクセステスト
+      logger.i("Database integrity check: PASSED")
+      true
+    } catch (e: Exception) {
+      logger.e("Database integrity check failed", e)
+      false
     }
   }
 }

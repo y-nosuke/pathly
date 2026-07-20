@@ -16,8 +16,13 @@ android {
     applicationId = "com.pathly"
     minSdk = 34
     targetSdk = 36
-    versionCode = 1
-    versionName = "1.0"
+
+    // CI（GitHub Actions）の run 番号から versionCode を自動採番する。
+    // run_number はリポジトリ横断で単調増加するため、後にビルドしたものほど
+    // versionCode が大きくなり、常に更新インストールできる。ローカルは 1。
+    val ciRunNumber = System.getenv("GITHUB_RUN_NUMBER")?.toIntOrNull() ?: 0
+    versionCode = 1 + ciRunNumber
+    versionName = if (ciRunNumber > 0) "1.0.$ciRunNumber" else "1.0"
 
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
@@ -38,6 +43,17 @@ android {
       "GOOGLE_MAPS_API_KEY",
       "\"${localProperties.getProperty("GOOGLE_MAPS_API_KEY", "")}\"",
     )
+  }
+
+  signingConfigs {
+    // CI とローカルで同一のデバッグ鍵を使い、実行ごとに署名が変わらないようにする。
+    // デバッグ鍵はパスワードが公知（android）で秘密情報ではないためリポジトリに含める。
+    getByName("debug") {
+      storeFile = file("pathly-debug.keystore")
+      storePassword = "android"
+      keyAlias = "androiddebugkey"
+      keyPassword = "android"
+    }
   }
 
   buildTypes {
@@ -135,15 +151,17 @@ dependencies {
 spotless {
   kotlin {
     target("**/*.kt")
-    ktlint("0.50.0").editorConfigOverride(
+    ktlint("1.5.0").editorConfigOverride(
       mapOf(
         "indent_size" to "2",
+        // @Composable関数はPascalCaseが慣例のため命名規則の対象外にする
+        "ktlint_function_naming_ignore_when_annotated_with" to "Composable",
       ),
     )
   }
   kotlinGradle {
     target("*.gradle.kts")
-    ktlint("0.50.0").editorConfigOverride(
+    ktlint("1.5.0").editorConfigOverride(
       mapOf(
         "indent_size" to "2",
       ),

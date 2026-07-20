@@ -6,7 +6,9 @@ import com.google.android.gms.maps.OnMapsSdkInitializedCallback
 import dagger.hilt.android.HiltAndroidApp
 
 @HiltAndroidApp
-class PathlyApplication : Application(), OnMapsSdkInitializedCallback {
+class PathlyApplication :
+  Application(),
+  OnMapsSdkInitializedCallback {
 
   override fun onCreate() {
     super.onCreate()

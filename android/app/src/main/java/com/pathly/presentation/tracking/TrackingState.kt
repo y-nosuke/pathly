@@ -10,6 +10,8 @@ data class TrackingState(
   val currentLocation: LocationInfo? = null,
   val locationCount: Int = 0,
   val currentTrack: GpsTrack? = null,
+  // アプリ更新やクラッシュで中断され、再開/完了の確認待ちになっているトラック
+  val interruptedTrack: GpsTrack? = null,
 )
 
 data class LocationInfo(

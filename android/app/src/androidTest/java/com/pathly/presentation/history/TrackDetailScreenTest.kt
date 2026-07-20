@@ -32,29 +32,7 @@ class TrackDetailScreenTest {
   }
 
   @Test
-  fun trackDetailScreen_showsTitle() {
-    // Given
-    val track = createSampleTrack()
-
-    // When
-    composeTestRule.setContent {
-      PathlyAndroidTheme {
-        TrackDetailScreen(
-          track = track,
-          onBackClick = mockOnBackClick,
-        )
-      }
-    }
-
-    // Then
-    composeTestRule
-      .onNodeWithText("外出記録詳細")
-      .assertIsDisplayed()
-  }
-
-  @Test
   fun trackDetailScreen_backButton_triggersCallback() {
-    // Given
     val track = createSampleTrack()
 
     composeTestRule.setContent {
@@ -66,18 +44,15 @@ class TrackDetailScreenTest {
       }
     }
 
-    // When
     composeTestRule
       .onNodeWithContentDescription("戻る")
       .performClick()
 
-    // Then
     verify { mockOnBackClick() }
   }
 
   @Test
   fun trackDetailScreen_backButton_hasClickAction() {
-    // Given
     val track = createSampleTrack()
 
     composeTestRule.setContent {
@@ -89,7 +64,6 @@ class TrackDetailScreenTest {
       }
     }
 
-    // Then
     composeTestRule
       .onNodeWithContentDescription("戻る")
       .assertIsDisplayed()
@@ -97,63 +71,9 @@ class TrackDetailScreenTest {
   }
 
   @Test
-  fun trackDetailScreen_displaysBasicInformation() {
-    // Given
-    val startTime = Date(1640995200000L) // 2022-01-01 00:00:00 UTC
-    val endTime = Date(1640998800000L) // 2022-01-01 01:00:00 UTC
-
-    val track = GpsTrack(
-      id = 123L,
-      startTime = startTime,
-      endTime = endTime,
-      isActive = false,
-      points = createSamplePoints(5),
-      createdAt = startTime,
-      updatedAt = endTime,
-    )
-
-    // When
-    composeTestRule.setContent {
-      PathlyAndroidTheme {
-        TrackDetailScreen(
-          track = track,
-          onBackClick = mockOnBackClick,
-        )
-      }
-    }
-
-    // Then
-    composeTestRule
-      .onNodeWithText("基本情報")
-      .assertIsDisplayed()
-
-    composeTestRule
-      .onNodeWithText("日付")
-      .assertIsDisplayed()
-
-    composeTestRule
-      .onNodeWithText("開始時刻")
-      .assertIsDisplayed()
-
-    composeTestRule
-      .onNodeWithText("終了時刻")
-      .assertIsDisplayed()
-
-    composeTestRule
-      .onNodeWithText("所要時間")
-      .assertIsDisplayed()
-
-    composeTestRule
-      .onNodeWithText("総移動距離")
-      .assertIsDisplayed()
-  }
-
-  @Test
-  fun trackDetailScreen_displaysRecordingState() {
-    // Given
+  fun trackDetailScreen_bottomSheet_showsStatLabels() {
     val track = createSampleTrack()
 
-    // When
     composeTestRule.setContent {
       PathlyAndroidTheme {
         TrackDetailScreen(
@@ -163,98 +83,17 @@ class TrackDetailScreenTest {
       }
     }
 
-    // Then
     composeTestRule
-      .onNodeWithText("記録状態")
+      .onNodeWithText("移動距離")
       .assertIsDisplayed()
 
     composeTestRule
-      .onNodeWithText("状態")
-      .assertIsDisplayed()
-
-    composeTestRule
-      .onNodeWithText("完了")
-      .assertIsDisplayed()
-
-    composeTestRule
-      .onNodeWithText("トラックID")
-      .assertIsDisplayed()
-
-    composeTestRule
-      .onNodeWithText("123")
+      .onNodeWithText("地点数")
       .assertIsDisplayed()
   }
 
   @Test
-  fun trackDetailScreen_activeTrack_showsActiveState() {
-    // Given
-    val track = GpsTrack(
-      id = 456L,
-      startTime = Date(),
-      endTime = null,
-      isActive = true,
-      points = createSamplePoints(3),
-      createdAt = Date(),
-      updatedAt = Date(),
-    )
-
-    // When
-    composeTestRule.setContent {
-      PathlyAndroidTheme {
-        TrackDetailScreen(
-          track = track,
-          onBackClick = mockOnBackClick,
-        )
-      }
-    }
-
-    // Then
-    composeTestRule
-      .onNodeWithText("記録中")
-      .assertIsDisplayed()
-
-    composeTestRule
-      .onNodeWithText("この記録は現在進行中です")
-      .assertIsDisplayed()
-
-    // アクティブトラックでは終了時刻と所要時間は表示されない
-    composeTestRule
-      .onNodeWithText("終了時刻")
-      .assertDoesNotExist()
-
-    composeTestRule
-      .onNodeWithText("所要時間")
-      .assertDoesNotExist()
-  }
-
-  @Test
-  fun trackDetailScreen_completedTrack_doesNotShowActiveMessage() {
-    // Given
-    val track = createSampleTrack(isActive = false)
-
-    // When
-    composeTestRule.setContent {
-      PathlyAndroidTheme {
-        TrackDetailScreen(
-          track = track,
-          onBackClick = mockOnBackClick,
-        )
-      }
-    }
-
-    // Then
-    composeTestRule
-      .onNodeWithText("この記録は現在進行中です")
-      .assertDoesNotExist()
-
-    composeTestRule
-      .onNodeWithText("完了")
-      .assertIsDisplayed()
-  }
-
-  @Test
-  fun trackDetailScreen_displaysDistanceAndPointCount() {
-    // Given
+  fun trackDetailScreen_bottomSheet_showsPointCountAndDistance() {
     val track = GpsTrack(
       id = 1L,
       startTime = Date(),
@@ -265,7 +104,6 @@ class TrackDetailScreenTest {
       updatedAt = Date(),
     )
 
-    // When
     composeTestRule.setContent {
       PathlyAndroidTheme {
         TrackDetailScreen(
@@ -275,31 +113,29 @@ class TrackDetailScreenTest {
       }
     }
 
-    // Then
+    // 地点数タイルの値
     composeTestRule
-      .onNodeWithText("(8点)", substring = true)
+      .onNodeWithText("8")
       .assertIsDisplayed()
 
-    // 距離は実際の計算結果に依存するので、km表示があることだけ確認
+    // 距離タイルは実際の計算結果に依存するので km 表示があることだけ確認
     composeTestRule
       .onNodeWithText("km", substring = true)
       .assertIsDisplayed()
   }
 
   @Test
-  fun trackDetailScreen_zeroPointsTrack_showsZeroDistance() {
-    // Given
+  fun trackDetailScreen_activeTrack_showsRecordingBadge() {
     val track = GpsTrack(
-      id = 1L,
+      id = 456L,
       startTime = Date(),
-      endTime = Date(),
-      isActive = false,
-      points = emptyList(), // 0点
+      endTime = null,
+      isActive = true,
+      points = createSamplePoints(3),
       createdAt = Date(),
       updatedAt = Date(),
     )
 
-    // When
     composeTestRule.setContent {
       PathlyAndroidTheme {
         TrackDetailScreen(
@@ -309,26 +145,15 @@ class TrackDetailScreenTest {
       }
     }
 
-    // Then
     composeTestRule
-      .onNodeWithText("0.0km (0点)")
+      .onNodeWithText("記録中", substring = true)
       .assertIsDisplayed()
   }
 
   @Test
-  fun trackDetailScreen_onePointTrack_showsZeroDistance() {
-    // Given
-    val track = GpsTrack(
-      id = 1L,
-      startTime = Date(),
-      endTime = Date(),
-      isActive = false,
-      points = createSamplePoints(1), // 1点のみ
-      createdAt = Date(),
-      updatedAt = Date(),
-    )
+  fun trackDetailScreen_completedTrack_doesNotShowRecordingBadge() {
+    val track = createSampleTrack(isActive = false)
 
-    // When
     composeTestRule.setContent {
       PathlyAndroidTheme {
         TrackDetailScreen(
@@ -338,15 +163,44 @@ class TrackDetailScreenTest {
       }
     }
 
-    // Then
     composeTestRule
-      .onNodeWithText("0.0km (1点)")
+      .onNodeWithText("記録中", substring = true)
+      .assertDoesNotExist()
+  }
+
+  @Test
+  fun trackDetailScreen_emptyTrack_showsNoDataMessage() {
+    val track = GpsTrack(
+      id = 1L,
+      startTime = Date(),
+      endTime = Date(),
+      isActive = false,
+      points = emptyList(),
+      createdAt = Date(),
+      updatedAt = Date(),
+    )
+
+    composeTestRule.setContent {
+      PathlyAndroidTheme {
+        TrackDetailScreen(
+          track = track,
+          onBackClick = mockOnBackClick,
+        )
+      }
+    }
+
+    composeTestRule
+      .onNodeWithText("GPSデータがありません")
+      .assertIsDisplayed()
+
+    // 地点数タイルは 0
+    composeTestRule
+      .onNodeWithText("0.0km")
       .assertIsDisplayed()
   }
 
   @Test
-  fun trackDetailScreen_duration_showsCorrectFormat() {
-    // Given
+  fun trackDetailScreen_duration_showsHoursAndMinutes() {
     val startTime = Date(1640995200000L) // 2022-01-01 00:00:00 UTC
     val endTime = Date(1640995200000L + 3661000L) // 1時間1分後
 
@@ -360,7 +214,6 @@ class TrackDetailScreenTest {
       updatedAt = endTime,
     )
 
-    // When
     composeTestRule.setContent {
       PathlyAndroidTheme {
         TrackDetailScreen(
@@ -370,15 +223,14 @@ class TrackDetailScreenTest {
       }
     }
 
-    // Then
+    // 所要時間は差分のためタイムゾーン非依存。サブタイトル内に含まれる
     composeTestRule
-      .onNodeWithText("1時間1分")
+      .onNodeWithText("1時間1分", substring = true)
       .assertIsDisplayed()
   }
 
   @Test
   fun trackDetailScreen_shortDuration_showsMinutesOnly() {
-    // Given
     val startTime = Date(1640995200000L) // 2022-01-01 00:00:00 UTC
     val endTime = Date(1640995200000L + 1800000L) // 30分後
 
@@ -392,7 +244,6 @@ class TrackDetailScreenTest {
       updatedAt = endTime,
     )
 
-    // When
     composeTestRule.setContent {
       PathlyAndroidTheme {
         TrackDetailScreen(
@@ -402,9 +253,8 @@ class TrackDetailScreenTest {
       }
     }
 
-    // Then
     composeTestRule
-      .onNodeWithText("30分")
+      .onNodeWithText("30分", substring = true)
       .assertIsDisplayed()
   }
 
@@ -424,20 +274,18 @@ class TrackDetailScreenTest {
     )
   }
 
-  private fun createSamplePoints(count: Int): List<GpsPoint> {
-    return (1..count).map { index ->
-      GpsPoint(
-        id = index.toLong(),
-        trackId = 1L,
-        latitude = 35.6762 + (index * 0.001),
-        longitude = 139.6503 + (index * 0.001),
-        altitude = null,
-        accuracy = 10f,
-        speed = null,
-        bearing = null,
-        timestamp = Date(1640995200000L + index * 60000), // 1分間隔
-        createdAt = Date(),
-      )
-    }
+  private fun createSamplePoints(count: Int): List<GpsPoint> = (1..count).map { index ->
+    GpsPoint(
+      id = index.toLong(),
+      trackId = 1L,
+      latitude = 35.6762 + (index * 0.001),
+      longitude = 139.6503 + (index * 0.001),
+      altitude = null,
+      accuracy = 10f,
+      speed = null,
+      bearing = null,
+      timestamp = Date(1640995200000L + index * 60000), // 1分間隔
+      createdAt = Date(),
+    )
   }
 }

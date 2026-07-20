@@ -7,6 +7,12 @@
 /.idea/workspace.xml
 /.idea/navEditor.xml
 /.idea/assetWizardSettings.xml
+# マシン固有・セッション依存の値が入り、Android Studio起動のたびに書き換わるため管理外にする
+/.idea/gradle.xml
+/.idea/misc.xml
+/.idea/deploymentTargetSelector.xml
+/.idea/deviceManager.xml
+/.idea/studiobot.xml
 .DS_Store
 /build
 /captures

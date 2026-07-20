@@ -22,8 +22,10 @@ data class GpsTrack(
       val prevPoint = points[i - 1]
       val currPoint = points[i]
       totalDistance += distanceBetween(
-        prevPoint.latitude, prevPoint.longitude,
-        currPoint.latitude, currPoint.longitude,
+        prevPoint.latitude,
+        prevPoint.longitude,
+        currPoint.latitude,
+        currPoint.longitude,
       )
     }
     return totalDistance

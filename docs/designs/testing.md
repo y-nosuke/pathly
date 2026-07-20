@@ -98,7 +98,7 @@ fun calculateDistance_twoPoints_returnsCorrectDistance() {
 - **対象**: Repository実装、コンバーター、エンティティ変換
 - **特徴**: DAOをモック化、高速実行
 
-##### インストルメンテーションテスト  
+##### インストルメンテーションテスト
 
 - **場所**: `app/src/androidTest/java/com/pathly/data/`
 - **対象**: DAO、データベース統合、Repository統合テスト
@@ -137,7 +137,7 @@ class TrackingViewModelTest {
 
 ##### UIテスト（インストルメンテーションテスト）
 
-- **場所**: `app/src/androidTest/java/com/pathly/presentation/`  
+- **場所**: `app/src/androidTest/java/com/pathly/presentation/`
 - **対象**: Compose UI、ユーザーインタラクション
 - **特徴**: 実際のコンポーネント描画とインタラクション
 
@@ -334,7 +334,7 @@ fun stateChangeTest() {
 # すべてのユニットテスト実行
 ./gradlew test
 
-# すべてのインストルメンテーションテスト実行  
+# すべてのインストルメンテーションテスト実行
 ./gradlew connectedAndroidTest
 
 # 特定のテストクラス実行
@@ -429,7 +429,7 @@ fun asyncTest() = runTest {
 
 **解決**: `build.gradle.kts`に`packaging`ブロックを追加
 
-#### 2. Compose UI複数要素エラー  
+#### 2. Compose UI複数要素エラー
 
 ```bash
 Expected at most 1 node but found 3 nodes
@@ -467,7 +467,7 @@ Expected at most 1 node but found 3 nodes
 - name: Run Unit Tests
   run: ./gradlew test
 
-- name: Run Instrumentation Tests  
+- name: Run Instrumentation Tests
   run: ./gradlew connectedAndroidTest
 ```
 
