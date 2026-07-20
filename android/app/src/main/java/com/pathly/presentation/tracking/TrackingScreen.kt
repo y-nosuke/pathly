@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -19,6 +20,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -62,6 +64,25 @@ fun TrackingScreen(
 
   LaunchedEffect(Unit) {
     viewModel.checkLocationPermission()
+  }
+
+  // 中断された記録の再開/完了を確認するダイアログ
+  if (uiState.interruptedTrack != null) {
+    AlertDialog(
+      onDismissRequest = viewModel::finishInterruptedTracking,
+      title = { Text("前回の記録が中断されています") },
+      text = { Text("アプリの更新などで記録が中断されました。続けて記録を再開しますか？") },
+      confirmButton = {
+        TextButton(onClick = viewModel::resumeTracking) {
+          Text("再開する")
+        }
+      },
+      dismissButton = {
+        TextButton(onClick = viewModel::finishInterruptedTracking) {
+          Text("完了にする")
+        }
+      },
+    )
   }
 
   Box(modifier = modifier.fillMaxSize()) {
