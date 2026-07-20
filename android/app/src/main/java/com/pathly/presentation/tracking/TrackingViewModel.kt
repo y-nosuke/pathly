@@ -154,6 +154,9 @@ class TrackingViewModel @Inject constructor(
     _uiState.value = _uiState.value.copy(
       isTracking = false,
       currentTrackId = null,
+      // 停止後に古い現在地が残って地図がそこへ寄るのを防ぐ
+      currentLocation = null,
+      locationCount = 0,
     )
   }
 

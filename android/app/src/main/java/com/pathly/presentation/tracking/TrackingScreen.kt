@@ -222,6 +222,13 @@ private fun TrackingMapView(
     }
   }
 
+  // 画面表示時（権限取得時）に一度、現在地へセンタリングする
+  LaunchedEffect(hasPermission) {
+    if (hasPermission) {
+      recenterToCurrentLocation()
+    }
+  }
+
   // ユーザーが地図を手で操作したら追従を止める（現在地ボタンで再センター可能）
   LaunchedEffect(cameraPositionState) {
     snapshotFlow { cameraPositionState.cameraMoveStartedReason }
