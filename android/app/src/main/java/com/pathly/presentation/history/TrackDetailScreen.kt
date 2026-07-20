@@ -217,9 +217,10 @@ private fun TrackMapView(
   val defaultPosition = LatLng(35.6762, 139.6503) // Tokyo Station as default
 
   LaunchedEffect(track) {
-    if (track.points.isNotEmpty()) {
+    val pts = track.smoothedPoints
+    if (pts.isNotEmpty()) {
       val boundsBuilder = LatLngBounds.Builder()
-      track.points.forEach { point ->
+      pts.forEach { point ->
         boundsBuilder.include(LatLng(point.latitude, point.longitude))
       }
       cameraPositionState.animate(
@@ -247,8 +248,9 @@ private fun TrackMapView(
       scrollGesturesEnabled = true,
     ),
   ) {
-    if (track.points.size >= 2) {
-      val polylinePoints = track.points.map {
+    val points = track.smoothedPoints
+    if (points.size >= 2) {
+      val polylinePoints = points.map {
         LatLng(it.latitude, it.longitude)
       }
       Polyline(
@@ -257,7 +259,7 @@ private fun TrackMapView(
         width = 6f,
       )
 
-      val startPoint = track.points.first()
+      val startPoint = points.first()
       val startMarkerState = remember(startPoint) {
         MarkerState(position = LatLng(startPoint.latitude, startPoint.longitude))
       }
@@ -268,7 +270,7 @@ private fun TrackMapView(
         icon = BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_GREEN),
       )
 
-      val endPoint = track.points.last()
+      val endPoint = points.last()
       val endMarkerState = remember(endPoint) {
         MarkerState(position = LatLng(endPoint.latitude, endPoint.longitude))
       }

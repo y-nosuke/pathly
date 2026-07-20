@@ -202,7 +202,7 @@ private fun TrackingMapView(
         compassEnabled = false,
       ),
     ) {
-      val points = track?.points.orEmpty()
+      val points = track?.smoothedPoints.orEmpty()
       if (points.size >= 2) {
         Polyline(
           points = points.map { LatLng(it.latitude, it.longitude) },
