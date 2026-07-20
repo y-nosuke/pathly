@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -36,6 +37,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.google.android.gms.maps.CameraUpdateFactory
 import com.google.android.gms.maps.model.CameraPosition
@@ -62,8 +65,10 @@ fun TrackingScreen(
 ) {
   val uiState by viewModel.uiState.collectAsStateWithLifecycle()
 
-  LaunchedEffect(Unit) {
+  // 復帰のたびに権限・電池最適化の状態を再確認（システム設定から戻ったときに反映するため）
+  LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
     viewModel.checkLocationPermission()
+    viewModel.checkBatteryOptimization()
   }
 
   // 中断された記録の再開/完了を確認するダイアログ
@@ -113,14 +118,24 @@ fun TrackingScreen(
       )
     }
 
-    // 下部コントロール：統計カード（記録中）＋エラー＋記録ボタン
+    // 下部コントロール：電池最適化の案内＋統計カード（記録中）＋エラー＋記録ボタン
     Column(
       modifier = Modifier
         .align(Alignment.BottomCenter)
+        .fillMaxWidth()
+        .padding(horizontal = 16.dp)
         .padding(bottom = 24.dp),
       horizontalAlignment = Alignment.CenterHorizontally,
       verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
+      // 電池の最適化が有効なままだとバックグラウンド記録が止まりやすいので案内する
+      if (uiState.hasLocationPermission && !uiState.isIgnoringBatteryOptimizations) {
+        BatteryOptimizationCard(
+          onDisable = viewModel::requestDisableBatteryOptimization,
+          modifier = Modifier.fillMaxWidth(),
+        )
+      }
+
       if (uiState.isTracking) {
         TrackingStatsCard(
           track = uiState.currentTrack,
@@ -394,6 +409,39 @@ private fun LocationPermissionOverlay(
       )
       Button(onClick = onRequestPermission) {
         Text("位置情報を許可")
+      }
+    }
+  }
+}
+
+@Composable
+private fun BatteryOptimizationCard(
+  onDisable: () -> Unit,
+  modifier: Modifier = Modifier,
+) {
+  Surface(
+    modifier = modifier,
+    shape = RoundedCornerShape(12.dp),
+    color = MaterialTheme.colorScheme.secondaryContainer,
+    shadowElevation = 4.dp,
+  ) {
+    Column(
+      modifier = Modifier.padding(16.dp),
+      verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+      Text(
+        text = "バックグラウンド記録を安定させる",
+        style = MaterialTheme.typography.titleSmall,
+        fontWeight = FontWeight.Bold,
+        color = MaterialTheme.colorScheme.onSecondaryContainer,
+      )
+      Text(
+        text = "電池の最適化を無効にすると、アプリを閉じても記録が止まりにくくなります。",
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSecondaryContainer,
+      )
+      Button(onClick = onDisable) {
+        Text("電池の最適化を無効にする")
       }
     }
   }
