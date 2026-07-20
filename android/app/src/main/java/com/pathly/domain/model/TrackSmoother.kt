@@ -6,6 +6,17 @@ import kotlin.math.sin
 import kotlin.math.sqrt
 
 /**
+ * 補正パラメータ。既定値は [TrackSmoother] の定数。調整ツールで値を変えて
+ * 見比べ、良い値が決まったら定数に反映する。
+ */
+data class SmoothingParams(
+  val maxAccuracyMeters: Float = TrackSmoother.MAX_ACCURACY_METERS,
+  val maxSpeedMps: Double = TrackSmoother.MAX_SPEED_MPS,
+  val minStepMeters: Double = TrackSmoother.MIN_STEP_METERS,
+  val smoothingWindow: Int = TrackSmoother.SMOOTHING_WINDOW,
+)
+
+/**
  * GPS軌跡のノイズを補正する（非破壊）。原データは変更せず、表示・距離計算用の
  * 補正後の点列を計算で返す。
  *
@@ -32,18 +43,28 @@ object TrackSmoother {
 
   private const val EARTH_RADIUS_METERS = 6371000.0
 
-  /** 補正後の点列を返す。点が少ない場合はそのまま返す。 */
-  fun smooth(points: List<GpsPoint>): List<GpsPoint> {
-    if (points.size < 3) return points
-    val filtered = filter(points)
-    return movingAverage(filtered)
+  /** 点列の総移動距離（メートル）。 */
+  fun totalDistanceMeters(points: List<GpsPoint>): Double {
+    if (points.size < 2) return 0.0
+    var total = 0.0
+    for (i in 1 until points.size) {
+      total += distanceMeters(points[i - 1], points[i])
+    }
+    return total
   }
 
-  private fun filter(points: List<GpsPoint>): List<GpsPoint> {
+  /** 補正後の点列を返す。点が少ない場合はそのまま返す。 */
+  fun smooth(points: List<GpsPoint>, params: SmoothingParams = SmoothingParams()): List<GpsPoint> {
+    if (points.size < 3) return points
+    val filtered = filter(points, params)
+    return movingAverage(filtered, params.smoothingWindow)
+  }
+
+  private fun filter(points: List<GpsPoint>, params: SmoothingParams): List<GpsPoint> {
     val result = mutableListOf<GpsPoint>()
     for (point in points) {
       // 精度フィルタ
-      if (point.accuracy > MAX_ACCURACY_METERS) continue
+      if (point.accuracy > params.maxAccuracyMeters) continue
 
       val last = result.lastOrNull()
       if (last != null) {
@@ -51,10 +72,10 @@ object TrackSmoother {
         val seconds = (point.timestamp.time - last.timestamp.time) / 1000.0
 
         // GPS ジャンプ（非現実的な速度）を除外
-        if (seconds > 0 && meters / seconds > MAX_SPEED_MPS) continue
+        if (seconds > 0 && meters / seconds > params.maxSpeedMps) continue
 
         // 微小移動（停止時のドリフト）を間引く
-        if (meters < MIN_STEP_METERS) continue
+        if (meters < params.minStepMeters) continue
       }
       result.add(point)
     }
@@ -62,9 +83,9 @@ object TrackSmoother {
     return if (result.size >= 2) result else points
   }
 
-  private fun movingAverage(points: List<GpsPoint>): List<GpsPoint> {
-    if (points.size < SMOOTHING_WINDOW) return points
-    val half = SMOOTHING_WINDOW / 2
+  private fun movingAverage(points: List<GpsPoint>, window: Int): List<GpsPoint> {
+    if (window < 3 || points.size < window) return points
+    val half = window / 2
     return points.mapIndexed { index, point ->
       // 端点は平滑化せずそのまま（始点・終点をずらさない）
       if (index < half || index >= points.size - half) {
@@ -76,9 +97,10 @@ object TrackSmoother {
           sumLat += points[j].latitude
           sumLon += points[j].longitude
         }
+        val count = half * 2 + 1
         point.copy(
-          latitude = sumLat / SMOOTHING_WINDOW,
-          longitude = sumLon / SMOOTHING_WINDOW,
+          latitude = sumLat / count,
+          longitude = sumLon / count,
         )
       }
     }

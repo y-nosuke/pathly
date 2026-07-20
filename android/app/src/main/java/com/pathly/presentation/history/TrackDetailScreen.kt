@@ -14,14 +14,19 @@ import androidx.compose.material3.BottomSheetScaffold
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberBottomSheetScaffoldState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -38,13 +43,19 @@ import com.google.maps.android.compose.Marker
 import com.google.maps.android.compose.MarkerState
 import com.google.maps.android.compose.Polyline
 import com.google.maps.android.compose.rememberCameraPositionState
+import com.pathly.BuildConfig
 import com.pathly.R
+import com.pathly.domain.model.GpsPoint
 import com.pathly.domain.model.GpsTrack
+import com.pathly.domain.model.SmoothingParams
+import com.pathly.domain.model.TrackSmoother
 import com.pathly.ui.theme.TrackLineOrange
 import com.pathly.util.DateFormatters
 import kotlin.math.roundToInt
 
 private val sheetPeekHeight = 200.dp
+private val tuningSheetPeekHeight = 360.dp
+private val rawTrackColor = Color(0x66424242)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -54,13 +65,29 @@ fun TrackDetailScreen(
   modifier: Modifier = Modifier,
 ) {
   val scaffoldState = rememberBottomSheetScaffoldState()
+  var tuningMode by remember { mutableStateOf(false) }
+  var tuningParams by remember { mutableStateOf(SmoothingParams()) }
+
+  // 地図に描く点列。調整モードではスライダーの値で補正する。
+  val displayPoints = remember(track, tuningMode, tuningParams) {
+    if (tuningMode) TrackSmoother.smooth(track.points, tuningParams) else track.smoothedPoints
+  }
+  val peek = if (tuningMode) tuningSheetPeekHeight else sheetPeekHeight
 
   BottomSheetScaffold(
     modifier = modifier.fillMaxSize(),
     scaffoldState = scaffoldState,
-    sheetPeekHeight = sheetPeekHeight,
+    sheetPeekHeight = peek,
     sheetContent = {
-      TrackDetailSheet(track = track)
+      if (tuningMode) {
+        TuningSheet(
+          track = track,
+          params = tuningParams,
+          onParamsChange = { tuningParams = it },
+        )
+      } else {
+        TrackDetailSheet(track = track)
+      }
     },
   ) { innerPadding ->
     Box(
@@ -71,7 +98,9 @@ fun TrackDetailScreen(
       if (track.points.isNotEmpty()) {
         TrackMapView(
           track = track,
-          contentPadding = PaddingValues(bottom = sheetPeekHeight),
+          displayPoints = displayPoints,
+          showRawOverlay = tuningMode,
+          contentPadding = PaddingValues(bottom = peek),
           modifier = Modifier.fillMaxSize(),
         )
       } else {
@@ -87,18 +116,47 @@ fun TrackDetailScreen(
         }
       }
 
-      Surface(
-        onClick = onBackClick,
+      Row(
         modifier = Modifier.padding(12.dp),
-        shape = CircleShape,
-        color = MaterialTheme.colorScheme.surface,
-        shadowElevation = 4.dp,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
       ) {
-        Icon(
-          painter = painterResource(R.drawable.ic_arrow_back),
-          contentDescription = "戻る",
-          modifier = Modifier.padding(8.dp),
-        )
+        Surface(
+          onClick = onBackClick,
+          shape = CircleShape,
+          color = MaterialTheme.colorScheme.surface,
+          shadowElevation = 4.dp,
+        ) {
+          Icon(
+            painter = painterResource(R.drawable.ic_arrow_back),
+            contentDescription = "戻る",
+            modifier = Modifier.padding(8.dp),
+          )
+        }
+
+        // 補正の調整はデバッグビルドのみ
+        if (BuildConfig.DEBUG && track.points.isNotEmpty()) {
+          Surface(
+            onClick = { tuningMode = !tuningMode },
+            shape = CircleShape,
+            color = if (tuningMode) {
+              MaterialTheme.colorScheme.primary
+            } else {
+              MaterialTheme.colorScheme.surface
+            },
+            shadowElevation = 4.dp,
+          ) {
+            Icon(
+              painter = painterResource(R.drawable.ic_tune),
+              contentDescription = "補正を調整",
+              tint = if (tuningMode) {
+                MaterialTheme.colorScheme.onPrimary
+              } else {
+                MaterialTheme.colorScheme.onSurface
+              },
+              modifier = Modifier.padding(8.dp),
+            )
+          }
+        }
       }
     }
   }
@@ -179,6 +237,94 @@ private fun TrackDetailSheet(
 }
 
 @Composable
+private fun TuningSheet(
+  track: GpsTrack,
+  params: SmoothingParams,
+  onParamsChange: (SmoothingParams) -> Unit,
+  modifier: Modifier = Modifier,
+) {
+  val smoothed = remember(track, params) { TrackSmoother.smooth(track.points, params) }
+  val rawKm = (TrackSmoother.totalDistanceMeters(track.points) / 1000.0 * 100).roundToInt() / 100.0
+  val smKm = (TrackSmoother.totalDistanceMeters(smoothed) / 1000.0 * 100).roundToInt() / 100.0
+
+  Column(
+    modifier = modifier
+      .fillMaxWidth()
+      .padding(horizontal = 20.dp)
+      .padding(bottom = 24.dp),
+    verticalArrangement = Arrangement.spacedBy(8.dp),
+  ) {
+    Text(
+      text = "補正の調整（デバッグ）",
+      style = MaterialTheme.typography.titleMedium,
+      fontWeight = FontWeight.Bold,
+    )
+    Text(
+      text = "生（灰）: ${rawKm}km / ${track.points.size}点  →  補正後（橙）: ${smKm}km / ${smoothed.size}点",
+      style = MaterialTheme.typography.bodySmall,
+      color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
+
+    ParamSlider(
+      label = "精度上限: ${params.maxAccuracyMeters.roundToInt()} m",
+      value = params.maxAccuracyMeters,
+      valueRange = 5f..60f,
+      onChange = { onParamsChange(params.copy(maxAccuracyMeters = it)) },
+    )
+    ParamSlider(
+      label = "速度上限: ${params.maxSpeedMps.roundToInt()} m/s",
+      value = params.maxSpeedMps.toFloat(),
+      valueRange = 10f..100f,
+      onChange = { onParamsChange(params.copy(maxSpeedMps = it.toDouble())) },
+    )
+    ParamSlider(
+      label = "最小移動: ${params.minStepMeters.roundToInt()} m",
+      value = params.minStepMeters.toFloat(),
+      valueRange = 0f..15f,
+      onChange = { onParamsChange(params.copy(minStepMeters = it.toDouble())) },
+    )
+    ParamSlider(
+      label = "平滑窓: ${params.smoothingWindow}",
+      value = params.smoothingWindow.toFloat(),
+      valueRange = 1f..9f,
+      onChange = {
+        val window = it.roundToInt().let { v -> if (v % 2 == 0) v + 1 else v }.coerceIn(1, 9)
+        onParamsChange(params.copy(smoothingWindow = window))
+      },
+    )
+
+    Text(
+      text = "MAX_ACCURACY=${params.maxAccuracyMeters.roundToInt()}, " +
+        "MAX_SPEED=${params.maxSpeedMps.roundToInt()}, " +
+        "MIN_STEP=${params.minStepMeters.roundToInt()}, " +
+        "WINDOW=${params.smoothingWindow}",
+      style = MaterialTheme.typography.bodySmall,
+      color = MaterialTheme.colorScheme.primary,
+    )
+  }
+}
+
+@Composable
+private fun ParamSlider(
+  label: String,
+  value: Float,
+  valueRange: ClosedFloatingPointRange<Float>,
+  onChange: (Float) -> Unit,
+) {
+  Column(modifier = Modifier.fillMaxWidth()) {
+    Text(
+      text = label,
+      style = MaterialTheme.typography.bodySmall,
+    )
+    Slider(
+      value = value,
+      onValueChange = onChange,
+      valueRange = valueRange,
+    )
+  }
+}
+
+@Composable
 private fun StatTile(
   value: String,
   label: String,
@@ -210,13 +356,16 @@ private fun StatTile(
 @Composable
 private fun TrackMapView(
   track: GpsTrack,
+  displayPoints: List<GpsPoint>,
   modifier: Modifier = Modifier,
+  showRawOverlay: Boolean = false,
   contentPadding: PaddingValues = PaddingValues(0.dp),
 ) {
   val cameraPositionState = rememberCameraPositionState()
   val defaultPosition = LatLng(35.6762, 139.6503) // Tokyo Station as default
 
-  LaunchedEffect(track) {
+  // カメラ範囲はトラック読み込み時に一度だけ合わせる（スライダー操作では動かさない）
+  LaunchedEffect(track.id) {
     val pts = track.smoothedPoints
     if (pts.isNotEmpty()) {
       val boundsBuilder = LatLngBounds.Builder()
@@ -248,18 +397,23 @@ private fun TrackMapView(
       scrollGesturesEnabled = true,
     ),
   ) {
-    val points = track.smoothedPoints
-    if (points.size >= 2) {
-      val polylinePoints = points.map {
-        LatLng(it.latitude, it.longitude)
-      }
+    // 調整モードでは生データを灰色で重ねて見比べる
+    if (showRawOverlay && track.points.size >= 2) {
       Polyline(
-        points = polylinePoints,
+        points = track.points.map { LatLng(it.latitude, it.longitude) },
+        color = rawTrackColor,
+        width = 10f,
+      )
+    }
+
+    if (displayPoints.size >= 2) {
+      Polyline(
+        points = displayPoints.map { LatLng(it.latitude, it.longitude) },
         color = TrackLineOrange,
         width = 6f,
       )
 
-      val startPoint = points.first()
+      val startPoint = displayPoints.first()
       val startMarkerState = remember(startPoint) {
         MarkerState(position = LatLng(startPoint.latitude, startPoint.longitude))
       }
@@ -270,7 +424,7 @@ private fun TrackMapView(
         icon = BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_GREEN),
       )
 
-      val endPoint = points.last()
+      val endPoint = displayPoints.last()
       val endMarkerState = remember(endPoint) {
         MarkerState(position = LatLng(endPoint.latitude, endPoint.longitude))
       }
