@@ -165,26 +165,68 @@ private fun TrackingMapView(
     }
   }
 
-  GoogleMap(
-    modifier = modifier,
-    cameraPositionState = cameraPositionState,
-    properties = MapProperties(
-      mapType = MapType.NORMAL,
-      isMyLocationEnabled = hasPermission,
-    ),
-    uiSettings = MapUiSettings(
-      zoomControlsEnabled = false,
-      myLocationButtonEnabled = hasPermission,
-      mapToolbarEnabled = false,
-      compassEnabled = false,
-    ),
+  Box(modifier = modifier) {
+    GoogleMap(
+      modifier = Modifier.fillMaxSize(),
+      cameraPositionState = cameraPositionState,
+      properties = MapProperties(
+        mapType = MapType.NORMAL,
+        isMyLocationEnabled = hasPermission,
+      ),
+      uiSettings = MapUiSettings(
+        zoomControlsEnabled = false,
+        // 標準ボタンは追従状態を反映しないため無効化し、自作ボタンを使う
+        myLocationButtonEnabled = false,
+        mapToolbarEnabled = false,
+        compassEnabled = false,
+      ),
+    ) {
+      val points = track?.points.orEmpty()
+      if (points.size >= 2) {
+        Polyline(
+          points = points.map { LatLng(it.latitude, it.longitude) },
+          color = TrackLineOrange,
+          width = 8f,
+        )
+      }
+    }
+
+    // 現在地ボタン：追従中は活性（色付き）、固定中は非活性（グレー）。タップで追従再開＆リセンター。
+    if (hasPermission) {
+      FollowLocationButton(
+        following = followUser,
+        onClick = { followUser = true },
+        modifier = Modifier
+          .align(Alignment.TopEnd)
+          .padding(12.dp),
+      )
+    }
+  }
+}
+
+@Composable
+private fun FollowLocationButton(
+  following: Boolean,
+  onClick: () -> Unit,
+  modifier: Modifier = Modifier,
+) {
+  Surface(
+    onClick = onClick,
+    modifier = modifier.size(44.dp),
+    shape = CircleShape,
+    color = if (following) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surface,
+    shadowElevation = 4.dp,
   ) {
-    val points = track?.points.orEmpty()
-    if (points.size >= 2) {
-      Polyline(
-        points = points.map { LatLng(it.latitude, it.longitude) },
-        color = TrackLineOrange,
-        width = 8f,
+    Box(contentAlignment = Alignment.Center) {
+      Icon(
+        painter = painterResource(R.drawable.ic_my_location),
+        contentDescription = if (following) "現在地に追従中" else "現在地へ移動",
+        tint = if (following) {
+          MaterialTheme.colorScheme.onPrimary
+        } else {
+          MaterialTheme.colorScheme.onSurfaceVariant
+        },
+        modifier = Modifier.size(24.dp),
       )
     }
   }
