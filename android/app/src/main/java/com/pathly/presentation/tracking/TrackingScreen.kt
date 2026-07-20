@@ -16,6 +16,7 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -185,47 +186,51 @@ private fun TrackingMapView(
     position = CameraPosition.fromLatLngZoom(LatLng(35.6762, 139.6503), 15f)
   }
   var followUser by remember { mutableStateOf(true) }
+  var isLocating by remember { mutableStateOf(false) }
 
   val context = LocalContext.current
   val scope = rememberCoroutineScope()
   val fusedClient = remember { LocationServices.getFusedLocationProviderClient(context) }
 
-  // 現在地へリセンターして追従を再開する。
-  // 記録中はサービスの現在地、停止中は単発取得した現在地を使う。
-  fun recenterToCurrentLocation() {
+  fun applyCamera(latitude: Double, longitude: Double, animate: Boolean) {
+    val update = CameraUpdateFactory.newLatLng(LatLng(latitude, longitude))
+    if (animate) {
+      scope.launch { cameraPositionState.animate(update) }
+    } else {
+      // 初回は横断的なアニメーションを避けるため瞬時に移動する
+      cameraPositionState.move(update)
+    }
+  }
+
+  // 現在地へセンタリングして追従を再開する。
+  // 記録中はサービスの現在地、停止中は単発取得した現在地を使う（取得中はローディング表示）。
+  fun centerOnCurrentLocation(animate: Boolean) {
     followUser = true
     val known = currentLocation
     if (known != null) {
-      scope.launch {
-        cameraPositionState.animate(
-          CameraUpdateFactory.newLatLng(LatLng(known.latitude, known.longitude)),
-        )
-      }
+      applyCamera(known.latitude, known.longitude, animate)
       return
     }
     if (!hasPermission) return
+    isLocating = true
     try {
       fusedClient.getCurrentLocation(
         Priority.PRIORITY_BALANCED_POWER_ACCURACY,
         CancellationTokenSource().token,
-      ).addOnSuccessListener { location ->
-        location?.let {
-          scope.launch {
-            cameraPositionState.animate(
-              CameraUpdateFactory.newLatLng(LatLng(it.latitude, it.longitude)),
-            )
-          }
-        }
+      ).addOnCompleteListener { task ->
+        isLocating = false
+        val location = if (task.isSuccessful) task.result else null
+        location?.let { applyCamera(it.latitude, it.longitude, animate) }
       }
     } catch (e: SecurityException) {
-      // 権限が無い場合は何もしない
+      isLocating = false
     }
   }
 
-  // 画面表示時（権限取得時）に一度、現在地へセンタリングする
+  // 画面表示時（権限取得時）に一度、現在地へセンタリングする（初回は瞬時に移動）
   LaunchedEffect(hasPermission) {
     if (hasPermission) {
-      recenterToCurrentLocation()
+      centerOnCurrentLocation(animate = false)
     }
   }
 
@@ -280,11 +285,39 @@ private fun TrackingMapView(
     if (hasPermission) {
       FollowLocationButton(
         following = followUser,
-        onClick = { recenterToCurrentLocation() },
+        onClick = { centerOnCurrentLocation(animate = true) },
         modifier = Modifier
           .align(Alignment.TopEnd)
           .padding(12.dp),
       )
+    }
+
+    // 現在地を取得中のローディング表示（上部中央）
+    if (isLocating) {
+      Surface(
+        modifier = Modifier
+          .align(Alignment.TopCenter)
+          .padding(top = 12.dp),
+        shape = RoundedCornerShape(20.dp),
+        color = MaterialTheme.colorScheme.surface,
+        shadowElevation = 4.dp,
+      ) {
+        Row(
+          modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+          verticalAlignment = Alignment.CenterVertically,
+        ) {
+          CircularProgressIndicator(
+            modifier = Modifier.size(16.dp),
+            strokeWidth = 2.dp,
+          )
+          Spacer(modifier = Modifier.width(8.dp))
+          Text(
+            text = "現在地を取得中…",
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurface,
+          )
+        }
+      }
     }
   }
 }
