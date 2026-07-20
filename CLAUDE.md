@@ -174,7 +174,7 @@ app/src/main/java/com/pathly/
 
 ### パフォーマンス
 
-- **GPS取得：** 10秒間隔（最大15秒バッチ許容）、PRIORITY_BALANCED_POWER_ACCURACY
+- **GPS取得：** 設定で変更可（既定10秒、5/10/30/60秒）＋バッチ許容、PRIORITY_BALANCED_POWER_ACCURACY
 - **データ同期：** 差分同期、バッチ処理
 - **画像：** 最大2MB圧縮
 - **オフライン：** ローカル保存→後で同期

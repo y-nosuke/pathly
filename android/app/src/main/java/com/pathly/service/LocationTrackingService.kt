@@ -26,6 +26,7 @@ import com.pathly.data.local.dao.GpsPointDao
 import com.pathly.data.local.dao.GpsTrackDao
 import com.pathly.data.local.entity.GpsPointEntity
 import com.pathly.data.local.entity.GpsTrackEntity
+import com.pathly.data.settings.SettingsRepository
 import com.pathly.util.PermissionUtils
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.CoroutineScope
@@ -52,10 +53,6 @@ class LocationTrackingService : Service() {
     const val ACTION_STOP_TRACKING = "STOP_TRACKING"
     const val EXTRA_TRACK_ID = "track_id"
 
-    private const val LOCATION_REQUEST_INTERVAL = 10000L // 10秒
-    private const val LOCATION_REQUEST_FASTEST_INTERVAL = 5000L // 5秒
-    private const val LOCATION_REQUEST_MAX_DELAY = 15000L // バッチ許容（最大15秒）で省電力化
-
     /**
      * サービスが実際に記録中かどうか。プロセス内の状態なので、アプリ更新・クラッシュ等で
      * プロセスが終了すると自動的に false に戻る。起動時に DB のアクティブトラックが
@@ -71,6 +68,9 @@ class LocationTrackingService : Service() {
 
   @Inject
   lateinit var gpsPointDao: GpsPointDao
+
+  @Inject
+  lateinit var settingsRepository: SettingsRepository
 
   private val binder = LocationTrackingBinder()
   private lateinit var fusedLocationClient: FusedLocationProviderClient
@@ -197,12 +197,14 @@ class LocationTrackingService : Service() {
       return
     }
 
+    // 設定された記録間隔（秒）を使う。バッチ許容で省電力化。
+    val intervalMs = settingsRepository.currentGpsIntervalSeconds() * 1000L
     val locationRequest = LocationRequest.Builder(
       Priority.PRIORITY_BALANCED_POWER_ACCURACY,
-      LOCATION_REQUEST_INTERVAL,
+      intervalMs,
     )
-      .setMinUpdateIntervalMillis(LOCATION_REQUEST_FASTEST_INTERVAL)
-      .setMaxUpdateDelayMillis(LOCATION_REQUEST_MAX_DELAY)
+      .setMinUpdateIntervalMillis(intervalMs / 2)
+      .setMaxUpdateDelayMillis(intervalMs + intervalMs / 2)
       .build()
 
     locationCallback = object : LocationCallback() {

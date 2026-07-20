@@ -27,6 +27,7 @@ import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import com.pathly.domain.model.GpsTrack
 import com.pathly.presentation.history.HistoryScreen
 import com.pathly.presentation.history.TrackDetailScreen
+import com.pathly.presentation.settings.SettingsScreen
 import com.pathly.presentation.tracking.TrackingScreen
 import com.pathly.presentation.tracking.TrackingViewModel
 import com.pathly.ui.theme.PathlyAndroidTheme
@@ -39,6 +40,7 @@ enum class BottomNavItem(
 ) {
   TRACKING("記録", R.drawable.ic_location_on),
   HISTORY("履歴", R.drawable.ic_list),
+  SETTINGS("設定", R.drawable.ic_settings),
 }
 
 @AndroidEntryPoint
@@ -142,6 +144,12 @@ private fun MainScreen(
         HistoryScreen(
           modifier = Modifier.padding(innerPadding),
           onTrackClick = { track -> selectedTrack = track },
+        )
+      }
+
+      selectedTab == BottomNavItem.SETTINGS -> {
+        SettingsScreen(
+          modifier = Modifier.padding(innerPadding),
         )
       }
     }
