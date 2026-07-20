@@ -37,6 +37,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.util.Date
 import javax.inject.Inject
 
@@ -106,6 +107,9 @@ class LocationTrackingService : Service() {
         startLocationTracking(resumeTrackId = trackId)
       }
       ACTION_STOP_TRACKING -> stopLocationTracking()
+      // intent が null＝START_STICKY による再起動（OSにkillされた後など）。
+      // アクティブなトラックがあれば記録を再開して自己回復する。
+      null -> restoreTrackingIfNeeded()
     }
     return START_STICKY
   }
@@ -148,6 +152,25 @@ class LocationTrackingService : Service() {
     }
 
     startLocationUpdates()
+  }
+
+  /**
+   * START_STICKY 再起動時に、DB にアクティブなトラックが残っていれば記録を再開する。
+   * 無ければサービスを終了する。
+   */
+  private fun restoreTrackingIfNeeded() {
+    serviceScope.launch {
+      val activeTrack = gpsTrackDao.getActiveTrack()
+      if (activeTrack != null) {
+        Log.d("LocationService", "Restoring tracking for active track ${activeTrack.id}")
+        withContext(Dispatchers.Main) {
+          startLocationTracking(resumeTrackId = activeTrack.id)
+        }
+      } else {
+        Log.d("LocationService", "No active track to restore; stopping service")
+        stopSelf()
+      }
+    }
   }
 
   private fun stopLocationTracking() {

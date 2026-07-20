@@ -11,6 +11,7 @@ object PermissionUtils {
   object Permissions {
     const val FINE_LOCATION = Manifest.permission.ACCESS_FINE_LOCATION
     const val COARSE_LOCATION = Manifest.permission.ACCESS_COARSE_LOCATION
+    const val BACKGROUND_LOCATION = Manifest.permission.ACCESS_BACKGROUND_LOCATION
     const val POST_NOTIFICATIONS = Manifest.permission.POST_NOTIFICATIONS
   }
 
@@ -35,6 +36,9 @@ object PermissionUtils {
 
   /** 位置権限（FINE_LOCATION + COARSE_LOCATION）をチェック */
   fun hasLocationPermissions(context: Context): Boolean = hasAllPermissions(context, PermissionGroups.LOCATION_PERMISSIONS)
+
+  /** バックグラウンド位置権限（「常に許可」）をチェック */
+  fun hasBackgroundLocationPermission(context: Context): Boolean = hasPermission(context, Permissions.BACKGROUND_LOCATION)
 
   /** アプリで必要なすべての権限をチェック (FINE_LOCATION + COARSE_LOCATION + POST_NOTIFICATIONS) */
   fun hasAllRequiredPermissions(context: Context): Boolean = hasAllPermissions(context, PermissionGroups.ALL_REQUIRED_PERMISSIONS)
