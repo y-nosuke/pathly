@@ -246,6 +246,8 @@ private fun TuningSheet(
   val smoothed = remember(track, params) { TrackSmoother.smooth(track.points, params) }
   val rawKm = (TrackSmoother.totalDistanceMeters(track.points) / 1000.0 * 100).roundToInt() / 100.0
   val smKm = (TrackSmoother.totalDistanceMeters(smoothed) / 1000.0 * 100).roundToInt() / 100.0
+  val rawTurn = TrackSmoother.totalTurningDegrees(track.points).roundToInt()
+  val smTurn = TrackSmoother.totalTurningDegrees(smoothed).roundToInt()
 
   Column(
     modifier = modifier
@@ -260,44 +262,34 @@ private fun TuningSheet(
       fontWeight = FontWeight.Bold,
     )
     Text(
-      text = "生（灰）: ${rawKm}km / ${track.points.size}点  →  補正後（橙）: ${smKm}km / ${smoothed.size}点",
+      text = "距離: 生 ${rawKm}km → 補正 ${smKm}km",
+      style = MaterialTheme.typography.bodySmall,
+      color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
+    Text(
+      text = "曲がり角合計: 生 $rawTurn° → 補正 $smTurn°（小さいほど滑らか）",
       style = MaterialTheme.typography.bodySmall,
       color = MaterialTheme.colorScheme.onSurfaceVariant,
     )
 
     ParamSlider(
-      label = "精度上限: ${params.maxAccuracyMeters.roundToInt()} m",
-      value = params.maxAccuracyMeters,
-      valueRange = 5f..60f,
-      onChange = { onParamsChange(params.copy(maxAccuracyMeters = it)) },
-    )
-    ParamSlider(
-      label = "速度上限: ${params.maxSpeedMps.roundToInt()} m/s",
+      label = "速度上限（ジャンプ除外）: ${params.maxSpeedMps.roundToInt()} m/s",
       value = params.maxSpeedMps.toFloat(),
       valueRange = 10f..100f,
       onChange = { onParamsChange(params.copy(maxSpeedMps = it.toDouble())) },
     )
     ParamSlider(
-      label = "最小移動: ${params.minStepMeters.roundToInt()} m",
-      value = params.minStepMeters.toFloat(),
-      valueRange = 0f..15f,
-      onChange = { onParamsChange(params.copy(minStepMeters = it.toDouble())) },
-    )
-    ParamSlider(
-      label = "平滑窓: ${params.smoothingWindow}",
-      value = params.smoothingWindow.toFloat(),
-      valueRange = 1f..9f,
+      label = "平滑窓: ${params.window}",
+      value = params.window.toFloat(),
+      valueRange = 1f..15f,
       onChange = {
-        val window = it.roundToInt().let { v -> if (v % 2 == 0) v + 1 else v }.coerceIn(1, 9)
-        onParamsChange(params.copy(smoothingWindow = window))
+        val window = it.roundToInt().let { v -> if (v % 2 == 0) v + 1 else v }.coerceIn(1, 15)
+        onParamsChange(params.copy(window = window))
       },
     )
 
     Text(
-      text = "MAX_ACCURACY=${params.maxAccuracyMeters.roundToInt()}, " +
-        "MAX_SPEED=${params.maxSpeedMps.roundToInt()}, " +
-        "MIN_STEP=${params.minStepMeters.roundToInt()}, " +
-        "WINDOW=${params.smoothingWindow}",
+      text = "MAX_SPEED=${params.maxSpeedMps.roundToInt()}, WINDOW=${params.window}",
       style = MaterialTheme.typography.bodySmall,
       color = MaterialTheme.colorScheme.primary,
     )
