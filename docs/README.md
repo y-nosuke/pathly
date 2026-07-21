@@ -29,13 +29,14 @@
 
 ### 設計（How）
 
-| ファイル                                               | 内容                             |
-| ------------------------------------------------------ | -------------------------------- |
-| [designs/architecture.md](designs/architecture.md)     | アーキテクチャ・プロジェクト構成 |
-| [designs/security.md](designs/security.md)             | セキュリティ設計                 |
-| [designs/logging.md](designs/logging.md)               | ログ方針・実装                   |
-| [designs/testing.md](designs/testing.md)               | テスト戦略                       |
-| [designs/cloud-database.md](designs/cloud-database.md) | クラウドDB・同期設計（将来）     |
+| ファイル                                               | 内容                              |
+| ------------------------------------------------------ | --------------------------------- |
+| [designs/architecture.md](designs/architecture.md)     | アーキテクチャ・プロジェクト構成  |
+| [designs/security.md](designs/security.md)             | セキュリティ設計                  |
+| [designs/logging.md](designs/logging.md)               | ログ方針・実装                    |
+| [designs/gps-smoothing.md](designs/gps-smoothing.md)   | GPS軌跡の補正（スムージング）設計 |
+| [designs/testing.md](designs/testing.md)               | テスト戦略                        |
+| [designs/cloud-database.md](designs/cloud-database.md) | クラウドDB・同期設計（将来）      |
 
 ---
 
