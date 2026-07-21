@@ -14,6 +14,9 @@ data class GpsTrack(
   /** ノイズ補正後の点列（非破壊・表示や距離計算に使う）。原データ [points] は保持する。 */
   val smoothedPoints: List<GpsPoint> by lazy { TrackSmoother.smooth(points) }
 
+  /** 立ち寄り場所（補正後の点列から検出）。 */
+  val stops: List<Stop> by lazy { StopDetector.detect(smoothedPoints) }
+
   /** 補正後の点列で計算した総移動距離。 */
   val totalDistanceMeters: Double
     get() = calculateDistance(smoothedPoints)
