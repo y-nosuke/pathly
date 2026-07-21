@@ -1,5 +1,6 @@
 package com.pathly
 
+import android.Manifest
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
@@ -26,6 +27,7 @@ import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import com.pathly.domain.model.GpsTrack
 import com.pathly.presentation.history.HistoryScreen
 import com.pathly.presentation.history.TrackDetailScreen
+import com.pathly.presentation.settings.SettingsScreen
 import com.pathly.presentation.tracking.TrackingScreen
 import com.pathly.presentation.tracking.TrackingViewModel
 import com.pathly.ui.theme.PathlyAndroidTheme
@@ -38,6 +40,7 @@ enum class BottomNavItem(
 ) {
   TRACKING("記録", R.drawable.ic_location_on),
   HISTORY("履歴", R.drawable.ic_list),
+  SETTINGS("設定", R.drawable.ic_settings),
 }
 
 @AndroidEntryPoint
@@ -50,6 +53,23 @@ class MainActivity : ComponentActivity() {
   ) { permissions ->
     val allGranted = permissions.values.all { it }
     viewModel.updateLocationPermission(allGranted)
+    // フォアグラウンド位置が許可されたら、続けて「常に許可」を要求する
+    // （アプリを閉じてもバックグラウンドで記録を続けるため）
+    if (allGranted) {
+      requestBackgroundLocationIfNeeded()
+    }
+  }
+
+  // バックグラウンド位置（「常に許可」）は前景位置とは別に要求する必要がある。
+  // 許可されなくても前景では記録できるため、結果は状態更新のみに使う。
+  private val backgroundLocationLauncher = registerForActivityResult(
+    ActivityResultContracts.RequestPermission(),
+  ) { }
+
+  private fun requestBackgroundLocationIfNeeded() {
+    if (!PermissionUtils.hasBackgroundLocationPermission(this)) {
+      backgroundLocationLauncher.launch(Manifest.permission.ACCESS_BACKGROUND_LOCATION)
+    }
   }
 
   override fun onCreate(savedInstanceState: Bundle?) {
@@ -124,6 +144,12 @@ private fun MainScreen(
         HistoryScreen(
           modifier = Modifier.padding(innerPadding),
           onTrackClick = { track -> selectedTrack = track },
+        )
+      }
+
+      selectedTab == BottomNavItem.SETTINGS -> {
+        SettingsScreen(
+          modifier = Modifier.padding(innerPadding),
         )
       }
     }

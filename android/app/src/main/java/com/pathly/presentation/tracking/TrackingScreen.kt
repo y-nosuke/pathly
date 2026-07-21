@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -15,6 +16,7 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -27,19 +29,26 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.google.android.gms.location.LocationServices
+import com.google.android.gms.location.Priority
 import com.google.android.gms.maps.CameraUpdateFactory
 import com.google.android.gms.maps.model.CameraPosition
 import com.google.android.gms.maps.model.LatLng
+import com.google.android.gms.tasks.CancellationTokenSource
 import com.google.maps.android.compose.CameraMoveStartedReason
 import com.google.maps.android.compose.GoogleMap
 import com.google.maps.android.compose.MapProperties
@@ -51,6 +60,7 @@ import com.pathly.R
 import com.pathly.domain.model.GpsTrack
 import com.pathly.ui.theme.TrackLineOrange
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import java.util.Date
 import kotlin.math.roundToInt
 
@@ -62,8 +72,10 @@ fun TrackingScreen(
 ) {
   val uiState by viewModel.uiState.collectAsStateWithLifecycle()
 
-  LaunchedEffect(Unit) {
+  // 復帰のたびに権限・電池最適化の状態を再確認（システム設定から戻ったときに反映するため）
+  LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
     viewModel.checkLocationPermission()
+    viewModel.checkBatteryOptimization()
   }
 
   // 中断された記録の再開/完了を確認するダイアログ
@@ -113,14 +125,24 @@ fun TrackingScreen(
       )
     }
 
-    // 下部コントロール：統計カード（記録中）＋エラー＋記録ボタン
+    // 下部コントロール：電池最適化の案内＋統計カード（記録中）＋エラー＋記録ボタン
     Column(
       modifier = Modifier
         .align(Alignment.BottomCenter)
+        .fillMaxWidth()
+        .padding(horizontal = 16.dp)
         .padding(bottom = 24.dp),
       horizontalAlignment = Alignment.CenterHorizontally,
       verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
+      // 電池の最適化が有効なままだとバックグラウンド記録が止まりやすいので案内する
+      if (uiState.hasLocationPermission && !uiState.isIgnoringBatteryOptimizations) {
+        BatteryOptimizationCard(
+          onDisable = viewModel::requestDisableBatteryOptimization,
+          modifier = Modifier.fillMaxWidth(),
+        )
+      }
+
       if (uiState.isTracking) {
         TrackingStatsCard(
           track = uiState.currentTrack,
@@ -164,6 +186,53 @@ private fun TrackingMapView(
     position = CameraPosition.fromLatLngZoom(LatLng(35.6762, 139.6503), 15f)
   }
   var followUser by remember { mutableStateOf(true) }
+  var isLocating by remember { mutableStateOf(false) }
+
+  val context = LocalContext.current
+  val scope = rememberCoroutineScope()
+  val fusedClient = remember { LocationServices.getFusedLocationProviderClient(context) }
+
+  fun applyCamera(latitude: Double, longitude: Double, animate: Boolean) {
+    val update = CameraUpdateFactory.newLatLng(LatLng(latitude, longitude))
+    if (animate) {
+      scope.launch { cameraPositionState.animate(update) }
+    } else {
+      // 初回は横断的なアニメーションを避けるため瞬時に移動する
+      cameraPositionState.move(update)
+    }
+  }
+
+  // 現在地へセンタリングして追従を再開する。
+  // 記録中はサービスの現在地、停止中は単発取得した現在地を使う（取得中はローディング表示）。
+  fun centerOnCurrentLocation(animate: Boolean) {
+    followUser = true
+    val known = currentLocation
+    if (known != null) {
+      applyCamera(known.latitude, known.longitude, animate)
+      return
+    }
+    if (!hasPermission) return
+    isLocating = true
+    try {
+      fusedClient.getCurrentLocation(
+        Priority.PRIORITY_BALANCED_POWER_ACCURACY,
+        CancellationTokenSource().token,
+      ).addOnCompleteListener { task ->
+        isLocating = false
+        val location = if (task.isSuccessful) task.result else null
+        location?.let { applyCamera(it.latitude, it.longitude, animate) }
+      }
+    } catch (e: SecurityException) {
+      isLocating = false
+    }
+  }
+
+  // 画面表示時（権限取得時）に一度、現在地へセンタリングする（初回は瞬時に移動）
+  LaunchedEffect(hasPermission) {
+    if (hasPermission) {
+      centerOnCurrentLocation(animate = false)
+    }
+  }
 
   // ユーザーが地図を手で操作したら追従を止める（現在地ボタンで再センター可能）
   LaunchedEffect(cameraPositionState) {
@@ -202,7 +271,7 @@ private fun TrackingMapView(
         compassEnabled = false,
       ),
     ) {
-      val points = track?.points.orEmpty()
+      val points = track?.smoothedPoints.orEmpty()
       if (points.size >= 2) {
         Polyline(
           points = points.map { LatLng(it.latitude, it.longitude) },
@@ -216,11 +285,39 @@ private fun TrackingMapView(
     if (hasPermission) {
       FollowLocationButton(
         following = followUser,
-        onClick = { followUser = true },
+        onClick = { centerOnCurrentLocation(animate = true) },
         modifier = Modifier
           .align(Alignment.TopEnd)
           .padding(12.dp),
       )
+    }
+
+    // 現在地を取得中のローディング表示（上部中央）
+    if (isLocating) {
+      Surface(
+        modifier = Modifier
+          .align(Alignment.TopCenter)
+          .padding(top = 12.dp),
+        shape = RoundedCornerShape(20.dp),
+        color = MaterialTheme.colorScheme.surface,
+        shadowElevation = 4.dp,
+      ) {
+        Row(
+          modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+          verticalAlignment = Alignment.CenterVertically,
+        ) {
+          CircularProgressIndicator(
+            modifier = Modifier.size(16.dp),
+            strokeWidth = 2.dp,
+          )
+          Spacer(modifier = Modifier.width(8.dp))
+          Text(
+            text = "現在地を取得中…",
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurface,
+          )
+        }
+      }
     }
   }
 }
@@ -394,6 +491,39 @@ private fun LocationPermissionOverlay(
       )
       Button(onClick = onRequestPermission) {
         Text("位置情報を許可")
+      }
+    }
+  }
+}
+
+@Composable
+private fun BatteryOptimizationCard(
+  onDisable: () -> Unit,
+  modifier: Modifier = Modifier,
+) {
+  Surface(
+    modifier = modifier,
+    shape = RoundedCornerShape(12.dp),
+    color = MaterialTheme.colorScheme.secondaryContainer,
+    shadowElevation = 4.dp,
+  ) {
+    Column(
+      modifier = Modifier.padding(16.dp),
+      verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+      Text(
+        text = "バックグラウンド記録を安定させる",
+        style = MaterialTheme.typography.titleSmall,
+        fontWeight = FontWeight.Bold,
+        color = MaterialTheme.colorScheme.onSecondaryContainer,
+      )
+      Text(
+        text = "電池の最適化を無効にすると、アプリを閉じても記録が止まりにくくなります。",
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSecondaryContainer,
+      )
+      Button(onClick = onDisable) {
+        Text("電池の最適化を無効にする")
       }
     }
   }

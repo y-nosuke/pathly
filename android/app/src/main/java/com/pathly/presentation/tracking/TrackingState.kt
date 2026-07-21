@@ -12,6 +12,8 @@ data class TrackingState(
   val currentTrack: GpsTrack? = null,
   // アプリ更新やクラッシュで中断され、再開/完了の確認待ちになっているトラック
   val interruptedTrack: GpsTrack? = null,
+  // 電池の最適化を無効化済みか（バックグラウンド記録の安定性に影響）。既定はtrueで案内を出さない
+  val isIgnoringBatteryOptimizations: Boolean = true,
 )
 
 data class LocationInfo(

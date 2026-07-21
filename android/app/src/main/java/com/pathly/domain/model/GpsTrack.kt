@@ -11,16 +11,20 @@ data class GpsTrack(
   val createdAt: Date,
   val updatedAt: Date,
 ) {
-  val totalDistanceMeters: Double
-    get() = calculateDistance()
+  /** ノイズ補正後の点列（非破壊・表示や距離計算に使う）。原データ [points] は保持する。 */
+  val smoothedPoints: List<GpsPoint> by lazy { TrackSmoother.smooth(points) }
 
-  private fun calculateDistance(): Double {
-    if (points.size < 2) return 0.0
+  /** 補正後の点列で計算した総移動距離。 */
+  val totalDistanceMeters: Double
+    get() = calculateDistance(smoothedPoints)
+
+  private fun calculateDistance(pts: List<GpsPoint>): Double {
+    if (pts.size < 2) return 0.0
 
     var totalDistance = 0.0
-    for (i in 1 until points.size) {
-      val prevPoint = points[i - 1]
-      val currPoint = points[i]
+    for (i in 1 until pts.size) {
+      val prevPoint = pts[i - 1]
+      val currPoint = pts[i]
       totalDistance += distanceBetween(
         prevPoint.latitude,
         prevPoint.longitude,

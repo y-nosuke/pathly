@@ -5,7 +5,10 @@ import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.content.ServiceConnection
+import android.net.Uri
 import android.os.IBinder
+import android.os.PowerManager
+import android.provider.Settings
 import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
@@ -151,6 +154,9 @@ class TrackingViewModel @Inject constructor(
     _uiState.value = _uiState.value.copy(
       isTracking = false,
       currentTrackId = null,
+      // 停止後に古い現在地が残って地図がそこへ寄るのを防ぐ
+      currentLocation = null,
+      locationCount = 0,
     )
   }
 
@@ -196,6 +202,22 @@ class TrackingViewModel @Inject constructor(
   fun checkLocationPermission() {
     val hasPermission = PermissionUtils.hasAllRequiredPermissions(application)
     updateLocationPermission(hasPermission)
+  }
+
+  /** 電池の最適化が無効化されているか（=バックグラウンドで制限されないか）を確認する */
+  fun checkBatteryOptimization() {
+    val powerManager = application.getSystemService(Context.POWER_SERVICE) as PowerManager
+    val ignoring = powerManager.isIgnoringBatteryOptimizations(application.packageName)
+    _uiState.value = _uiState.value.copy(isIgnoringBatteryOptimizations = ignoring)
+  }
+
+  /** 電池の最適化の無効化を要求するシステムダイアログを開く */
+  fun requestDisableBatteryOptimization() {
+    val intent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
+      data = Uri.parse("package:${application.packageName}")
+      addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+    }
+    application.startActivity(intent)
   }
 
   fun clearError() {

@@ -26,6 +26,7 @@ import com.pathly.data.local.dao.GpsPointDao
 import com.pathly.data.local.dao.GpsTrackDao
 import com.pathly.data.local.entity.GpsPointEntity
 import com.pathly.data.local.entity.GpsTrackEntity
+import com.pathly.data.settings.SettingsRepository
 import com.pathly.util.PermissionUtils
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.CoroutineScope
@@ -37,6 +38,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.util.Date
 import javax.inject.Inject
 
@@ -50,9 +52,6 @@ class LocationTrackingService : Service() {
     const val ACTION_RESUME_TRACKING = "RESUME_TRACKING"
     const val ACTION_STOP_TRACKING = "STOP_TRACKING"
     const val EXTRA_TRACK_ID = "track_id"
-
-    private const val LOCATION_REQUEST_INTERVAL = 3000L // 3秒
-    private const val LOCATION_REQUEST_FASTEST_INTERVAL = 1000L // 1秒
 
     /**
      * サービスが実際に記録中かどうか。プロセス内の状態なので、アプリ更新・クラッシュ等で
@@ -69,6 +68,9 @@ class LocationTrackingService : Service() {
 
   @Inject
   lateinit var gpsPointDao: GpsPointDao
+
+  @Inject
+  lateinit var settingsRepository: SettingsRepository
 
   private val binder = LocationTrackingBinder()
   private lateinit var fusedLocationClient: FusedLocationProviderClient
@@ -106,6 +108,9 @@ class LocationTrackingService : Service() {
         startLocationTracking(resumeTrackId = trackId)
       }
       ACTION_STOP_TRACKING -> stopLocationTracking()
+      // intent が null＝START_STICKY による再起動（OSにkillされた後など）。
+      // アクティブなトラックがあれば記録を再開して自己回復する。
+      null -> restoreTrackingIfNeeded()
     }
     return START_STICKY
   }
@@ -150,6 +155,25 @@ class LocationTrackingService : Service() {
     startLocationUpdates()
   }
 
+  /**
+   * START_STICKY 再起動時に、DB にアクティブなトラックが残っていれば記録を再開する。
+   * 無ければサービスを終了する。
+   */
+  private fun restoreTrackingIfNeeded() {
+    serviceScope.launch {
+      val activeTrack = gpsTrackDao.getActiveTrack()
+      if (activeTrack != null) {
+        Log.d("LocationService", "Restoring tracking for active track ${activeTrack.id}")
+        withContext(Dispatchers.Main) {
+          startLocationTracking(resumeTrackId = activeTrack.id)
+        }
+      } else {
+        Log.d("LocationService", "No active track to restore; stopping service")
+        stopSelf()
+      }
+    }
+  }
+
   private fun stopLocationTracking() {
     isTracking = false
     stopLocationUpdates()
@@ -173,12 +197,14 @@ class LocationTrackingService : Service() {
       return
     }
 
+    // 設定された記録間隔（秒）を使う。バッチ許容で省電力化。
+    val intervalMs = settingsRepository.currentGpsIntervalSeconds() * 1000L
     val locationRequest = LocationRequest.Builder(
       Priority.PRIORITY_BALANCED_POWER_ACCURACY,
-      LOCATION_REQUEST_INTERVAL,
+      intervalMs,
     )
-      .setMinUpdateIntervalMillis(LOCATION_REQUEST_FASTEST_INTERVAL)
-      .setMaxUpdateDelayMillis(LOCATION_REQUEST_INTERVAL)
+      .setMinUpdateIntervalMillis(intervalMs / 2)
+      .setMaxUpdateDelayMillis(intervalMs + intervalMs / 2)
       .build()
 
     locationCallback = object : LocationCallback() {
