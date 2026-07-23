@@ -54,7 +54,12 @@ class OfflineDataStorageTest {
     gpsPointDao = database.gpsPointDao()
 
     encryptionHelper = EncryptionHelper(context)
-    repository = GpsTrackRepositoryImpl(gpsTrackDao, gpsPointDao, encryptionHelper)
+    repository = GpsTrackRepositoryImpl(
+      gpsTrackDao,
+      gpsPointDao,
+      database.smoothedPointDao(),
+      encryptionHelper,
+    )
   }
 
   @After

@@ -60,33 +60,33 @@ object DatabaseMigrations {
   }
 
   /**
-   * バージョン2から3へのマイグレーション
-   * 例: テーブル構造の変更、データ型の変更など
+   * バージョン2から3へのマイグレーション。
+   * 補正後（スムージング済み）の点列を保存する smoothed_points テーブルを追加する
+   * （docs/designs/gps-smoothing.md）。
+   *
+   * DDL は Room がエンティティから生成するものと一致させること（起動時のスキーマ検証を通すため）。
    */
   val MIGRATION_2_3 = object : Migration(2, 3) {
     override fun migrate(db: SupportSQLiteDatabase) {
       try {
         Logger.i(TAG, "Starting migration from version 2 to 3")
 
-        // 例: 新しいテーブルの作成
-        // db.execSQL("""
-        //     CREATE TABLE IF NOT EXISTS stops (
-        //         id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
-        //         track_id INTEGER NOT NULL,
-        //         latitude REAL NOT NULL,
-        //         longitude REAL NOT NULL,
-        //         name TEXT NOT NULL,
-        //         arrival_time INTEGER NOT NULL,
-        //         departure_time INTEGER,
-        //         created_at INTEGER NOT NULL,
-        //         FOREIGN KEY(track_id) REFERENCES gps_tracks(id) ON DELETE CASCADE
-        //     )
-        // """.trimIndent())
-
-        // 例: 新しいテーブルのインデックス作成
-        // db.execSQL(
-        //     "CREATE INDEX IF NOT EXISTS index_stops_track_id ON stops(track_id)"
-        // )
+        // smoothed_points（補正後の点列・gps_tracks に従属）
+        db.execSQL(
+          "CREATE TABLE IF NOT EXISTS `smoothed_points` (" +
+            "`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+            "`trackId` INTEGER NOT NULL, " +
+            "`seq` INTEGER NOT NULL, " +
+            "`latitude` REAL NOT NULL, " +
+            "`longitude` REAL NOT NULL, " +
+            "`timestamp` INTEGER NOT NULL, " +
+            "`sourcePointId` INTEGER, " +
+            "`createdAt` INTEGER NOT NULL, " +
+            "FOREIGN KEY(`trackId`) REFERENCES `gps_tracks`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+        )
+        db.execSQL(
+          "CREATE INDEX IF NOT EXISTS `index_smoothed_points_trackId` ON `smoothed_points` (`trackId`)",
+        )
 
         Logger.i(TAG, "Migration from version 2 to 3 completed successfully")
       } catch (e: Exception) {

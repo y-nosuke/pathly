@@ -10,9 +10,20 @@ data class GpsTrack(
   val points: List<GpsPoint> = emptyList(),
   val createdAt: Date,
   val updatedAt: Date,
+  /**
+   * 保存済みの補正後点列（smoothed_points）。リポジトリが読み込んで渡す。
+   * null または空なら [points] から都度計算にフォールバックする（docs/designs/gps-smoothing.md）。
+   */
+  val smoothedOverride: List<GpsPoint>? = null,
 ) {
-  /** ノイズ補正後の点列（非破壊・表示や距離計算に使う）。原データ [points] は保持する。 */
-  val smoothedPoints: List<GpsPoint> by lazy { TrackSmoother.smooth(points) }
+  /**
+   * ノイズ補正後の点列（非破壊・表示や距離計算に使う）。原データ [points] は保持する。
+   * 保存済みがあればそれを、無ければ都度計算した結果を使う。
+   */
+  val smoothedPoints: List<GpsPoint>
+    get() = smoothedOverride?.takeIf { it.isNotEmpty() } ?: computedSmoothedPoints
+
+  private val computedSmoothedPoints: List<GpsPoint> by lazy { TrackSmoother.smooth(points) }
 
   /** 補正後の点列で計算した総移動距離。 */
   val totalDistanceMeters: Double

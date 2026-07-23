@@ -5,6 +5,7 @@ import com.pathly.data.local.PathlyDatabase
 import com.pathly.data.local.dao.GpsPointDao
 import com.pathly.data.local.dao.GpsTrackDao
 import com.pathly.data.local.dao.PlaceDao
+import com.pathly.data.local.dao.SmoothedPointDao
 import com.pathly.data.local.dao.StopDao
 import com.pathly.util.EncryptionHelper
 import dagger.Module
@@ -37,4 +38,7 @@ object DatabaseModule {
 
   @Provides
   fun provideStopDao(database: PathlyDatabase): StopDao = database.stopDao()
+
+  @Provides
+  fun provideSmoothedPointDao(database: PathlyDatabase): SmoothedPointDao = database.smoothedPointDao()
 }

@@ -3,6 +3,7 @@ package com.pathly.data.repository
 import androidx.arch.core.executor.testing.InstantTaskExecutorRule
 import com.pathly.data.local.dao.GpsPointDao
 import com.pathly.data.local.dao.GpsTrackDao
+import com.pathly.data.local.dao.SmoothedPointDao
 import com.pathly.data.local.entity.GpsPointEntity
 import com.pathly.data.local.entity.GpsTrackEntity
 import com.pathly.data.local.entity.GpsTrackWithPoints
@@ -39,6 +40,7 @@ class GpsTrackRepositoryImplTest {
   private val testDispatcher = StandardTestDispatcher()
   private val mockGpsTrackDao = mockk<GpsTrackDao>(relaxed = true)
   private val mockGpsPointDao = mockk<GpsPointDao>(relaxed = true)
+  private val mockSmoothedPointDao = mockk<SmoothedPointDao>(relaxed = true)
   private val mockEncryptionHelper = mockk<EncryptionHelper>(relaxed = true)
 
   private lateinit var repository: GpsTrackRepositoryImpl
@@ -46,7 +48,12 @@ class GpsTrackRepositoryImplTest {
   @Before
   fun setup() {
     Dispatchers.setMain(testDispatcher)
-    repository = GpsTrackRepositoryImpl(mockGpsTrackDao, mockGpsPointDao, mockEncryptionHelper)
+    repository = GpsTrackRepositoryImpl(
+      mockGpsTrackDao,
+      mockGpsPointDao,
+      mockSmoothedPointDao,
+      mockEncryptionHelper,
+    )
   }
 
   @After
