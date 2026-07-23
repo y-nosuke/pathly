@@ -9,15 +9,19 @@ import androidx.sqlite.db.SupportSQLiteDatabase
 import com.pathly.data.local.converter.DateConverter
 import com.pathly.data.local.dao.GpsPointDao
 import com.pathly.data.local.dao.GpsTrackDao
+import com.pathly.data.local.dao.PlaceDao
+import com.pathly.data.local.dao.StopDao
 import com.pathly.data.local.entity.GpsPointEntity
 import com.pathly.data.local.entity.GpsTrackEntity
+import com.pathly.data.local.entity.PlaceEntity
+import com.pathly.data.local.entity.StopEntity
 import com.pathly.data.local.migration.DatabaseMigrations
 import com.pathly.util.EncryptionHelper
 import com.pathly.util.Logger
 
 @Database(
-  entities = [GpsTrackEntity::class, GpsPointEntity::class],
-  version = 1,
+  entities = [GpsTrackEntity::class, GpsPointEntity::class, PlaceEntity::class, StopEntity::class],
+  version = 2,
   exportSchema = false,
 )
 @TypeConverters(DateConverter::class)
@@ -25,6 +29,8 @@ abstract class PathlyDatabase : RoomDatabase() {
 
   abstract fun gpsTrackDao(): GpsTrackDao
   abstract fun gpsPointDao(): GpsPointDao
+  abstract fun placeDao(): PlaceDao
+  abstract fun stopDao(): StopDao
 
   companion object {
     const val DATABASE_NAME = "pathly_database"

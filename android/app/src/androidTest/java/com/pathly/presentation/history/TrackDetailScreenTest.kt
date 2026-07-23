@@ -9,6 +9,8 @@ import androidx.compose.ui.test.performClick
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.pathly.domain.model.GpsPoint
 import com.pathly.domain.model.GpsTrack
+import com.pathly.domain.model.Place
+import com.pathly.domain.model.Stop
 import com.pathly.ui.theme.PathlyAndroidTheme
 import io.mockk.mockk
 import io.mockk.verify
@@ -256,6 +258,71 @@ class TrackDetailScreenTest {
     composeTestRule
       .onNodeWithText("30分", substring = true)
       .assertIsDisplayed()
+  }
+
+  @Test
+  fun trackDetailScreen_showsStopWithPlaceName() {
+    val track = createSampleTrack()
+    val stops = listOf(sampleStop(name = "テストカフェ"))
+
+    composeTestRule.setContent {
+      PathlyAndroidTheme {
+        TrackDetailScreen(
+          track = track,
+          onBackClick = mockOnBackClick,
+          stops = stops,
+        )
+      }
+    }
+
+    composeTestRule.onNodeWithText("立ち寄り 1件").assertIsDisplayed()
+    composeTestRule.onNodeWithText("テストカフェ").assertIsDisplayed()
+  }
+
+  @Test
+  fun trackDetailScreen_tapStop_opensDialogAndSaveTriggersCallback() {
+    val onEdit = mockk<(Long, String) -> Unit>(relaxed = true)
+    val track = createSampleTrack()
+    val stops = listOf(sampleStop(placeId = 9L, name = "旧名"))
+
+    composeTestRule.setContent {
+      PathlyAndroidTheme {
+        TrackDetailScreen(
+          track = track,
+          onBackClick = mockOnBackClick,
+          stops = stops,
+          onEditPlaceName = onEdit,
+        )
+      }
+    }
+
+    composeTestRule.onNodeWithText("旧名").performClick()
+    composeTestRule.onNodeWithText("場所の名前").assertIsDisplayed()
+    composeTestRule.onNodeWithText("保存").performClick()
+
+    verify { onEdit(9L, "旧名") }
+  }
+
+  private fun sampleStop(
+    placeId: Long = 1L,
+    name: String? = null,
+  ): Stop {
+    val place = Place(
+      id = placeId,
+      name = name,
+      latitude = 35.0,
+      longitude = 139.0,
+      address = null,
+      createdAt = Date(0L),
+      updatedAt = Date(0L),
+    )
+    return Stop(
+      id = 1L,
+      place = place,
+      trackId = 123L,
+      arrivalTime = Date(1640995200000L),
+      departureTime = Date(1640995200000L + 300000L),
+    )
   }
 
   private fun createSampleTrack(

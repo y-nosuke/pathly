@@ -14,6 +14,7 @@ hilt = "2.60.1"
 playServicesLocation = "21.4.0"
 playServicesMaps = "20.0.0"
 mapsCompose = "8.4.0"
+places = "5.1.1"
 accompanistPermissions = "0.37.3"
 kotlinxCoroutines = "1.11.0"
 hiltNavigationCompose = "1.4.0"
@@ -51,6 +52,7 @@ play-services-location = { group = "com.google.android.gms", name = "play-servic
 # Maps
 play-services-maps = { group = "com.google.android.gms", name = "play-services-maps", version.ref = "playServicesMaps" }
 maps-compose = { group = "com.google.maps.android", name = "maps-compose", version.ref = "mapsCompose" }
+places = { group = "com.google.android.libraries.places", name = "places", version.ref = "places" }
 
 # Permissions
 accompanist-permissions = { group = "com.google.accompanist", name = "accompanist-permissions", version.ref = "accompanistPermissions" }

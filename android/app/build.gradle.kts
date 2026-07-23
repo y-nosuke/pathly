@@ -113,6 +113,9 @@ dependencies {
   implementation(libs.play.services.maps)
   implementation(libs.maps.compose)
 
+  // Places (立ち寄り場所の命名)
+  implementation(libs.places)
+
   // Permissions
   implementation(libs.accompanist.permissions)
 

@@ -219,7 +219,7 @@ app/src/main/java/com/pathly/
 
 - **位置権限：** ACCESS_FINE_LOCATION + ACCESS_COARSE_LOCATION必須
 - **バックグラウンド実行：** LocationTrackingService使用
-- **データベースバージョン：** Room v1。破壊的フォールバックは無効。スキーマ変更時は `DatabaseMigrations` に正式なマイグレーションを追加すること
+- **データベースバージョン：** Room v2（v2 で places/stops 追加）。破壊的フォールバックは無効。スキーマ変更時は `DatabaseMigrations` に正式なマイグレーションを追加すること
 - **最小SDK：** API 34（Android 14）以上 / compileSdk 37・targetSdk 36
 - **ビルド環境：** AGP 9.2 / Gradle 9.6 / Kotlin 2.3（AGP内蔵Kotlin）。KotlinはAGPバンドル版に連動するため独立に最新化しないこと
 - **アノテーション処理：** KSP使用（Room/Hilt）。kaptは廃止
