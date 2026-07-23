@@ -71,6 +71,7 @@ fun TrackDetailScreen(
   stops: List<Stop> = emptyList(),
   onEditPlaceName: (placeId: Long, name: String) -> Unit = { _, _ -> },
   onRetryNaming: () -> Unit = {},
+  onRecompute: () -> Unit = {},
 ) {
   val scaffoldState = rememberBottomSheetScaffoldState()
   var tuningMode by remember { mutableStateOf(false) }
@@ -100,6 +101,7 @@ fun TrackDetailScreen(
           stops = stops,
           onStopClick = { editingStop = it },
           onRetryNaming = onRetryNaming,
+          onRecompute = onRecompute,
         )
       }
     },
@@ -221,6 +223,7 @@ private fun TrackDetailSheet(
   stops: List<Stop>,
   onStopClick: (Stop) -> Unit,
   onRetryNaming: () -> Unit,
+  onRecompute: () -> Unit,
   modifier: Modifier = Modifier,
 ) {
   Column(
@@ -316,6 +319,23 @@ private fun TrackDetailSheet(
             modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
           )
         }
+      }
+    }
+
+    // 軌跡を生データから作り直す（アルゴリズム修正の反映・記録中に保存できなかったときの保険）。
+    if (track.points.size >= 2 && !track.isActive) {
+      Surface(
+        onClick = onRecompute,
+        shape = RoundedCornerShape(20.dp),
+        color = MaterialTheme.colorScheme.tertiaryContainer,
+      ) {
+        Text(
+          text = "軌跡を再補正",
+          style = MaterialTheme.typography.labelLarge,
+          color = MaterialTheme.colorScheme.onTertiaryContainer,
+          fontWeight = FontWeight.Medium,
+          modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+        )
       }
     }
   }

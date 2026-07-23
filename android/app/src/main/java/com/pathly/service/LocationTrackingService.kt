@@ -27,6 +27,7 @@ import com.pathly.data.local.dao.GpsTrackDao
 import com.pathly.data.local.entity.GpsPointEntity
 import com.pathly.data.local.entity.GpsTrackEntity
 import com.pathly.data.settings.SettingsRepository
+import com.pathly.domain.repository.GpsTrackRepository
 import com.pathly.util.PermissionUtils
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.CoroutineScope
@@ -71,6 +72,9 @@ class LocationTrackingService : Service() {
 
   @Inject
   lateinit var settingsRepository: SettingsRepository
+
+  @Inject
+  lateinit var gpsTrackRepository: GpsTrackRepository
 
   private val binder = LocationTrackingBinder()
   private lateinit var fusedLocationClient: FusedLocationProviderClient
@@ -140,6 +144,10 @@ class LocationTrackingService : Service() {
       // 中断されたトラックに続けて記録する
       currentTrackId = resumeTrackId
       Log.d("LocationService", "Resuming existing track with ID: $resumeTrackId")
+      // 中断中にたまった生点の補正を追いつかせる。
+      serviceScope.launch {
+        gpsTrackRepository.updateSmoothedForTrack(resumeTrackId, isFinal = false)
+      }
     } else {
       serviceScope.launch {
         // 新しいトラックを作成
@@ -180,6 +188,8 @@ class LocationTrackingService : Service() {
 
     serviceScope.launch {
       currentTrackId?.let { trackId ->
+        // 記録終了時に末尾の暫定点まで確定して保存する。
+        gpsTrackRepository.updateSmoothedForTrack(trackId, isFinal = true)
         gpsTrackDao.finishTrack(trackId, Date())
       }
       currentTrackId = null
@@ -357,6 +367,9 @@ class LocationTrackingService : Service() {
         )
 
         gpsPointDao.insertPoint(gpsPoint)
+
+        // 新しい点までの補正を計算し、確定分だけ保存する（末尾は暫定なので保存しない）。
+        gpsTrackRepository.updateSmoothedForTrack(trackId, isFinal = false)
       }
     }
   }

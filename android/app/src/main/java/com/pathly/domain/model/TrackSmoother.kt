@@ -27,8 +27,12 @@ data class SmoothingParams(
  */
 object TrackSmoother {
 
-  /** 直前の採用点からの速度がこれを超える点は GPS ジャンプとして除外する。単位: m/s（約200km/h）。 */
-  const val MAX_SPEED_MPS = 55.0
+  /**
+   * 直前の採用点からの速度がこれを超える点は GPS ジャンプとして除外する。単位: m/s。
+   * 乗り物（新幹線 ≒ 83 m/s）は通し、1サンプルで数km飛ぶグリッチ（数百 m/s）だけ落とす高さにする。
+   * 低すぎると新幹線区間が丸ごと除外され距離を過小評価するため 150 m/s（≒540km/h）とする。
+   */
+  const val MAX_SPEED_MPS = 150.0
 
   /** 平滑化の窓サイズ（奇数）。大きいほど滑らかになる。 */
   const val SMOOTHING_WINDOW = 5
