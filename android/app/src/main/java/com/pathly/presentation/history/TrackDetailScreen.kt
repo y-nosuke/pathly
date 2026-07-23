@@ -233,6 +233,24 @@ private fun TrackDetailSheet(
         modifier = Modifier.weight(1f),
       )
     }
+
+    if (track.stops.isNotEmpty()) {
+      Text(
+        text = "立ち寄り ${track.stops.size}件",
+        style = MaterialTheme.typography.titleSmall,
+        fontWeight = FontWeight.Bold,
+        modifier = Modifier.padding(top = 4.dp),
+      )
+      track.stops.forEach { stop ->
+        Text(
+          text = "${DateFormatters.SHORT_TIME_FORMAT.format(stop.arrivalTime)}" +
+            " – ${DateFormatters.SHORT_TIME_FORMAT.format(stop.departureTime)}" +
+            " ・ 滞在${stop.durationMinutes}分",
+          style = MaterialTheme.typography.bodyMedium,
+          color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+      }
+    }
   }
 }
 
@@ -429,6 +447,19 @@ private fun TrackMapView(
         icon = BitmapDescriptorFactory.defaultMarker(
           if (track.isActive) BitmapDescriptorFactory.HUE_BLUE else BitmapDescriptorFactory.HUE_RED,
         ),
+      )
+    }
+
+    // 立ち寄り場所（紫のピン）
+    track.stops.forEach { stop ->
+      val stopMarkerState = remember(stop) {
+        MarkerState(position = LatLng(stop.latitude, stop.longitude))
+      }
+      Marker(
+        state = stopMarkerState,
+        title = "立ち寄り",
+        snippet = "${DateFormatters.SHORT_TIME_FORMAT.format(stop.arrivalTime)} ・ 滞在${stop.durationMinutes}分",
+        icon = BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_VIOLET),
       )
     }
   }
