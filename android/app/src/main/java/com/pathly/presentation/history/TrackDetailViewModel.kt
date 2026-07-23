@@ -44,4 +44,10 @@ class TrackDetailViewModel @Inject constructor(
   fun updatePlaceName(placeId: Long, name: String) {
     viewModelScope.launch { placeRepository.updatePlaceName(placeId, name) }
   }
+
+  /** 未命名の場所を Places で取り直す（オフラインで命名できなかった分の手動再実行）。 */
+  fun retryNaming() {
+    val trackId = loadedTrackId ?: return
+    viewModelScope.launch { placeRepository.resolveMissingNames(trackId) }
+  }
 }

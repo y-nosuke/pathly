@@ -139,6 +139,7 @@ private fun MainScreen(
           modifier = Modifier.padding(innerPadding),
           stops = stops,
           onEditPlaceName = { placeId, name -> detailViewModel.updatePlaceName(placeId, name) },
+          onRetryNaming = { detailViewModel.retryNaming() },
         )
       }
 

@@ -73,7 +73,7 @@ class PlaceRepositoryImpl @Inject constructor(
     return placeDao.insert(PlaceEntity(latitude = latitude, longitude = longitude))
   }
 
-  private suspend fun resolveMissingNames(trackId: Long) {
+  override suspend fun resolveMissingNames(trackId: Long) {
     val unnamed = placeDao.getUnnamedPlacesForTrack(trackId)
     for (place in unnamed) {
       val result = placesNameResolver.resolve(place.latitude, place.longitude) ?: continue

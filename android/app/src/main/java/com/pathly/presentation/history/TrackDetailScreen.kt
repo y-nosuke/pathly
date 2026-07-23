@@ -70,6 +70,7 @@ fun TrackDetailScreen(
   modifier: Modifier = Modifier,
   stops: List<Stop> = emptyList(),
   onEditPlaceName: (placeId: Long, name: String) -> Unit = { _, _ -> },
+  onRetryNaming: () -> Unit = {},
 ) {
   val scaffoldState = rememberBottomSheetScaffoldState()
   var tuningMode by remember { mutableStateOf(false) }
@@ -98,6 +99,7 @@ fun TrackDetailScreen(
           track = track,
           stops = stops,
           onStopClick = { editingStop = it },
+          onRetryNaming = onRetryNaming,
         )
       }
     },
@@ -218,6 +220,7 @@ private fun TrackDetailSheet(
   track: GpsTrack,
   stops: List<Stop>,
   onStopClick: (Stop) -> Unit,
+  onRetryNaming: () -> Unit,
   modifier: Modifier = Modifier,
 ) {
   Column(
@@ -296,6 +299,23 @@ private fun TrackDetailSheet(
       )
       stops.forEach { stop ->
         StopRow(stop = stop, onClick = { onStopClick(stop) })
+      }
+
+      val unnamedCount = stops.count { it.place.name == null }
+      if (unnamedCount > 0) {
+        Surface(
+          onClick = onRetryNaming,
+          shape = RoundedCornerShape(20.dp),
+          color = MaterialTheme.colorScheme.secondaryContainer,
+        ) {
+          Text(
+            text = "未命名 ${unnamedCount}件の名前を取得",
+            style = MaterialTheme.typography.labelLarge,
+            color = MaterialTheme.colorScheme.onSecondaryContainer,
+            fontWeight = FontWeight.Medium,
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+          )
+        }
       }
     }
   }

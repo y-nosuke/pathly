@@ -106,6 +106,30 @@ class PlaceRepositoryImplTest {
   }
 
   @Test
+  fun resolveMissingNames_namesUnnamedPlaces() = runTest {
+    coEvery { placeDao.getUnnamedPlacesForTrack(1L) } returns listOf(
+      PlaceEntity(id = 5L, latitude = 35.0, longitude = 139.0),
+    )
+    coEvery { resolver.resolve(any(), any()) } returns PlacesNameResolver.Result("名前", "住所")
+
+    repository.resolveMissingNames(1L)
+
+    coVerify { placeDao.updateNameAndAddress(5L, "名前", "住所", any()) }
+  }
+
+  @Test
+  fun resolveMissingNames_whenPlacesReturnsNull_keepsUnnamed() = runTest {
+    coEvery { placeDao.getUnnamedPlacesForTrack(1L) } returns listOf(
+      PlaceEntity(id = 5L, latitude = 35.0, longitude = 139.0),
+    )
+    coEvery { resolver.resolve(any(), any()) } returns null
+
+    repository.resolveMissingNames(1L)
+
+    coVerify(exactly = 0) { placeDao.updateNameAndAddress(any(), any(), any(), any()) }
+  }
+
+  @Test
   fun updatePlaceName_blankBecomesNull() = runTest {
     repository.updatePlaceName(5L, "   ")
     coVerify { placeDao.updateName(5L, null, any()) }

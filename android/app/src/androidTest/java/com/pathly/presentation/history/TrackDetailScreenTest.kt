@@ -303,6 +303,27 @@ class TrackDetailScreenTest {
     verify { onEdit(9L, "旧名") }
   }
 
+  @Test
+  fun trackDetailScreen_unnamedStop_showsRetryButtonAndTriggersCallback() {
+    val onRetry = mockk<() -> Unit>(relaxed = true)
+    val track = createSampleTrack()
+    val stops = listOf(sampleStop(name = null))
+
+    composeTestRule.setContent {
+      PathlyAndroidTheme {
+        TrackDetailScreen(
+          track = track,
+          onBackClick = mockOnBackClick,
+          stops = stops,
+          onRetryNaming = onRetry,
+        )
+      }
+    }
+
+    composeTestRule.onNodeWithText("名前を取得", substring = true).performClick()
+    verify { onRetry() }
+  }
+
   private fun sampleStop(
     placeId: Long = 1L,
     name: String? = null,
