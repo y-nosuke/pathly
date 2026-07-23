@@ -35,7 +35,7 @@ class PlaceRepositoryImpl @Inject constructor(
 
   override suspend fun ensureStopsDetected(track: GpsTrack) {
     try {
-      // 未検出のときだけ検出して保存する（冪等）。
+      // 未検出のときだけ検出・保存・命名する（冪等）。開き直しても再評価・再命名しない。
       if (stopDao.countByTrack(track.id) == 0) {
         val detected = StopDetector.detect(track.smoothedPoints)
         for (d in detected) {
@@ -50,9 +50,11 @@ class PlaceRepositoryImpl @Inject constructor(
           )
         }
         logger.i("Stored ${detected.size} stops for track ${track.id}")
+
+        // 名前の無い場所を Places で命名（この初回検出時に1回だけ）。
+        // 取れなければ null のまま（手動命名にフォールバック）。places に試行状態は持たせない。
+        resolveMissingNames(track.id)
       }
-      // 名前の無い場所を Places で命名（オンライン時のみ・キャッシュ）。
-      resolveMissingNames(track.id)
     } catch (e: Exception) {
       logger.e("ensureStopsDetected failed for track ${track.id}", e)
     }

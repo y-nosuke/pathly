@@ -75,15 +75,16 @@ class PlaceRepositoryImplTest {
   }
 
   @Test
-  fun ensureStopsDetected_whenStopsExist_skipsDetectionButResolvesNames() = runTest {
+  fun ensureStopsDetected_whenStopsExist_skipsDetectionAndNaming() = runTest {
     coEvery { stopDao.countByTrack(1L) } returns 2
-    coEvery { placeDao.getUnnamedPlacesForTrack(1L) } returns emptyList()
 
     repository.ensureStopsDetected(stationaryTrack())
 
+    // 保存済みなら検出も命名も再実行しない（開き直しで再評価・再課金しない）。
     coVerify(exactly = 0) { stopDao.insert(any()) }
     coVerify(exactly = 0) { placeDao.insert(any()) }
-    coVerify { placeDao.getUnnamedPlacesForTrack(1L) }
+    coVerify(exactly = 0) { placeDao.getUnnamedPlacesForTrack(any()) }
+    coVerify(exactly = 0) { resolver.resolve(any(), any()) }
   }
 
   @Test
