@@ -1,5 +1,6 @@
 package com.pathly.presentation.history
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -10,13 +11,16 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.BottomSheetScaffold
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberBottomSheetScaffoldState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -48,6 +52,7 @@ import com.pathly.R
 import com.pathly.domain.model.GpsPoint
 import com.pathly.domain.model.GpsTrack
 import com.pathly.domain.model.SmoothingParams
+import com.pathly.domain.model.Stop
 import com.pathly.domain.model.TrackSmoother
 import com.pathly.ui.theme.TrackLineOrange
 import com.pathly.util.DateFormatters
@@ -63,10 +68,14 @@ fun TrackDetailScreen(
   track: GpsTrack,
   onBackClick: () -> Unit,
   modifier: Modifier = Modifier,
+  stops: List<Stop> = emptyList(),
+  onEditPlaceName: (placeId: Long, name: String) -> Unit = { _, _ -> },
+  onRetryNaming: () -> Unit = {},
 ) {
   val scaffoldState = rememberBottomSheetScaffoldState()
   var tuningMode by remember { mutableStateOf(false) }
   var tuningParams by remember { mutableStateOf(SmoothingParams()) }
+  var editingStop by remember { mutableStateOf<Stop?>(null) }
 
   // 地図に描く点列。調整モードではスライダーの値で補正する。
   val displayPoints = remember(track, tuningMode, tuningParams) {
@@ -86,7 +95,12 @@ fun TrackDetailScreen(
           onParamsChange = { tuningParams = it },
         )
       } else {
-        TrackDetailSheet(track = track)
+        TrackDetailSheet(
+          track = track,
+          stops = stops,
+          onStopClick = { editingStop = it },
+          onRetryNaming = onRetryNaming,
+        )
       }
     },
   ) { innerPadding ->
@@ -99,6 +113,7 @@ fun TrackDetailScreen(
         TrackMapView(
           track = track,
           displayPoints = displayPoints,
+          stops = stops,
           showRawOverlay = tuningMode,
           contentPadding = PaddingValues(bottom = peek),
           modifier = Modifier.fillMaxSize(),
@@ -160,11 +175,52 @@ fun TrackDetailScreen(
       }
     }
   }
+
+  editingStop?.let { stop ->
+    PlaceNameDialog(
+      stop = stop,
+      onDismiss = { editingStop = null },
+      onConfirm = { name ->
+        onEditPlaceName(stop.place.id, name)
+        editingStop = null
+      },
+    )
+  }
+}
+
+@Composable
+private fun PlaceNameDialog(
+  stop: Stop,
+  onDismiss: () -> Unit,
+  onConfirm: (String) -> Unit,
+) {
+  var text by remember(stop.id) { mutableStateOf(stop.place.name ?: "") }
+  AlertDialog(
+    onDismissRequest = onDismiss,
+    title = { Text("場所の名前") },
+    text = {
+      OutlinedTextField(
+        value = text,
+        onValueChange = { text = it },
+        singleLine = true,
+        placeholder = { Text("例: スターバックス ◯◯店") },
+      )
+    },
+    confirmButton = {
+      TextButton(onClick = { onConfirm(text) }) { Text("保存") }
+    },
+    dismissButton = {
+      TextButton(onClick = onDismiss) { Text("キャンセル") }
+    },
+  )
 }
 
 @Composable
 private fun TrackDetailSheet(
   track: GpsTrack,
+  stops: List<Stop>,
+  onStopClick: (Stop) -> Unit,
+  onRetryNaming: () -> Unit,
   modifier: Modifier = Modifier,
 ) {
   Column(
@@ -234,23 +290,62 @@ private fun TrackDetailSheet(
       )
     }
 
-    if (track.stops.isNotEmpty()) {
+    if (stops.isNotEmpty()) {
       Text(
-        text = "立ち寄り ${track.stops.size}件",
+        text = "立ち寄り ${stops.size}件",
         style = MaterialTheme.typography.titleSmall,
         fontWeight = FontWeight.Bold,
         modifier = Modifier.padding(top = 4.dp),
       )
-      track.stops.forEach { stop ->
-        Text(
-          text = "${DateFormatters.SHORT_TIME_FORMAT.format(stop.arrivalTime)}" +
-            " – ${DateFormatters.SHORT_TIME_FORMAT.format(stop.departureTime)}" +
-            " ・ 滞在${stop.durationMinutes}分",
-          style = MaterialTheme.typography.bodyMedium,
-          color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
+      stops.forEach { stop ->
+        StopRow(stop = stop, onClick = { onStopClick(stop) })
+      }
+
+      val unnamedCount = stops.count { it.place.name == null }
+      if (unnamedCount > 0) {
+        Surface(
+          onClick = onRetryNaming,
+          shape = RoundedCornerShape(20.dp),
+          color = MaterialTheme.colorScheme.secondaryContainer,
+        ) {
+          Text(
+            text = "未命名 ${unnamedCount}件の名前を取得",
+            style = MaterialTheme.typography.labelLarge,
+            color = MaterialTheme.colorScheme.onSecondaryContainer,
+            fontWeight = FontWeight.Medium,
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+          )
+        }
       }
     }
+  }
+}
+
+@Composable
+private fun StopRow(
+  stop: Stop,
+  onClick: () -> Unit,
+) {
+  val title = stop.place.name
+    ?: "%.5f, %.5f".format(stop.place.latitude, stop.place.longitude)
+  Column(
+    modifier = Modifier
+      .fillMaxWidth()
+      .clickable(onClick = onClick)
+      .padding(vertical = 4.dp),
+  ) {
+    Text(
+      text = title,
+      style = MaterialTheme.typography.bodyLarge,
+      fontWeight = FontWeight.Medium,
+    )
+    Text(
+      text = "${DateFormatters.SHORT_TIME_FORMAT.format(stop.arrivalTime)}" +
+        " – ${DateFormatters.SHORT_TIME_FORMAT.format(stop.departureTime)}" +
+        " ・ 滞在${stop.durationMinutes}分",
+      style = MaterialTheme.typography.bodyMedium,
+      color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
   }
 }
 
@@ -368,6 +463,7 @@ private fun TrackMapView(
   track: GpsTrack,
   displayPoints: List<GpsPoint>,
   modifier: Modifier = Modifier,
+  stops: List<Stop> = emptyList(),
   showRawOverlay: Boolean = false,
   contentPadding: PaddingValues = PaddingValues(0.dp),
 ) {
@@ -451,13 +547,13 @@ private fun TrackMapView(
     }
 
     // 立ち寄り場所（紫のピン）
-    track.stops.forEach { stop ->
-      val stopMarkerState = remember(stop) {
-        MarkerState(position = LatLng(stop.latitude, stop.longitude))
+    stops.forEach { stop ->
+      val stopMarkerState = remember(stop.id, stop.place.latitude, stop.place.longitude) {
+        MarkerState(position = LatLng(stop.place.latitude, stop.place.longitude))
       }
       Marker(
         state = stopMarkerState,
-        title = "立ち寄り",
+        title = stop.place.name ?: "立ち寄り",
         snippet = "${DateFormatters.SHORT_TIME_FORMAT.format(stop.arrivalTime)} ・ 滞在${stop.durationMinutes}分",
         icon = BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_VIOLET),
       )

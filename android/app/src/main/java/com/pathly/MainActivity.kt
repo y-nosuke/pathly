@@ -17,6 +17,8 @@ import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -27,6 +29,7 @@ import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import com.pathly.domain.model.GpsTrack
 import com.pathly.presentation.history.HistoryScreen
 import com.pathly.presentation.history.TrackDetailScreen
+import com.pathly.presentation.history.TrackDetailViewModel
 import com.pathly.presentation.settings.SettingsScreen
 import com.pathly.presentation.tracking.TrackingScreen
 import com.pathly.presentation.tracking.TrackingViewModel
@@ -126,10 +129,17 @@ private fun MainScreen(
   ) { innerPadding ->
     when {
       selectedTrack != null -> {
+        val track = selectedTrack!!
+        val detailViewModel: TrackDetailViewModel = hiltViewModel()
+        val stops by detailViewModel.stops.collectAsState()
+        LaunchedEffect(track.id) { detailViewModel.load(track) }
         TrackDetailScreen(
-          track = selectedTrack!!,
+          track = track,
           onBackClick = { selectedTrack = null },
           modifier = Modifier.padding(innerPadding),
+          stops = stops,
+          onEditPlaceName = { placeId, name -> detailViewModel.updatePlaceName(placeId, name) },
+          onRetryNaming = { detailViewModel.retryNaming() },
         )
       }
 

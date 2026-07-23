@@ -13,23 +13,43 @@ object DatabaseMigrations {
   private const val TAG = "DatabaseMigrations"
 
   /**
-   * バージョン1から2へのマイグレーション
-   * 例: 新しいカラムの追加、インデックスの作成など
+   * バージョン1から2へのマイグレーション。
+   * 立ち寄り場所の永続化のため places / stops テーブルを追加する
+   * （docs/designs/places-and-stops.md）。
+   *
+   * DDL は Room がエンティティから生成するものと一致させること（起動時のスキーマ検証を通すため）。
    */
   val MIGRATION_1_2 = object : Migration(1, 2) {
     override fun migrate(db: SupportSQLiteDatabase) {
       try {
         Logger.i(TAG, "Starting migration from version 1 to 2")
 
-        // 例: gps_tracks テーブルに新しいカラムを追加
-        // db.execSQL(
-        //     "ALTER TABLE gps_tracks ADD COLUMN notes TEXT DEFAULT ''"
-        // )
+        // places（場所そのもの・経路と独立）
+        db.execSQL(
+          "CREATE TABLE IF NOT EXISTS `places` (" +
+            "`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+            "`name` TEXT, " +
+            "`latitude` REAL NOT NULL, " +
+            "`longitude` REAL NOT NULL, " +
+            "`address` TEXT, " +
+            "`createdAt` INTEGER NOT NULL, " +
+            "`updatedAt` INTEGER NOT NULL)",
+        )
 
-        // 例: パフォーマンス向上のためのインデックス追加
-        // db.execSQL(
-        //     "CREATE INDEX IF NOT EXISTS index_gps_tracks_created_at ON gps_tracks(created_at)"
-        // )
+        // stops（立ち寄り＝places と gps_tracks の関連）
+        db.execSQL(
+          "CREATE TABLE IF NOT EXISTS `stops` (" +
+            "`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+            "`placeId` INTEGER NOT NULL, " +
+            "`trackId` INTEGER NOT NULL, " +
+            "`arrivalTime` INTEGER NOT NULL, " +
+            "`departureTime` INTEGER NOT NULL, " +
+            "`createdAt` INTEGER NOT NULL, " +
+            "FOREIGN KEY(`trackId`) REFERENCES `gps_tracks`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE , " +
+            "FOREIGN KEY(`placeId`) REFERENCES `places`(`id`) ON UPDATE NO ACTION ON DELETE NO ACTION )",
+        )
+        db.execSQL("CREATE INDEX IF NOT EXISTS `index_stops_placeId` ON `stops` (`placeId`)")
+        db.execSQL("CREATE INDEX IF NOT EXISTS `index_stops_trackId` ON `stops` (`trackId`)")
 
         Logger.i(TAG, "Migration from version 1 to 2 completed successfully")
       } catch (e: Exception) {

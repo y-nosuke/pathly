@@ -4,6 +4,8 @@ import android.content.Context
 import com.pathly.data.local.PathlyDatabase
 import com.pathly.data.local.dao.GpsPointDao
 import com.pathly.data.local.dao.GpsTrackDao
+import com.pathly.data.local.dao.PlaceDao
+import com.pathly.data.local.dao.StopDao
 import com.pathly.util.EncryptionHelper
 import dagger.Module
 import dagger.Provides
@@ -29,4 +31,10 @@ object DatabaseModule {
 
   @Provides
   fun provideGpsPointDao(database: PathlyDatabase): GpsPointDao = database.gpsPointDao()
+
+  @Provides
+  fun providePlaceDao(database: PathlyDatabase): PlaceDao = database.placeDao()
+
+  @Provides
+  fun provideStopDao(database: PathlyDatabase): StopDao = database.stopDao()
 }

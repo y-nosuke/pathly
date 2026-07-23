@@ -10,7 +10,8 @@ import kotlin.math.sqrt
  *
  * 連続する点が [radiusMeters] の範囲にとどまり続け、その滞在時間が
  * [minDurationMs] 以上になったら1つの立ち寄りとみなす。ノイズの影響を減らすため、
- * 補正後の点列に対して適用することを想定している（[GpsTrack.stops] 参照）。
+ * 補正後の点列（[GpsTrack.smoothedPoints]）に対して適用することを想定している。
+ * 検出結果の永続化・命名は PlaceRepository が担う（docs/designs/places-and-stops.md）。
  *
  * しきい値は実データを見ながら調整する。
  */
@@ -28,10 +29,10 @@ object StopDetector {
     points: List<GpsPoint>,
     radiusMeters: Double = RADIUS_METERS,
     minDurationMs: Long = MIN_DURATION_MS,
-  ): List<Stop> {
+  ): List<DetectedStop> {
     if (points.size < 2) return emptyList()
 
-    val stops = mutableListOf<Stop>()
+    val stops = mutableListOf<DetectedStop>()
     var i = 0
     while (i < points.size) {
       // points[i] を起点にクラスタを伸ばす。重心から radius 以内の間だけ広げる。
@@ -55,7 +56,7 @@ object StopDetector {
       val duration = points[j - 1].timestamp.time - points[i].timestamp.time
       if (count >= 2 && duration >= minDurationMs) {
         stops.add(
-          Stop(
+          DetectedStop(
             latitude = sumLat / count,
             longitude = sumLon / count,
             arrivalTime = points[i].timestamp,
