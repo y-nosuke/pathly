@@ -31,6 +31,7 @@
 
 | ファイル                                               | 内容                              |
 | ------------------------------------------------------ | --------------------------------- |
+| [designs/glossary.md](designs/glossary.md)             | 用語集（データ・処理の日英対応）  |
 | [designs/architecture.md](designs/architecture.md)     | アーキテクチャ・プロジェクト構成  |
 | [designs/security.md](designs/security.md)             | セキュリティ設計                  |
 | [designs/logging.md](designs/logging.md)               | ログ方針・実装                    |
