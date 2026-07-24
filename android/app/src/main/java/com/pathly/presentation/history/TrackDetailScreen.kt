@@ -137,9 +137,11 @@ fun TrackDetailScreen(
     },
   ) { innerPadding ->
     Box(
+      // 地図はシートの下まで敷き詰める（下スワイプで隠したとき黒帯が残らないよう、
+      // ボトムのインセットは効かせない）。上端のみステータスバー分を空ける。
       modifier = Modifier
         .fillMaxSize()
-        .padding(innerPadding),
+        .padding(top = innerPadding.calculateTopPadding()),
     ) {
       if (track.points.isNotEmpty()) {
         TrackMapView(
@@ -382,6 +384,24 @@ private fun TrackDetailSheet(
       color = MaterialTheme.colorScheme.onSurfaceVariant,
     )
 
+    // 操作ボタンは上部（ピーク内）に置いて常に押せるようにする。
+    if (track.points.size >= 2 && !track.isActive) {
+      ActionChip(
+        text = "再解析",
+        container = MaterialTheme.colorScheme.tertiaryContainer,
+        content = MaterialTheme.colorScheme.onTertiaryContainer,
+        onClick = onReanalyze,
+      )
+    }
+    if (unresolvedCount > 0) {
+      ActionChip(
+        text = "場所を取得（未取得 ${unresolvedCount}件）",
+        container = MaterialTheme.colorScheme.secondaryContainer,
+        content = MaterialTheme.colorScheme.onSecondaryContainer,
+        onClick = onResolveNames,
+      )
+    }
+
     val distanceKm = (track.totalDistanceMeters / 1000.0 * 100).roundToInt() / 100.0
     Row(
       modifier = Modifier.fillMaxWidth(),
@@ -396,26 +416,6 @@ private fun TrackDetailSheet(
         value = "${track.points.size}",
         label = "地点数",
         modifier = Modifier.weight(1f),
-      )
-    }
-
-    // 操作ボタンは一覧の上に置く（場所が多くても隠れず押せるように）。
-    // 再解析: 軌跡を再補正 → 立ち寄りを検出し直し → 命名。
-    if (track.points.size >= 2 && !track.isActive) {
-      ActionChip(
-        text = "再解析",
-        container = MaterialTheme.colorScheme.tertiaryContainer,
-        content = MaterialTheme.colorScheme.onTertiaryContainer,
-        onClick = onReanalyze,
-      )
-    }
-    // 未取得（googlePlaceId 無し）の場所を Places で取り直す（手動）。
-    if (unresolvedCount > 0) {
-      ActionChip(
-        text = "場所を取得（未取得 ${unresolvedCount}件）",
-        container = MaterialTheme.colorScheme.secondaryContainer,
-        content = MaterialTheme.colorScheme.onSecondaryContainer,
-        onClick = onResolveNames,
       )
     }
 
