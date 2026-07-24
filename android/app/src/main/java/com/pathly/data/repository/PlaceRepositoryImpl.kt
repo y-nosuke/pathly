@@ -91,6 +91,20 @@ class PlaceRepositoryImpl @Inject constructor(
     placeDao.updateName(placeId, name.trim().ifBlank { null }, Date())
   }
 
+  override suspend fun deleteStop(stopId: Long) {
+    mutex.withLock { stopDao.deleteById(stopId) }
+  }
+
+  override suspend fun deletePlace(placeId: Long, trackId: Long): Boolean = mutex.withLock {
+    // 他の経路にも訪問が残っているなら場所は消さない（誤削除防止）。
+    if (stopDao.countByPlaceInOtherTracks(placeId, trackId) > 0) {
+      return@withLock false
+    }
+    stopDao.deleteByPlace(placeId) // この経路の訪問を消す
+    placeDao.deleteById(placeId) // place_resolutions は CASCADE で消える
+    true
+  }
+
   /**
    * 補正後の点列から立ち寄りを検出し、確定分だけを差分保存する。末尾の滞在中クラスタが
    * 3分を超えたら place を先行確定して [currentStop] に流す（案B・メモリ保持）。
