@@ -17,6 +17,9 @@ interface StopDao {
   @Query("SELECT COUNT(*) FROM stops WHERE trackId = :trackId")
   suspend fun countByTrack(trackId: Long): Int
 
+  @Query("DELETE FROM stops WHERE trackId = :trackId")
+  suspend fun deleteByTrack(trackId: Long)
+
   @Transaction
   @Query("SELECT * FROM stops WHERE trackId = :trackId ORDER BY arrivalTime ASC")
   fun getStopsWithPlaceByTrack(trackId: Long): Flow<List<StopWithPlace>>

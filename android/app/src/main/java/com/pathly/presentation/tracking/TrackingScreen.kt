@@ -58,6 +58,7 @@ import com.google.maps.android.compose.Polyline
 import com.google.maps.android.compose.rememberCameraPositionState
 import com.pathly.R
 import com.pathly.domain.model.GpsTrack
+import com.pathly.domain.model.Stop
 import com.pathly.ui.theme.TrackLineOrange
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -144,6 +145,9 @@ fun TrackingScreen(
       }
 
       if (uiState.isTracking) {
+        uiState.currentStop?.let { stop ->
+          CurrentStopCard(stop = stop, modifier = Modifier.fillMaxWidth())
+        }
         TrackingStatsCard(
           track = uiState.currentTrack,
           locationCount = uiState.locationCount,
@@ -385,6 +389,39 @@ private fun RecordingStatusPill(
         text = elapsedText,
         style = MaterialTheme.typography.labelLarge,
         color = MaterialTheme.colorScheme.onErrorContainer,
+      )
+    }
+  }
+}
+
+@Composable
+private fun CurrentStopCard(
+  stop: Stop,
+  modifier: Modifier = Modifier,
+) {
+  val title = stop.place.name
+    ?: "%.5f, %.5f".format(stop.place.latitude, stop.place.longitude)
+  Surface(
+    modifier = modifier,
+    shape = RoundedCornerShape(16.dp),
+    color = MaterialTheme.colorScheme.tertiaryContainer,
+    shadowElevation = 4.dp,
+  ) {
+    Row(
+      modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp),
+      horizontalArrangement = Arrangement.spacedBy(10.dp),
+      verticalAlignment = Alignment.CenterVertically,
+    ) {
+      Text(
+        text = "● 立ち寄り中",
+        style = MaterialTheme.typography.labelMedium,
+        color = MaterialTheme.colorScheme.onTertiaryContainer,
+        fontWeight = FontWeight.Bold,
+      )
+      Text(
+        text = "$title ・ 滞在${stop.durationMinutes}分",
+        style = MaterialTheme.typography.bodyMedium,
+        color = MaterialTheme.colorScheme.onTertiaryContainer,
       )
     }
   }

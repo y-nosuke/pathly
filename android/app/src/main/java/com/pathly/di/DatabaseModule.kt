@@ -5,6 +5,7 @@ import com.pathly.data.local.PathlyDatabase
 import com.pathly.data.local.dao.GpsPointDao
 import com.pathly.data.local.dao.GpsTrackDao
 import com.pathly.data.local.dao.PlaceDao
+import com.pathly.data.local.dao.PlaceResolutionDao
 import com.pathly.data.local.dao.SmoothedPointDao
 import com.pathly.data.local.dao.StopDao
 import com.pathly.util.EncryptionHelper
@@ -41,4 +42,7 @@ object DatabaseModule {
 
   @Provides
   fun provideSmoothedPointDao(database: PathlyDatabase): SmoothedPointDao = database.smoothedPointDao()
+
+  @Provides
+  fun providePlaceResolutionDao(database: PathlyDatabase): PlaceResolutionDao = database.placeResolutionDao()
 }

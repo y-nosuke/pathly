@@ -69,9 +69,10 @@ fun TrackDetailScreen(
   onBackClick: () -> Unit,
   modifier: Modifier = Modifier,
   stops: List<Stop> = emptyList(),
+  unresolvedCount: Int = 0,
   onEditPlaceName: (placeId: Long, name: String) -> Unit = { _, _ -> },
-  onRetryNaming: () -> Unit = {},
-  onRecompute: () -> Unit = {},
+  onResolveNames: () -> Unit = {},
+  onReanalyze: () -> Unit = {},
 ) {
   val scaffoldState = rememberBottomSheetScaffoldState()
   var tuningMode by remember { mutableStateOf(false) }
@@ -99,9 +100,10 @@ fun TrackDetailScreen(
         TrackDetailSheet(
           track = track,
           stops = stops,
+          unresolvedCount = unresolvedCount,
           onStopClick = { editingStop = it },
-          onRetryNaming = onRetryNaming,
-          onRecompute = onRecompute,
+          onResolveNames = onResolveNames,
+          onReanalyze = onReanalyze,
         )
       }
     },
@@ -221,9 +223,10 @@ private fun PlaceNameDialog(
 private fun TrackDetailSheet(
   track: GpsTrack,
   stops: List<Stop>,
+  unresolvedCount: Int,
   onStopClick: (Stop) -> Unit,
-  onRetryNaming: () -> Unit,
-  onRecompute: () -> Unit,
+  onResolveNames: () -> Unit,
+  onReanalyze: () -> Unit,
   modifier: Modifier = Modifier,
 ) {
   Column(
@@ -304,15 +307,15 @@ private fun TrackDetailSheet(
         StopRow(stop = stop, onClick = { onStopClick(stop) })
       }
 
-      val unnamedCount = stops.count { it.place.name == null }
-      if (unnamedCount > 0) {
+      // 未取得（googlePlaceId 無し）の場所を Places で取り直す（手動）。
+      if (unresolvedCount > 0) {
         Surface(
-          onClick = onRetryNaming,
+          onClick = onResolveNames,
           shape = RoundedCornerShape(20.dp),
           color = MaterialTheme.colorScheme.secondaryContainer,
         ) {
           Text(
-            text = "未命名 ${unnamedCount}件の名前を取得",
+            text = "場所を取得（未取得 ${unresolvedCount}件）",
             style = MaterialTheme.typography.labelLarge,
             color = MaterialTheme.colorScheme.onSecondaryContainer,
             fontWeight = FontWeight.Medium,
@@ -322,15 +325,15 @@ private fun TrackDetailSheet(
       }
     }
 
-    // 軌跡を生データから作り直す（アルゴリズム修正の反映・記録中に保存できなかったときの保険）。
+    // 再解析: 軌跡を再補正 → 立ち寄りを検出し直し → 命名（記録中の取りこぼしやアルゴリズム修正の反映）。
     if (track.points.size >= 2 && !track.isActive) {
       Surface(
-        onClick = onRecompute,
+        onClick = onReanalyze,
         shape = RoundedCornerShape(20.dp),
         color = MaterialTheme.colorScheme.tertiaryContainer,
       ) {
         Text(
-          text = "軌跡を再補正",
+          text = "再解析",
           style = MaterialTheme.typography.labelLarge,
           color = MaterialTheme.colorScheme.onTertiaryContainer,
           fontWeight = FontWeight.Medium,

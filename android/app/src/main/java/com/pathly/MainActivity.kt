@@ -133,6 +133,7 @@ private fun MainScreen(
         val detailViewModel: TrackDetailViewModel = hiltViewModel()
         val stops by detailViewModel.stops.collectAsState()
         val displayTrack by detailViewModel.displayTrack.collectAsState()
+        val unresolvedCount by detailViewModel.unresolvedCount.collectAsState()
         LaunchedEffect(track.id) { detailViewModel.load(track) }
         TrackDetailScreen(
           // 保存済みの補正後点列を反映したトラックがあればそれを表示する。
@@ -140,9 +141,10 @@ private fun MainScreen(
           onBackClick = { selectedTrack = null },
           modifier = Modifier.padding(innerPadding),
           stops = stops,
+          unresolvedCount = unresolvedCount,
           onEditPlaceName = { placeId, name -> detailViewModel.updatePlaceName(placeId, name) },
-          onRetryNaming = { detailViewModel.retryNaming() },
-          onRecompute = { detailViewModel.recomputeSmoothing() },
+          onResolveNames = { detailViewModel.resolveNames() },
+          onReanalyze = { detailViewModel.reanalyze() },
         )
       }
 
