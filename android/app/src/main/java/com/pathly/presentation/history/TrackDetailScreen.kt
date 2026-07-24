@@ -379,7 +379,7 @@ private fun TrackDetailSheet(
       startText
     }
     Text(
-      text = subtitle,
+      text = subtitle + if (stops.isNotEmpty()) " ・ 立ち寄り${stops.size}件" else "",
       style = MaterialTheme.typography.bodyMedium,
       color = MaterialTheme.colorScheme.onSurfaceVariant,
     )
@@ -419,21 +419,13 @@ private fun TrackDetailSheet(
       )
     }
 
-    if (stops.isNotEmpty()) {
-      Text(
-        text = "立ち寄り ${stops.size}件",
-        style = MaterialTheme.typography.titleSmall,
-        fontWeight = FontWeight.Bold,
-        modifier = Modifier.padding(top = 4.dp),
+    stops.forEach { stop ->
+      StopRow(
+        stop = stop,
+        onFocus = { onFocusStop(stop) },
+        onEdit = { onEditStop(stop) },
+        onDelete = { onDeleteStop(stop) },
       )
-      stops.forEach { stop ->
-        StopRow(
-          stop = stop,
-          onFocus = { onFocusStop(stop) },
-          onEdit = { onEditStop(stop) },
-          onDelete = { onDeleteStop(stop) },
-        )
-      }
     }
   }
 }

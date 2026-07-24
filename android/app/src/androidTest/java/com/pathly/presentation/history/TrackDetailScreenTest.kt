@@ -275,7 +275,7 @@ class TrackDetailScreenTest {
       }
     }
 
-    composeTestRule.onNodeWithText("立ち寄り 1件").assertIsDisplayed()
+    composeTestRule.onNodeWithText("立ち寄り1件", substring = true).assertIsDisplayed()
     composeTestRule.onNodeWithText("テストカフェ").assertIsDisplayed()
   }
 
