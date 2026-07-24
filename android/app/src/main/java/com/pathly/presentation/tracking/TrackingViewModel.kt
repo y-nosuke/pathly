@@ -13,6 +13,7 @@ import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.pathly.domain.repository.GpsTrackRepository
+import com.pathly.domain.repository.PlaceRepository
 import com.pathly.service.LocationTrackingService
 import com.pathly.util.DateFormatters
 import com.pathly.util.PermissionUtils
@@ -28,6 +29,7 @@ import javax.inject.Inject
 class TrackingViewModel @Inject constructor(
   private val application: Application,
   private val gpsTrackRepository: GpsTrackRepository,
+  private val placeRepository: PlaceRepository,
 ) : AndroidViewModel(application) {
 
   private val _uiState = MutableStateFlow(TrackingState())
@@ -82,6 +84,15 @@ class TrackingViewModel @Inject constructor(
     checkActiveTracking()
     checkLocationPermission()
     observeActiveTrack()
+    observeCurrentStop()
+  }
+
+  private fun observeCurrentStop() {
+    viewModelScope.launch {
+      placeRepository.currentStop.collect { stop ->
+        _uiState.value = _uiState.value.copy(currentStop = stop)
+      }
+    }
   }
 
   private fun checkActiveTracking() {
@@ -157,6 +168,7 @@ class TrackingViewModel @Inject constructor(
       // 停止後に古い現在地が残って地図がそこへ寄るのを防ぐ
       currentLocation = null,
       locationCount = 0,
+      currentStop = null,
     )
   }
 

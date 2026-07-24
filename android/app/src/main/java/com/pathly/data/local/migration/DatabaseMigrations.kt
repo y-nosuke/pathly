@@ -97,11 +97,41 @@ object DatabaseMigrations {
   }
 
   /**
+   * バージョン3から4へのマイグレーション。
+   * Google Places の解決ログ place_resolutions テーブルを追加する
+   * （docs/designs/places-and-stops.md）。
+   *
+   * DDL は Room がエンティティから生成するものと一致させること（起動時のスキーマ検証を通すため）。
+   */
+  val MIGRATION_3_4 = object : Migration(3, 4) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+      try {
+        Logger.i(TAG, "Starting migration from version 3 to 4")
+
+        db.execSQL(
+          "CREATE TABLE IF NOT EXISTS `place_resolutions` (" +
+            "`placeId` INTEGER NOT NULL, " +
+            "`resolvedAt` INTEGER NOT NULL, " +
+            "`googlePlaceId` TEXT, " +
+            "PRIMARY KEY(`placeId`), " +
+            "FOREIGN KEY(`placeId`) REFERENCES `places`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+        )
+
+        Logger.i(TAG, "Migration from version 3 to 4 completed successfully")
+      } catch (e: Exception) {
+        Logger.e(TAG, "Migration from version 3 to 4 failed", e)
+        throw e
+      }
+    }
+  }
+
+  /**
    * 現在利用可能な全てのマイグレーション
    */
   val ALL_MIGRATIONS = arrayOf(
     MIGRATION_1_2,
     MIGRATION_2_3,
+    MIGRATION_3_4,
     // 将来のマイグレーションをここに追加
   )
 

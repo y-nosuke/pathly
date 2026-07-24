@@ -304,8 +304,8 @@ class TrackDetailScreenTest {
   }
 
   @Test
-  fun trackDetailScreen_unnamedStop_showsRetryButtonAndTriggersCallback() {
-    val onRetry = mockk<() -> Unit>(relaxed = true)
+  fun trackDetailScreen_unresolvedPlaces_showsResolveButtonAndTriggersCallback() {
+    val onResolve = mockk<() -> Unit>(relaxed = true)
     val track = createSampleTrack()
     val stops = listOf(sampleStop(name = null))
 
@@ -315,13 +315,14 @@ class TrackDetailScreenTest {
           track = track,
           onBackClick = mockOnBackClick,
           stops = stops,
-          onRetryNaming = onRetry,
+          unresolvedCount = 1,
+          onResolveNames = onResolve,
         )
       }
     }
 
-    composeTestRule.onNodeWithText("名前を取得", substring = true).performClick()
-    verify { onRetry() }
+    composeTestRule.onNodeWithText("場所を取得", substring = true).performClick()
+    verify { onResolve() }
   }
 
   private fun sampleStop(

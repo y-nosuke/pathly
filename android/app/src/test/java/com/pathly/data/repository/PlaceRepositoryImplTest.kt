@@ -1,18 +1,21 @@
 package com.pathly.data.repository
 
 import com.pathly.data.local.dao.PlaceDao
+import com.pathly.data.local.dao.PlaceResolutionDao
+import com.pathly.data.local.dao.SmoothedPointDao
 import com.pathly.data.local.dao.StopDao
 import com.pathly.data.local.entity.PlaceEntity
+import com.pathly.data.local.entity.SmoothedPointEntity
 import com.pathly.data.local.entity.StopEntity
 import com.pathly.data.places.PlacesNameResolver
-import com.pathly.domain.model.GpsPoint
-import com.pathly.domain.model.GpsTrack
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.mockk
 import io.mockk.slot
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Test
 import java.util.Date
 
@@ -20,113 +23,141 @@ class PlaceRepositoryImplTest {
 
   private val placeDao = mockk<PlaceDao>(relaxed = true)
   private val stopDao = mockk<StopDao>(relaxed = true)
+  private val smoothedPointDao = mockk<SmoothedPointDao>(relaxed = true)
+  private val placeResolutionDao = mockk<PlaceResolutionDao>(relaxed = true)
   private val resolver = mockk<PlacesNameResolver>(relaxed = true)
-  private val repository = PlaceRepositoryImpl(placeDao, stopDao, resolver)
+  private val repository = PlaceRepositoryImpl(
+    placeDao,
+    stopDao,
+    smoothedPointDao,
+    placeResolutionDao,
+    resolver,
+  )
 
-  private fun point(lat: Double, lon: Double, timeSec: Long) = GpsPoint(
-    id = 0,
+  private fun sp(lat: Double, lon: Double, timeSec: Long, seq: Int) = SmoothedPointEntity(
     trackId = 1L,
+    seq = seq,
     latitude = lat,
     longitude = lon,
-    altitude = null,
-    accuracy = 5f,
-    speed = null,
-    bearing = null,
     timestamp = Date(timeSec * 1000L),
-    createdAt = Date(0L),
   )
 
-  // 50m圏内・4分滞在 → 立ち寄り1件
-  private fun stationaryTrack() = GpsTrack(
-    id = 1L,
-    startTime = Date(0L),
-    endTime = Date(240_000L),
-    isActive = false,
-    points = listOf(
-      point(35.0000, 139.0000, 0),
-      point(35.0002, 139.0000, 60),
-      point(35.0000, 139.0002, 120),
-      point(35.0001, 139.0000, 180),
-      point(35.0002, 139.0001, 240),
-    ),
-    createdAt = Date(0L),
-    updatedAt = Date(0L),
+  // 50m圏内に4分滞在 → 遠くへ移動（離脱）。確定した立ち寄り1件。
+  private fun finishedVisitPoints() = listOf(
+    sp(35.0000, 139.0000, 0, 0),
+    sp(35.0001, 139.0000, 60, 1),
+    sp(35.0000, 139.0001, 120, 2),
+    sp(35.0001, 139.0001, 180, 3),
+    sp(35.0000, 139.0000, 240, 4),
+    sp(35.0100, 139.0100, 300, 5), // 約1.4km 離れる＝離脱
   )
+
+  // 50m圏内に4分滞在したまま（末尾まで滞在中）。確定していない＝立ち寄り中。
+  private fun dwellingPoints() = finishedVisitPoints().dropLast(1)
 
   @Test
-  fun ensureStopsDetected_whenNoStops_createsPlaceAndStopThenResolvesName() = runTest {
+  fun updateStops_finalizedVisit_persistsStopAndResolvesName() = runTest {
+    coEvery { smoothedPointDao.getByTrack(1L) } returns finishedVisitPoints()
     coEvery { stopDao.countByTrack(1L) } returns 0
     coEvery { placeDao.getAll() } returns emptyList()
     coEvery { placeDao.insert(any()) } returns 10L
     coEvery { stopDao.insert(any()) } returns 100L
-    coEvery { placeDao.getUnnamedPlacesForTrack(1L) } returns listOf(
-      PlaceEntity(id = 10L, latitude = 35.0001, longitude = 139.0001),
+    coEvery { placeDao.getUnresolvedPlacesForTrack(1L) } returns listOf(
+      PlaceEntity(id = 10L, latitude = 35.0, longitude = 139.0),
     )
-    coEvery { resolver.resolve(any(), any()) } returns PlacesNameResolver.Result("カフェ", "住所")
+    coEvery { resolver.resolve(any(), any()) } returns
+      PlacesNameResolver.Outcome.Found("カフェ", "住所", "gp-1")
 
-    repository.ensureStopsDetected(stationaryTrack())
+    repository.updateStopsForTrack(1L, isFinal = false)
 
     val stopSlot = slot<StopEntity>()
-    coVerify { placeDao.insert(any()) }
     coVerify { stopDao.insert(capture(stopSlot)) }
     assertEquals(10L, stopSlot.captured.placeId)
     assertEquals(1L, stopSlot.captured.trackId)
     coVerify { placeDao.updateNameAndAddress(10L, "カフェ", "住所", any()) }
+    coVerify { placeResolutionDao.upsert(match { it.placeId == 10L && it.googlePlaceId == "gp-1" }) }
+    // 離脱済みなので「立ち寄り中」は無い。
+    assertNull(repository.currentStop.value)
   }
 
   @Test
-  fun ensureStopsDetected_whenStopsExist_skipsDetectionAndNaming() = runTest {
-    coEvery { stopDao.countByTrack(1L) } returns 2
-
-    repository.ensureStopsDetected(stationaryTrack())
-
-    // 保存済みなら検出も命名も再実行しない（開き直しで再評価・再課金しない）。
-    coVerify(exactly = 0) { stopDao.insert(any()) }
-    coVerify(exactly = 0) { placeDao.insert(any()) }
-    coVerify(exactly = 0) { placeDao.getUnnamedPlacesForTrack(any()) }
-    coVerify(exactly = 0) { resolver.resolve(any(), any()) }
-  }
-
-  @Test
-  fun ensureStopsDetected_reusesNearbyExistingPlace() = runTest {
+  fun updateStops_dwelling_setsCurrentStopWithoutPersistingStop() = runTest {
+    coEvery { smoothedPointDao.getByTrack(1L) } returns dwellingPoints()
     coEvery { stopDao.countByTrack(1L) } returns 0
-    // 立ち寄り重心のすぐ近くに既存の場所 → 再利用（新規作成しない）
-    coEvery { placeDao.getAll() } returns listOf(
-      PlaceEntity(id = 7L, latitude = 35.0001, longitude = 139.0001),
-    )
+    coEvery { placeDao.getAll() } returns emptyList()
+    coEvery { placeDao.insert(any()) } returns 20L
+    coEvery { placeDao.getById(20L) } returns
+      PlaceEntity(id = 20L, name = "カフェ", latitude = 35.0, longitude = 139.0)
+    coEvery { placeDao.getUnresolvedPlacesForTrack(1L) } returns emptyList()
+    coEvery { placeResolutionDao.getByPlace(20L) } returns null
+    coEvery { resolver.resolve(any(), any()) } returns
+      PlacesNameResolver.Outcome.Found("カフェ", "住所", "gp-2")
+
+    repository.updateStopsForTrack(1L, isFinal = false)
+
+    // 滞在中は stop を保存しない。place は先行確定し「立ち寄り中」に出る。
+    coVerify(exactly = 0) { stopDao.insert(any()) }
+    val current = repository.currentStop.value
+    assertNotNull(current)
+    assertEquals(20L, current!!.place.id)
+    coVerify { placeResolutionDao.upsert(match { it.placeId == 20L && it.googlePlaceId == "gp-2" }) }
+  }
+
+  @Test
+  fun updateStops_finalizesDwellingWhenIsFinal() = runTest {
+    coEvery { smoothedPointDao.getByTrack(1L) } returns dwellingPoints()
+    coEvery { stopDao.countByTrack(1L) } returns 0
+    coEvery { placeDao.getAll() } returns emptyList()
+    coEvery { placeDao.insert(any()) } returns 30L
+    coEvery { stopDao.insert(any()) } returns 300L
+    coEvery { placeDao.getUnresolvedPlacesForTrack(1L) } returns emptyList()
+
+    repository.updateStopsForTrack(1L, isFinal = true)
+
+    // 記録終了なら末尾の滞在も確定して保存する。
+    coVerify { stopDao.insert(any()) }
+    assertNull(repository.currentStop.value)
+  }
+
+  @Test
+  fun redetectStops_deletesThenDetects() = runTest {
+    coEvery { smoothedPointDao.getByTrack(1L) } returns finishedVisitPoints()
+    coEvery { stopDao.countByTrack(1L) } returns 0
+    coEvery { placeDao.getAll() } returns emptyList()
+    coEvery { placeDao.insert(any()) } returns 10L
     coEvery { stopDao.insert(any()) } returns 100L
-    coEvery { placeDao.getUnnamedPlacesForTrack(1L) } returns emptyList()
+    coEvery { placeDao.getUnresolvedPlacesForTrack(1L) } returns emptyList()
 
-    repository.ensureStopsDetected(stationaryTrack())
+    repository.redetectStops(1L)
 
-    val stopSlot = slot<StopEntity>()
-    coVerify(exactly = 0) { placeDao.insert(any()) }
-    coVerify { stopDao.insert(capture(stopSlot)) }
-    assertEquals(7L, stopSlot.captured.placeId)
+    coVerify { stopDao.deleteByTrack(1L) }
+    coVerify { stopDao.insert(any()) }
   }
 
   @Test
-  fun resolveMissingNames_namesUnnamedPlaces() = runTest {
-    coEvery { placeDao.getUnnamedPlacesForTrack(1L) } returns listOf(
+  fun resolveUnresolvedNames_noMatch_recordsNullRow() = runTest {
+    coEvery { placeDao.getPlacesWithoutGoogleIdForTrack(1L) } returns listOf(
       PlaceEntity(id = 5L, latitude = 35.0, longitude = 139.0),
     )
-    coEvery { resolver.resolve(any(), any()) } returns PlacesNameResolver.Result("名前", "住所")
+    coEvery { resolver.resolve(any(), any()) } returns PlacesNameResolver.Outcome.NoMatch
 
-    repository.resolveMissingNames(1L)
+    repository.resolveUnresolvedNames(1L)
 
-    coVerify { placeDao.updateNameAndAddress(5L, "名前", "住所", any()) }
-  }
-
-  @Test
-  fun resolveMissingNames_whenPlacesReturnsNull_keepsUnnamed() = runTest {
-    coEvery { placeDao.getUnnamedPlacesForTrack(1L) } returns listOf(
-      PlaceEntity(id = 5L, latitude = 35.0, longitude = 139.0),
-    )
-    coEvery { resolver.resolve(any(), any()) } returns null
-
-    repository.resolveMissingNames(1L)
-
+    coVerify { placeResolutionDao.upsert(match { it.placeId == 5L && it.googlePlaceId == null }) }
     coVerify(exactly = 0) { placeDao.updateNameAndAddress(any(), any(), any(), any()) }
+  }
+
+  @Test
+  fun resolveUnresolvedNames_offline_recordsNoRow() = runTest {
+    coEvery { placeDao.getPlacesWithoutGoogleIdForTrack(1L) } returns listOf(
+      PlaceEntity(id = 6L, latitude = 35.0, longitude = 139.0),
+    )
+    coEvery { resolver.resolve(any(), any()) } returns PlacesNameResolver.Outcome.NotAttempted
+
+    repository.resolveUnresolvedNames(1L)
+
+    // 未実施は行を作らない（後でキャッチアップ）。
+    coVerify(exactly = 0) { placeResolutionDao.upsert(any()) }
   }
 
   @Test
