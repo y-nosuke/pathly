@@ -35,4 +35,13 @@ interface PlaceRepository {
 
   /** 場所の表示名を手動で更新する（命名。空文字なら未命名に戻す）。 */
   suspend fun updatePlaceName(placeId: Long, name: String)
+
+  /** 立ち寄り（訪問）1件を削除する。場所（place）は残す。 */
+  suspend fun deleteStop(stopId: Long)
+
+  /**
+   * 場所（place）ごと削除する（その場所の訪問・解決記録も消える）。
+   * ただし**他の経路にもその場所への訪問が残っている場合は削除せず false を返す**。
+   */
+  suspend fun deletePlace(placeId: Long, trackId: Long): Boolean
 }
