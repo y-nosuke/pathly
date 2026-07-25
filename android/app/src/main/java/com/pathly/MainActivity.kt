@@ -134,6 +134,7 @@ private fun MainScreen(
         val stops by detailViewModel.stops.collectAsState()
         val displayTrack by detailViewModel.displayTrack.collectAsState()
         val unresolvedCount by detailViewModel.unresolvedCount.collectAsState()
+        val message by detailViewModel.message.collectAsState()
         LaunchedEffect(track.id) { detailViewModel.load(track) }
         TrackDetailScreen(
           // 保存済みの補正後点列を反映したトラックがあればそれを表示する。
@@ -142,9 +143,13 @@ private fun MainScreen(
           modifier = Modifier.padding(innerPadding),
           stops = stops,
           unresolvedCount = unresolvedCount,
+          message = message,
           onEditPlaceName = { placeId, name -> detailViewModel.updatePlaceName(placeId, name) },
           onResolveNames = { detailViewModel.resolveNames() },
           onReanalyze = { detailViewModel.reanalyze() },
+          onDeleteStop = { stopId -> detailViewModel.deleteStop(stopId) },
+          onDeletePlace = { placeId, trackId -> detailViewModel.deletePlace(placeId, trackId) },
+          onMessageShown = { detailViewModel.clearMessage() },
         )
       }
 

@@ -36,6 +36,10 @@ class TrackDetailViewModel @Inject constructor(
   private val _displayTrack = MutableStateFlow<GpsTrack?>(null)
   val displayTrack: StateFlow<GpsTrack?> = _displayTrack.asStateFlow()
 
+  // 削除失敗などの一時メッセージ（表示したらクリアする）。
+  private val _message = MutableStateFlow<String?>(null)
+  val message: StateFlow<String?> = _message.asStateFlow()
+
   private val loadedTrackId = MutableStateFlow<Long?>(null)
 
   /** 未取得（googlePlaceId 無し）の place 件数。「場所を取得」ボタンの表示に使う。 */
@@ -66,6 +70,24 @@ class TrackDetailViewModel @Inject constructor(
   fun resolveNames() {
     val trackId = loadedTrackId.value ?: return
     viewModelScope.launch { placeRepository.resolveUnresolvedNames(trackId) }
+  }
+
+  /** 立ち寄り（訪問）1件を削除する。場所は残す。 */
+  fun deleteStop(stopId: Long) {
+    viewModelScope.launch { placeRepository.deleteStop(stopId) }
+  }
+
+  /** 場所ごと削除する。他経路に訪問が残っていれば削除せずメッセージを出す。 */
+  fun deletePlace(placeId: Long, trackId: Long) {
+    viewModelScope.launch {
+      if (!placeRepository.deletePlace(placeId, trackId)) {
+        _message.value = "他の経路にも訪問があるため、場所ごとは削除できません（この訪問だけ削除できます）"
+      }
+    }
+  }
+
+  fun clearMessage() {
+    _message.value = null
   }
 
   /** 再解析: 軌跡を再補正 → 立ち寄りを検出し直し → 命名する。 */

@@ -275,12 +275,12 @@ class TrackDetailScreenTest {
       }
     }
 
-    composeTestRule.onNodeWithText("立ち寄り 1件").assertIsDisplayed()
+    composeTestRule.onNodeWithText("立ち寄り1件", substring = true).assertIsDisplayed()
     composeTestRule.onNodeWithText("テストカフェ").assertIsDisplayed()
   }
 
   @Test
-  fun trackDetailScreen_tapStop_opensDialogAndSaveTriggersCallback() {
+  fun trackDetailScreen_editButton_opensDialogAndSaveTriggersCallback() {
     val onEdit = mockk<(Long, String) -> Unit>(relaxed = true)
     val track = createSampleTrack()
     val stops = listOf(sampleStop(placeId = 9L, name = "旧名"))
@@ -296,11 +296,35 @@ class TrackDetailScreenTest {
       }
     }
 
-    composeTestRule.onNodeWithText("旧名").performClick()
+    // 行タップは地図フォーカス。名前編集は「編集」ボタンから。
+    composeTestRule.onNodeWithText("編集").performClick()
     composeTestRule.onNodeWithText("場所の名前").assertIsDisplayed()
     composeTestRule.onNodeWithText("保存").performClick()
 
     verify { onEdit(9L, "旧名") }
+  }
+
+  @Test
+  fun trackDetailScreen_deleteButton_opensDeleteDialog() {
+    val onDeleteStop = mockk<(Long) -> Unit>(relaxed = true)
+    val track = createSampleTrack()
+    val stops = listOf(sampleStop(placeId = 9L, name = "テストカフェ"))
+
+    composeTestRule.setContent {
+      PathlyAndroidTheme {
+        TrackDetailScreen(
+          track = track,
+          onBackClick = mockOnBackClick,
+          stops = stops,
+          onDeleteStop = onDeleteStop,
+        )
+      }
+    }
+
+    composeTestRule.onNodeWithText("削除").performClick()
+    composeTestRule.onNodeWithText("この訪問だけ削除").performClick()
+
+    verify { onDeleteStop(1L) }
   }
 
   @Test

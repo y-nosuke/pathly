@@ -9,24 +9,30 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.BottomSheetScaffold
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.SheetValue
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberBottomSheetScaffoldState
+import androidx.compose.material3.rememberStandardBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -56,9 +62,10 @@ import com.pathly.domain.model.Stop
 import com.pathly.domain.model.TrackSmoother
 import com.pathly.ui.theme.TrackLineOrange
 import com.pathly.util.DateFormatters
+import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
 
-private val sheetPeekHeight = 200.dp
+private val sheetPeekHeight = 240.dp
 private val tuningSheetPeekHeight = 360.dp
 private val rawTrackColor = Color(0x66424242)
 
@@ -70,20 +77,36 @@ fun TrackDetailScreen(
   modifier: Modifier = Modifier,
   stops: List<Stop> = emptyList(),
   unresolvedCount: Int = 0,
+  message: String? = null,
   onEditPlaceName: (placeId: Long, name: String) -> Unit = { _, _ -> },
   onResolveNames: () -> Unit = {},
   onReanalyze: () -> Unit = {},
+  onDeleteStop: (stopId: Long) -> Unit = {},
+  onDeletePlace: (placeId: Long, trackId: Long) -> Unit = { _, _ -> },
+  onMessageShown: () -> Unit = {},
 ) {
-  val scaffoldState = rememberBottomSheetScaffoldState()
+  // 下にスワイプでシートを隠せる（地図を全画面化）。戻すボタンで復帰する。
+  val sheetState = rememberStandardBottomSheetState(
+    initialValue = SheetValue.PartiallyExpanded,
+    skipHiddenState = false,
+  )
+  val scaffoldState = rememberBottomSheetScaffoldState(bottomSheetState = sheetState)
+  val scope = rememberCoroutineScope()
   var tuningMode by remember { mutableStateOf(false) }
   var tuningParams by remember { mutableStateOf(SmoothingParams()) }
   var editingStop by remember { mutableStateOf<Stop?>(null) }
+  var deletingStop by remember { mutableStateOf<Stop?>(null) }
+
+  // タップした立ち寄りへ地図をフォーカスする（nonce で同じ場所の再タップにも反応）。
+  var focusTarget by remember { mutableStateOf<LatLng?>(null) }
+  var focusNonce by remember { mutableIntStateOf(0) }
 
   // 地図に描く点列。調整モードではスライダーの値で補正する。
   val displayPoints = remember(track, tuningMode, tuningParams) {
     if (tuningMode) TrackSmoother.smooth(track.points, tuningParams) else track.smoothedPoints
   }
   val peek = if (tuningMode) tuningSheetPeekHeight else sheetPeekHeight
+  val sheetHidden = sheetState.currentValue == SheetValue.Hidden
 
   BottomSheetScaffold(
     modifier = modifier.fillMaxSize(),
@@ -101,7 +124,12 @@ fun TrackDetailScreen(
           track = track,
           stops = stops,
           unresolvedCount = unresolvedCount,
-          onStopClick = { editingStop = it },
+          onFocusStop = {
+            focusTarget = LatLng(it.place.latitude, it.place.longitude)
+            focusNonce++
+          },
+          onEditStop = { editingStop = it },
+          onDeleteStop = { deletingStop = it },
           onResolveNames = onResolveNames,
           onReanalyze = onReanalyze,
         )
@@ -109,9 +137,11 @@ fun TrackDetailScreen(
     },
   ) { innerPadding ->
     Box(
+      // 地図はシートの下まで敷き詰める（下スワイプで隠したとき黒帯が残らないよう、
+      // ボトムのインセットは効かせない）。上端のみステータスバー分を空ける。
       modifier = Modifier
         .fillMaxSize()
-        .padding(innerPadding),
+        .padding(top = innerPadding.calculateTopPadding()),
     ) {
       if (track.points.isNotEmpty()) {
         TrackMapView(
@@ -119,7 +149,9 @@ fun TrackDetailScreen(
           displayPoints = displayPoints,
           stops = stops,
           showRawOverlay = tuningMode,
-          contentPadding = PaddingValues(bottom = peek),
+          focusTarget = focusTarget,
+          focusNonce = focusNonce,
+          contentPadding = PaddingValues(bottom = if (sheetHidden) 0.dp else peek),
           modifier = Modifier.fillMaxSize(),
         )
       } else {
@@ -177,6 +209,26 @@ fun TrackDetailScreen(
           }
         }
       }
+
+      // シートを隠しているときは、下部中央に戻すボタンを出す。
+      if (sheetHidden && !tuningMode) {
+        Surface(
+          onClick = { scope.launch { sheetState.partialExpand() } },
+          shape = RoundedCornerShape(20.dp),
+          color = MaterialTheme.colorScheme.surface,
+          shadowElevation = 4.dp,
+          modifier = Modifier
+            .align(Alignment.BottomCenter)
+            .padding(bottom = 24.dp),
+        ) {
+          Text(
+            text = "▲ 詳細を表示",
+            style = MaterialTheme.typography.labelLarge,
+            fontWeight = FontWeight.Medium,
+            modifier = Modifier.padding(horizontal = 20.dp, vertical = 10.dp),
+          )
+        }
+      }
     }
   }
 
@@ -190,6 +242,56 @@ fun TrackDetailScreen(
       },
     )
   }
+
+  deletingStop?.let { stop ->
+    DeleteStopDialog(
+      stop = stop,
+      onDismiss = { deletingStop = null },
+      onDeleteStop = {
+        onDeleteStop(stop.id)
+        deletingStop = null
+      },
+      onDeletePlace = {
+        onDeletePlace(stop.place.id, stop.trackId)
+        deletingStop = null
+      },
+    )
+  }
+
+  message?.let { text ->
+    AlertDialog(
+      onDismissRequest = onMessageShown,
+      confirmButton = { TextButton(onClick = onMessageShown) { Text("OK") } },
+      text = { Text(text) },
+    )
+  }
+}
+
+@Composable
+private fun DeleteStopDialog(
+  stop: Stop,
+  onDismiss: () -> Unit,
+  onDeleteStop: () -> Unit,
+  onDeletePlace: () -> Unit,
+) {
+  val label = stop.place.name
+    ?: "%.5f, %.5f".format(stop.place.latitude, stop.place.longitude)
+  AlertDialog(
+    onDismissRequest = onDismiss,
+    title = { Text("削除") },
+    text = { Text("「$label」を削除します。") },
+    confirmButton = {
+      Column {
+        TextButton(onClick = onDeleteStop) { Text("この訪問だけ削除") }
+        TextButton(onClick = onDeletePlace) {
+          Text("場所ごと削除", color = MaterialTheme.colorScheme.error)
+        }
+      }
+    },
+    dismissButton = {
+      TextButton(onClick = onDismiss) { Text("キャンセル") }
+    },
+  )
 }
 
 @Composable
@@ -224,7 +326,9 @@ private fun TrackDetailSheet(
   track: GpsTrack,
   stops: List<Stop>,
   unresolvedCount: Int,
-  onStopClick: (Stop) -> Unit,
+  onFocusStop: (Stop) -> Unit,
+  onEditStop: (Stop) -> Unit,
+  onDeleteStop: (Stop) -> Unit,
   onResolveNames: () -> Unit,
   onReanalyze: () -> Unit,
   modifier: Modifier = Modifier,
@@ -232,6 +336,7 @@ private fun TrackDetailSheet(
   Column(
     modifier = modifier
       .fillMaxWidth()
+      .verticalScroll(rememberScrollState())
       .padding(horizontal = 20.dp)
       .padding(bottom = 24.dp),
     verticalArrangement = Arrangement.spacedBy(12.dp),
@@ -274,10 +379,28 @@ private fun TrackDetailSheet(
       startText
     }
     Text(
-      text = subtitle,
+      text = subtitle + if (stops.isNotEmpty()) " ・ 立ち寄り${stops.size}件" else "",
       style = MaterialTheme.typography.bodyMedium,
       color = MaterialTheme.colorScheme.onSurfaceVariant,
     )
+
+    // 操作ボタンは上部（ピーク内）に置いて常に押せるようにする。
+    if (track.points.size >= 2 && !track.isActive) {
+      ActionChip(
+        text = "再解析",
+        container = MaterialTheme.colorScheme.tertiaryContainer,
+        content = MaterialTheme.colorScheme.onTertiaryContainer,
+        onClick = onReanalyze,
+      )
+    }
+    if (unresolvedCount > 0) {
+      ActionChip(
+        text = "場所を取得（未取得 ${unresolvedCount}件）",
+        container = MaterialTheme.colorScheme.secondaryContainer,
+        content = MaterialTheme.colorScheme.onSecondaryContainer,
+        onClick = onResolveNames,
+      )
+    }
 
     val distanceKm = (track.totalDistanceMeters / 1000.0 * 100).roundToInt() / 100.0
     Row(
@@ -296,50 +419,13 @@ private fun TrackDetailSheet(
       )
     }
 
-    if (stops.isNotEmpty()) {
-      Text(
-        text = "立ち寄り ${stops.size}件",
-        style = MaterialTheme.typography.titleSmall,
-        fontWeight = FontWeight.Bold,
-        modifier = Modifier.padding(top = 4.dp),
+    stops.forEach { stop ->
+      StopRow(
+        stop = stop,
+        onFocus = { onFocusStop(stop) },
+        onEdit = { onEditStop(stop) },
+        onDelete = { onDeleteStop(stop) },
       )
-      stops.forEach { stop ->
-        StopRow(stop = stop, onClick = { onStopClick(stop) })
-      }
-
-      // 未取得（googlePlaceId 無し）の場所を Places で取り直す（手動）。
-      if (unresolvedCount > 0) {
-        Surface(
-          onClick = onResolveNames,
-          shape = RoundedCornerShape(20.dp),
-          color = MaterialTheme.colorScheme.secondaryContainer,
-        ) {
-          Text(
-            text = "場所を取得（未取得 ${unresolvedCount}件）",
-            style = MaterialTheme.typography.labelLarge,
-            color = MaterialTheme.colorScheme.onSecondaryContainer,
-            fontWeight = FontWeight.Medium,
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-          )
-        }
-      }
-    }
-
-    // 再解析: 軌跡を再補正 → 立ち寄りを検出し直し → 命名（記録中の取りこぼしやアルゴリズム修正の反映）。
-    if (track.points.size >= 2 && !track.isActive) {
-      Surface(
-        onClick = onReanalyze,
-        shape = RoundedCornerShape(20.dp),
-        color = MaterialTheme.colorScheme.tertiaryContainer,
-      ) {
-        Text(
-          text = "再解析",
-          style = MaterialTheme.typography.labelLarge,
-          color = MaterialTheme.colorScheme.onTertiaryContainer,
-          fontWeight = FontWeight.Medium,
-          modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-        )
-      }
     }
   }
 }
@@ -347,28 +433,40 @@ private fun TrackDetailSheet(
 @Composable
 private fun StopRow(
   stop: Stop,
-  onClick: () -> Unit,
+  onFocus: () -> Unit,
+  onEdit: () -> Unit,
+  onDelete: () -> Unit,
 ) {
   val title = stop.place.name
     ?: "%.5f, %.5f".format(stop.place.latitude, stop.place.longitude)
-  Column(
-    modifier = Modifier
-      .fillMaxWidth()
-      .clickable(onClick = onClick)
-      .padding(vertical = 4.dp),
+  Row(
+    modifier = Modifier.fillMaxWidth(),
+    verticalAlignment = Alignment.CenterVertically,
   ) {
-    Text(
-      text = title,
-      style = MaterialTheme.typography.bodyLarge,
-      fontWeight = FontWeight.Medium,
-    )
-    Text(
-      text = "${DateFormatters.SHORT_TIME_FORMAT.format(stop.arrivalTime)}" +
-        " – ${DateFormatters.SHORT_TIME_FORMAT.format(stop.departureTime)}" +
-        " ・ 滞在${stop.durationMinutes}分",
-      style = MaterialTheme.typography.bodyMedium,
-      color = MaterialTheme.colorScheme.onSurfaceVariant,
-    )
+    // タップで地図をこの場所へフォーカス。
+    Column(
+      modifier = Modifier
+        .weight(1f)
+        .clickable(onClick = onFocus)
+        .padding(vertical = 4.dp),
+    ) {
+      Text(
+        text = title,
+        style = MaterialTheme.typography.bodyLarge,
+        fontWeight = FontWeight.Medium,
+      )
+      Text(
+        text = "${DateFormatters.SHORT_TIME_FORMAT.format(stop.arrivalTime)}" +
+          " – ${DateFormatters.SHORT_TIME_FORMAT.format(stop.departureTime)}" +
+          " ・ 滞在${stop.durationMinutes}分",
+        style = MaterialTheme.typography.bodyMedium,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+      )
+    }
+    TextButton(onClick = onEdit) { Text("編集") }
+    TextButton(onClick = onDelete) {
+      Text("削除", color = MaterialTheme.colorScheme.error)
+    }
   }
 }
 
@@ -453,6 +551,28 @@ private fun ParamSlider(
 }
 
 @Composable
+private fun ActionChip(
+  text: String,
+  container: Color,
+  content: Color,
+  onClick: () -> Unit,
+) {
+  Surface(
+    onClick = onClick,
+    shape = RoundedCornerShape(20.dp),
+    color = container,
+  ) {
+    Text(
+      text = text,
+      style = MaterialTheme.typography.labelLarge,
+      color = content,
+      fontWeight = FontWeight.Medium,
+      modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+    )
+  }
+}
+
+@Composable
 private fun StatTile(
   value: String,
   label: String,
@@ -488,6 +608,8 @@ private fun TrackMapView(
   modifier: Modifier = Modifier,
   stops: List<Stop> = emptyList(),
   showRawOverlay: Boolean = false,
+  focusTarget: LatLng? = null,
+  focusNonce: Int = 0,
   contentPadding: PaddingValues = PaddingValues(0.dp),
 ) {
   val cameraPositionState = rememberCameraPositionState()
@@ -507,6 +629,13 @@ private fun TrackMapView(
     } else {
       cameraPositionState.position = CameraPosition.fromLatLngZoom(defaultPosition, 12f)
     }
+  }
+
+  // 立ち寄り一覧のタップで、その場所へズーム＆センタリングする。
+  LaunchedEffect(focusNonce) {
+    val target = focusTarget ?: return@LaunchedEffect
+    if (focusNonce == 0) return@LaunchedEffect
+    cameraPositionState.animate(CameraUpdateFactory.newLatLngZoom(target, 17f))
   }
 
   GoogleMap(
