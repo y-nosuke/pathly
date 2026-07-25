@@ -8,6 +8,7 @@
   - 場所名を自分たちに分かりやすい名前に手動で入力・変更したい
   - 行きたい場所をリストアップしたい／場所の詳細情報を登録したい（将来）
 - 前提: 立ち寄りの**検出ロジック**は [gps-smoothing.md](./gps-smoothing.md) の補正後の点列に対して行う（`StopDetector`）。本書は検出結果を**どう保存・命名・編集するか**を扱う。
+- データモデル（`places` / `stops` / `place_resolutions`）は [../specs/model.md](../specs/model.md) を参照。
 
 ---
 
@@ -111,11 +112,11 @@ gps_tracks 1 ──< stops >── 1 places
 
 Google Places を「叩いたか」を place 単位で記録する。places を静的に保つため、動的な解決状態はここに分離する。
 
-| カラム        | 型      | 制約                     | 説明                                             |
-| ------------- | ------- | ------------------------ | ------------------------------------------------ |
-| placeId       | INTEGER | PK, FK→places(id)        | 対象の場所（1行/place）                          |
-| resolvedAt    | INTEGER | NOT NULL                 | Googleに問い合わせた日時（＝「叩いた」印）        |
-| googlePlaceId | TEXT    | NULL                     | 見つかった Google の place ID（POI無しは null）   |
+| カラム        | 型      | 制約              | 説明                                            |
+| ------------- | ------- | ----------------- | ----------------------------------------------- |
+| placeId       | INTEGER | PK, FK→places(id) | 対象の場所（1行/place）                         |
+| resolvedAt    | INTEGER | NOT NULL          | Googleに問い合わせた日時（＝「叩いた」印）      |
+| googlePlaceId | TEXT    | NULL              | 見つかった Google の place ID（POI無しは null） |
 
 - **行がある＝問い合わせ済み**（結果の有無を問わず）。無ければ未実施。
 - 主役は `resolvedAt`（叩いた事実）。`googlePlaceId` は結果で、POIが無ければ null。
@@ -190,11 +191,11 @@ Google Places を「叩いたか」を place 単位で記録する。places を�
 - **オフライン／通信エラー**: 行を作らない → 次に命名が走ったとき再挑戦（キャッチアップ）。
 - **手動「場所を取得」**: `googlePlaceId` が無い place（行が無い or null）を対象に、ユーザー操作でだけ再挑戦。
 
-| 状況              | 記録         | 自動再取得 | 手動再取得 |
-| ----------------- | ------------ | ---------- | ---------- |
-| POI発見           | 行・ID あり  | しない     | しない     |
-| POI無し           | 行・ID null  | しない     | できる     |
-| オフライン/失敗   | 行なし       | する(復帰時)| できる     |
+| 状況            | 記録        | 自動再取得   | 手動再取得 |
+| --------------- | ----------- | ------------ | ---------- |
+| POI発見         | 行・ID あり | しない       | しない     |
+| POI無し         | 行・ID null | しない       | できる     |
+| オフライン/失敗 | 行なし      | する(復帰時) | できる     |
 
 > 命名を「オンライン時・place 1件1回」に閉じ込めるのは、(1) 課金を最小化するため、(2) POIの無い場所を毎回叩き直さないため。
 > `name IS NULL` を条件にしないのは、POI無しの場所が永遠に未命名のまま毎回叩かれてしまうため。判定は `place_resolutions` の行の有無で行う。
@@ -274,20 +275,20 @@ places が track から独立し、解決状態も `place_resolutions` に分離
 
 ## 実装マップ
 
-| 要素                  | ファイル                                                                          |
-| --------------------- | --------------------------------------------------------------------------------- |
-| 検出（既存）          | `domain/model/StopDetector.kt`（返り値は `DetectedStop`）                         |
-| ドメイン              | `domain/model/Place.kt`, `Stop.kt`, `DetectedStop.kt`                             |
-| Entity（既存）        | `data/local/entity/PlaceEntity.kt`, `StopEntity.kt`, `StopWithPlace.kt`           |
-| Entity（予定）        | `data/local/entity/PlaceResolutionEntity.kt`                                      |
-| DAO                   | `data/local/dao/PlaceDao.kt`, `StopDao.kt`, `PlaceResolutionDao.kt`（予定）       |
-| マイグレーション      | `DatabaseMigrations.kt`（1→2 済 / 立ち寄り記録中対応は次バージョンで追加）        |
-| Places 呼び出し       | `data/places/PlacesNameResolver.kt`（+ オンライン判定）                           |
-| 記録中の検出・保存(予定)| `service/LocationTrackingService.kt` → `PlaceRepository.updateStopsForTrack`      |
-| ライブ立ち寄り中(予定) | 記録中サービスの `StateFlow`（非永続）→ `presentation/tracking/TrackingScreen.kt` |
-| 再解析(予定)          | 詳細画面 → 補正の再計算 + 立ち寄り再検出 + 命名                                    |
-| リポジトリ            | `domain/repository/PlaceRepository.kt` / `data/repository/PlaceRepositoryImpl.kt` |
-| 画面                  | `presentation/history/TrackDetailScreen.kt`（+ 詳細用 ViewModel）                 |
+| 要素                     | ファイル                                                                          |
+| ------------------------ | --------------------------------------------------------------------------------- |
+| 検出（既存）             | `domain/model/StopDetector.kt`（返り値は `DetectedStop`）                         |
+| ドメイン                 | `domain/model/Place.kt`, `Stop.kt`, `DetectedStop.kt`                             |
+| Entity（既存）           | `data/local/entity/PlaceEntity.kt`, `StopEntity.kt`, `StopWithPlace.kt`           |
+| Entity（予定）           | `data/local/entity/PlaceResolutionEntity.kt`                                      |
+| DAO                      | `data/local/dao/PlaceDao.kt`, `StopDao.kt`, `PlaceResolutionDao.kt`（予定）       |
+| マイグレーション         | `DatabaseMigrations.kt`（1→2 済 / 立ち寄り記録中対応は次バージョンで追加）        |
+| Places 呼び出し          | `data/places/PlacesNameResolver.kt`（+ オンライン判定）                           |
+| 記録中の検出・保存(予定) | `service/LocationTrackingService.kt` → `PlaceRepository.updateStopsForTrack`      |
+| ライブ立ち寄り中(予定)   | 記録中サービスの `StateFlow`（非永続）→ `presentation/tracking/TrackingScreen.kt` |
+| 再解析(予定)             | 詳細画面 → 補正の再計算 + 立ち寄り再検出 + 命名                                   |
+| リポジトリ               | `domain/repository/PlaceRepository.kt` / `data/repository/PlaceRepositoryImpl.kt` |
+| 画面                     | `presentation/history/TrackDetailScreen.kt`（+ 詳細用 ViewModel）                 |
 
 ---
 

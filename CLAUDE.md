@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **アプリ名：** Pathly（お出掛け記録アプリ）  
 **目的：** お出掛けの記録・計画・振り返りを行う  
-**主要ユーザー：** 出掛けるのが好きな人、カップルなど（Android + iPhone環境）  
+**主要ユーザー：** 出掛けるのが好きな人（Android + iPhone環境）  
 **開発方針：** 段階的開発（リアルタイム記録 → 事後振り返り → 事前計画）  
 **開発体制：** 一人開発、アジャイル手法、Claude Code活用
 
@@ -52,15 +52,15 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - 立ち寄り場所の自動検出（50m圏内+3分滞在）
 - 手動での場所記録
 - 写真撮影機能
-- クラウド同期（二人での共有）
+- クラウド同期（複数人での共有）
 
 ## データベース構造（PostgreSQL）
 
 ### 主要テーブル
 
 - **users** - ユーザー情報
-- **dates** - デート情報（計画・実行済み）
-- **date_participants** - デート参加者（カップル）
+- **outings** - お出掛け情報（計画・実行済み）
+- **outing_participants** - お出掛け参加者（複数人）
 - **tracks** - GPS軌跡データ
 - **gps_points** - GPS座標点（原データ・補正後）
 - **stops** - 立ち寄り場所
@@ -123,7 +123,7 @@ app/src/main/java/com/pathly/
 - **写真・動画記録** - 位置情報付きメディア管理
 - **事後編集** - 場所名、評価、コメント追加
 - **事前計画** - 行きたい場所リスト、ルート計画
-- **データ共有** - カップル間でのリアルタイム同期
+- **データ共有** - 複数人でのリアルタイム同期
 
 ## 開発環境・コマンド
 
@@ -192,7 +192,7 @@ app/src/main/java/com/pathly/
 - **タブ型：** [記録] [履歴] [地図] [計画] [設定]
 - **記録開始：** ホーム画面の大きなボタン + 通知バーのクイックアクセス
 
-### デート中操作（Phase 2以降）
+### お出掛け中操作（Phase 2以降）
 
 - ワンタップ操作重視
 - 大きなボタン設計

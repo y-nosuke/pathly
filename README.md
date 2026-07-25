@@ -2,12 +2,14 @@
 
 <div align="center">
 
-![Pathly Logo](https://via.placeholder.com/200x80/4285f4/ffffff?text=Pathly)
+<img src="docs/assets/pathly-logo.svg" alt="Pathly Logo" width="120" height="120" />
 
 **GPS軌跡を自動記録し、お出掛けの思い出を残す Android アプリ**
 
-[![Platform](https://img.shields.io/badge/platform-Android-green.svg)](https://developer.android.com)
-[![Kotlin](https://img.shields.io/badge/language-Kotlin-blue.svg)](https://kotlinlang.org)
+[![Platform](https://img.shields.io/badge/platform-Android-green)](https://developer.android.com)
+[![Kotlin](https://img.shields.io/badge/language-Kotlin-blue)](https://kotlinlang.org)
+[![minSdk](https://img.shields.io/badge/minSdk-34-orange)](https://developer.android.com/about/versions/14)
+[![CI](https://github.com/y-nosuke/pathly/actions/workflows/android-build.yml/badge.svg)](https://github.com/y-nosuke/pathly/actions/workflows/android-build.yml)
 
 </div>
 
@@ -15,48 +17,50 @@
 
 **Pathly** は、お出掛けが好きな人向けの GPS 記録アプリです。外出中の移動経路を自動的に記録し、後から思い出を振り返ることができます。
 
-### 🎯 主な機能
+## 🎯 主な機能
 
-**Phase 1: リアルタイム記録（MVP）** - _完了_
+チェック済みが実装済み、未チェックが今後の予定です。
 
-- ✅ GPS経路の自動記録・保存（バックグラウンド動作）
-- ✅ 記録したデータの一覧表示・削除
-- ✅ 地図上での軌跡表示（Google Maps）
-- ✅ リアルタイム経路表示・記録中ステータス
-- ✅ ローカルデータ保存（オフライン対応）
+**リアルタイム記録**
 
-**Phase 2: 事後振り返り・編集** - _計画中_
+- [x] 🛰️ GPS経路の自動記録・保存（バックグラウンド動作）
+- [x] 📋 記録データの一覧表示・削除
+- [x] 🗺️ 地図上での軌跡表示（Google Maps）
+- [x] 🔴 リアルタイム経路表示・記録中ステータス
+- [x] 💾 ローカルデータ保存（オフライン対応）
 
-- 🔧 GPSノイズ除去（位置補正）
-- 📍 立ち寄り場所の自動検出
-- 📸 写真・動画記録
-- ⭐ 場所の評価・コメント追加
-- 🏷️ タグ付け機能
+**事後振り返り・編集**
 
-**Phase 3: 事前計画・詳細機能** - _計画中_
+- [x] 🧹 GPSノイズ除去（位置補正）
+- [x] 📍 立ち寄り場所の自動検出
+- [ ] 📸 写真・動画記録
+- [ ] ⭐ 場所の評価・コメント追加
+- [ ] 🏷️ タグ付け機能
 
-- 📋 行きたい場所リスト
-- 🗺️ ルート計画・シミュレーション
-- 🔄 データ共有・リアルタイム同期
-- 📊 統計情報・分析機能
+**事前計画・詳細機能**
+
+- [ ] 🗒️ 行きたい場所リスト
+- [ ] 🧭 ルート計画・シミュレーション
+- [ ] 🔄 データ共有・リアルタイム同期
+- [ ] 📊 統計情報・分析機能
 
 ## 🏗️ 技術スタック
 
-### Frontend
+### フロントエンド
 
 - **Language:** Kotlin
 - **UI Framework:** Jetpack Compose
 - **Architecture:** MVVM + Clean Architecture
 - **Async:** Kotlin Coroutines + StateFlow
 
-### Backend & Data
+### バックエンド・データ
 
 - **Database:** Room (SQLite)
 - **BaaS:** Supabase（将来実装）
 - **Location:** Google Play Services Location
 - **Maps:** Google Maps SDK
 
-### Development
+### 開発
 
 - **DI:** Hilt (Dagger)
 - **Annotation Processing:** KSP
@@ -75,8 +79,10 @@ pathly/
 │   ├── requirements.md # 要望書（★肝）
 │   ├── roadmap.md      # ロードマップ
 │   ├── specs/          # 仕様（features / screens / model）
-│   └── designs/        # 設計（architecture / security / logging / testing / cloud-database）
+│   ├── designs/        # 設計（architecture / security / logging / testing / cloud-database）
+│   └── assets/         # 画像・ロゴ
 ├── .github/            # GitHub Actions（CI）
+├── .githooks/          # Git フック（Markdown 整形）
 ├── .vscode/            # エディタ設定（Prettier など）
 ├── CLAUDE.md           # 開発ガイド
 └── README.md
@@ -95,3 +101,7 @@ pathly/
 - [ロードマップ](docs/roadmap.md) — フェーズ・優先度・進捗
 - [ドキュメント索引](docs/README.md) — 仕様（specs/）・設計（designs/）
 - [CLAUDE.md](CLAUDE.md) — 開発ガイド（規約・詳細コマンド）
+
+## 📄 ライセンス
+
+個人開発プロジェクトのため、**全権利を留保します（All Rights Reserved）**。著作権者の許可なく複製・改変・再配布・利用することを禁じます。詳細は [LICENSE](LICENSE) を参照してください。

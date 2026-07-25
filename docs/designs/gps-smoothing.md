@@ -6,6 +6,7 @@ GPSの生データはノイズで「経路がぐちゃぐちゃ」になり、�
 
 > 対応する要望: [requirements.md](../requirements.md) の「記録した経路をきれいに見たい／正確な距離を知りたい」。ロードマップ Phase 2「GPSノイズ除去（位置補正）」。
 > 用語の日英対応（生データ・補正後の点列・補正・平滑化など）は [glossary.md](./glossary.md) を参照。
+> データモデル（`smoothed_points` 等）は [../specs/model.md](../specs/model.md) を参照。
 
 ## 設計方針
 
@@ -72,16 +73,16 @@ weight_j = 1 / (accuracy_j² + 1)
 
 → 「行の有無」でスキップを自然に表現でき、再補正は**そのtrackの行を全DELETE→再INSERT**で済む。
 
-| カラム            | 型          | 備考                                          |
-| ----------------- | ----------- | --------------------------------------------- |
-| `id`              | INTEGER PK  | AUTOINCREMENT                                 |
-| `track_id`        | INTEGER     | FK → `gps_tracks`（CASCADE）。index あり       |
-| `seq`             | INTEGER     | track内の順序                                 |
-| `latitude`        | REAL        | 補正後                                        |
-| `longitude`       | REAL        | 補正後                                        |
-| `timestamp`       | INTEGER     | 由来の生点の時刻（順序・立ち寄り検出で使う）   |
-| `source_point_id` | INTEGER?    | 由来の `gps_points.id`（任意・トレース用）     |
-| `created_at`      | INTEGER     |                                               |
+| カラム            | 型         | 備考                                         |
+| ----------------- | ---------- | -------------------------------------------- |
+| `id`              | INTEGER PK | AUTOINCREMENT                                |
+| `track_id`        | INTEGER    | FK → `gps_tracks`（CASCADE）。index あり     |
+| `seq`             | INTEGER    | track内の順序                                |
+| `latitude`        | REAL       | 補正後                                       |
+| `longitude`       | REAL       | 補正後                                       |
+| `timestamp`       | INTEGER    | 由来の生点の時刻（順序・立ち寄り検出で使う） |
+| `source_point_id` | INTEGER?   | 由来の `gps_points.id`（任意・トレース用）   |
+| `created_at`      | INTEGER    |                                              |
 
 Room は v2→v3。破壊的フォールバックは無効なので `DatabaseMigrations` に正式なマイグレーションを追加する。`GpsTrack.smoothedPoints` は「読むたびに計算」から「保存済み `smoothed_points` を読む（無ければ生）」へ切り替える。
 
@@ -98,10 +99,10 @@ Room は v2→v3。破壊的フォールバックは無効なので `DatabaseMig
 
 ## パラメータ（SmoothingParams）
 
-| パラメータ    | 意味                          | 既定 | 大きくすると                   |
-| ------------- | ----------------------------- | ---- | ------------------------------ |
+| パラメータ    | 意味                          | 既定 | 大きくすると                                         |
+| ------------- | ----------------------------- | ---- | ---------------------------------------------------- |
 | `maxSpeedMps` | ジャンプ除外の速度上限（m/s） | 150  | 除外が緩くなる（外れ値が残る）。新幹線を通すため高め |
-| `window`      | 平滑窓（ならす点数・奇数）    | 5    | 滑らかになるが実際の角も丸まる |
+| `window`      | 平滑窓（ならす点数・奇数）    | 5    | 滑らかになるが実際の角も丸まる                       |
 
 既定値は `TrackSmoother` の定数（`MAX_SPEED_MPS` / `SMOOTHING_WINDOW`）。
 
@@ -140,16 +141,16 @@ Room は v2→v3。破壊的フォールバックは無効なので `DatabaseMig
 
 ## 実装マップ
 
-| 役割                     | 場所                                                                   |
-| ------------------------ | ---------------------------------------------------------------------- |
-| 補正ロジック・指標       | `domain/model/TrackSmoother.kt`（`SmoothingParams` 含む）              |
-| トラックの補正後点・距離 | `domain/model/GpsTrack.kt`（`smoothedPoints` / `totalDistanceMeters`） |
-| 詳細画面の描画・調整UI   | `presentation/history/TrackDetailScreen.kt`                            |
-| 記録画面のライブ描画     | `presentation/tracking/TrackingScreen.kt`                              |
-| 記録間隔の設定           | `data/settings/SettingsRepository.kt` / 設定画面                       |
-| 記録中の増分補正・保存（予定） | `service/LocationTrackingService.kt`                              |
-| 補正後の永続化（予定）   | `data/local/entity/SmoothedPointEntity.kt` / `data/local/dao/SmoothedPointDao.kt` |
-| 再補正の実行（予定）     | 詳細画面 → Repository（該当trackを全DELETE→再INSERT）                  |
+| 役割                           | 場所                                                                              |
+| ------------------------------ | --------------------------------------------------------------------------------- |
+| 補正ロジック・指標             | `domain/model/TrackSmoother.kt`（`SmoothingParams` 含む）                         |
+| トラックの補正後点・距離       | `domain/model/GpsTrack.kt`（`smoothedPoints` / `totalDistanceMeters`）            |
+| 詳細画面の描画・調整UI         | `presentation/history/TrackDetailScreen.kt`                                       |
+| 記録画面のライブ描画           | `presentation/tracking/TrackingScreen.kt`                                         |
+| 記録間隔の設定                 | `data/settings/SettingsRepository.kt` / 設定画面                                  |
+| 記録中の増分補正・保存（予定） | `service/LocationTrackingService.kt`                                              |
+| 補正後の永続化（予定）         | `data/local/entity/SmoothedPointEntity.kt` / `data/local/dao/SmoothedPointDao.kt` |
+| 再補正の実行（予定）           | 詳細画面 → Repository（該当trackを全DELETE→再INSERT）                             |
 
 ## 決めた値の反映
 

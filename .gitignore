@@ -1,0 +1,3 @@
+# Claude Code — 個人・ローカル設定（共有しない）
+.claude/settings.local.json
+.claude/scheduled_tasks.lock
