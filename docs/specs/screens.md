@@ -12,7 +12,7 @@ Jetpack Compose による Android アプリの画面仕様。**マップを主�
 
 ## ナビゲーション構成
 
-ボトムナビの3タブ（記録・履歴・設定）。詳細画面は全画面オーバーレイで開き、その間はボトムナビを隠す。実装は Jetpack Navigation を使わず、`MainActivity` の単純な State 管理（`selectedTab` / `selectedTrack`）。
+ボトムナビの4タブ（記録・履歴・行きたい・設定）。詳細画面は全画面オーバーレイで開き、その間はボトムナビを隠す。実装は Jetpack Navigation を使わず、`MainActivity` の単純な State 管理（`selectedTab` / `selectedTrack`）。
 
 ```text
 ┌─────────────────────────────┐
@@ -20,17 +20,18 @@ Jetpack Compose による Android アプリの画面仕様。**マップを主�
 │      各画面（全画面）         │
 │                             │
 ├─────────────────────────────┤
-│   [ 記録 ] [ 履歴 ] [ 設定 ] │ ← BottomNavigationBar（詳細表示中は非表示）
+│ [記録] [履歴] [行きたい] [設定]│ ← BottomNavigationBar（詳細表示中は非表示）
 └─────────────────────────────┘
 ```
 
-| タブ | 機能                  | アイコン         |
-| ---- | --------------------- | ---------------- |
-| 記録 | 全画面マップ＋GPS記録 | `ic_location_on` |
-| 履歴 | 過去記録の一覧・統計  | `ic_list`        |
-| 設定 | GPS記録間隔などの設定 | `ic_settings`    |
+| タブ     | 機能                     | アイコン         |
+| -------- | ------------------------ | ---------------- |
+| 記録     | 全画面マップ＋GPS記録    | `ic_location_on` |
+| 履歴     | 過去記録の一覧・統計     | `ic_list`        |
+| 行きたい | 行きたい場所の一覧・登録 | `ic_flag`        |
+| 設定     | GPS記録間隔などの設定    | `ic_settings`    |
 
-> 計画タブは Phase 3 で追加予定（現状は枠のみの構想）。
+> 「行きたい」はマイルストーンを前倒しして追加（[../designs/wishlist.md](../designs/wishlist.md)）。将来の計画タブ（Phase 3）の前身。
 
 ## 画面設計詳細
 
@@ -151,6 +152,30 @@ Jetpack Compose による Android アプリの画面仕様。**マップを主�
 
 対応実装: `presentation/settings/SettingsScreen.kt`, `SettingsViewModel`。
 
+### 5. 行きたい画面
+
+行きたい場所の一覧・登録。詳細な仕様は [../designs/wishlist.md](../designs/wishlist.md) を参照（本節は要点のみ）。
+
+```text
+┌─────────────────────────────┐
+│ 行きたい場所            (＋) │ ← 右上:追加（検索/地図で選ぶ/手入力）
+│ [未訪問] [訪問済み]          │ ← 状態フィルタ
+│ ┌─────────────────────────┐ │
+│ │ ★★★ ◯◯カフェ            │ │ ← 優先度・名前
+│ │ 東京都… / メモ抜粋…       │ │
+│ └─────────────────────────┘ │
+├─────────────────────────────┤
+│ [記録] [履歴] [行きたい] [設定]│
+└─────────────────────────────┘
+```
+
+- **一覧**: 優先度順／登録日順。状態（未訪問/訪問済み）でフィルタ。各行に優先度・場所名（未命名は住所→座標）・メモ抜粋・訪問済みバッジ。
+- **登録3経路**: キーワード検索（Google・オンライン）／地図タップ（オフライン可）／手入力。立ち寄りからの「また行きたい」は後段。
+- **詳細**: map-first。優先度・メモ・訪問済みを編集、削除は wishlist 行のみ（place は残す）。未命名は「場所を取得」で命名（既存 Nearby 解決を再利用）。
+- **初回スコープ**: 優先度・メモ・訪問済み状態のみ。**タグは後段**（複数タグを `tags` 共有で実装）。
+
+対応実装（予定）: `presentation/wishlist/WishlistScreen.kt`, `WishlistViewModel`。
+
 ## デザイントークン
 
 ### カラー（暖色系・Material3）
@@ -172,11 +197,12 @@ Jetpack Compose による Android アプリの画面仕様。**マップを主�
 
 ### アイコン
 
-Material Icons は不使用。`res/drawable` のベクター＋`painterResource` を使う（`ic_location_on` / `ic_list` / `ic_settings` / `ic_play_arrow` / `ic_stop` / `ic_arrow_back` / `ic_my_location` / `ic_tune` / `ic_delete`）。
+Material Icons は不使用。`res/drawable` のベクター＋`painterResource` を使う（`ic_location_on` / `ic_list` / `ic_flag` / `ic_settings` / `ic_play_arrow` / `ic_stop` / `ic_arrow_back` / `ic_my_location` / `ic_tune` / `ic_delete`）。
 
 ## 今後の拡張（ロードマップ連動）
 
 map-first 構成を土台に、[roadmap.md](../roadmap.md) の各フェーズを載せていく。
 
+- **先行**: 「行きたい」タブ（[../designs/wishlist.md](../designs/wishlist.md)）。計画タブの前身。
 - **Phase 2**: 写真・評価・コメント・タグを詳細シートに追加。手動での場所記録。
-- **Phase 3**: 計画タブの追加。計画ルートをマップに重ねる。複数人でのリアルタイム共有。
+- **Phase 3**: 計画タブへ発展（お出掛けの計画・ルート・予算）。計画ルートをマップに重ねる。複数人でのリアルタイム共有。
