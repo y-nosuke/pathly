@@ -3,7 +3,7 @@
 > **ステータス:** 将来の実装用（Phase 3）。現在は Android Room によるローカル完結。
 > ローカルのデータモデルは [specs/model.md](../specs/model.md) を参照。
 
-複数デバイス間の同期・カップル間共有・Web アクセスを担う、Supabase（PostgreSQL）側の設計方針。
+複数デバイス間の同期・複数人での共有・Web アクセスを担う、Supabase（PostgreSQL）側の設計方針。
 
 ---
 
@@ -17,7 +17,7 @@
 ### 担当機能（Supabase 側）
 
 - 複数デバイス間のデータ同期
-- カップル間のリアルタイム共有
+- 複数人でのリアルタイム共有
 - Web アプリからのデータアクセス
 - Row Level Security（RLS）によるアクセス制御
 
@@ -37,7 +37,7 @@
 
 - [ ] users（ユーザー情報）
 - [ ] tracks / gps_points（Room と同期）
-- [ ] user_relationships（カップル関係管理）
+- [ ] user_relationships（複数人の関係管理）
 
 ### セキュリティ設計
 
