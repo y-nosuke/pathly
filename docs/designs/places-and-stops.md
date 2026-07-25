@@ -8,6 +8,7 @@
   - 場所名を自分たちに分かりやすい名前に手動で入力・変更したい
   - 行きたい場所をリストアップしたい／場所の詳細情報を登録したい（将来）
 - 前提: 立ち寄りの**検出ロジック**は [gps-smoothing.md](./gps-smoothing.md) の補正後の点列に対して行う（`StopDetector`）。本書は検出結果を**どう保存・命名・編集するか**を扱う。
+- データモデル（`places` / `stops` / `place_resolutions`）は [../specs/model.md](../specs/model.md) を参照。
 
 ---
 
