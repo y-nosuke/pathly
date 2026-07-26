@@ -2,10 +2,14 @@ package com.pathly.presentation.places
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.pathly.data.places.PlacesTextSearcher
 import com.pathly.domain.model.PlaceListItem
+import com.pathly.domain.model.PlaceSearchResult
 import com.pathly.domain.model.Priority
 import com.pathly.domain.repository.WishlistRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -15,6 +19,7 @@ import javax.inject.Inject
 @HiltViewModel
 class PlacesViewModel @Inject constructor(
   private val wishlistRepository: WishlistRepository,
+  private val placesTextSearcher: PlacesTextSearcher,
 ) : ViewModel() {
 
   private val _uiState = MutableStateFlow(PlacesState())
@@ -103,6 +108,65 @@ class PlacesViewModel @Inject constructor(
         _uiState.value = _uiState.value.copy(errorMessage = "更新に失敗しました: ${e.message}")
       }
     }
+  }
+
+  // ---- キーワード検索（追加＞検索して追加） ----
+
+  private var predictJob: Job? = null
+
+  /** 検索画面を開いたとき。セッション開始＋状態リセット。 */
+  fun startSearch() {
+    placesTextSearcher.startSession()
+    _uiState.value = _uiState.value.copy(search = SearchState())
+  }
+
+  fun onSearchQueryChange(query: String) {
+    _uiState.value = _uiState.value.copy(search = _uiState.value.search.copy(query = query))
+    predictJob?.cancel()
+    if (query.isBlank()) {
+      _uiState.value = _uiState.value.copy(search = _uiState.value.search.copy(predictions = emptyList(), isSearching = false))
+      return
+    }
+    predictJob = viewModelScope.launch {
+      delay(300) // デバウンス（打鍵ごとに叩かない）
+      _uiState.value = _uiState.value.copy(search = _uiState.value.search.copy(isSearching = true))
+      val preds = placesTextSearcher.predict(query)
+      _uiState.value = _uiState.value.copy(
+        search = _uiState.value.search.copy(predictions = preds, isSearching = false),
+      )
+    }
+  }
+
+  /** 候補を選んで確定（fetchPlace）。取得できたら入力フォーム用に result を保持する。 */
+  fun selectPrediction(placeId: String) {
+    viewModelScope.launch {
+      val result = placesTextSearcher.fetch(placeId)
+      if (result == null) {
+        _uiState.value = _uiState.value.copy(errorMessage = "場所の取得に失敗しました（オフライン等）")
+      } else {
+        _uiState.value = _uiState.value.copy(search = _uiState.value.search.copy(result = result))
+      }
+    }
+  }
+
+  /** 検索結果を登録する。行きたい ON なら wishlist にも入れる。 */
+  fun registerSearchResult(result: PlaceSearchResult, wishlist: Boolean, priority: Priority, memo: String?) {
+    viewModelScope.launch {
+      try {
+        val placeId = wishlistRepository.registerSearchedPlace(result)
+        if (wishlist) {
+          wishlistRepository.addToWishlist(placeId, priority, memo)
+        }
+        _uiState.value = _uiState.value.copy(search = SearchState())
+      } catch (e: Exception) {
+        _uiState.value = _uiState.value.copy(errorMessage = "登録に失敗しました: ${e.message}")
+      }
+    }
+  }
+
+  /** 確定フォームから戻る（候補選び直し）。 */
+  fun clearSearchResult() {
+    _uiState.value = _uiState.value.copy(search = _uiState.value.search.copy(result = null))
   }
 
   /** 場所そのものを削除する（行きたい・立ち寄り記録も一緒に消える）。 */

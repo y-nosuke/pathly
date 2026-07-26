@@ -1,11 +1,14 @@
 package com.pathly.data.repository
 
 import com.pathly.data.local.dao.PlaceDao
+import com.pathly.data.local.dao.PlaceResolutionDao
 import com.pathly.data.local.dao.WishlistDao
+import com.pathly.data.local.entity.PlaceResolutionEntity
 import com.pathly.data.local.entity.PlaceWithWishlist
 import com.pathly.data.local.entity.WishlistEntity
 import com.pathly.domain.model.Place
 import com.pathly.domain.model.PlaceListItem
+import com.pathly.domain.model.PlaceSearchResult
 import com.pathly.domain.model.Priority
 import com.pathly.domain.repository.PlaceRepository
 import com.pathly.domain.repository.WishlistRepository
@@ -20,6 +23,7 @@ import javax.inject.Singleton
 class WishlistRepositoryImpl @Inject constructor(
   private val wishlistDao: WishlistDao,
   private val placeDao: PlaceDao,
+  private val placeResolutionDao: PlaceResolutionDao,
   private val placeRepository: PlaceRepository,
 ) : WishlistRepository {
 
@@ -34,6 +38,18 @@ class WishlistRepositoryImpl @Inject constructor(
     if (trimmedName != null && placeDao.getById(placeId)?.name == null) {
       placeDao.updateName(placeId, trimmedName, Date())
     }
+    return placeId
+  }
+
+  override suspend fun registerSearchedPlace(result: PlaceSearchResult): Long {
+    val placeId = placeRepository.findOrCreatePlace(result.latitude, result.longitude)
+    // 未命名なら検索結果の名前・住所を設定（既存の命名は上書きしない）。
+    if (placeDao.getById(placeId)?.name == null) {
+      placeDao.updateNameAndAddress(placeId, result.name, result.address, Date())
+    }
+    // googlePlaceId を解決ログに記録 → 以後は自動命名で Nearby を叩かない。
+    placeResolutionDao.upsert(PlaceResolutionEntity(placeId, Date(), result.googlePlaceId))
+    logger.i("Registered searched place $placeId (google=${result.googlePlaceId})")
     return placeId
   }
 

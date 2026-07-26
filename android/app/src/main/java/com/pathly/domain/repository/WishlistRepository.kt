@@ -1,6 +1,7 @@
 package com.pathly.domain.repository
 
 import com.pathly.domain.model.PlaceListItem
+import com.pathly.domain.model.PlaceSearchResult
 import com.pathly.domain.model.Priority
 import kotlinx.coroutines.flow.Flow
 
@@ -18,6 +19,13 @@ interface WishlistRepository {
    * [name] が非空で場所が未命名なら名前も設定する。行きたい登録はしない。返り値は place の id。
    */
   suspend fun registerPlace(latitude: Double, longitude: Double, name: String?): Long
+
+  /**
+   * キーワード検索の結果から場所を登録する。find-or-create（30m）で場所を同定し、
+   * 未命名なら名前・住所を設定、`place_resolutions` に googlePlaceId を記録する（以後 Nearby を叩かない）。
+   * 返り値は place の id。行きたい登録はしない（呼び出し側で任意に [addToWishlist]）。
+   */
+  suspend fun registerSearchedPlace(result: PlaceSearchResult): Long
 
   /** その場所を「行きたい」に登録する。既に登録済みなら既存の wishlist id を返す。 */
   suspend fun addToWishlist(placeId: Long, priority: Priority, memo: String?): Long
