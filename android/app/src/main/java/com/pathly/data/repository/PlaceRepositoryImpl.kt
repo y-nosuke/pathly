@@ -177,7 +177,7 @@ class PlaceRepositoryImpl @Inject constructor(
   }
 
   /** 近く（[DEDUPE_RADIUS_METERS] 以内）に既存の場所があれば再利用、無ければ新規作成する。 */
-  private suspend fun findOrCreatePlace(latitude: Double, longitude: Double): Long {
+  override suspend fun findOrCreatePlace(latitude: Double, longitude: Double): Long {
     val existing = placeDao.getAll().firstOrNull {
       distanceMeters(it.latitude, it.longitude, latitude, longitude) <= DEDUPE_RADIUS_METERS
     }

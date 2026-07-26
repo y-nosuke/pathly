@@ -8,6 +8,7 @@ import com.pathly.data.local.dao.PlaceDao
 import com.pathly.data.local.dao.PlaceResolutionDao
 import com.pathly.data.local.dao.SmoothedPointDao
 import com.pathly.data.local.dao.StopDao
+import com.pathly.data.local.dao.WishlistDao
 import com.pathly.util.EncryptionHelper
 import dagger.Module
 import dagger.Provides
@@ -45,4 +46,7 @@ object DatabaseModule {
 
   @Provides
   fun providePlaceResolutionDao(database: PathlyDatabase): PlaceResolutionDao = database.placeResolutionDao()
+
+  @Provides
+  fun provideWishlistDao(database: PathlyDatabase): WishlistDao = database.wishlistDao()
 }

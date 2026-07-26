@@ -36,6 +36,12 @@ interface PlaceRepository {
   /** 場所の表示名を手動で更新する（命名。空文字なら未命名に戻す）。 */
   suspend fun updatePlaceName(placeId: Long, name: String)
 
+  /**
+   * 近く（30m以内）に既存の場所があれば再利用し、無ければ新規作成して place の id を返す。
+   * 立ち寄りと行きたい場所で同じ場所を共有するための同定（重複排除）。
+   */
+  suspend fun findOrCreatePlace(latitude: Double, longitude: Double): Long
+
   /** 立ち寄り（訪問）1件を削除する。場所（place）は残す。 */
   suspend fun deleteStop(stopId: Long)
 
