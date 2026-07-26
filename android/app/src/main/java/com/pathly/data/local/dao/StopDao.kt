@@ -4,6 +4,7 @@ import androidx.room.Dao
 import androidx.room.Insert
 import androidx.room.Query
 import androidx.room.Transaction
+import com.pathly.data.local.entity.PlaceVisitRow
 import com.pathly.data.local.entity.StopEntity
 import com.pathly.data.local.entity.StopWithPlace
 import kotlinx.coroutines.flow.Flow
@@ -33,4 +34,14 @@ interface StopDao {
   @Transaction
   @Query("SELECT * FROM stops WHERE trackId = :trackId ORDER BY arrivalTime ASC")
   fun getStopsWithPlaceByTrack(trackId: Long): Flow<List<StopWithPlace>>
+
+  /** その場所を含むお出掛け（経路）の一覧。新しい順。「場所→関連経路の一覧」に使う。 */
+  @Query(
+    "SELECT s.trackId AS trackId, t.startTime AS trackStartTime, " +
+      "s.arrivalTime AS arrivalTime, s.departureTime AS departureTime " +
+      "FROM stops s INNER JOIN gps_tracks t ON t.id = s.trackId " +
+      "WHERE s.placeId = :placeId " +
+      "ORDER BY t.startTime DESC",
+  )
+  fun getVisitsForPlace(placeId: Long): Flow<List<PlaceVisitRow>>
 }

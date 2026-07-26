@@ -22,6 +22,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.painterResource
@@ -37,6 +38,7 @@ import com.pathly.presentation.tracking.TrackingViewModel
 import com.pathly.ui.theme.PathlyAndroidTheme
 import com.pathly.util.PermissionUtils
 import dagger.hilt.android.AndroidEntryPoint
+import kotlinx.coroutines.launch
 
 enum class BottomNavItem(
   val title: String,
@@ -102,6 +104,8 @@ private fun MainScreen(
 ) {
   var selectedTab by remember { mutableStateOf(BottomNavItem.TRACKING) }
   var selectedTrack by remember { mutableStateOf<GpsTrack?>(null) }
+  val mainViewModel: MainViewModel = hiltViewModel()
+  val scope = rememberCoroutineScope()
 
   // 詳細表示中は一覧へ戻す
   BackHandler(enabled = selectedTrack != null) {
@@ -175,6 +179,11 @@ private fun MainScreen(
       selectedTab == BottomNavItem.PLACES -> {
         PlacesScreen(
           modifier = Modifier.padding(innerPadding),
+          onOpenTrack = { trackId ->
+            scope.launch {
+              mainViewModel.getTrack(trackId)?.let { selectedTrack = it }
+            }
+          },
         )
       }
 

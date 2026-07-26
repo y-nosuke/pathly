@@ -2,6 +2,7 @@ package com.pathly.data.repository
 
 import com.pathly.data.local.dao.PlaceDao
 import com.pathly.data.local.dao.PlaceResolutionDao
+import com.pathly.data.local.dao.StopDao
 import com.pathly.data.local.dao.WishlistDao
 import com.pathly.data.local.entity.PlaceResolutionEntity
 import com.pathly.data.local.entity.PlaceWithWishlist
@@ -9,6 +10,7 @@ import com.pathly.data.local.entity.WishlistEntity
 import com.pathly.domain.model.Place
 import com.pathly.domain.model.PlaceListItem
 import com.pathly.domain.model.PlaceSearchResult
+import com.pathly.domain.model.PlaceVisit
 import com.pathly.domain.model.Priority
 import com.pathly.domain.repository.PlaceRepository
 import com.pathly.domain.repository.WishlistRepository
@@ -24,12 +26,24 @@ class WishlistRepositoryImpl @Inject constructor(
   private val wishlistDao: WishlistDao,
   private val placeDao: PlaceDao,
   private val placeResolutionDao: PlaceResolutionDao,
+  private val stopDao: StopDao,
   private val placeRepository: PlaceRepository,
 ) : WishlistRepository {
 
   private val logger = Logger("WishlistRepositoryImpl")
 
   override fun getPlaces(): Flow<List<PlaceListItem>> = placeDao.getPlacesWithWishlist().map { list -> list.map { it.toPlaceListItem() } }
+
+  override fun getVisits(placeId: Long): Flow<List<PlaceVisit>> = stopDao.getVisitsForPlace(placeId).map { list ->
+    list.map {
+      PlaceVisit(
+        trackId = it.trackId,
+        outingDate = it.trackStartTime,
+        arrivalTime = it.arrivalTime,
+        departureTime = it.departureTime,
+      )
+    }
+  }
 
   override suspend fun registerPlace(latitude: Double, longitude: Double, name: String?): Long {
     val placeId = placeRepository.findOrCreatePlace(latitude, longitude)

@@ -11,11 +11,14 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -65,7 +68,9 @@ import com.pathly.R
 import com.pathly.domain.model.PlaceListItem
 import com.pathly.domain.model.PlacePrediction
 import com.pathly.domain.model.PlaceSearchResult
+import com.pathly.domain.model.PlaceVisit
 import com.pathly.domain.model.Priority
+import com.pathly.util.DateFormatters
 
 /** 「場所」タブ内の表示モード（一覧／地図で追加／検索で追加／詳細）。MainActivity には触れず内部で切り替える。 */
 private sealed interface PlacesMode {
@@ -79,6 +84,7 @@ private sealed interface PlacesMode {
 fun PlacesScreen(
   modifier: Modifier = Modifier,
   viewModel: PlacesViewModel = hiltViewModel(),
+  onOpenTrack: (trackId: Long) -> Unit = {},
 ) {
   val uiState by viewModel.uiState.collectAsStateWithLifecycle()
   var mode by remember { mutableStateOf<PlacesMode>(PlacesMode.List) }
@@ -132,9 +138,13 @@ fun PlacesScreen(
       if (item == null) {
         LaunchedEffect(current.placeId) { mode = PlacesMode.List }
       } else {
+        val visitsFlow = remember(current.placeId) { viewModel.visitsFor(current.placeId) }
+        val visits by visitsFlow.collectAsStateWithLifecycle(emptyList())
         PlaceDetailContent(
           modifier = modifier,
           item = item,
+          visits = visits,
+          onOpenTrack = onOpenTrack,
           onBack = { mode = PlacesMode.List },
           onToggleWishlist = { viewModel.toggleWishlist(item) },
           onSaveName = { name -> viewModel.renamePlace(item.place.id, name) },
@@ -556,12 +566,14 @@ private fun AddPlaceContent(
 @Composable
 private fun PlaceDetailContent(
   item: PlaceListItem,
+  visits: List<PlaceVisit>,
   onBack: () -> Unit,
   onToggleWishlist: () -> Unit,
   onSaveName: (name: String) -> Unit,
   onSaveWishlist: (priority: Priority, memo: String?) -> Unit,
   onToggleVisited: (Boolean) -> Unit,
   onRegisterPoi: (lat: Double, lng: Double, name: String, wishlist: Boolean) -> Unit,
+  onOpenTrack: (trackId: Long) -> Unit,
   onDeleteRequest: () -> Unit,
   modifier: Modifier = Modifier,
 ) {
@@ -616,10 +628,15 @@ private fun PlaceDetailContent(
         .align(Alignment.BottomCenter)
         .onSizeChanged { sheetHeightPx = it.height }
         .fillMaxWidth()
+        .heightIn(max = 460.dp)
         .padding(12.dp),
       shape = RoundedCornerShape(12.dp),
     ) {
-      Column(modifier = Modifier.padding(16.dp)) {
+      Column(
+        modifier = Modifier
+          .verticalScroll(rememberScrollState())
+          .padding(16.dp),
+      ) {
         Row(
           modifier = Modifier.fillMaxWidth(),
           horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -692,6 +709,20 @@ private fun PlaceDetailContent(
           modifier = Modifier.fillMaxWidth(),
         ) {
           Text("保存")
+        }
+
+        if (visits.isNotEmpty()) {
+          Spacer(modifier = Modifier.height(16.dp))
+          Text(
+            text = "この場所を含むお出掛け（${visits.size}件）",
+            style = MaterialTheme.typography.titleSmall,
+            fontWeight = FontWeight.Bold,
+          )
+          Spacer(modifier = Modifier.height(4.dp))
+          visits.forEach { visit ->
+            VisitRow(visit = visit, onClick = { onOpenTrack(visit.trackId) })
+            HorizontalDivider()
+          }
         }
 
         Spacer(modifier = Modifier.height(8.dp))
@@ -927,6 +958,31 @@ private fun SearchResultForm(
     ) {
       Text("登録")
     }
+  }
+}
+
+@Composable
+private fun VisitRow(
+  visit: PlaceVisit,
+  onClick: () -> Unit,
+  modifier: Modifier = Modifier,
+) {
+  Column(
+    modifier = modifier
+      .fillMaxWidth()
+      .clickable(onClick = onClick)
+      .padding(vertical = 10.dp),
+  ) {
+    Text(
+      text = DateFormatters.SHORT_DATE_FORMAT.format(visit.outingDate),
+      style = MaterialTheme.typography.bodyLarge,
+    )
+    Text(
+      text = "${DateFormatters.SHORT_TIME_FORMAT.format(visit.arrivalTime)}–" +
+        "${DateFormatters.SHORT_TIME_FORMAT.format(visit.departureTime)} ・滞在${visit.stayMinutes}分",
+      style = MaterialTheme.typography.bodySmall,
+      color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
   }
 }
 
