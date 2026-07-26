@@ -36,7 +36,7 @@ import com.pathly.util.Logger
     WishlistEntity::class,
   ],
   version = 5,
-  exportSchema = false,
+  exportSchema = true,
 )
 @TypeConverters(DateConverter::class)
 abstract class PathlyDatabase : RoomDatabase() {
