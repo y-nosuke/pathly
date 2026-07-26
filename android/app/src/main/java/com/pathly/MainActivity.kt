@@ -30,10 +30,10 @@ import com.pathly.domain.model.GpsTrack
 import com.pathly.presentation.history.HistoryScreen
 import com.pathly.presentation.history.TrackDetailScreen
 import com.pathly.presentation.history.TrackDetailViewModel
+import com.pathly.presentation.places.PlacesScreen
 import com.pathly.presentation.settings.SettingsScreen
 import com.pathly.presentation.tracking.TrackingScreen
 import com.pathly.presentation.tracking.TrackingViewModel
-import com.pathly.presentation.wishlist.WishlistScreen
 import com.pathly.ui.theme.PathlyAndroidTheme
 import com.pathly.util.PermissionUtils
 import dagger.hilt.android.AndroidEntryPoint
@@ -44,7 +44,7 @@ enum class BottomNavItem(
 ) {
   TRACKING("記録", R.drawable.ic_location_on),
   HISTORY("履歴", R.drawable.ic_list),
-  WISHLIST("行きたい", R.drawable.ic_flag),
+  PLACES("場所", R.drawable.ic_place),
   SETTINGS("設定", R.drawable.ic_settings),
 }
 
@@ -169,8 +169,8 @@ private fun MainScreen(
         )
       }
 
-      selectedTab == BottomNavItem.WISHLIST -> {
-        WishlistScreen(
+      selectedTab == BottomNavItem.PLACES -> {
+        PlacesScreen(
           modifier = Modifier.padding(innerPadding),
         )
       }
