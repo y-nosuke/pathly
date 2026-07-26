@@ -20,7 +20,9 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -48,6 +50,7 @@ import com.google.android.gms.location.Priority
 import com.google.android.gms.maps.CameraUpdateFactory
 import com.google.android.gms.maps.model.CameraPosition
 import com.google.android.gms.maps.model.LatLng
+import com.google.android.gms.maps.model.PointOfInterest
 import com.google.android.gms.tasks.CancellationTokenSource
 import com.google.maps.android.compose.CameraMoveStartedReason
 import com.google.maps.android.compose.GoogleMap
@@ -98,11 +101,14 @@ fun TrackingScreen(
     )
   }
 
+  var poiTarget by remember { mutableStateOf<PointOfInterest?>(null) }
+
   Box(modifier = modifier.fillMaxSize()) {
     TrackingMapView(
       hasPermission = uiState.hasLocationPermission,
       track = uiState.currentTrack,
       currentLocation = uiState.currentLocation,
+      onPoiClick = { poiTarget = it },
       modifier = Modifier.fillMaxSize(),
     )
 
@@ -114,6 +120,29 @@ fun TrackingScreen(
           .align(Alignment.TopCenter)
           .padding(top = 12.dp),
       )
+    }
+
+    // 場所を登録した直後の一時メッセージ
+    uiState.placeRegisteredMessage?.let { msg ->
+      LaunchedEffect(msg) {
+        delay(2000)
+        viewModel.clearPlaceRegisteredMessage()
+      }
+      Surface(
+        modifier = Modifier
+          .align(Alignment.TopCenter)
+          .padding(top = if (uiState.isTracking) 56.dp else 12.dp),
+        shape = RoundedCornerShape(20.dp),
+        color = MaterialTheme.colorScheme.secondaryContainer,
+        shadowElevation = 4.dp,
+      ) {
+        Text(
+          text = msg,
+          modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+          style = MaterialTheme.typography.labelLarge,
+          color = MaterialTheme.colorScheme.onSecondaryContainer,
+        )
+      }
     }
 
     // 権限がない場合のオーバーレイ（中央）
@@ -177,6 +206,58 @@ fun TrackingScreen(
       }
     }
   }
+
+  poiTarget?.let { poi ->
+    RegisterPlaceFromPoiDialog(
+      poi = poi,
+      onDismiss = { poiTarget = null },
+      onRegister = { name, wishlist ->
+        viewModel.registerPlace(poi.latLng.latitude, poi.latLng.longitude, name, wishlist)
+        poiTarget = null
+      },
+    )
+  }
+}
+
+@Composable
+private fun RegisterPlaceFromPoiDialog(
+  poi: PointOfInterest,
+  onDismiss: () -> Unit,
+  onRegister: (name: String, wishlist: Boolean) -> Unit,
+) {
+  var name by remember(poi) { mutableStateOf(poi.name) }
+  var wishlist by remember(poi) { mutableStateOf(false) }
+
+  AlertDialog(
+    onDismissRequest = onDismiss,
+    title = { Text("この場所を登録") },
+    text = {
+      Column {
+        OutlinedTextField(
+          value = name,
+          onValueChange = { name = it },
+          label = { Text("名前") },
+          singleLine = true,
+          modifier = Modifier.fillMaxWidth(),
+        )
+        Spacer(modifier = Modifier.padding(top = 4.dp))
+        Row(
+          modifier = Modifier.fillMaxWidth(),
+          horizontalArrangement = Arrangement.SpaceBetween,
+          verticalAlignment = Alignment.CenterVertically,
+        ) {
+          Text("行きたいに登録")
+          Switch(checked = wishlist, onCheckedChange = { wishlist = it })
+        }
+      }
+    },
+    confirmButton = {
+      TextButton(onClick = { onRegister(name, wishlist) }) { Text("登録") }
+    },
+    dismissButton = {
+      TextButton(onClick = onDismiss) { Text("キャンセル") }
+    },
+  )
 }
 
 @Composable
@@ -184,6 +265,7 @@ private fun TrackingMapView(
   hasPermission: Boolean,
   track: GpsTrack?,
   currentLocation: LocationInfo?,
+  onPoiClick: (PointOfInterest) -> Unit,
   modifier: Modifier = Modifier,
 ) {
   val cameraPositionState = rememberCameraPositionState {
@@ -274,6 +356,8 @@ private fun TrackingMapView(
         mapToolbarEnabled = false,
         compassEnabled = false,
       ),
+      // 施設アイコン（POI）をタップしたら場所登録ダイアログを開く
+      onPOIClick = onPoiClick,
     ) {
       val points = track?.smoothedPoints.orEmpty()
       if (points.size >= 2) {

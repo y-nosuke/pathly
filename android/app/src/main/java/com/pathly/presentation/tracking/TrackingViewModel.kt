@@ -12,8 +12,10 @@ import android.provider.Settings
 import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.pathly.domain.model.Priority
 import com.pathly.domain.repository.GpsTrackRepository
 import com.pathly.domain.repository.PlaceRepository
+import com.pathly.domain.repository.WishlistRepository
 import com.pathly.service.LocationTrackingService
 import com.pathly.util.DateFormatters
 import com.pathly.util.PermissionUtils
@@ -30,6 +32,7 @@ class TrackingViewModel @Inject constructor(
   private val application: Application,
   private val gpsTrackRepository: GpsTrackRepository,
   private val placeRepository: PlaceRepository,
+  private val wishlistRepository: WishlistRepository,
 ) : AndroidViewModel(application) {
 
   private val _uiState = MutableStateFlow(TrackingState())
@@ -230,6 +233,28 @@ class TrackingViewModel @Inject constructor(
       addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
     }
     application.startActivity(intent)
+  }
+
+  /**
+   * 記録画面のマップで POI をタップして場所を登録する。行きたい ON なら wishlist にも入れる。
+   * 登録後は「場所」タブに現れる（優先度・メモは場所タブで編集）。
+   */
+  fun registerPlace(latitude: Double, longitude: Double, name: String?, wishlist: Boolean) {
+    viewModelScope.launch {
+      try {
+        val placeId = wishlistRepository.registerPlace(latitude, longitude, name)
+        if (wishlist) {
+          wishlistRepository.addToWishlist(placeId, Priority.MEDIUM, null)
+        }
+        _uiState.value = _uiState.value.copy(placeRegisteredMessage = "「${name?.ifBlank { null } ?: "場所"}」を登録しました")
+      } catch (e: Exception) {
+        _uiState.value = _uiState.value.copy(errorMessage = "場所の登録に失敗しました: ${e.message}")
+      }
+    }
+  }
+
+  fun clearPlaceRegisteredMessage() {
+    _uiState.value = _uiState.value.copy(placeRegisteredMessage = null)
   }
 
   fun clearError() {

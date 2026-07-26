@@ -142,6 +142,16 @@ WishlistItem
 3. wishlist 行を作成（優先度・メモを任意入力）。
 4. 名前は後で **手動入力**、またはオンライン時に **「場所を取得」**（座標中心の Nearby ＝ 既存 `PlacesNameResolver.resolve` を再利用）で命名。
 
+### 2b. 記録画面のマップから登録（POIタップ）
+
+記録（トラッキング）画面の全画面マップでも、施設アイコン（POI）をタップして登録できる。
+
+1. `onPOIClick` で POI（名前・座標）を取得 → 登録ダイアログ（名前・行きたいトグル）。
+2. `registerPlace`（＝地図タップと同じ）。行きたい ON なら `addToWishlist`（優先度は既定 MEDIUM・メモは後で「場所」タブで編集）。
+3. 記録中でも使える。空きタップは登録に使わない（地図操作と競合するため POI タップのみ）。
+
+対応実装: `presentation/tracking/TrackingScreen.kt`（`onPOIClick` → ダイアログ）／`TrackingViewModel.registerPlace`。
+
 ### 3. 立ち寄り場所から登録（また行きたい）
 
 > [requirements.md](../requirements.md) に「訪れた場所を『また行きたい』としてワンタップで追加したい」を追記済み（2026-07-26）。
@@ -279,7 +289,8 @@ interface WishlistRepository {
 3. **キーワード検索登録**: `PlacesTextSearcher`（Autocomplete＋fetchPlace・セッショントークン・オンライン限定）。
 4. **立ち寄りから「また行きたい」**: 詳細画面に導線を追加。
 5. **タグ（複数）**: `tags` / `wishlist_tags` を追加し、一覧にタグ絞り込みを追加。記録側 `stop_tags` と共有する横断機能として設計。
-6. **将来**: 訪問済みの自動判定（stops とのひも付け）、営業時間、計画（お出掛け）への割り当て、Phase 3 の「計画」タブへ発展。
+6. **場所から関連経路の一覧**: 場所の詳細から、その場所に立ち寄った経路（tracks）の一覧を表示して辿れるようにする。`stops`（placeId → trackId）を JOIN すれば実現できる。
+7. **将来**: 営業時間、計画（お出掛け）への割り当て、Phase 3 の「計画」タブへ発展。
 
 いずれの段階でも、Google が使えなくても（地図タップで）アプリは成立する。
 
