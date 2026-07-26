@@ -27,6 +27,9 @@ interface WishlistRepository {
    */
   suspend fun registerSearchedPlace(result: PlaceSearchResult): Long
 
+  /** 場所の名前を手動で設定・変更する（空文字なら未命名に戻す）。 */
+  suspend fun renamePlace(placeId: Long, name: String)
+
   /** その場所を「行きたい」に登録する。既に登録済みなら既存の wishlist id を返す。 */
   suspend fun addToWishlist(placeId: Long, priority: Priority, memo: String?): Long
 
