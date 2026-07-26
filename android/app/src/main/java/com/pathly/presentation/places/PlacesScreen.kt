@@ -136,6 +136,7 @@ fun PlacesScreen(
           item = item,
           onBack = { mode = PlacesMode.List },
           onToggleWishlist = { viewModel.toggleWishlist(item) },
+          onSaveName = { name -> viewModel.renamePlace(item.place.id, name) },
           onSaveWishlist = { priority, memo ->
             item.wishlistId?.let { viewModel.updateWishlist(it, priority, memo) }
           },
@@ -553,16 +554,21 @@ private fun PlaceDetailContent(
   item: PlaceListItem,
   onBack: () -> Unit,
   onToggleWishlist: () -> Unit,
+  onSaveName: (name: String) -> Unit,
   onSaveWishlist: (priority: Priority, memo: String?) -> Unit,
   onToggleVisited: (Boolean) -> Unit,
   onDeleteRequest: () -> Unit,
   modifier: Modifier = Modifier,
 ) {
+  val savedName = item.place.name ?: ""
   val savedPriority = item.priority ?: Priority.MEDIUM
   val savedMemo = item.memo ?: ""
+  var name by remember(item.place.id) { mutableStateOf(savedName) }
   var priority by remember(item.wishlistId) { mutableStateOf(savedPriority) }
   var memo by remember(item.wishlistId) { mutableStateOf(savedMemo) }
-  val hasChanges = priority != savedPriority || memo.trim() != savedMemo.trim()
+  val nameChanged = name.trim() != savedName.trim()
+  val wishlistChanged = item.isWishlisted && (priority != savedPriority || memo.trim() != savedMemo.trim())
+  val hasChanges = nameChanged || wishlistChanged
 
   // 下部カードの高さを測り、その分マップ下部に余白を入れてピンがカードに隠れないようにする。
   var sheetHeightPx by remember { mutableIntStateOf(0) }
@@ -608,18 +614,21 @@ private fun PlaceDetailContent(
       Column(modifier = Modifier.padding(16.dp)) {
         Row(
           modifier = Modifier.fillMaxWidth(),
-          horizontalArrangement = Arrangement.SpaceBetween,
+          horizontalArrangement = Arrangement.spacedBy(8.dp),
           verticalAlignment = Alignment.CenterVertically,
         ) {
-          Text(
-            text = item.displayName,
-            style = MaterialTheme.typography.titleLarge,
-            fontWeight = FontWeight.Bold,
+          OutlinedTextField(
+            value = name,
+            onValueChange = { name = it },
+            label = { Text("名前") },
+            placeholder = { Text(item.displayName, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+            singleLine = true,
             modifier = Modifier.weight(1f),
           )
           WishlistFlagButton(active = item.isWishlisted, onClick = onToggleWishlist)
         }
         item.place.address?.let { address ->
+          Spacer(modifier = Modifier.height(4.dp))
           Text(
             text = address,
             style = MaterialTheme.typography.bodyMedium,
@@ -656,15 +665,6 @@ private fun PlaceDetailContent(
               Switch(checked = item.isManuallyVisited, onCheckedChange = onToggleVisited)
             }
           }
-
-          Spacer(modifier = Modifier.height(12.dp))
-          Button(
-            onClick = { onSaveWishlist(priority, memo.ifBlank { null }) },
-            enabled = hasChanges,
-            modifier = Modifier.fillMaxWidth(),
-          ) {
-            Text("保存")
-          }
         } else {
           Spacer(modifier = Modifier.height(8.dp))
           Text(
@@ -672,6 +672,18 @@ private fun PlaceDetailContent(
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
           )
+        }
+
+        Spacer(modifier = Modifier.height(12.dp))
+        Button(
+          onClick = {
+            if (nameChanged) onSaveName(name)
+            if (wishlistChanged) onSaveWishlist(priority, memo.ifBlank { null })
+          },
+          enabled = hasChanges,
+          modifier = Modifier.fillMaxWidth(),
+        ) {
+          Text("保存")
         }
 
         Spacer(modifier = Modifier.height(8.dp))

@@ -90,6 +90,17 @@ class PlacesViewModel @Inject constructor(
     }
   }
 
+  /** 場所の名前を手動で編集する（空なら未命名に戻す）。 */
+  fun renamePlace(placeId: Long, name: String) {
+    viewModelScope.launch {
+      try {
+        wishlistRepository.renamePlace(placeId, name)
+      } catch (e: Exception) {
+        _uiState.value = _uiState.value.copy(errorMessage = "名前の変更に失敗しました: ${e.message}")
+      }
+    }
+  }
+
   fun updateWishlist(id: Long, priority: Priority, memo: String?) {
     viewModelScope.launch {
       try {

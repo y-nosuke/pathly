@@ -53,6 +53,10 @@ class WishlistRepositoryImpl @Inject constructor(
     return placeId
   }
 
+  override suspend fun renamePlace(placeId: Long, name: String) {
+    placeDao.updateName(placeId, name.trim().ifBlank { null }, Date())
+  }
+
   override suspend fun addToWishlist(placeId: Long, priority: Priority, memo: String?): Long {
     // 同じ場所を二重登録しない（placeId は UNIQUE）。既にあれば既存を返す。
     wishlistDao.getByPlaceId(placeId)?.let { return it.id }
