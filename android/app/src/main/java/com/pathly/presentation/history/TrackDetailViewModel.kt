@@ -3,9 +3,11 @@ package com.pathly.presentation.history
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.pathly.domain.model.GpsTrack
+import com.pathly.domain.model.Priority
 import com.pathly.domain.model.Stop
 import com.pathly.domain.repository.GpsTrackRepository
 import com.pathly.domain.repository.PlaceRepository
+import com.pathly.domain.repository.WishlistRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -27,6 +29,7 @@ import javax.inject.Inject
 class TrackDetailViewModel @Inject constructor(
   private val placeRepository: PlaceRepository,
   private val gpsTrackRepository: GpsTrackRepository,
+  private val wishlistRepository: WishlistRepository,
 ) : ViewModel() {
 
   private val _stops = MutableStateFlow<List<Stop>>(emptyList())
@@ -82,6 +85,21 @@ class TrackDetailViewModel @Inject constructor(
     viewModelScope.launch {
       if (!placeRepository.deletePlace(placeId, trackId)) {
         _message.value = "他の経路にも訪問があるため、場所ごとは削除できません（この訪問だけ削除できます）"
+      }
+    }
+  }
+
+  /** 振り返り中の地図で POI をタップして場所を登録する。行きたい ON なら wishlist にも入れる。 */
+  fun registerPlace(latitude: Double, longitude: Double, name: String?, wishlist: Boolean) {
+    viewModelScope.launch {
+      try {
+        val placeId = wishlistRepository.registerPlace(latitude, longitude, name)
+        if (wishlist) {
+          wishlistRepository.addToWishlist(placeId, Priority.MEDIUM, null)
+        }
+        _message.value = "「${name?.ifBlank { null } ?: "場所"}」を登録しました"
+      } catch (e: Exception) {
+        _message.value = "場所の登録に失敗しました: ${e.message}"
       }
     }
   }

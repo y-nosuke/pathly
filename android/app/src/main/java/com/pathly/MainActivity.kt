@@ -152,6 +152,9 @@ private fun MainScreen(
           onDeleteStop = { stopId -> detailViewModel.deleteStop(stopId) },
           onDeletePlace = { placeId, trackId -> detailViewModel.deletePlace(placeId, trackId) },
           onMessageShown = { detailViewModel.clearMessage() },
+          onRegisterPlace = { lat, lng, name, wishlist ->
+            detailViewModel.registerPlace(lat, lng, name, wishlist)
+          },
         )
       }
 

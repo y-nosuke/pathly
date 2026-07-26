@@ -20,9 +20,7 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -62,6 +60,7 @@ import com.google.maps.android.compose.rememberCameraPositionState
 import com.pathly.R
 import com.pathly.domain.model.GpsTrack
 import com.pathly.domain.model.Stop
+import com.pathly.presentation.places.RegisterPlaceFromPoiDialog
 import com.pathly.ui.theme.TrackLineOrange
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -217,47 +216,6 @@ fun TrackingScreen(
       },
     )
   }
-}
-
-@Composable
-private fun RegisterPlaceFromPoiDialog(
-  poi: PointOfInterest,
-  onDismiss: () -> Unit,
-  onRegister: (name: String, wishlist: Boolean) -> Unit,
-) {
-  var name by remember(poi) { mutableStateOf(poi.name) }
-  var wishlist by remember(poi) { mutableStateOf(false) }
-
-  AlertDialog(
-    onDismissRequest = onDismiss,
-    title = { Text("この場所を登録") },
-    text = {
-      Column {
-        OutlinedTextField(
-          value = name,
-          onValueChange = { name = it },
-          label = { Text("名前") },
-          singleLine = true,
-          modifier = Modifier.fillMaxWidth(),
-        )
-        Spacer(modifier = Modifier.padding(top = 4.dp))
-        Row(
-          modifier = Modifier.fillMaxWidth(),
-          horizontalArrangement = Arrangement.SpaceBetween,
-          verticalAlignment = Alignment.CenterVertically,
-        ) {
-          Text("行きたいに登録")
-          Switch(checked = wishlist, onCheckedChange = { wishlist = it })
-        }
-      }
-    },
-    confirmButton = {
-      TextButton(onClick = { onRegister(name, wishlist) }) { Text("登録") }
-    },
-    dismissButton = {
-      TextButton(onClick = onDismiss) { Text("キャンセル") }
-    },
-  )
 }
 
 @Composable

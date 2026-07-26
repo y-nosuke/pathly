@@ -55,6 +55,7 @@ import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.google.android.gms.maps.model.CameraPosition
 import com.google.android.gms.maps.model.LatLng
+import com.google.android.gms.maps.model.PointOfInterest
 import com.google.maps.android.compose.GoogleMap
 import com.google.maps.android.compose.MapUiSettings
 import com.google.maps.android.compose.Marker
@@ -142,6 +143,9 @@ fun PlacesScreen(
           },
           onToggleVisited = { visited ->
             item.wishlistId?.let { viewModel.setVisited(it, visited) }
+          },
+          onRegisterPoi = { lat, lng, name, wishlist ->
+            viewModel.registerPlace(lat, lng, name, wishlist, Priority.MEDIUM, null)
           },
           onDeleteRequest = { deleteTarget = item },
         )
@@ -557,9 +561,11 @@ private fun PlaceDetailContent(
   onSaveName: (name: String) -> Unit,
   onSaveWishlist: (priority: Priority, memo: String?) -> Unit,
   onToggleVisited: (Boolean) -> Unit,
+  onRegisterPoi: (lat: Double, lng: Double, name: String, wishlist: Boolean) -> Unit,
   onDeleteRequest: () -> Unit,
   modifier: Modifier = Modifier,
 ) {
+  var poiTarget by remember { mutableStateOf<PointOfInterest?>(null) }
   val savedName = item.place.name ?: ""
   val savedPriority = item.priority ?: Priority.MEDIUM
   val savedMemo = item.memo ?: ""
@@ -589,6 +595,8 @@ private fun PlaceDetailContent(
         mapToolbarEnabled = false,
         myLocationButtonEnabled = false,
       ),
+      // 詳細のマップで別の施設(POI)を見かけたらタップで登録できる。
+      onPOIClick = { poiTarget = it },
     ) {
       val markerState = remember(position) { MarkerState(position = position) }
       Marker(state = markerState, title = item.displayName)
@@ -714,6 +722,17 @@ private fun PlaceDetailContent(
         }
       }
     }
+  }
+
+  poiTarget?.let { poi ->
+    RegisterPlaceFromPoiDialog(
+      poi = poi,
+      onDismiss = { poiTarget = null },
+      onRegister = { name, wishlist ->
+        onRegisterPoi(poi.latLng.latitude, poi.latLng.longitude, name, wishlist)
+        poiTarget = null
+      },
+    )
   }
 }
 
