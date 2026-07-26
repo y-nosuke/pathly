@@ -68,6 +68,8 @@ class PlacesViewModel @Inject constructor(
         if (wishlist) {
           wishlistRepository.addToWishlist(placeId, priority, memo)
         }
+        // 追加した場所が今のフィルタで隠れないよう「すべて」に戻す（先頭に出る）。
+        _uiState.value = _uiState.value.copy(filter = PlacesFilter.ALL)
       } catch (e: Exception) {
         _uiState.value = _uiState.value.copy(errorMessage = "登録に失敗しました: ${e.message}")
       }
@@ -157,7 +159,8 @@ class PlacesViewModel @Inject constructor(
         if (wishlist) {
           wishlistRepository.addToWishlist(placeId, priority, memo)
         }
-        _uiState.value = _uiState.value.copy(search = SearchState())
+        // 追加した場所が今のフィルタで隠れないよう「すべて」に戻す（先頭に出る）。
+        _uiState.value = _uiState.value.copy(search = SearchState(), filter = PlacesFilter.ALL)
       } catch (e: Exception) {
         _uiState.value = _uiState.value.copy(errorMessage = "登録に失敗しました: ${e.message}")
       }
