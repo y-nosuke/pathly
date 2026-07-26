@@ -272,8 +272,10 @@ private fun PlacesListContent(
 
       else -> {
         val listState = rememberLazyListState()
-        // フィルタを切り替えたら即座に先頭を表示する（アニメーションで動かさず、最初から一番上に）。
-        LaunchedEffect(state.filter) { listState.scrollToItem(0) }
+        // フィルタ切替時、または先頭の項目が変わったとき（＝新しい場所を追加したとき）に先頭へ。
+        // 追加した場所は先頭に入るが、リストはスクロール位置を保持するため明示的に戻す。
+        val topItemId = state.filteredItems.firstOrNull()?.place?.id
+        LaunchedEffect(state.filter, topItemId) { listState.scrollToItem(0) }
         LazyColumn(
           state = listState,
           verticalArrangement = Arrangement.spacedBy(8.dp),
