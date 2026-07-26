@@ -115,7 +115,7 @@ WishlistItem
 
 いずれも **place を find-or-create（30m 重複排除）で登録**するのが土台。「行きたい」は任意の属性で、
 必要なときだけ wishlist 行を作る（既に登録済みの place なら重複させない）。
-下記は登録の入口の一覧（実装済みは 2 の地図タップ。1・3 は後段）。
+下記は登録の入口の一覧（実装済み: 1 キーワード検索・2 地図タップ・2b 記録画面POI。3 立ち寄りから は後段）。
 
 ### 1. キーワード検索で登録（オンライン・課金あり）
 
@@ -286,7 +286,7 @@ interface WishlistRepository {
 1. **DB＋ドメイン＋一覧（オフラインで完結）✅ 実装済**: `wishlist` テーブル・DAO・マイグレーション、`PlaceListItem`、
    「場所」タブ（全 places 一覧）、**地図タップ登録**（POI 名自動入力・タップ後にフォーム）、行きたいトグル・優先度/メモ/訪問トグル。**Google 不要で成立**。
 2. **命名の再利用**: 座標のみ登録の place を既存「場所を取得」（Nearby）で命名。
-3. **キーワード検索登録**: `PlacesTextSearcher`（Autocomplete＋fetchPlace・セッショントークン・オンライン限定）。
+3. **キーワード検索登録 ✅ 実装済**: `PlacesTextSearcher`（Autocomplete＋fetchPlace・セッショントークン・オンライン限定）。「追加」＞「検索して追加」で店名検索 → 候補選択 → 名前/住所/座標/googlePlaceId 取得 → `registerSearchedPlace`（place＋解決ログ）＋任意で行きたい。**Cloud で「Places API (New)」有効化＋課金が前提**。
 4. **立ち寄りから「また行きたい」**: 詳細画面に導線を追加。
 5. **タグ（複数）**: `tags` / `wishlist_tags` を追加し、一覧にタグ絞り込みを追加。記録側 `stop_tags` と共有する横断機能として設計。
 6. **場所から関連経路の一覧**: 場所の詳細から、その場所に立ち寄った経路（tracks）の一覧を表示して辿れるようにする。`stops`（placeId → trackId）を JOIN すれば実現できる。

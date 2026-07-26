@@ -1,6 +1,7 @@
 package com.pathly.presentation.places
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -20,9 +21,12 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -58,12 +62,15 @@ import com.google.maps.android.compose.MarkerState
 import com.google.maps.android.compose.rememberCameraPositionState
 import com.pathly.R
 import com.pathly.domain.model.PlaceListItem
+import com.pathly.domain.model.PlacePrediction
+import com.pathly.domain.model.PlaceSearchResult
 import com.pathly.domain.model.Priority
 
-/** 「場所」タブ内の表示モード（一覧／追加／詳細）。MainActivity には触れず内部で切り替える。 */
+/** 「場所」タブ内の表示モード（一覧／地図で追加／検索で追加／詳細）。MainActivity には触れず内部で切り替える。 */
 private sealed interface PlacesMode {
   data object List : PlacesMode
   data object Add : PlacesMode
+  data object SearchAdd : PlacesMode
   data class Detail(val placeId: Long) : PlacesMode
 }
 
@@ -86,7 +93,11 @@ fun PlacesScreen(
     PlacesMode.List -> PlacesListContent(
       modifier = modifier,
       state = uiState,
-      onAddClick = { mode = PlacesMode.Add },
+      onAddByMap = { mode = PlacesMode.Add },
+      onAddBySearch = {
+        viewModel.startSearch()
+        mode = PlacesMode.SearchAdd
+      },
       onFilterChange = viewModel::setFilter,
       onItemClick = { mode = PlacesMode.Detail(it.place.id) },
       onToggleWishlist = viewModel::toggleWishlist,
@@ -98,6 +109,19 @@ fun PlacesScreen(
       onCancel = { mode = PlacesMode.List },
       onSave = { lat, lng, name, wishlist, priority, memo ->
         viewModel.registerPlace(lat, lng, name, wishlist, priority, memo)
+        mode = PlacesMode.List
+      },
+    )
+
+    PlacesMode.SearchAdd -> SearchAddContent(
+      modifier = modifier,
+      search = uiState.search,
+      onQueryChange = viewModel::onSearchQueryChange,
+      onSelectPrediction = viewModel::selectPrediction,
+      onBackToPredictions = viewModel::clearSearchResult,
+      onCancel = { mode = PlacesMode.List },
+      onRegister = { result, wishlist, priority, memo ->
+        viewModel.registerSearchResult(result, wishlist, priority, memo)
         mode = PlacesMode.List
       },
     )
@@ -166,7 +190,8 @@ private fun DeletePlaceDialog(
 @Composable
 private fun PlacesListContent(
   state: PlacesState,
-  onAddClick: () -> Unit,
+  onAddByMap: () -> Unit,
+  onAddBySearch: () -> Unit,
   onFilterChange: (PlacesFilter) -> Unit,
   onItemClick: (PlaceListItem) -> Unit,
   onToggleWishlist: (PlaceListItem) -> Unit,
@@ -188,9 +213,28 @@ private fun PlacesListContent(
         style = MaterialTheme.typography.headlineMedium,
         fontWeight = FontWeight.Bold,
       )
-      Button(onClick = onAddClick) {
-        Icon(painter = painterResource(R.drawable.ic_place), contentDescription = null)
-        Text(text = " 追加")
+      Box {
+        var menuOpen by remember { mutableStateOf(false) }
+        Button(onClick = { menuOpen = true }) {
+          Icon(painter = painterResource(R.drawable.ic_place), contentDescription = null)
+          Text(text = " 追加")
+        }
+        DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+          DropdownMenuItem(
+            text = { Text("検索して追加") },
+            onClick = {
+              menuOpen = false
+              onAddBySearch()
+            },
+          )
+          DropdownMenuItem(
+            text = { Text("地図で選ぶ") },
+            onClick = {
+              menuOpen = false
+              onAddByMap()
+            },
+          )
+        }
       }
     }
 
@@ -228,8 +272,10 @@ private fun PlacesListContent(
 
       else -> {
         val listState = rememberLazyListState()
-        // フィルタを切り替えたら即座に先頭を表示する（アニメーションで動かさず、最初から一番上に）。
-        LaunchedEffect(state.filter) { listState.scrollToItem(0) }
+        // フィルタ切替時、または先頭の項目が変わったとき（＝新しい場所を追加したとき）に先頭へ。
+        // 追加した場所は先頭に入るが、リストはスクロール位置を保持するため明示的に戻す。
+        val topItemId = state.filteredItems.firstOrNull()?.place?.id
+        LaunchedEffect(state.filter, topItemId) { listState.scrollToItem(0) }
         LazyColumn(
           state = listState,
           verticalArrangement = Arrangement.spacedBy(8.dp),
@@ -655,6 +701,200 @@ private fun PlaceDetailContent(
           )
         }
       }
+    }
+  }
+}
+
+// ---------------------------------------------------------------------------
+// 追加（キーワード検索）
+// ---------------------------------------------------------------------------
+
+@Composable
+private fun SearchAddContent(
+  search: SearchState,
+  onQueryChange: (String) -> Unit,
+  onSelectPrediction: (String) -> Unit,
+  onBackToPredictions: () -> Unit,
+  onCancel: () -> Unit,
+  onRegister: (result: PlaceSearchResult, wishlist: Boolean, priority: Priority, memo: String?) -> Unit,
+  modifier: Modifier = Modifier,
+) {
+  val result = search.result
+  if (result != null) {
+    // 候補を確定 → 登録フォーム
+    SearchResultForm(
+      result = result,
+      onBack = onBackToPredictions,
+      onRegister = onRegister,
+      modifier = modifier,
+    )
+    return
+  }
+
+  Column(
+    modifier = modifier
+      .fillMaxSize()
+      .padding(16.dp),
+  ) {
+    Row(
+      modifier = Modifier.fillMaxWidth(),
+      horizontalArrangement = Arrangement.SpaceBetween,
+      verticalAlignment = Alignment.CenterVertically,
+    ) {
+      Text(
+        text = "検索して追加",
+        style = MaterialTheme.typography.headlineSmall,
+        fontWeight = FontWeight.Bold,
+      )
+      TextButton(onClick = onCancel) { Text("閉じる") }
+    }
+
+    Spacer(modifier = Modifier.height(8.dp))
+
+    OutlinedTextField(
+      value = search.query,
+      onValueChange = onQueryChange,
+      label = { Text("店名・場所名で検索") },
+      singleLine = true,
+      modifier = Modifier.fillMaxWidth(),
+    )
+
+    Spacer(modifier = Modifier.height(8.dp))
+
+    when {
+      search.isSearching -> {
+        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+          CircularProgressIndicator()
+        }
+      }
+
+      search.query.isNotBlank() && search.predictions.isEmpty() -> {
+        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+          Text(
+            text = "候補がありません\n（オンライン・キーワードを確認）",
+            style = MaterialTheme.typography.bodyMedium,
+            textAlign = TextAlign.Center,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+          )
+        }
+      }
+
+      else -> {
+        LazyColumn {
+          items(search.predictions, key = { it.placeId }) { prediction ->
+            PredictionRow(prediction = prediction, onClick = { onSelectPrediction(prediction.placeId) })
+            HorizontalDivider()
+          }
+        }
+      }
+    }
+  }
+}
+
+@Composable
+private fun PredictionRow(
+  prediction: PlacePrediction,
+  onClick: () -> Unit,
+  modifier: Modifier = Modifier,
+) {
+  Column(
+    modifier = modifier
+      .fillMaxWidth()
+      .clickable(onClick = onClick)
+      .padding(vertical = 12.dp),
+  ) {
+    Text(
+      text = prediction.primaryText,
+      style = MaterialTheme.typography.bodyLarge,
+      maxLines = 1,
+      overflow = TextOverflow.Ellipsis,
+    )
+    if (prediction.secondaryText.isNotBlank()) {
+      Text(
+        text = prediction.secondaryText,
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        maxLines = 1,
+        overflow = TextOverflow.Ellipsis,
+      )
+    }
+  }
+}
+
+@Composable
+private fun SearchResultForm(
+  result: PlaceSearchResult,
+  onBack: () -> Unit,
+  onRegister: (result: PlaceSearchResult, wishlist: Boolean, priority: Priority, memo: String?) -> Unit,
+  modifier: Modifier = Modifier,
+) {
+  var wishlist by remember(result) { mutableStateOf(false) }
+  var priority by remember(result) { mutableStateOf(Priority.MEDIUM) }
+  var memo by remember(result) { mutableStateOf("") }
+
+  Column(
+    modifier = modifier
+      .fillMaxSize()
+      .padding(16.dp),
+  ) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+      FilledTonalIconButton(onClick = onBack) {
+        Icon(painter = painterResource(R.drawable.ic_arrow_back), contentDescription = "候補に戻る")
+      }
+      Spacer(modifier = Modifier.height(0.dp))
+      Text(
+        text = "この場所を登録",
+        style = MaterialTheme.typography.titleLarge,
+        fontWeight = FontWeight.Bold,
+        modifier = Modifier.padding(start = 8.dp),
+      )
+    }
+
+    Spacer(modifier = Modifier.height(12.dp))
+
+    Text(
+      text = result.name ?: "（名称なし）",
+      style = MaterialTheme.typography.titleMedium,
+      fontWeight = FontWeight.Bold,
+    )
+    result.address?.let { address ->
+      Text(
+        text = address,
+        style = MaterialTheme.typography.bodyMedium,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+      )
+    }
+
+    Spacer(modifier = Modifier.height(16.dp))
+
+    Row(
+      modifier = Modifier.fillMaxWidth(),
+      horizontalArrangement = Arrangement.SpaceBetween,
+      verticalAlignment = Alignment.CenterVertically,
+    ) {
+      Text("行きたいに登録")
+      Switch(checked = wishlist, onCheckedChange = { wishlist = it })
+    }
+
+    if (wishlist) {
+      Spacer(modifier = Modifier.height(8.dp))
+      PrioritySelector(selected = priority, onSelect = { priority = it })
+      Spacer(modifier = Modifier.height(8.dp))
+      OutlinedTextField(
+        value = memo,
+        onValueChange = { memo = it },
+        label = { Text("メモ（任意）") },
+        modifier = Modifier.fillMaxWidth(),
+      )
+    }
+
+    Spacer(modifier = Modifier.height(16.dp))
+
+    Button(
+      onClick = { onRegister(result, wishlist, priority, memo.ifBlank { null }) },
+      modifier = Modifier.fillMaxWidth(),
+    ) {
+      Text("登録")
     }
   }
 }
