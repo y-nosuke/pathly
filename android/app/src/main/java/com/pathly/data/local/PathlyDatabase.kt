@@ -13,12 +13,14 @@ import com.pathly.data.local.dao.PlaceDao
 import com.pathly.data.local.dao.PlaceResolutionDao
 import com.pathly.data.local.dao.SmoothedPointDao
 import com.pathly.data.local.dao.StopDao
+import com.pathly.data.local.dao.WishlistDao
 import com.pathly.data.local.entity.GpsPointEntity
 import com.pathly.data.local.entity.GpsTrackEntity
 import com.pathly.data.local.entity.PlaceEntity
 import com.pathly.data.local.entity.PlaceResolutionEntity
 import com.pathly.data.local.entity.SmoothedPointEntity
 import com.pathly.data.local.entity.StopEntity
+import com.pathly.data.local.entity.WishlistEntity
 import com.pathly.data.local.migration.DatabaseMigrations
 import com.pathly.util.EncryptionHelper
 import com.pathly.util.Logger
@@ -31,9 +33,10 @@ import com.pathly.util.Logger
     StopEntity::class,
     SmoothedPointEntity::class,
     PlaceResolutionEntity::class,
+    WishlistEntity::class,
   ],
-  version = 4,
-  exportSchema = false,
+  version = 5,
+  exportSchema = true,
 )
 @TypeConverters(DateConverter::class)
 abstract class PathlyDatabase : RoomDatabase() {
@@ -44,6 +47,7 @@ abstract class PathlyDatabase : RoomDatabase() {
   abstract fun stopDao(): StopDao
   abstract fun smoothedPointDao(): SmoothedPointDao
   abstract fun placeResolutionDao(): PlaceResolutionDao
+  abstract fun wishlistDao(): WishlistDao
 
   companion object {
     const val DATABASE_NAME = "pathly_database"

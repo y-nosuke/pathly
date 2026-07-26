@@ -6,6 +6,7 @@ import android.content.pm.PackageManager
 import androidx.arch.core.executor.testing.InstantTaskExecutorRule
 import com.pathly.domain.repository.GpsTrackRepository
 import com.pathly.domain.repository.PlaceRepository
+import com.pathly.domain.repository.WishlistRepository
 import io.mockk.coEvery
 import io.mockk.every
 import io.mockk.mockk
@@ -38,6 +39,7 @@ class TrackingViewModelTest {
   private val mockPlaceRepository = mockk<PlaceRepository>(relaxed = true).also {
     every { it.currentStop } returns MutableStateFlow(null)
   }
+  private val mockWishlistRepository = mockk<WishlistRepository>(relaxed = true)
 
   @Before
   fun setup() {
@@ -69,7 +71,7 @@ class TrackingViewModelTest {
     // Given
     coEvery { mockRepository.getActiveTrack() } returns null
     coEvery { mockRepository.getActiveTrackRealtime() } returns flowOf(null)
-    val viewModel = TrackingViewModel(mockApplication, mockRepository, mockPlaceRepository)
+    val viewModel = TrackingViewModel(mockApplication, mockRepository, mockPlaceRepository, mockWishlistRepository)
     testDispatcher.scheduler.advanceUntilIdle()
 
     // When
@@ -85,7 +87,7 @@ class TrackingViewModelTest {
     // Given
     coEvery { mockRepository.getActiveTrack() } returns null
     coEvery { mockRepository.getActiveTrackRealtime() } returns flowOf(null)
-    val viewModel = TrackingViewModel(mockApplication, mockRepository, mockPlaceRepository)
+    val viewModel = TrackingViewModel(mockApplication, mockRepository, mockPlaceRepository, mockWishlistRepository)
     testDispatcher.scheduler.advanceUntilIdle()
 
     // When
@@ -101,7 +103,7 @@ class TrackingViewModelTest {
     // Given
     coEvery { mockRepository.getActiveTrack() } returns null
     coEvery { mockRepository.getActiveTrackRealtime() } returns flowOf(null)
-    val viewModel = TrackingViewModel(mockApplication, mockRepository, mockPlaceRepository)
+    val viewModel = TrackingViewModel(mockApplication, mockRepository, mockPlaceRepository, mockWishlistRepository)
     testDispatcher.scheduler.advanceUntilIdle()
 
     // When

@@ -17,6 +17,8 @@ data class TrackingState(
   val interruptedTrack: GpsTrack? = null,
   // 電池の最適化を無効化済みか（バックグラウンド記録の安定性に影響）。既定はtrueで案内を出さない
   val isIgnoringBatteryOptimizations: Boolean = true,
+  // マップ上の POI から場所を登録した直後の一時メッセージ（表示後クリア）
+  val placeRegisteredMessage: String? = null,
 )
 
 data class LocationInfo(

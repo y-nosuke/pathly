@@ -30,6 +30,7 @@ import com.pathly.domain.model.GpsTrack
 import com.pathly.presentation.history.HistoryScreen
 import com.pathly.presentation.history.TrackDetailScreen
 import com.pathly.presentation.history.TrackDetailViewModel
+import com.pathly.presentation.places.PlacesScreen
 import com.pathly.presentation.settings.SettingsScreen
 import com.pathly.presentation.tracking.TrackingScreen
 import com.pathly.presentation.tracking.TrackingViewModel
@@ -43,6 +44,7 @@ enum class BottomNavItem(
 ) {
   TRACKING("記録", R.drawable.ic_location_on),
   HISTORY("履歴", R.drawable.ic_list),
+  PLACES("場所", R.drawable.ic_place),
   SETTINGS("設定", R.drawable.ic_settings),
 }
 
@@ -164,6 +166,12 @@ private fun MainScreen(
         HistoryScreen(
           modifier = Modifier.padding(innerPadding),
           onTrackClick = { track -> selectedTrack = track },
+        )
+      }
+
+      selectedTab == BottomNavItem.PLACES -> {
+        PlacesScreen(
+          modifier = Modifier.padding(innerPadding),
         )
       }
 

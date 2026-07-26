@@ -83,6 +83,20 @@ android {
       isReturnDefaultValues = true
     }
   }
+
+  // Room のスキーマ JSON を instrumented test（MigrationTestHelper）から読めるように
+  // assets へ含める。出力先は下の ksp{} で指定した $projectDir/schemas。
+  sourceSets {
+    getByName("androidTest") {
+      assets.srcDirs(files("$projectDir/schemas"))
+    }
+  }
+}
+
+// Room のスキーマを $projectDir/schemas に書き出す（exportSchema=true と対で使う）。
+// マイグレーションの自動検証（MigrationTestHelper）とスキーマ差分レビューのため。
+ksp {
+  arg("room.schemaLocation", "$projectDir/schemas")
 }
 
 dependencies {

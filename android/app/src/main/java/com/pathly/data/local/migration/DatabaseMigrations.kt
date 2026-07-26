@@ -126,12 +126,48 @@ object DatabaseMigrations {
   }
 
   /**
+   * バージョン4から5へのマイグレーション。
+   * 行きたい場所（計画）を保存する wishlist テーブルを追加する
+   * （docs/designs/wishlist.md）。1 place につき最大1件（placeId は UNIQUE）。
+   *
+   * DDL は Room がエンティティから生成するものと一致させること（起動時のスキーマ検証を通すため）。
+   */
+  val MIGRATION_4_5 = object : Migration(4, 5) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+      try {
+        Logger.i(TAG, "Starting migration from version 4 to 5")
+
+        db.execSQL(
+          "CREATE TABLE IF NOT EXISTS `wishlist` (" +
+            "`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+            "`placeId` INTEGER NOT NULL, " +
+            "`priority` INTEGER NOT NULL, " +
+            "`memo` TEXT, " +
+            "`visitedAt` INTEGER, " +
+            "`createdAt` INTEGER NOT NULL, " +
+            "`updatedAt` INTEGER NOT NULL, " +
+            "FOREIGN KEY(`placeId`) REFERENCES `places`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+        )
+        db.execSQL(
+          "CREATE UNIQUE INDEX IF NOT EXISTS `index_wishlist_placeId` ON `wishlist` (`placeId`)",
+        )
+
+        Logger.i(TAG, "Migration from version 4 to 5 completed successfully")
+      } catch (e: Exception) {
+        Logger.e(TAG, "Migration from version 4 to 5 failed", e)
+        throw e
+      }
+    }
+  }
+
+  /**
    * 現在利用可能な全てのマイグレーション
    */
   val ALL_MIGRATIONS = arrayOf(
     MIGRATION_1_2,
     MIGRATION_2_3,
     MIGRATION_3_4,
+    MIGRATION_4_5,
     // 将来のマイグレーションをここに追加
   )
 
