@@ -142,15 +142,17 @@ WishlistItem
 3. wishlist 行を作成（優先度・メモを任意入力）。
 4. 名前は後で **手動入力**、またはオンライン時に **「場所を取得」**（座標中心の Nearby ＝ 既存 `PlacesNameResolver.resolve` を再利用）で命名。
 
-### 2b. 記録画面のマップから登録（POIタップ）
+### 2b. マップ上の POI タップから登録（アプリ共通）
 
-記録（トラッキング）画面の全画面マップでも、施設アイコン（POI）をタップして登録できる。
+**地図はどこでも「場所を見つける面」**として扱い、施設アイコン（POI）をタップすると
+共通の登録ダイアログ（名前・行きたいトグル）を出す。シートや入力欄と干渉しないようモーダルにする。
 
-1. `onPOIClick` で POI（名前・座標）を取得 → 登録ダイアログ（名前・行きたいトグル）。
-2. `registerPlace`（＝地図タップと同じ）。行きたい ON なら `addToWishlist`（優先度は既定 MEDIUM・メモは後で「場所」タブで編集）。
-3. 記録中でも使える。空きタップは登録に使わない（地図操作と競合するため POI タップのみ）。
+- 対応マップ: **記録画面／経路詳細（振り返り）／場所詳細**の3つ。
+- `onPOIClick` で POI（名前・座標）→ 共通ダイアログ → `registerPlace`（＝地図タップと同じ）。行きたい ON なら `addToWishlist`（優先度は既定 MEDIUM・メモは後で「場所」タブで編集）。
+- 記録中でも使える。空きタップは登録に使わない（地図操作と競合するため POI タップのみ）。
 
-対応実装: `presentation/tracking/TrackingScreen.kt`（`onPOIClick` → ダイアログ）／`TrackingViewModel.registerPlace`。
+対応実装: 共通 `presentation/places/RegisterPlaceFromPoiDialog.kt`。呼び出しは
+`TrackingScreen`（`TrackingViewModel.registerPlace`）／`TrackDetailScreen`（`TrackDetailViewModel.registerPlace`）／`PlacesScreen` 詳細（`PlacesViewModel.registerPlace`）。
 
 ### 3. 立ち寄り場所から登録（また行きたい）
 

@@ -45,6 +45,7 @@ import com.google.android.gms.maps.model.BitmapDescriptorFactory
 import com.google.android.gms.maps.model.CameraPosition
 import com.google.android.gms.maps.model.LatLng
 import com.google.android.gms.maps.model.LatLngBounds
+import com.google.android.gms.maps.model.PointOfInterest
 import com.google.maps.android.compose.GoogleMap
 import com.google.maps.android.compose.MapProperties
 import com.google.maps.android.compose.MapType
@@ -60,6 +61,7 @@ import com.pathly.domain.model.GpsTrack
 import com.pathly.domain.model.SmoothingParams
 import com.pathly.domain.model.Stop
 import com.pathly.domain.model.TrackSmoother
+import com.pathly.presentation.places.RegisterPlaceFromPoiDialog
 import com.pathly.ui.theme.TrackLineOrange
 import com.pathly.util.DateFormatters
 import kotlinx.coroutines.launch
@@ -84,7 +86,9 @@ fun TrackDetailScreen(
   onDeleteStop: (stopId: Long) -> Unit = {},
   onDeletePlace: (placeId: Long, trackId: Long) -> Unit = { _, _ -> },
   onMessageShown: () -> Unit = {},
+  onRegisterPlace: (lat: Double, lng: Double, name: String, wishlist: Boolean) -> Unit = { _, _, _, _ -> },
 ) {
+  var poiTarget by remember { mutableStateOf<PointOfInterest?>(null) }
   // 下にスワイプでシートを隠せる（地図を全画面化）。戻すボタンで復帰する。
   val sheetState = rememberStandardBottomSheetState(
     initialValue = SheetValue.PartiallyExpanded,
@@ -152,6 +156,7 @@ fun TrackDetailScreen(
           focusTarget = focusTarget,
           focusNonce = focusNonce,
           contentPadding = PaddingValues(bottom = if (sheetHidden) 0.dp else peek),
+          onPoiClick = { poiTarget = it },
           modifier = Modifier.fillMaxSize(),
         )
       } else {
@@ -263,6 +268,17 @@ fun TrackDetailScreen(
       onDismissRequest = onMessageShown,
       confirmButton = { TextButton(onClick = onMessageShown) { Text("OK") } },
       text = { Text(text) },
+    )
+  }
+
+  poiTarget?.let { poi ->
+    RegisterPlaceFromPoiDialog(
+      poi = poi,
+      onDismiss = { poiTarget = null },
+      onRegister = { name, wishlist ->
+        onRegisterPlace(poi.latLng.latitude, poi.latLng.longitude, name, wishlist)
+        poiTarget = null
+      },
     )
   }
 }
@@ -611,6 +627,7 @@ private fun TrackMapView(
   focusTarget: LatLng? = null,
   focusNonce: Int = 0,
   contentPadding: PaddingValues = PaddingValues(0.dp),
+  onPoiClick: (PointOfInterest) -> Unit = {},
 ) {
   val cameraPositionState = rememberCameraPositionState()
   val defaultPosition = LatLng(35.6762, 139.6503) // Tokyo Station as default
@@ -654,6 +671,7 @@ private fun TrackMapView(
       zoomGesturesEnabled = true,
       scrollGesturesEnabled = true,
     ),
+    onPOIClick = onPoiClick,
   ) {
     // 調整モードでは生データを灰色で重ねて見比べる
     if (showRawOverlay && track.points.size >= 2) {
