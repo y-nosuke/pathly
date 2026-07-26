@@ -30,7 +30,7 @@ class PlacesViewModel @Inject constructor(
       try {
         wishlistRepository.getPlaces().collect { items ->
           _uiState.value = _uiState.value.copy(
-            items = items.sortedForDisplay(),
+            items = items,
             isLoading = false,
             errorMessage = null,
           )
@@ -43,13 +43,6 @@ class PlacesViewModel @Inject constructor(
       }
     }
   }
-
-  /** 行きたいを上に、優先度の高い順、次に更新の新しい順で並べる。 */
-  private fun List<PlaceListItem>.sortedForDisplay(): List<PlaceListItem> = sortedWith(
-    compareByDescending<PlaceListItem> { it.isWishlisted }
-      .thenByDescending { it.priority?.value ?: -1 }
-      .thenByDescending { it.place.updatedAt },
-  )
 
   fun setFilter(filter: PlacesFilter) {
     _uiState.value = _uiState.value.copy(filter = filter)
@@ -108,6 +101,17 @@ class PlacesViewModel @Inject constructor(
         wishlistRepository.setVisited(id, visited)
       } catch (e: Exception) {
         _uiState.value = _uiState.value.copy(errorMessage = "更新に失敗しました: ${e.message}")
+      }
+    }
+  }
+
+  /** 場所そのものを削除する（行きたい・立ち寄り記録も一緒に消える）。 */
+  fun deletePlace(placeId: Long) {
+    viewModelScope.launch {
+      try {
+        wishlistRepository.deletePlace(placeId)
+      } catch (e: Exception) {
+        _uiState.value = _uiState.value.copy(errorMessage = "削除に失敗しました: ${e.message}")
       }
     }
   }

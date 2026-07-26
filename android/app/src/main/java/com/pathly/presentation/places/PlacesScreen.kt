@@ -13,11 +13,13 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -26,6 +28,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -65,6 +68,7 @@ fun PlacesScreen(
 ) {
   val uiState by viewModel.uiState.collectAsStateWithLifecycle()
   var mode by remember { mutableStateOf<PlacesMode>(PlacesMode.List) }
+  var deleteTarget by remember { mutableStateOf<PlaceListItem?>(null) }
 
   BackHandler(enabled = mode != PlacesMode.List) { mode = PlacesMode.List }
 
@@ -80,6 +84,7 @@ fun PlacesScreen(
       onFilterChange = viewModel::setFilter,
       onItemClick = { mode = PlacesMode.Detail(it.place.id) },
       onToggleWishlist = viewModel::toggleWishlist,
+      onDeleteRequest = { deleteTarget = it },
     )
 
     PlacesMode.Add -> AddPlaceContent(
@@ -107,10 +112,44 @@ fun PlacesScreen(
           onToggleVisited = { visited ->
             item.wishlistId?.let { viewModel.setVisited(it, visited) }
           },
+          onDeleteRequest = { deleteTarget = item },
         )
       }
     }
   }
+
+  deleteTarget?.let { target ->
+    DeletePlaceDialog(
+      item = target,
+      onConfirm = {
+        viewModel.deletePlace(target.place.id)
+        deleteTarget = null
+        // 詳細を開いていた場合は、削除で items から消えて自動的に一覧へ戻る。
+      },
+      onDismiss = { deleteTarget = null },
+    )
+  }
+}
+
+@Composable
+private fun DeletePlaceDialog(
+  item: PlaceListItem,
+  onConfirm: () -> Unit,
+  onDismiss: () -> Unit,
+) {
+  AlertDialog(
+    onDismissRequest = onDismiss,
+    title = { Text("削除しますか？") },
+    text = { Text("「${item.displayName}」を削除します。") },
+    confirmButton = {
+      TextButton(onClick = onConfirm) {
+        Text("削除", color = MaterialTheme.colorScheme.error)
+      }
+    },
+    dismissButton = {
+      TextButton(onClick = onDismiss) { Text("キャンセル") }
+    },
+  )
 }
 
 // ---------------------------------------------------------------------------
@@ -125,6 +164,7 @@ private fun PlacesListContent(
   onFilterChange: (PlacesFilter) -> Unit,
   onItemClick: (PlaceListItem) -> Unit,
   onToggleWishlist: (PlaceListItem) -> Unit,
+  onDeleteRequest: (PlaceListItem) -> Unit,
   modifier: Modifier = Modifier,
 ) {
   Column(
@@ -187,6 +227,7 @@ private fun PlacesListContent(
               item = item,
               onClick = { onItemClick(item) },
               onToggleWishlist = { onToggleWishlist(item) },
+              onDelete = { onDeleteRequest(item) },
             )
           }
         }
@@ -201,6 +242,7 @@ private fun PlaceItemRow(
   item: PlaceListItem,
   onClick: () -> Unit,
   onToggleWishlist: () -> Unit,
+  onDelete: () -> Unit,
   modifier: Modifier = Modifier,
 ) {
   Card(
@@ -226,7 +268,9 @@ private fun PlaceItemRow(
         )
         val subtitle = buildList {
           if (item.isWishlisted) add("行きたい ${priorityStars(item.priority ?: Priority.MEDIUM)}")
-          if (item.isVisited) add("✓訪問済み")
+          if (item.isVisited) {
+            add(if (item.visitCount > 0) "✓訪問済み ${item.visitCount}回" else "✓訪問済み")
+          }
           item.memo?.takeIf { it.isNotBlank() }?.let { add(it) }
           item.place.address?.takeIf { it.isNotBlank() }?.let { add(it) }
         }.joinToString(" / ")
@@ -242,6 +286,19 @@ private fun PlaceItemRow(
       }
 
       WishlistFlagButton(active = item.isWishlisted, onClick = onToggleWishlist)
+      // 立ち寄り記録がある場所は削除不可（記録を残すため）。
+      val canDelete = item.visitCount == 0
+      IconButton(onClick = onDelete, enabled = canDelete) {
+        Icon(
+          painter = painterResource(R.drawable.ic_delete),
+          contentDescription = if (canDelete) "削除" else "立ち寄り記録があるため削除できません",
+          tint = if (canDelete) {
+            MaterialTheme.colorScheme.error
+          } else {
+            MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
+          },
+        )
+      }
     }
   }
 }
@@ -417,6 +474,7 @@ private fun PlaceDetailContent(
   onToggleWishlist: () -> Unit,
   onSaveWishlist: (priority: Priority, memo: String?) -> Unit,
   onToggleVisited: (Boolean) -> Unit,
+  onDeleteRequest: () -> Unit,
   modifier: Modifier = Modifier,
 ) {
   var priority by remember(item.wishlistId) { mutableStateOf(item.priority ?: Priority.MEDIUM) }
@@ -441,13 +499,13 @@ private fun PlaceDetailContent(
       Marker(state = markerState, title = item.displayName)
     }
 
-    IconButton(
+    FilledTonalIconButton(
       onClick = onBack,
       modifier = Modifier
         .align(Alignment.TopStart)
-        .padding(8.dp),
+        .padding(12.dp),
     ) {
-      Icon(painter = painterResource(R.drawable.ic_arrow_back), contentDescription = "戻る")
+      Icon(painter = painterResource(R.drawable.ic_arrow_back), contentDescription = "一覧に戻る")
     }
 
     Card(
@@ -492,13 +550,21 @@ private fun PlaceDetailContent(
           )
 
           Spacer(modifier = Modifier.height(8.dp))
-          Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically,
-          ) {
-            Text(text = if (item.isVisited) "訪問済み" else "未訪問")
-            Switch(checked = item.isVisited, onCheckedChange = onToggleVisited)
+          if (item.visitCount > 0) {
+            Text(
+              text = "訪問済み（立ち寄り記録 ${item.visitCount} 件）",
+              style = MaterialTheme.typography.bodyMedium,
+              color = MaterialTheme.colorScheme.secondary,
+            )
+          } else {
+            Row(
+              modifier = Modifier.fillMaxWidth(),
+              horizontalArrangement = Arrangement.SpaceBetween,
+              verticalAlignment = Alignment.CenterVertically,
+            ) {
+              Text(text = if (item.isManuallyVisited) "訪問済み" else "未訪問")
+              Switch(checked = item.isManuallyVisited, onCheckedChange = onToggleVisited)
+            }
           }
 
           Spacer(modifier = Modifier.height(12.dp))
@@ -512,6 +578,33 @@ private fun PlaceDetailContent(
           Spacer(modifier = Modifier.height(8.dp))
           Text(
             text = "「行きたい」に登録すると、優先度やメモを付けられます。",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+          )
+        }
+
+        Spacer(modifier = Modifier.height(8.dp))
+        val canDelete = item.visitCount == 0
+        val deleteColor = if (canDelete) {
+          MaterialTheme.colorScheme.error
+        } else {
+          MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
+        }
+        OutlinedButton(
+          onClick = onDeleteRequest,
+          enabled = canDelete,
+          modifier = Modifier.fillMaxWidth(),
+        ) {
+          Icon(
+            painter = painterResource(R.drawable.ic_delete),
+            contentDescription = null,
+            tint = deleteColor,
+          )
+          Text(text = " この場所を削除", color = deleteColor)
+        }
+        if (!canDelete) {
+          Text(
+            text = "立ち寄り記録があるため削除できません（記録を残します）",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
           )

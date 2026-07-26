@@ -2,7 +2,6 @@ package com.pathly.data.repository
 
 import com.pathly.data.local.dao.PlaceDao
 import com.pathly.data.local.dao.WishlistDao
-import com.pathly.data.local.entity.PlaceEntity
 import com.pathly.data.local.entity.PlaceWithWishlist
 import com.pathly.data.local.entity.WishlistEntity
 import com.pathly.domain.model.Place
@@ -68,21 +67,27 @@ class WishlistRepositoryImpl @Inject constructor(
     wishlistDao.deleteById(id)
   }
 
-  private fun PlaceWithWishlist.toPlaceListItem(): PlaceListItem = PlaceListItem(
-    place = place.toPlace(),
-    wishlistId = wishlist?.id,
-    priority = wishlist?.let { Priority.fromValue(it.priority) },
-    memo = wishlist?.memo,
-    visitedAt = wishlist?.visitedAt,
-  )
+  override suspend fun deletePlace(placeId: Long) {
+    // 立ち寄り記録（stops）は残す方針。呼び出し側で stops のある場所は削除させない（UIで非活性）。
+    // place を消すと wishlist / place_resolutions は CASCADE で消える。
+    placeDao.deleteById(placeId)
+    logger.i("Deleted place $placeId")
+  }
 
-  private fun PlaceEntity.toPlace(): Place = Place(
-    id = id,
-    name = name,
-    latitude = latitude,
-    longitude = longitude,
-    address = address,
-    createdAt = createdAt,
-    updatedAt = updatedAt,
+  private fun PlaceWithWishlist.toPlaceListItem(): PlaceListItem = PlaceListItem(
+    place = Place(
+      id = id,
+      name = name,
+      latitude = latitude,
+      longitude = longitude,
+      address = address,
+      createdAt = createdAt,
+      updatedAt = updatedAt,
+    ),
+    wishlistId = wishlistId,
+    priority = priority?.let { Priority.fromValue(it) },
+    memo = memo,
+    visitedAt = visitedAt,
+    visitCount = visitCount,
   )
 }

@@ -30,4 +30,11 @@ interface WishlistRepository {
 
   /** 「行きたい」から外す（wishlist 行のみ削除。場所 place は残す）。 */
   suspend fun removeFromWishlist(id: Long)
+
+  /**
+   * 場所そのものを削除する（行きたい登録・解決ログは CASCADE で一緒に消える）。
+   * **立ち寄り（stops）がある場所は消さない**方針のため、呼び出し側で stops のある場所は
+   * 削除させないこと（UI で非活性）。stops がある place を渡すと FK 制約で失敗する。
+   */
+  suspend fun deletePlace(placeId: Long)
 }

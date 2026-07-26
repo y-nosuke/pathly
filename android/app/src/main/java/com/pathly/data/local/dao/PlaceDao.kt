@@ -3,7 +3,6 @@ package com.pathly.data.local.dao
 import androidx.room.Dao
 import androidx.room.Insert
 import androidx.room.Query
-import androidx.room.Transaction
 import com.pathly.data.local.entity.PlaceEntity
 import com.pathly.data.local.entity.PlaceWithWishlist
 import kotlinx.coroutines.flow.Flow
@@ -18,9 +17,18 @@ interface PlaceDao {
   @Query("SELECT * FROM places")
   suspend fun getAll(): List<PlaceEntity>
 
-  /** 「場所」タブ用: 全ての場所を、行きたい登録（あれば）付きでリアクティブに取得する。 */
-  @Transaction
-  @Query("SELECT * FROM places")
+  /**
+   * 「場所」タブ用: 全ての場所を、行きたい登録（あれば）と立ち寄り件数付きで取得する。
+   * places / wishlist / stops を明示的に参照するので、いずれの変更にもリアクティブに追従する。
+   */
+  @Query(
+    "SELECT p.id AS id, p.name AS name, p.latitude AS latitude, p.longitude AS longitude, " +
+      "p.address AS address, p.createdAt AS createdAt, p.updatedAt AS updatedAt, " +
+      "w.id AS wishlistId, w.priority AS priority, w.memo AS memo, w.visitedAt AS visitedAt, " +
+      "(SELECT COUNT(*) FROM stops s WHERE s.placeId = p.id) AS visitCount " +
+      "FROM places p LEFT JOIN wishlist w ON w.placeId = p.id " +
+      "ORDER BY p.createdAt DESC",
+  )
   fun getPlacesWithWishlist(): Flow<List<PlaceWithWishlist>>
 
   @Query("SELECT * FROM places WHERE id = :id")
