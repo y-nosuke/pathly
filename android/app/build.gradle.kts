@@ -5,7 +5,7 @@ plugins {
   alias(libs.plugins.kotlin.compose)
   alias(libs.plugins.hilt)
   alias(libs.plugins.ksp)
-  id("com.diffplug.spotless")
+  alias(libs.plugins.spotless)
 }
 
 android {
@@ -88,7 +88,7 @@ android {
   // assets へ含める。出力先は下の ksp{} で指定した $projectDir/schemas。
   sourceSets {
     getByName("androidTest") {
-      assets.srcDirs(files("$projectDir/schemas"))
+      assets.directories.add("$projectDir/schemas")
     }
   }
 }
@@ -137,15 +137,15 @@ dependencies {
   implementation(libs.kotlinx.coroutines.android)
 
   // Security - Encrypted SharedPreferences
-  implementation("androidx.security:security-crypto:1.1.0")
+  implementation(libs.androidx.security.crypto)
 
   testImplementation(libs.junit)
 
   // Unit Test dependencies
-  testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.11.0")
-  testImplementation("androidx.arch.core:core-testing:2.2.0")
-  testImplementation("io.mockk:mockk:1.14.11")
-  testImplementation("app.cash.turbine:turbine:1.2.1")
+  testImplementation(libs.kotlinx.coroutines.test)
+  testImplementation(libs.androidx.core.testing)
+  testImplementation(libs.mockk)
+  testImplementation(libs.turbine)
 
   androidTestImplementation(libs.androidx.junit)
   androidTestImplementation(libs.androidx.espresso.core)
@@ -153,13 +153,12 @@ dependencies {
   androidTestImplementation(libs.androidx.ui.test.junit4)
 
   // Android Integration Test dependencies
-  androidTestImplementation("androidx.arch.core:core-testing:2.2.0")
-  androidTestImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.11.0")
+  androidTestImplementation(libs.androidx.core.testing)
+  androidTestImplementation(libs.kotlinx.coroutines.test)
   androidTestImplementation(libs.androidx.room.testing)
 
   // UI Test dependencies
-  androidTestImplementation("io.mockk:mockk-android:1.14.11")
-  androidTestImplementation("androidx.compose.ui:ui-test-manifest")
+  androidTestImplementation(libs.mockk.android)
 
   debugImplementation(libs.androidx.ui.tooling)
   debugImplementation(libs.androidx.ui.test.manifest)
