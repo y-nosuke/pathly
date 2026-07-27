@@ -247,19 +247,19 @@ WishlistItem
 
 Clean Architecture（[architecture.md](./architecture.md)）に沿う。既存の Place 系実装を最大限再利用する。
 
-| 要素                   | ファイル                                                                                   |
-| ---------------------- | ------------------------------------------------------------------------------------------ |
-| Entity                 | `data/local/entity/WishlistEntity.kt` ／ `PlaceWithWishlist.kt`（place＋wishlist の JOIN） |
-| DAO                    | `data/local/dao/WishlistDao.kt` ／ `PlaceDao.getPlacesWithWishlist()`（一覧）              |
-| マイグレーション       | `DatabaseMigrations.kt` の v4→v5（`wishlist` 作成）                                        |
-| ドメインモデル         | `domain/model/PlaceListItem.kt`（一覧行）, `Priority.kt`                                   |
-| リポジトリ             | `domain/repository/WishlistRepository.kt` ／ `data/repository/WishlistRepositoryImpl.kt`   |
-| 場所同定（再利用）     | 既存 `findOrCreatePlace`（`PlaceRepository`）を共用                                        |
-| ViewModel / 画面       | `presentation/places/PlacesViewModel.kt` ／ `PlacesScreen.kt`（一覧・追加・詳細）          |
-| ナビ                   | `MainActivity` の `selectedTab` に「場所」を追加、`ic_place` ベクター追加                  |
-| DI                     | `di/` に `WishlistRepository` のバインド追加                                               |
-| キーワード検索(後段)   | `data/places/PlacesTextSearcher.kt`（Autocomplete＋fetchPlace）                            |
-| 名前解決(後段・再利用) | 既存 `PlacesNameResolver.resolve`（座標のみ place の命名）                                 |
+| 要素                   | ファイル                                                                                                                                                                                                       |
+| ---------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Entity                 | `data/local/entity/WishlistEntity.kt` ／ `PlaceWithWishlist.kt`（place＋wishlist の JOIN）                                                                                                                     |
+| DAO                    | `data/local/dao/WishlistDao.kt` ／ `PlaceDao.getPlacesWithWishlist()`（一覧）                                                                                                                                  |
+| マイグレーション       | `DatabaseMigrations.kt` の v4→v5（`wishlist` 作成）                                                                                                                                                            |
+| ドメインモデル         | `domain/model/PlaceListItem.kt`（一覧行）, `Priority.kt`                                                                                                                                                       |
+| リポジトリ             | `domain/repository/WishlistRepository.kt` ／ `data/repository/WishlistRepositoryImpl.kt`                                                                                                                       |
+| 場所同定（再利用）     | 既存 `findOrCreatePlace`（`PlaceRepository`）を共用                                                                                                                                                            |
+| ViewModel / 画面       | `presentation/places/PlacesViewModel.kt` ／ `PlacesScreen.kt`（一覧・追加・詳細のルート）                                                                                                                      |
+| ナビ                   | Navigation-Compose。`presentation/navigation/PathlyNavHost.kt` の `places` ネストグラフ（`places_list`/`place_add`/`place_search`/`place_detail`）。VM は places グラフにスコープして共有。`ic_place` ベクター |
+| DI                     | `di/` に `WishlistRepository` のバインド追加                                                                                                                                                                   |
+| キーワード検索(後段)   | `data/places/PlacesTextSearcher.kt`（Autocomplete＋fetchPlace）                                                                                                                                                |
+| 名前解決(後段・再利用) | 既存 `PlacesNameResolver.resolve`（座標のみ place の命名）                                                                                                                                                     |
 
 ### リポジトリ・インターフェース
 
@@ -292,7 +292,7 @@ interface WishlistRepository {
 3. **キーワード検索登録 ✅ 実装済**: `PlacesTextSearcher`（Autocomplete＋fetchPlace・セッショントークン・オンライン限定）。「追加」＞「検索して追加」で店名検索 → 候補選択 → 名前/住所/座標/googlePlaceId 取得 → `registerSearchedPlace`（place＋解決ログ）＋任意で行きたい。**Cloud で「Places API (New)」有効化＋課金が前提**。
 4. **立ち寄りから「また行きたい」**: 詳細画面に導線を追加。
 5. **タグ（複数）**: `tags` / `wishlist_tags` を追加し、一覧にタグ絞り込みを追加。記録側 `stop_tags` と共有する横断機能として設計。
-6. **場所から関連経路の一覧 ✅ 実装済**: 場所の詳細に「この場所を含むお出掛け（N件）」を表示（日付＋その場所での滞在時刻・滞在分）。タップで経路詳細（振り返り）を開く。`StopDao.getVisitsForPlace`（stops×gps_tracks JOIN）→ `WishlistRepository.getVisits`。遷移は `MainActivity`（`MainViewModel.getTrack` で trackId→GpsTrack を解決し `selectedTrack` にセット）。
+6. **場所から関連経路の一覧 ✅ 実装済**: 場所の詳細に「この場所を含むお出掛け（N件）」を表示（日付＋その場所での滞在時刻・滞在分）。タップで経路詳細（振り返り）を開く。`StopDao.getVisitsForPlace`（stops×gps_tracks JOIN）→ `WishlistRepository.getVisits`。遷移は Navigation-Compose で `track_detail/{trackId}` へ push（`track_detail` は trackId から自前でロード）。場所詳細はスタックに残るため、経路詳細から戻ると場所詳細に戻る。
 7. **将来**: 営業時間、計画（お出掛け）への割り当て、Phase 3 の「計画」タブへ発展。
 
 いずれの段階でも、Google が使えなくても（地図タップで）アプリは成立する。
