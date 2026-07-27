@@ -52,16 +52,16 @@ class TrackDetailViewModel @Inject constructor(
 
   private var collectJob: Job? = null
 
-  fun load(track: GpsTrack) {
-    if (loadedTrackId.value == track.id) return
-    loadedTrackId.value = track.id
+  fun load(trackId: Long) {
+    if (loadedTrackId.value == trackId) return
+    loadedTrackId.value = trackId
 
     // 開いても検出はしない。保存済みの立ち寄りと補正後軌跡を表示するだけ。
-    viewModelScope.launch { _displayTrack.value = gpsTrackRepository.getTrackById(track.id) }
+    viewModelScope.launch { _displayTrack.value = gpsTrackRepository.getTrackById(trackId) }
 
     collectJob?.cancel()
     collectJob = viewModelScope.launch {
-      placeRepository.getStopsForTrack(track.id).collect { _stops.value = it }
+      placeRepository.getStopsForTrack(trackId).collect { _stops.value = it }
     }
   }
 

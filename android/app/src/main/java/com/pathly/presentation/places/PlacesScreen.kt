@@ -54,7 +54,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.google.android.gms.maps.model.CameraPosition
 import com.google.android.gms.maps.model.LatLng
@@ -72,96 +71,35 @@ import com.pathly.domain.model.PlaceVisit
 import com.pathly.domain.model.Priority
 import com.pathly.util.DateFormatters
 
-/** 「場所」タブ内の表示モード（一覧／地図で追加／検索で追加／詳細）。MainActivity には触れず内部で切り替える。 */
-private sealed interface PlacesMode {
-  data object List : PlacesMode
-  data object Add : PlacesMode
-  data object SearchAdd : PlacesMode
-  data class Detail(val placeId: Long) : PlacesMode
-}
+// 「場所」タブは Navigation-Compose の目的地に分割されている（一覧／地図で追加／検索で追加／詳細）。
+// いずれも共有の [PlacesViewModel]（places グラフにスコープ）を受け取り、遷移は呼び出し側（NavHost）が担う。
 
+/** 一覧（places_list）。 */
 @Composable
-fun PlacesScreen(
+fun PlacesListRoute(
+  viewModel: PlacesViewModel,
+  onAddByMap: () -> Unit,
+  onAddBySearch: () -> Unit,
+  onItemClick: (placeId: Long) -> Unit,
   modifier: Modifier = Modifier,
-  viewModel: PlacesViewModel = hiltViewModel(),
-  onOpenTrack: (trackId: Long) -> Unit = {},
 ) {
   val uiState by viewModel.uiState.collectAsStateWithLifecycle()
-  var mode by remember { mutableStateOf<PlacesMode>(PlacesMode.List) }
   var deleteTarget by remember { mutableStateOf<PlaceListItem?>(null) }
-
-  BackHandler(enabled = mode != PlacesMode.List) { mode = PlacesMode.List }
 
   uiState.errorMessage?.let { message ->
     LaunchedEffect(message) { viewModel.clearError() }
   }
 
-  when (val current = mode) {
-    PlacesMode.List -> PlacesListContent(
-      modifier = modifier,
-      state = uiState,
-      onAddByMap = { mode = PlacesMode.Add },
-      onAddBySearch = {
-        viewModel.startSearch()
-        mode = PlacesMode.SearchAdd
-      },
-      onFilterChange = viewModel::setFilter,
-      onItemClick = { mode = PlacesMode.Detail(it.place.id) },
-      onToggleWishlist = viewModel::toggleWishlist,
-      onDeleteRequest = { deleteTarget = it },
-    )
-
-    PlacesMode.Add -> AddPlaceContent(
-      modifier = modifier,
-      onCancel = { mode = PlacesMode.List },
-      onSave = { lat, lng, name, wishlist, priority, memo ->
-        viewModel.registerPlace(lat, lng, name, wishlist, priority, memo)
-        mode = PlacesMode.List
-      },
-    )
-
-    PlacesMode.SearchAdd -> SearchAddContent(
-      modifier = modifier,
-      search = uiState.search,
-      onQueryChange = viewModel::onSearchQueryChange,
-      onSelectPrediction = viewModel::selectPrediction,
-      onBackToPredictions = viewModel::clearSearchResult,
-      onCancel = { mode = PlacesMode.List },
-      onRegister = { result, wishlist, priority, memo ->
-        viewModel.registerSearchResult(result, wishlist, priority, memo)
-        mode = PlacesMode.List
-      },
-    )
-
-    is PlacesMode.Detail -> {
-      val item = uiState.items.firstOrNull { it.place.id == current.placeId }
-      if (item == null) {
-        LaunchedEffect(current.placeId) { mode = PlacesMode.List }
-      } else {
-        val visitsFlow = remember(current.placeId) { viewModel.visitsFor(current.placeId) }
-        val visits by visitsFlow.collectAsStateWithLifecycle(emptyList())
-        PlaceDetailContent(
-          modifier = modifier,
-          item = item,
-          visits = visits,
-          onOpenTrack = onOpenTrack,
-          onBack = { mode = PlacesMode.List },
-          onToggleWishlist = { viewModel.toggleWishlist(item) },
-          onSaveName = { name -> viewModel.renamePlace(item.place.id, name) },
-          onSaveWishlist = { priority, memo ->
-            item.wishlistId?.let { viewModel.updateWishlist(it, priority, memo) }
-          },
-          onToggleVisited = { visited ->
-            item.wishlistId?.let { viewModel.setVisited(it, visited) }
-          },
-          onRegisterPoi = { lat, lng, name, wishlist ->
-            viewModel.registerPlace(lat, lng, name, wishlist, Priority.MEDIUM, null)
-          },
-          onDeleteRequest = { deleteTarget = item },
-        )
-      }
-    }
-  }
+  PlacesListContent(
+    modifier = modifier,
+    state = uiState,
+    onAddByMap = onAddByMap,
+    onAddBySearch = onAddBySearch,
+    onFilterChange = viewModel::setFilter,
+    onItemClick = { onItemClick(it.place.id) },
+    onToggleWishlist = viewModel::toggleWishlist,
+    onDeleteRequest = { deleteTarget = it },
+  )
 
   deleteTarget?.let { target ->
     DeletePlaceDialog(
@@ -169,7 +107,106 @@ fun PlacesScreen(
       onConfirm = {
         viewModel.deletePlace(target.place.id)
         deleteTarget = null
-        // 詳細を開いていた場合は、削除で items から消えて自動的に一覧へ戻る。
+      },
+      onDismiss = { deleteTarget = null },
+    )
+  }
+}
+
+/** 地図で追加（place_add）。保存したら [onDone] で一覧へ戻す。 */
+@Composable
+fun AddPlaceRoute(
+  viewModel: PlacesViewModel,
+  onDone: () -> Unit,
+  modifier: Modifier = Modifier,
+) {
+  AddPlaceContent(
+    modifier = modifier,
+    onCancel = onDone,
+    onSave = { lat, lng, name, wishlist, priority, memo ->
+      viewModel.registerPlace(lat, lng, name, wishlist, priority, memo)
+      onDone()
+    },
+  )
+}
+
+/** 検索して追加（place_search）。入る時に検索セッションを開始し、登録したら一覧へ戻す。 */
+@Composable
+fun SearchAddRoute(
+  viewModel: PlacesViewModel,
+  onDone: () -> Unit,
+  modifier: Modifier = Modifier,
+) {
+  val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+  LaunchedEffect(Unit) { viewModel.startSearch() }
+  // 候補確定後（result 表示中）の戻るは、候補一覧へ戻す（画面自体は閉じない）。
+  BackHandler(enabled = uiState.search.result != null) { viewModel.clearSearchResult() }
+
+  SearchAddContent(
+    modifier = modifier,
+    search = uiState.search,
+    onQueryChange = viewModel::onSearchQueryChange,
+    onSelectPrediction = viewModel::selectPrediction,
+    onBackToPredictions = viewModel::clearSearchResult,
+    onCancel = onDone,
+    onRegister = { result, wishlist, priority, memo ->
+      viewModel.registerSearchResult(result, wishlist, priority, memo)
+      onDone()
+    },
+  )
+}
+
+/** 詳細（place_detail/{placeId}）。削除・不存在になったら [onBack] で一覧へ戻す。 */
+@Composable
+fun PlaceDetailRoute(
+  viewModel: PlacesViewModel,
+  placeId: Long,
+  onBack: () -> Unit,
+  onOpenTrack: (trackId: Long) -> Unit,
+  modifier: Modifier = Modifier,
+) {
+  val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+  var deleteTarget by remember { mutableStateOf<PlaceListItem?>(null) }
+
+  val item = uiState.items.firstOrNull { it.place.id == placeId }
+  if (item == null) {
+    // 読み込み済みで見つからない（削除された）なら一覧へ戻す。
+    if (!uiState.isLoading) {
+      LaunchedEffect(placeId) { onBack() }
+    }
+    return
+  }
+
+  val visitsFlow = remember(placeId) { viewModel.visitsFor(placeId) }
+  val visits by visitsFlow.collectAsStateWithLifecycle(emptyList())
+
+  PlaceDetailContent(
+    modifier = modifier,
+    item = item,
+    visits = visits,
+    onOpenTrack = onOpenTrack,
+    onBack = onBack,
+    onToggleWishlist = { viewModel.toggleWishlist(item) },
+    onSaveName = { name -> viewModel.renamePlace(item.place.id, name) },
+    onSaveWishlist = { priority, memo ->
+      item.wishlistId?.let { viewModel.updateWishlist(it, priority, memo) }
+    },
+    onToggleVisited = { visited ->
+      item.wishlistId?.let { viewModel.setVisited(it, visited) }
+    },
+    onRegisterPoi = { lat, lng, name, wishlist ->
+      viewModel.registerPlace(lat, lng, name, wishlist, Priority.MEDIUM, null)
+    },
+    onDeleteRequest = { deleteTarget = item },
+  )
+
+  deleteTarget?.let { target ->
+    DeletePlaceDialog(
+      item = target,
+      onConfirm = {
+        viewModel.deletePlace(target.place.id)
+        deleteTarget = null
+        // 削除で items から消えると item == null になり、上の分岐で一覧へ戻る。
       },
       onDismiss = { deleteTarget = null },
     )

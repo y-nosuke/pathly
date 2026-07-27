@@ -20,6 +20,7 @@ places = "5.3.0"
 accompanistPermissions = "0.37.3"
 kotlinxCoroutines = "1.11.0"
 hiltNavigationCompose = "1.4.0"
+navigationCompose = "2.9.8"
 securityCrypto = "1.1.0"
 spotless = "8.8.0"
 turbine = "1.2.1"
@@ -52,6 +53,7 @@ androidx-room-testing = { group = "androidx.room", name = "room-testing", versio
 hilt-android = { group = "com.google.dagger", name = "hilt-android", version.ref = "hilt" }
 hilt-compiler = { group = "com.google.dagger", name = "hilt-compiler", version.ref = "hilt" }
 hilt-navigation-compose = { group = "androidx.hilt", name = "hilt-navigation-compose", version.ref = "hiltNavigationCompose" }
+androidx-navigation-compose = { group = "androidx.navigation", name = "navigation-compose", version.ref = "navigationCompose" }
 
 # Location Services
 kotlinx-coroutines-test = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-test", version.ref = "kotlinxCoroutines" }
