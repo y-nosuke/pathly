@@ -15,7 +15,7 @@ android {
   defaultConfig {
     applicationId = "com.pathly"
     minSdk = 34
-    targetSdk = 36
+    targetSdk = 37
 
     // CI（GitHub Actions）の run 番号から versionCode を自動採番する。
     // run_number はリポジトリ横断で単調増加するため、後にビルドしたものほど
