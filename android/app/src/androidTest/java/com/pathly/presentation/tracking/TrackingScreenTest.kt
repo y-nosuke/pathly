@@ -68,6 +68,7 @@ class TrackingScreenTest {
         TrackingScreen(
           onRequestPermission = mockOnRequestPermission,
           viewModel = mockViewModel,
+          mapContent = {},
         )
       }
     }
@@ -95,6 +96,7 @@ class TrackingScreenTest {
         TrackingScreen(
           onRequestPermission = mockOnRequestPermission,
           viewModel = mockViewModel,
+          mapContent = {},
         )
       }
     }
@@ -115,6 +117,7 @@ class TrackingScreenTest {
         TrackingScreen(
           onRequestPermission = mockOnRequestPermission,
           viewModel = mockViewModel,
+          mapContent = {},
         )
       }
     }
@@ -139,6 +142,7 @@ class TrackingScreenTest {
         TrackingScreen(
           onRequestPermission = mockOnRequestPermission,
           viewModel = mockViewModel,
+          mapContent = {},
         )
       }
     }
@@ -159,6 +163,7 @@ class TrackingScreenTest {
         TrackingScreen(
           onRequestPermission = mockOnRequestPermission,
           viewModel = mockViewModel,
+          mapContent = {},
         )
       }
     }
@@ -190,6 +195,7 @@ class TrackingScreenTest {
         TrackingScreen(
           onRequestPermission = mockOnRequestPermission,
           viewModel = mockViewModel,
+          mapContent = {},
         )
       }
     }
@@ -215,6 +221,7 @@ class TrackingScreenTest {
         TrackingScreen(
           onRequestPermission = mockOnRequestPermission,
           viewModel = mockViewModel,
+          mapContent = {},
         )
       }
     }
@@ -236,6 +243,7 @@ class TrackingScreenTest {
         TrackingScreen(
           onRequestPermission = mockOnRequestPermission,
           viewModel = mockViewModel,
+          mapContent = {},
         )
       }
     }
@@ -266,6 +274,7 @@ class TrackingScreenTest {
         TrackingScreen(
           onRequestPermission = mockOnRequestPermission,
           viewModel = mockViewModel,
+          mapContent = {},
         )
       }
     }

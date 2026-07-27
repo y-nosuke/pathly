@@ -87,6 +87,9 @@ fun TrackDetailScreen(
   onDeletePlace: (placeId: Long, trackId: Long) -> Unit = { _, _ -> },
   onMessageShown: () -> Unit = {},
   onRegisterPlace: (lat: Double, lng: Double, name: String, wishlist: Boolean) -> Unit = { _, _, _, _ -> },
+  // 地図スロット。null（既定）は実マップ（GoogleMap）を描画する。
+  // テストは空スロット（{}）を渡し、GMS 依存の地図描画を避けてシート・オーバーレイだけを検証する。
+  mapContent: (@Composable () -> Unit)? = null,
 ) {
   var poiTarget by remember { mutableStateOf<PointOfInterest?>(null) }
   // 下にスワイプでシートを隠せる（地図を全画面化）。戻すボタンで復帰する。
@@ -148,17 +151,21 @@ fun TrackDetailScreen(
         .padding(top = innerPadding.calculateTopPadding()),
     ) {
       if (track.points.isNotEmpty()) {
-        TrackMapView(
-          track = track,
-          displayPoints = displayPoints,
-          stops = stops,
-          showRawOverlay = tuningMode,
-          focusTarget = focusTarget,
-          focusNonce = focusNonce,
-          contentPadding = PaddingValues(bottom = if (sheetHidden) 0.dp else peek),
-          onPoiClick = { poiTarget = it },
-          modifier = Modifier.fillMaxSize(),
-        )
+        if (mapContent != null) {
+          mapContent()
+        } else {
+          TrackMapView(
+            track = track,
+            displayPoints = displayPoints,
+            stops = stops,
+            showRawOverlay = tuningMode,
+            focusTarget = focusTarget,
+            focusNonce = focusNonce,
+            contentPadding = PaddingValues(bottom = if (sheetHidden) 0.dp else peek),
+            onPoiClick = { poiTarget = it },
+            modifier = Modifier.fillMaxSize(),
+          )
+        }
       } else {
         Box(
           modifier = Modifier.fillMaxSize(),
