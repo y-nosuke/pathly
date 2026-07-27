@@ -5,11 +5,13 @@ import androidx.lifecycle.viewModelScope
 import com.pathly.data.places.PlacesTextSearcher
 import com.pathly.domain.model.PlaceListItem
 import com.pathly.domain.model.PlaceSearchResult
+import com.pathly.domain.model.PlaceVisit
 import com.pathly.domain.model.Priority
 import com.pathly.domain.repository.WishlistRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -52,6 +54,9 @@ class PlacesViewModel @Inject constructor(
   fun setFilter(filter: PlacesFilter) {
     _uiState.value = _uiState.value.copy(filter = filter)
   }
+
+  /** その場所を含むお出掛け（経路）の一覧。詳細画面で購読する。 */
+  fun visitsFor(placeId: Long): Flow<List<PlaceVisit>> = wishlistRepository.getVisits(placeId)
 
   /** 地図タップからの登録。行きたいONのときだけ wishlist にも入れる。 */
   fun registerPlace(

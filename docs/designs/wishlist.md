@@ -292,7 +292,7 @@ interface WishlistRepository {
 3. **キーワード検索登録 ✅ 実装済**: `PlacesTextSearcher`（Autocomplete＋fetchPlace・セッショントークン・オンライン限定）。「追加」＞「検索して追加」で店名検索 → 候補選択 → 名前/住所/座標/googlePlaceId 取得 → `registerSearchedPlace`（place＋解決ログ）＋任意で行きたい。**Cloud で「Places API (New)」有効化＋課金が前提**。
 4. **立ち寄りから「また行きたい」**: 詳細画面に導線を追加。
 5. **タグ（複数）**: `tags` / `wishlist_tags` を追加し、一覧にタグ絞り込みを追加。記録側 `stop_tags` と共有する横断機能として設計。
-6. **場所から関連経路の一覧**: 場所の詳細から、その場所に立ち寄った経路（tracks）の一覧を表示して辿れるようにする。`stops`（placeId → trackId）を JOIN すれば実現できる。
+6. **場所から関連経路の一覧 ✅ 実装済**: 場所の詳細に「この場所を含むお出掛け（N件）」を表示（日付＋その場所での滞在時刻・滞在分）。タップで経路詳細（振り返り）を開く。`StopDao.getVisitsForPlace`（stops×gps_tracks JOIN）→ `WishlistRepository.getVisits`。遷移は `MainActivity`（`MainViewModel.getTrack` で trackId→GpsTrack を解決し `selectedTrack` にセット）。
 7. **将来**: 営業時間、計画（お出掛け）への割り当て、Phase 3 の「計画」タブへ発展。
 
 いずれの段階でも、Google が使えなくても（地図タップで）アプリは成立する。

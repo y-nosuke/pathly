@@ -2,6 +2,7 @@ package com.pathly.domain.repository
 
 import com.pathly.domain.model.PlaceListItem
 import com.pathly.domain.model.PlaceSearchResult
+import com.pathly.domain.model.PlaceVisit
 import com.pathly.domain.model.Priority
 import kotlinx.coroutines.flow.Flow
 
@@ -13,6 +14,9 @@ interface WishlistRepository {
 
   /** 全ての場所を、行きたい登録（あれば）付きでリアクティブに取得する。 */
   fun getPlaces(): Flow<List<PlaceListItem>>
+
+  /** その場所を含むお出掛け（経路）の一覧。新しい順。訪問が無ければ空。 */
+  fun getVisits(placeId: Long): Flow<List<PlaceVisit>>
 
   /**
    * 座標から場所を登録する（地図タップ）。find-or-create（30m）で場所を同定し、
