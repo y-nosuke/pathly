@@ -162,8 +162,10 @@ class DataPersistenceTest {
   /**
    * データベースバックアップとリストア機能のテスト
    */
+  // 明示的に Unit を返す（式本体の最後が Boolean だと JUnit に "should be void" で弾かれ、
+  // クラスごと初期化不能になるため）。
   @Test
-  fun testDatabaseBackupAndRestore() = runBlocking {
+  fun testDatabaseBackupAndRestore(): Unit = runBlocking {
     // テストデータの作成
     val testTrack = GpsTrackEntity(
       id = 0,
@@ -242,7 +244,7 @@ class DataPersistenceTest {
         PathlyDatabase::class.java,
         TEST_DB_NAME,
       )
-        .fallbackToDestructiveMigration()
+        .fallbackToDestructiveMigration(dropAllTables = true)
         .allowMainThreadQueries()
         .build()
 

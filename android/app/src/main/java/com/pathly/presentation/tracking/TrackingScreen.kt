@@ -72,6 +72,9 @@ fun TrackingScreen(
   modifier: Modifier = Modifier,
   onRequestPermission: () -> Unit,
   viewModel: TrackingViewModel = hiltViewModel(),
+  // 地図スロット。null（既定）は実マップ（GoogleMap）を描画する。
+  // テストは空スロット（{}）を渡し、GMS 依存の地図描画を避けてオーバーレイだけを検証する。
+  mapContent: (@Composable () -> Unit)? = null,
 ) {
   val uiState by viewModel.uiState.collectAsStateWithLifecycle()
 
@@ -103,13 +106,17 @@ fun TrackingScreen(
   var poiTarget by remember { mutableStateOf<PointOfInterest?>(null) }
 
   Box(modifier = modifier.fillMaxSize()) {
-    TrackingMapView(
-      hasPermission = uiState.hasLocationPermission,
-      track = uiState.currentTrack,
-      currentLocation = uiState.currentLocation,
-      onPoiClick = { poiTarget = it },
-      modifier = Modifier.fillMaxSize(),
-    )
+    if (mapContent != null) {
+      mapContent()
+    } else {
+      TrackingMapView(
+        hasPermission = uiState.hasLocationPermission,
+        track = uiState.currentTrack,
+        currentLocation = uiState.currentLocation,
+        onPoiClick = { poiTarget = it },
+        modifier = Modifier.fillMaxSize(),
+      )
+    }
 
     // 記録中の状態ピル（上部中央）
     if (uiState.isTracking) {

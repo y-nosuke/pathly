@@ -2,7 +2,7 @@ package com.pathly.presentation.history
 
 import androidx.compose.ui.test.assertHasClickAction
 import androidx.compose.ui.test.assertIsDisplayed
-import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -42,6 +42,7 @@ class TrackDetailScreenTest {
         TrackDetailScreen(
           track = track,
           onBackClick = mockOnBackClick,
+          mapContent = {},
         )
       }
     }
@@ -62,6 +63,7 @@ class TrackDetailScreenTest {
         TrackDetailScreen(
           track = track,
           onBackClick = mockOnBackClick,
+          mapContent = {},
         )
       }
     }
@@ -81,6 +83,7 @@ class TrackDetailScreenTest {
         TrackDetailScreen(
           track = track,
           onBackClick = mockOnBackClick,
+          mapContent = {},
         )
       }
     }
@@ -111,6 +114,7 @@ class TrackDetailScreenTest {
         TrackDetailScreen(
           track = track,
           onBackClick = mockOnBackClick,
+          mapContent = {},
         )
       }
     }
@@ -143,6 +147,7 @@ class TrackDetailScreenTest {
         TrackDetailScreen(
           track = track,
           onBackClick = mockOnBackClick,
+          mapContent = {},
         )
       }
     }
@@ -161,6 +166,7 @@ class TrackDetailScreenTest {
         TrackDetailScreen(
           track = track,
           onBackClick = mockOnBackClick,
+          mapContent = {},
         )
       }
     }
@@ -187,6 +193,7 @@ class TrackDetailScreenTest {
         TrackDetailScreen(
           track = track,
           onBackClick = mockOnBackClick,
+          mapContent = {},
         )
       }
     }
@@ -221,6 +228,7 @@ class TrackDetailScreenTest {
         TrackDetailScreen(
           track = track,
           onBackClick = mockOnBackClick,
+          mapContent = {},
         )
       }
     }
@@ -251,6 +259,7 @@ class TrackDetailScreenTest {
         TrackDetailScreen(
           track = track,
           onBackClick = mockOnBackClick,
+          mapContent = {},
         )
       }
     }
@@ -270,13 +279,16 @@ class TrackDetailScreenTest {
         TrackDetailScreen(
           track = track,
           onBackClick = mockOnBackClick,
+          mapContent = {},
           stops = stops,
         )
       }
     }
 
     composeTestRule.onNodeWithText("立ち寄り1件", substring = true).assertIsDisplayed()
-    composeTestRule.onNodeWithText("テストカフェ").assertIsDisplayed()
+    // 立ち寄り行はボトムシートのピーク（部分展開）より下にあり画面外になり得るため、
+    // 表示（displayed）ではなく存在（exists）で検証する。
+    composeTestRule.onNodeWithText("テストカフェ").assertExists()
   }
 
   @Test
@@ -290,6 +302,7 @@ class TrackDetailScreenTest {
         TrackDetailScreen(
           track = track,
           onBackClick = mockOnBackClick,
+          mapContent = {},
           stops = stops,
           onEditPlaceName = onEdit,
         )
@@ -315,6 +328,7 @@ class TrackDetailScreenTest {
         TrackDetailScreen(
           track = track,
           onBackClick = mockOnBackClick,
+          mapContent = {},
           stops = stops,
           onDeleteStop = onDeleteStop,
         )
@@ -338,6 +352,7 @@ class TrackDetailScreenTest {
         TrackDetailScreen(
           track = track,
           onBackClick = mockOnBackClick,
+          mapContent = {},
           stops = stops,
           unresolvedCount = 1,
           onResolveNames = onResolve,
