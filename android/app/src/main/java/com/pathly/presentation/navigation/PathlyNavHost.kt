@@ -1,6 +1,8 @@
 package com.pathly.presentation.navigation
 
 import androidx.annotation.DrawableRes
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
@@ -116,6 +118,11 @@ fun PathlyNavHost(
       navController = navController,
       startDestination = Routes.TRACKING,
       modifier = Modifier.padding(innerPadding),
+      // 以前の手書き when ナビと同じく、遷移アニメーションは付けない（瞬時に切り替える）。
+      enterTransition = { EnterTransition.None },
+      exitTransition = { ExitTransition.None },
+      popEnterTransition = { EnterTransition.None },
+      popExitTransition = { ExitTransition.None },
     ) {
       composable(Routes.TRACKING) {
         TrackingScreen(
