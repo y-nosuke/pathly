@@ -77,19 +77,17 @@ class TrackDetailViewModel @Inject constructor(
 
   /**
    * 立ち寄り（訪問）を削除する（1件でも複数でも同じ）。参照が無くなった場所は自動で場所ごと削除し、
-   * 他の履歴で使われている／行きたい登録がある場所は「この訪問だけ」消して保持する。結果はメッセージで知らせる。
+   * 他の履歴で使われている／行きたい登録がある場所は「この訪問だけ」消して保持する。
+   * 確認ダイアログは出さず即時削除し、画面側のスナックバーから [undoDeletion] で取り消せる。
    */
   fun deleteStops(stopIds: List<Long>) {
     if (stopIds.isEmpty()) return
-    viewModelScope.launch {
-      val result = placeRepository.deleteStops(stopIds)
-      _message.value = if (result.placesKept > 0) {
-        "${result.stopsDeleted}件を削除しました" +
-          "（うち${result.placesKept}件は他の履歴や行きたいで使われているため場所は残しています）"
-      } else {
-        "${result.stopsDeleted}件を削除しました"
-      }
-    }
+    viewModelScope.launch { placeRepository.deleteStops(stopIds) }
+  }
+
+  /** 直近の削除を取り消して元に戻す（スナックバーの「取り消す」）。 */
+  fun undoDeletion() {
+    viewModelScope.launch { placeRepository.undoLastDeletion() }
   }
 
   /** 振り返り中の地図で POI をタップして場所を登録する。行きたい ON なら wishlist にも入れる。 */

@@ -234,6 +234,7 @@ private fun TrackDetailRoute(
     onResolveNames = { viewModel.resolveNames() },
     onReanalyze = { viewModel.reanalyze() },
     onDeleteStops = { stopIds -> viewModel.deleteStops(stopIds) },
+    onUndoDeletion = { viewModel.undoDeletion() },
     onMessageShown = { viewModel.clearMessage() },
     onRegisterPlace = { lat, lng, name, wishlist -> viewModel.registerPlace(lat, lng, name, wishlist) },
   )

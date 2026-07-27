@@ -52,6 +52,10 @@ class PlaceRepositoryImpl @Inject constructor(
   private val _currentStop = MutableStateFlow<Stop?>(null)
   override val currentStop: StateFlow<Stop?> = _currentStop.asStateFlow()
 
+  // 直近の削除の取り消し用スナップショット（1件だけ保持。次の削除で置き換わる）。
+  // 画面のスナックバーは常に最新の1件しか出さないため、単一スロットで十分。
+  private var lastDeletion: DeletedSnapshot? = null
+
   override fun getStopsForTrack(trackId: Long): Flow<List<Stop>> = stopDao.getStopsWithPlaceByTrack(trackId).map { list -> list.map { it.toStop() } }
 
   override fun unresolvedCountForTrack(trackId: Long): Flow<Int> = placeDao.countPlacesWithoutGoogleIdForTrack(trackId)
@@ -95,10 +99,16 @@ class PlaceRepositoryImpl @Inject constructor(
   }
 
   override suspend fun deleteStops(stopIds: List<Long>): StopDeletionResult = mutex.withLock {
-    if (stopIds.isEmpty()) return@withLock StopDeletionResult(0, 0, 0)
-    // 先に対象 place を控えてから訪問を消し、どこからも参照されなくなった place だけ回収する。
-    val affectedPlaceIds = stopDao.placeIdsForStops(stopIds)
+    if (stopIds.isEmpty()) {
+      lastDeletion = null
+      return@withLock StopDeletionResult(0, 0, 0)
+    }
+    // 取り消し（Undo）で元IDのまま戻せるよう、削除前に実体を控える。
+    val deletedStops = stopDao.getByIds(stopIds)
+    val affectedPlaceIds = deletedStops.map { it.placeId }.distinct()
     stopDao.deleteByIds(stopIds)
+    val deletedPlaces = mutableListOf<PlaceEntity>()
+    val deletedResolutions = mutableListOf<PlaceResolutionEntity>()
     var placesDeleted = 0
     var placesKept = 0
     for (placeId in affectedPlaceIds) {
@@ -108,12 +118,28 @@ class PlaceRepositoryImpl @Inject constructor(
       if (stillReferenced) {
         placesKept++
       } else {
-        placeDao.deleteById(placeId) // place_resolutions は CASCADE で消える
+        // 回収する place と解決ログを控えてから消す（place_resolutions は CASCADE で消える）。
+        placeDao.getById(placeId)?.let { deletedPlaces.add(it) }
+        placeResolutionDao.getByPlace(placeId)?.let { deletedResolutions.add(it) }
+        placeDao.deleteById(placeId)
         placesDeleted++
       }
     }
+    lastDeletion = DeletedSnapshot(deletedStops, deletedPlaces, deletedResolutions)
     logger.i("Batch-deleted ${stopIds.size} stops (places: -$placesDeleted, kept $placesKept)")
     StopDeletionResult(stopsDeleted = stopIds.size, placesDeleted = placesDeleted, placesKept = placesKept)
+  }
+
+  override suspend fun undoLastDeletion(): Boolean = mutex.withLock {
+    val snap = lastDeletion ?: return@withLock false
+    // FK 順に復元する: 先に place（stops/解決ログが参照）→ 解決ログ → stops。
+    // 明示的な id を持つ実体を再挿入するので、元の id のまま戻る。
+    for (place in snap.places) placeDao.insert(place)
+    for (resolution in snap.resolutions) placeResolutionDao.upsert(resolution)
+    for (stop in snap.stops) stopDao.insert(stop)
+    lastDeletion = null
+    logger.i("Undid deletion: restored ${snap.stops.size} stops, ${snap.places.size} places")
+    true
   }
 
   /**
@@ -225,6 +251,13 @@ class PlaceRepositoryImpl @Inject constructor(
     bearing = null,
     timestamp = timestamp,
     createdAt = createdAt,
+  )
+
+  /** 削除の取り消しに必要な実体一式（元IDのまま再挿入して復元する）。 */
+  private class DeletedSnapshot(
+    val stops: List<StopEntity>,
+    val places: List<PlaceEntity>,
+    val resolutions: List<PlaceResolutionEntity>,
   )
 
   private fun distanceMeters(lat1: Double, lon1: Double, lat2: Double, lon2: Double): Double {

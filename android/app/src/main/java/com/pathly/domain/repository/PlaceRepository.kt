@@ -47,6 +47,13 @@ interface PlaceRepository {
    * 立ち寄り（訪問）を削除する（1件でも複数でも同じ経路）。選択した訪問はすべて消し、
    * その結果どこからも参照されなくなった場所だけを場所ごと削除する。
    * 他に訪問が残る場所（＝他の履歴でも使われている）や、行きたい登録がある場所は保持する。
+   * 取り消し（[undoLastDeletion]）用に、直近の削除内容を1件だけ控える。
    */
   suspend fun deleteStops(stopIds: List<Long>): StopDeletionResult
+
+  /**
+   * 直近の [deleteStops] を取り消し、消した訪問と回収した場所を**元のIDのまま**復元する。
+   * 控えが無ければ何もしない。復元したら true を返す。
+   */
+  suspend fun undoLastDeletion(): Boolean
 }

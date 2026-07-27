@@ -6,6 +6,7 @@ import com.pathly.data.local.dao.SmoothedPointDao
 import com.pathly.data.local.dao.StopDao
 import com.pathly.data.local.dao.WishlistDao
 import com.pathly.data.local.entity.PlaceEntity
+import com.pathly.data.local.entity.PlaceResolutionEntity
 import com.pathly.data.local.entity.SmoothedPointEntity
 import com.pathly.data.local.entity.StopEntity
 import com.pathly.data.places.PlacesNameResolver
@@ -15,8 +16,10 @@ import io.mockk.mockk
 import io.mockk.slot
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.util.Date
 
@@ -163,10 +166,18 @@ class PlaceRepositoryImplTest {
     coVerify(exactly = 0) { placeResolutionDao.upsert(any()) }
   }
 
+  private fun stopEntity(id: Long, placeId: Long) = StopEntity(
+    id = id,
+    placeId = placeId,
+    trackId = 1L,
+    arrivalTime = Date(0L),
+    departureTime = Date(60_000L),
+  )
+
   @Test
   fun deleteStops_orphanedPlaceIsDeleted_sharedPlaceIsKept() = runTest {
     // stop 100 -> place 10（他に訪問なし＝孤立）, stop 200 -> place 20（他にも訪問が残る）
-    coEvery { stopDao.placeIdsForStops(listOf(100L, 200L)) } returns listOf(10L, 20L)
+    coEvery { stopDao.getByIds(listOf(100L, 200L)) } returns listOf(stopEntity(100L, 10L), stopEntity(200L, 20L))
     coEvery { stopDao.countByPlace(10L) } returns 0
     coEvery { stopDao.countByPlace(20L) } returns 1
 
@@ -183,7 +194,7 @@ class PlaceRepositoryImplTest {
   @Test
   fun deleteStops_placeOnWishlist_isKeptEvenWithoutRemainingStops() = runTest {
     // stop 100 -> place 10。stop は無くなるが行きたい登録があるので場所は残す。
-    coEvery { stopDao.placeIdsForStops(listOf(100L)) } returns listOf(10L)
+    coEvery { stopDao.getByIds(listOf(100L)) } returns listOf(stopEntity(100L, 10L))
     coEvery { stopDao.countByPlace(10L) } returns 0
     coEvery { wishlistDao.countByPlace(10L) } returns 1
 
@@ -201,6 +212,32 @@ class PlaceRepositoryImplTest {
 
     coVerify(exactly = 0) { stopDao.deleteByIds(any()) }
     assertEquals(0, result.stopsDeleted)
+  }
+
+  @Test
+  fun undoLastDeletion_restoresStopsAndOrphanedPlace() = runTest {
+    // 孤立 place を回収する削除 → 取り消しで place・解決ログ・stop を元IDのまま復元。
+    val stop = stopEntity(100L, 10L)
+    val place = PlaceEntity(id = 10L, latitude = 35.0, longitude = 139.0)
+    val resolution = PlaceResolutionEntity(10L, Date(0L), "gp-1")
+    coEvery { stopDao.getByIds(listOf(100L)) } returns listOf(stop)
+    coEvery { stopDao.countByPlace(10L) } returns 0
+    coEvery { wishlistDao.countByPlace(10L) } returns 0
+    coEvery { placeDao.getById(10L) } returns place
+    coEvery { placeResolutionDao.getByPlace(10L) } returns resolution
+
+    repository.deleteStops(listOf(100L))
+    val undone = repository.undoLastDeletion()
+
+    assertTrue(undone)
+    coVerify { placeDao.insert(place) }
+    coVerify { placeResolutionDao.upsert(resolution) }
+    coVerify { stopDao.insert(stop) }
+  }
+
+  @Test
+  fun undoLastDeletion_withoutPriorDeletion_returnsFalse() = runTest {
+    assertFalse(repository.undoLastDeletion())
   }
 
   @Test

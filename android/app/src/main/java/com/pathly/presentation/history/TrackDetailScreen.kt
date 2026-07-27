@@ -23,6 +23,10 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.SheetValue
 import androidx.compose.material3.Slider
+import androidx.compose.material3.SnackbarDuration
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -87,6 +91,7 @@ fun TrackDetailScreen(
   onResolveNames: () -> Unit = {},
   onReanalyze: () -> Unit = {},
   onDeleteStops: (stopIds: List<Long>) -> Unit = {},
+  onUndoDeletion: () -> Unit = {},
   onMessageShown: () -> Unit = {},
   onRegisterPlace: (lat: Double, lng: Double, name: String, wishlist: Boolean) -> Unit = { _, _, _, _ -> },
   // 地図スロット。null（既定）は実マップ（GoogleMap）を描画する。
@@ -104,18 +109,32 @@ fun TrackDetailScreen(
   var tuningMode by remember { mutableStateOf(false) }
   var tuningParams by remember { mutableStateOf(SmoothingParams()) }
   var editingStop by remember { mutableStateOf<Stop?>(null) }
-  var deletingStop by remember { mutableStateOf<Stop?>(null) }
 
   // 複数選択削除。長押しで選択モードに入り、チェックで選ぶ。
   var selectionMode by remember { mutableStateOf(false) }
   val selectedStopIds = remember { mutableStateListOf<Long>() }
-  var confirmingBatchDelete by remember { mutableStateOf(false) }
 
   // 再解析などで stops が変わったら、消えた ID を選択から外す。空になったら選択モードを抜ける。
   LaunchedEffect(stops) {
     val ids = stops.mapTo(HashSet()) { it.id }
     selectedStopIds.retainAll(ids)
     if (selectedStopIds.isEmpty()) selectionMode = false
+  }
+
+  // 削除は確認ダイアログを出さず即時実行し、スナックバーの「取り消す」で元に戻せる。
+  val snackbarHostState = remember { SnackbarHostState() }
+  val deleteWithUndo: (List<Long>) -> Unit = { ids ->
+    if (ids.isNotEmpty()) {
+      onDeleteStops(ids)
+      scope.launch {
+        val result = snackbarHostState.showSnackbar(
+          message = "${ids.size}件を削除しました",
+          actionLabel = "取り消す",
+          duration = SnackbarDuration.Short,
+        )
+        if (result == SnackbarResult.ActionPerformed) onUndoDeletion()
+      }
+    }
   }
 
   // タップした立ち寄りへ地図をフォーカスする（nonce で同じ場所の再タップにも反応）。
@@ -133,6 +152,7 @@ fun TrackDetailScreen(
     modifier = modifier.fillMaxSize(),
     scaffoldState = scaffoldState,
     sheetPeekHeight = peek,
+    snackbarHost = { SnackbarHost(snackbarHostState) },
     sheetContent = {
       if (tuningMode) {
         TuningSheet(
@@ -152,7 +172,7 @@ fun TrackDetailScreen(
             focusNonce++
           },
           onEditStop = { editingStop = it },
-          onDeleteStop = { deletingStop = it },
+          onDeleteStop = { deleteWithUndo(listOf(it.id)) },
           onResolveNames = onResolveNames,
           onReanalyze = onReanalyze,
           onEnterSelection = { stop ->
@@ -171,7 +191,11 @@ fun TrackDetailScreen(
             selectionMode = false
             selectedStopIds.clear()
           },
-          onRequestDeleteSelected = { confirmingBatchDelete = true },
+          onDeleteSelected = {
+            deleteWithUndo(selectedStopIds.toList())
+            selectionMode = false
+            selectedStopIds.clear()
+          },
         )
       }
     },
@@ -288,32 +312,6 @@ fun TrackDetailScreen(
     )
   }
 
-  deletingStop?.let { stop ->
-    val label = stop.place.name
-      ?: "%.5f, %.5f".format(stop.place.latitude, stop.place.longitude)
-    DeleteConfirmDialog(
-      message = "「$label」を削除します。",
-      onConfirm = {
-        onDeleteStops(listOf(stop.id))
-        deletingStop = null
-      },
-      onDismiss = { deletingStop = null },
-    )
-  }
-
-  if (confirmingBatchDelete) {
-    DeleteConfirmDialog(
-      message = "選択した${selectedStopIds.size}件の立ち寄りを削除します。",
-      onConfirm = {
-        onDeleteStops(selectedStopIds.toList())
-        confirmingBatchDelete = false
-        selectionMode = false
-        selectedStopIds.clear()
-      },
-      onDismiss = { confirmingBatchDelete = false },
-    )
-  }
-
   message?.let { text ->
     AlertDialog(
       onDismissRequest = onMessageShown,
@@ -332,33 +330,6 @@ fun TrackDetailScreen(
       },
     )
   }
-}
-
-/**
- * 立ち寄り削除の確認ダイアログ（単体・複数で共用）。削除は「訪問を消す」動作で、
- * どこからも参照されなくなった場所だけ自動で消える。他の履歴や行きたいで使われている場所は残る。
- */
-@Composable
-private fun DeleteConfirmDialog(
-  message: String,
-  onConfirm: () -> Unit,
-  onDismiss: () -> Unit,
-) {
-  AlertDialog(
-    onDismissRequest = onDismiss,
-    title = { Text("削除") },
-    text = {
-      Text("$message\n他の履歴や行きたいでも使われている場所は、この訪問だけ削除して場所は残します。")
-    },
-    confirmButton = {
-      TextButton(onClick = onConfirm) {
-        Text("削除する", color = MaterialTheme.colorScheme.error)
-      }
-    },
-    dismissButton = {
-      TextButton(onClick = onDismiss) { Text("キャンセル") }
-    },
-  )
 }
 
 @Composable
@@ -404,7 +375,7 @@ private fun TrackDetailSheet(
   onToggleSelect: (Stop) -> Unit,
   onSelectAll: () -> Unit,
   onCancelSelection: () -> Unit,
-  onRequestDeleteSelected: () -> Unit,
+  onDeleteSelected: () -> Unit,
   modifier: Modifier = Modifier,
 ) {
   Column(
@@ -420,7 +391,7 @@ private fun TrackDetailSheet(
         selectedCount = selectedStopIds.size,
         totalCount = stops.size,
         onSelectAll = onSelectAll,
-        onDelete = onRequestDeleteSelected,
+        onDelete = onDeleteSelected,
         onCancel = onCancelSelection,
       )
     }

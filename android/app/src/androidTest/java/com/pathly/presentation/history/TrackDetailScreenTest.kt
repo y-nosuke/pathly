@@ -320,7 +320,7 @@ class TrackDetailScreenTest {
   }
 
   @Test
-  fun trackDetailScreen_deleteButton_confirmTriggersDeleteStops() {
+  fun trackDetailScreen_deleteButton_immediatelyTriggersDeleteStops() {
     val onDeleteStops = mockk<(List<Long>) -> Unit>(relaxed = true)
     val track = createSampleTrack()
     val stops = listOf(sampleStop(placeId = 9L, name = "テストカフェ"))
@@ -337,9 +337,8 @@ class TrackDetailScreenTest {
       }
     }
 
-    // 行の「削除」→ 確認ダイアログ →「削除する」で一括削除ロジックに合流。
+    // 確認ダイアログは出さず、行の「削除」で即座に削除（取り消しはスナックバーから）。
     composeTestRule.onNodeWithText("削除").performClick()
-    composeTestRule.onNodeWithText("削除する").performClick()
 
     verify { onDeleteStops(listOf(1L)) }
   }
@@ -389,9 +388,8 @@ class TrackDetailScreenTest {
     composeTestRule.onNodeWithText("テストカフェ").performTouchInput { longClick() }
     composeTestRule.onNodeWithText("1件選択中").assertIsDisplayed()
 
-    // 選択バーの「削除」→ 確認ダイアログ →「削除する」で一括削除コールバック。
+    // 選択バーの「削除」で即座に一括削除コールバック（確認ダイアログなし）。
     composeTestRule.onNodeWithText("削除").performClick()
-    composeTestRule.onNodeWithText("削除する").performClick()
 
     verify { onDeleteStops(listOf(1L)) }
   }

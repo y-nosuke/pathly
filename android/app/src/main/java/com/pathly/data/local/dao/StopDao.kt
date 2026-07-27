@@ -24,9 +24,9 @@ interface StopDao {
   @Query("DELETE FROM stops WHERE id IN (:stopIds)")
   suspend fun deleteByIds(stopIds: List<Long>)
 
-  /** 指定した立ち寄りが参照している場所の一覧（重複なし）。一括削除後の孤立場所の回収に使う。 */
-  @Query("SELECT DISTINCT placeId FROM stops WHERE id IN (:stopIds)")
-  suspend fun placeIdsForStops(stopIds: List<Long>): List<Long>
+  /** 指定した立ち寄りの実体（削除前のスナップショット取得・取り消し復元に使う）。 */
+  @Query("SELECT * FROM stops WHERE id IN (:stopIds)")
+  suspend fun getByIds(stopIds: List<Long>): List<StopEntity>
 
   /** その場所への訪問の総数（経路を問わない）。0 かつ行きたい登録も無ければ場所ごと回収してよい。 */
   @Query("SELECT COUNT(*) FROM stops WHERE placeId = :placeId")
