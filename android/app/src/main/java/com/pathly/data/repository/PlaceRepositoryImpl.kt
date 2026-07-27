@@ -4,6 +4,7 @@ import com.pathly.data.local.dao.PlaceDao
 import com.pathly.data.local.dao.PlaceResolutionDao
 import com.pathly.data.local.dao.SmoothedPointDao
 import com.pathly.data.local.dao.StopDao
+import com.pathly.data.local.dao.WishlistDao
 import com.pathly.data.local.entity.PlaceEntity
 import com.pathly.data.local.entity.PlaceResolutionEntity
 import com.pathly.data.local.entity.SmoothedPointEntity
@@ -14,6 +15,7 @@ import com.pathly.domain.model.DetectedStop
 import com.pathly.domain.model.GpsPoint
 import com.pathly.domain.model.Place
 import com.pathly.domain.model.Stop
+import com.pathly.domain.model.StopDeletionResult
 import com.pathly.domain.model.StopDetector
 import com.pathly.domain.repository.PlaceRepository
 import com.pathly.util.Logger
@@ -38,6 +40,7 @@ class PlaceRepositoryImpl @Inject constructor(
   private val stopDao: StopDao,
   private val smoothedPointDao: SmoothedPointDao,
   private val placeResolutionDao: PlaceResolutionDao,
+  private val wishlistDao: WishlistDao,
   private val placesNameResolver: PlacesNameResolver,
 ) : PlaceRepository {
 
@@ -91,18 +94,26 @@ class PlaceRepositoryImpl @Inject constructor(
     placeDao.updateName(placeId, name.trim().ifBlank { null }, Date())
   }
 
-  override suspend fun deleteStop(stopId: Long) {
-    mutex.withLock { stopDao.deleteById(stopId) }
-  }
-
-  override suspend fun deletePlace(placeId: Long, trackId: Long): Boolean = mutex.withLock {
-    // 他の経路にも訪問が残っているなら場所は消さない（誤削除防止）。
-    if (stopDao.countByPlaceInOtherTracks(placeId, trackId) > 0) {
-      return@withLock false
+  override suspend fun deleteStops(stopIds: List<Long>): StopDeletionResult = mutex.withLock {
+    if (stopIds.isEmpty()) return@withLock StopDeletionResult(0, 0, 0)
+    // 先に対象 place を控えてから訪問を消し、どこからも参照されなくなった place だけ回収する。
+    val affectedPlaceIds = stopDao.placeIdsForStops(stopIds)
+    stopDao.deleteByIds(stopIds)
+    var placesDeleted = 0
+    var placesKept = 0
+    for (placeId in affectedPlaceIds) {
+      // 他の訪問が残る（他の履歴など）か、行きたい登録がある場所は保持する。
+      // wishlist は place を消すと CASCADE で消えるため、ここで巻き込まないよう明示的に守る。
+      val stillReferenced = stopDao.countByPlace(placeId) > 0 || wishlistDao.countByPlace(placeId) > 0
+      if (stillReferenced) {
+        placesKept++
+      } else {
+        placeDao.deleteById(placeId) // place_resolutions は CASCADE で消える
+        placesDeleted++
+      }
     }
-    stopDao.deleteByPlace(placeId) // この経路の訪問を消す
-    placeDao.deleteById(placeId) // place_resolutions は CASCADE で消える
-    true
+    logger.i("Batch-deleted ${stopIds.size} stops (places: -$placesDeleted, kept $placesKept)")
+    StopDeletionResult(stopsDeleted = stopIds.size, placesDeleted = placesDeleted, placesKept = placesKept)
   }
 
   /**

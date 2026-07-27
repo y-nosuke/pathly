@@ -4,6 +4,7 @@ import com.pathly.data.local.dao.PlaceDao
 import com.pathly.data.local.dao.PlaceResolutionDao
 import com.pathly.data.local.dao.SmoothedPointDao
 import com.pathly.data.local.dao.StopDao
+import com.pathly.data.local.dao.WishlistDao
 import com.pathly.data.local.entity.PlaceEntity
 import com.pathly.data.local.entity.SmoothedPointEntity
 import com.pathly.data.local.entity.StopEntity
@@ -25,12 +26,14 @@ class PlaceRepositoryImplTest {
   private val stopDao = mockk<StopDao>(relaxed = true)
   private val smoothedPointDao = mockk<SmoothedPointDao>(relaxed = true)
   private val placeResolutionDao = mockk<PlaceResolutionDao>(relaxed = true)
+  private val wishlistDao = mockk<WishlistDao>(relaxed = true)
   private val resolver = mockk<PlacesNameResolver>(relaxed = true)
   private val repository = PlaceRepositoryImpl(
     placeDao,
     stopDao,
     smoothedPointDao,
     placeResolutionDao,
+    wishlistDao,
     resolver,
   )
 
@@ -158,6 +161,46 @@ class PlaceRepositoryImplTest {
 
     // 未実施は行を作らない（後でキャッチアップ）。
     coVerify(exactly = 0) { placeResolutionDao.upsert(any()) }
+  }
+
+  @Test
+  fun deleteStops_orphanedPlaceIsDeleted_sharedPlaceIsKept() = runTest {
+    // stop 100 -> place 10（他に訪問なし＝孤立）, stop 200 -> place 20（他にも訪問が残る）
+    coEvery { stopDao.placeIdsForStops(listOf(100L, 200L)) } returns listOf(10L, 20L)
+    coEvery { stopDao.countByPlace(10L) } returns 0
+    coEvery { stopDao.countByPlace(20L) } returns 1
+
+    val result = repository.deleteStops(listOf(100L, 200L))
+
+    coVerify { stopDao.deleteByIds(listOf(100L, 200L)) }
+    coVerify { placeDao.deleteById(10L) } // 孤立した場所ごと削除
+    coVerify(exactly = 0) { placeDao.deleteById(20L) } // 他訪問が残る場所は保持
+    assertEquals(2, result.stopsDeleted)
+    assertEquals(1, result.placesDeleted)
+    assertEquals(1, result.placesKept)
+  }
+
+  @Test
+  fun deleteStops_placeOnWishlist_isKeptEvenWithoutRemainingStops() = runTest {
+    // stop 100 -> place 10。stop は無くなるが行きたい登録があるので場所は残す。
+    coEvery { stopDao.placeIdsForStops(listOf(100L)) } returns listOf(10L)
+    coEvery { stopDao.countByPlace(10L) } returns 0
+    coEvery { wishlistDao.countByPlace(10L) } returns 1
+
+    val result = repository.deleteStops(listOf(100L))
+
+    coVerify { stopDao.deleteByIds(listOf(100L)) }
+    coVerify(exactly = 0) { placeDao.deleteById(10L) } // wishlist を巻き込まない
+    assertEquals(0, result.placesDeleted)
+    assertEquals(1, result.placesKept)
+  }
+
+  @Test
+  fun deleteStops_emptyList_isNoOp() = runTest {
+    val result = repository.deleteStops(emptyList())
+
+    coVerify(exactly = 0) { stopDao.deleteByIds(any()) }
+    assertEquals(0, result.stopsDeleted)
   }
 
   @Test

@@ -234,6 +234,7 @@ Android アプリ制限付きの API キー（地図と共用）を**そのま�
 - 名前編集 → `updatePlaceName(placeId, name)` で places を更新。同じ場所の別訪問にも反映される
 - **場所を取得**ボタン: `googlePlaceId` が無い place が残るとき表示 → その track の未取得 place を Places で取得（手動再取得）。ラベルは「未命名 N件」ではなく**未取得（`googlePlaceId` 無し）**を条件にする
 - **再解析**ボタン: 軌跡を再補正し、立ち寄りを検出し直して命名する（[gps-smoothing.md](./gps-smoothing.md) の「再補正」を包含）
+- **立ち寄りの削除**: 各行の「削除」で1件、行を**長押し**すると複数選択して一括削除できる（再解析後の誤検知の掃除を想定）。削除は単体・複数とも同じロジック（`deleteStops(stopIds)`）で、常に**訪問（stop）を消す**動作。消した結果**どこからも参照されなくなった place だけ**を自動で場所ごと回収する（孤立 GC）。回収条件は「**残る stop がゼロ かつ wishlist 登録もゼロ**」。逆に、他に stop が残る（＝他の履歴でも使われている）place や、wishlist に登録がある place は残す。**wishlist は place を消すと CASCADE で消える**ため、行きたい登録のある place は履歴画面からは巻き込まず必ず残す。place ごと明示的に消したいときは場所タブ（[wishlist.md](./wishlist.md)）から。
 
 ---
 

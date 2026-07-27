@@ -75,16 +75,19 @@ class TrackDetailViewModel @Inject constructor(
     viewModelScope.launch { placeRepository.resolveUnresolvedNames(trackId) }
   }
 
-  /** 立ち寄り（訪問）1件を削除する。場所は残す。 */
-  fun deleteStop(stopId: Long) {
-    viewModelScope.launch { placeRepository.deleteStop(stopId) }
-  }
-
-  /** 場所ごと削除する。他経路に訪問が残っていれば削除せずメッセージを出す。 */
-  fun deletePlace(placeId: Long, trackId: Long) {
+  /**
+   * 立ち寄り（訪問）を削除する（1件でも複数でも同じ）。参照が無くなった場所は自動で場所ごと削除し、
+   * 他の履歴で使われている／行きたい登録がある場所は「この訪問だけ」消して保持する。結果はメッセージで知らせる。
+   */
+  fun deleteStops(stopIds: List<Long>) {
+    if (stopIds.isEmpty()) return
     viewModelScope.launch {
-      if (!placeRepository.deletePlace(placeId, trackId)) {
-        _message.value = "他の経路にも訪問があるため、場所ごとは削除できません（この訪問だけ削除できます）"
+      val result = placeRepository.deleteStops(stopIds)
+      _message.value = if (result.placesKept > 0) {
+        "${result.stopsDeleted}件を削除しました" +
+          "（うち${result.placesKept}件は他の履歴や行きたいで使われているため場所は残しています）"
+      } else {
+        "${result.stopsDeleted}件を削除しました"
       }
     }
   }

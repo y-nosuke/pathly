@@ -3,9 +3,11 @@ package com.pathly.presentation.history
 import androidx.compose.ui.test.assertHasClickAction
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.v2.createComposeRule
+import androidx.compose.ui.test.longClick
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performTouchInput
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.pathly.domain.model.GpsPoint
 import com.pathly.domain.model.GpsTrack
@@ -318,8 +320,8 @@ class TrackDetailScreenTest {
   }
 
   @Test
-  fun trackDetailScreen_deleteButton_opensDeleteDialog() {
-    val onDeleteStop = mockk<(Long) -> Unit>(relaxed = true)
+  fun trackDetailScreen_deleteButton_confirmTriggersDeleteStops() {
+    val onDeleteStops = mockk<(List<Long>) -> Unit>(relaxed = true)
     val track = createSampleTrack()
     val stops = listOf(sampleStop(placeId = 9L, name = "テストカフェ"))
 
@@ -330,15 +332,16 @@ class TrackDetailScreenTest {
           onBackClick = mockOnBackClick,
           mapContent = {},
           stops = stops,
-          onDeleteStop = onDeleteStop,
+          onDeleteStops = onDeleteStops,
         )
       }
     }
 
+    // 行の「削除」→ 確認ダイアログ →「削除する」で一括削除ロジックに合流。
     composeTestRule.onNodeWithText("削除").performClick()
-    composeTestRule.onNodeWithText("この訪問だけ削除").performClick()
+    composeTestRule.onNodeWithText("削除する").performClick()
 
-    verify { onDeleteStop(1L) }
+    verify { onDeleteStops(listOf(1L)) }
   }
 
   @Test
@@ -362,6 +365,35 @@ class TrackDetailScreenTest {
 
     composeTestRule.onNodeWithText("場所を取得", substring = true).performClick()
     verify { onResolve() }
+  }
+
+  @Test
+  fun trackDetailScreen_longPressStop_entersSelectionAndBatchDeleteTriggersCallback() {
+    val onDeleteStops = mockk<(List<Long>) -> Unit>(relaxed = true)
+    val track = createSampleTrack()
+    val stops = listOf(sampleStop(placeId = 9L, name = "テストカフェ"))
+
+    composeTestRule.setContent {
+      PathlyAndroidTheme {
+        TrackDetailScreen(
+          track = track,
+          onBackClick = mockOnBackClick,
+          mapContent = {},
+          stops = stops,
+          onDeleteStops = onDeleteStops,
+        )
+      }
+    }
+
+    // 長押しで選択モードに入り、その行が選択される。
+    composeTestRule.onNodeWithText("テストカフェ").performTouchInput { longClick() }
+    composeTestRule.onNodeWithText("1件選択中").assertIsDisplayed()
+
+    // 選択バーの「削除」→ 確認ダイアログ →「削除する」で一括削除コールバック。
+    composeTestRule.onNodeWithText("削除").performClick()
+    composeTestRule.onNodeWithText("削除する").performClick()
+
+    verify { onDeleteStops(listOf(1L)) }
   }
 
   private fun sampleStop(

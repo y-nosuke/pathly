@@ -98,7 +98,7 @@ erDiagram
 ### 関連と削除規則（要点）
 
 - `gps_tracks` を削除すると、配下の `gps_points` / `smoothed_points` / `stops` も削除される（CASCADE）。
-- `stops` を削除しても `places` は残す（場所は複数の立ち寄りで再利用されるため）。
+- `stops` を削除しても DB 上は `places` を残す（FK は NO_ACTION・場所は複数の立ち寄りで再利用されるため）。ただし履歴画面の削除ではアプリ側で**孤立回収**を行い、削除後にどの `stops` からも参照されず `wishlist` にも無い place は場所ごと消す（[../designs/places-and-stops.md](../designs/places-and-stops.md)）。
 - `place_resolutions` は `places` に従属し、場所の削除で一緒に消える。
 - `smoothed_points.sourcePointId` は由来の生点への参照（トレース用・任意）。DB 上の外部キー制約は張らない。
 - `wishlist` は `places` に従属し（1 place 1件・placeId は UNIQUE）、place の削除で一緒に消える。ただし place は通常消さない（再利用のため静的に保つ）。

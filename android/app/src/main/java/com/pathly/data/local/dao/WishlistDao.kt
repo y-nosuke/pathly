@@ -24,6 +24,10 @@ interface WishlistDao {
   @Query("SELECT * FROM wishlist WHERE placeId = :placeId LIMIT 1")
   suspend fun getByPlaceId(placeId: Long): WishlistEntity?
 
+  /** その place を参照する行きたい登録の件数（場所の自動回収の可否判定）。 */
+  @Query("SELECT COUNT(*) FROM wishlist WHERE placeId = :placeId")
+  suspend fun countByPlace(placeId: Long): Int
+
   @Query("UPDATE wishlist SET priority = :priority, memo = :memo, updatedAt = :updatedAt WHERE id = :id")
   suspend fun updateFields(id: Long, priority: Int, memo: String?, updatedAt: Date)
 
