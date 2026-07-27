@@ -46,11 +46,16 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 4. ✅ ローカルデータ保存
 5. ✅ リアルタイム経路表示・記録中ステータス表示（US010/US011）
 
+**Phase 2 で実装済みの機能（先行着手含む）：**
+
+- ✅ GPSノイズ除去（位置補正・スムージング）
+- ✅ 立ち寄り場所の自動検出（50m圏内+3分滞在）・永続化・自動命名（Places）
+- ✅ 場所・行きたい（wishlist）管理（登録・優先度・メモ・訪問済み・キーワード検索・関連経路一覧）
+
 **Phase 2以降に先送りされた機能：**
 
 - 外出の自動検知→記録開始
-- 立ち寄り場所の自動検出（50m圏内+3分滞在）
-- 手動での場所記録
+- 手動での場所記録（ワンタップ）
 - 写真撮影機能
 - クラウド同期（複数人での共有）
 
@@ -88,8 +93,12 @@ app/src/main/java/com/pathly/
 ├── domain/                # ドメイン層
 │   ├── model/             # ドメインモデル
 │   └── repository/        # Repository interface
-├── presentation/          # プレゼンテーション層
-│   └── tracking/          # 画面別のViewModel, State, Screen
+├── presentation/          # プレゼンテーション層（画面別のViewModel, State, Screen）
+│   ├── tracking/          # 記録画面
+│   ├── history/           # 履歴・経路詳細
+│   ├── places/            # 場所・行きたい（wishlist）
+│   ├── settings/          # 設定
+│   └── navigation/        # ボトムナビ・NavHost（Navigation-Compose）
 ├── service/               # Androidサービス（GPS追跡など）
 └── ui/theme/             # Compose UIテーマ
 ```
@@ -117,12 +126,17 @@ app/src/main/java/com/pathly/
 3. **地図表示** - Google Maps上での軌跡表示
 4. **ローカル保存** - オフライン対応
 
+### 実装済みの主な機能（Phase 2・先行着手）
+
+- **立ち寄り判定** - 50m圏内+3分滞在の自動検出・永続化・自動命名（Places）
+- **場所・行きたいリスト** - 登録（地図/POI/キーワード検索）・優先度・メモ・訪問済み・関連経路一覧
+- **場所名の手動編集** - 未命名⇄命名
+
 ### 将来実装予定機能
 
-- **立ち寄り判定** - 50m圏内+3分滞在の自動検出
 - **写真・動画記録** - 位置情報付きメディア管理
-- **事後編集** - 場所名、評価、コメント追加
-- **事前計画** - 行きたい場所リスト、ルート計画
+- **事後編集** - 評価・コメント・費用・タグの追加
+- **事前計画** - ルート計画・予算
 - **データ共有** - 複数人でのリアルタイム同期
 
 ## 開発環境・コマンド
@@ -189,7 +203,7 @@ app/src/main/java/com/pathly/
 
 ### ナビゲーション構造
 
-- **タブ型：** [記録] [履歴] [地図] [計画] [設定]
+- **タブ型：** [記録] [履歴] [場所] [設定]（地図は各画面に全画面で内包。計画タブは Phase 3 で追加予定）
 - **記録開始：** ホーム画面の大きなボタン + 通知バーのクイックアクセス
 
 ### お出掛け中操作（Phase 2以降）
@@ -219,7 +233,7 @@ app/src/main/java/com/pathly/
 
 - **位置権限：** ACCESS_FINE_LOCATION + ACCESS_COARSE_LOCATION必須
 - **バックグラウンド実行：** LocationTrackingService使用
-- **データベースバージョン：** Room v4（v2: places/stops、v3: smoothed_points、v4: place_resolutions）。破壊的フォールバックは無効。スキーマ変更時は `DatabaseMigrations` に正式なマイグレーションを追加すること
+- **データベースバージョン：** Room v5（v2: places/stops、v3: smoothed_points、v4: place_resolutions、v5: wishlist）。破壊的フォールバックは無効。スキーマ変更時は `DatabaseMigrations` に正式なマイグレーションを追加すること
 - **最小SDK：** API 34（Android 14）以上 / compileSdk 37・targetSdk 37（Android 17）
 - **ビルド環境：** AGP 9.2 / Gradle 9.6 / Kotlin 2.3（AGP内蔵Kotlin）。KotlinはAGPバンドル版に連動するため独立に最新化しないこと
 - **アノテーション処理：** KSP使用（Room/Hilt）。kaptは廃止

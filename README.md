@@ -37,9 +37,14 @@
 - [ ] ⭐ 場所の評価・コメント追加
 - [ ] 🏷️ タグ付け機能
 
+**場所・行きたい**
+
+- [x] 📌 場所の登録・一覧（地図タップ・POIタップ・キーワード検索）
+- [x] 🗒️ 行きたい場所リスト（優先度・メモ・訪問済み管理）
+- [x] 🔗 場所から関連するお出掛け（経路）の一覧
+
 **事前計画・詳細機能**
 
-- [ ] 🗒️ 行きたい場所リスト
 - [ ] 🧭 ルート計画・シミュレーション
 - [ ] 🔄 データ共有・リアルタイム同期
 - [ ] 📊 統計情報・分析機能
@@ -79,7 +84,7 @@ pathly/
 │   ├── requirements.md # 要望書（★肝）
 │   ├── roadmap.md      # ロードマップ
 │   ├── specs/          # 仕様（features / screens / model）
-│   ├── designs/        # 設計（architecture / security / logging / testing / cloud-database）
+│   ├── designs/        # 設計（architecture / performance / security / logging / gps-smoothing / places-and-stops / wishlist / testing / cloud-database / glossary）
 │   └── assets/         # 画像・ロゴ
 ├── .github/            # GitHub Actions（CI）
 ├── .githooks/          # Git フック（Markdown 整形）

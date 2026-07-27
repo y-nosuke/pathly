@@ -159,26 +159,21 @@ class LocationPermissionManager {
 <!-- <uses-permission android:name="android.permission.READ_CONTACTS" /> -->
 ```
 
-#### 精度レベル管理
+#### 精度・省電力の管理
+
+精度を最優先にせず、`PRIORITY_BALANCED_POWER_ACCURACY` を用いて過剰な精度・電力消費を避ける。
+取得間隔はユーザー設定（5/10/30/60 秒・既定 10 秒）に従い、バッチ許容で省電力化する。
 
 ```kotlin
-class LocationAccuracyManager {
-    fun getLocationRequest(accuracyLevel: AccuracyLevel): LocationRequest {
-        return when (accuracyLevel) {
-            AccuracyLevel.HIGH -> LocationRequest.Builder(30_000) // 30秒間隔
-                .setPriority(Priority.PRIORITY_HIGH_ACCURACY)
-                .build()
-
-            AccuracyLevel.BALANCED -> LocationRequest.Builder(60_000) // 60秒間隔
-                .setPriority(Priority.PRIORITY_BALANCED_POWER_ACCURACY)
-                .build()
-
-            AccuracyLevel.LOW_POWER -> LocationRequest.Builder(300_000) // 5分間隔
-                .setPriority(Priority.PRIORITY_LOW_POWER)
-                .build()
-        }
-    }
-}
+// LocationTrackingService.startLocationUpdates()
+val intervalMs = settingsRepository.currentGpsIntervalSeconds() * 1000L
+val locationRequest = LocationRequest.Builder(
+    Priority.PRIORITY_BALANCED_POWER_ACCURACY,
+    intervalMs,
+)
+    .setMinUpdateIntervalMillis(intervalMs / 2)      // 早すぎる更新は間引く
+    .setMaxUpdateDelayMillis(intervalMs + intervalMs / 2) // バッチ配信を許容
+    .build()
 ```
 
 ## 🔐 プライバシー保護
