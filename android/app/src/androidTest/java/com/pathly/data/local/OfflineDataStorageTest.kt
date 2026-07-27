@@ -271,26 +271,36 @@ class OfflineDataStorageTest {
     // When: データベースバージョンを確認
     val currentVersion = database.openHelper.readableDatabase.version
 
-    // Then: 期待されるバージョンと一致
-    assertEquals("Database version should be 1", 1, currentVersion)
+    // Then: 現在のスキーマバージョンと一致（マイグレーション追加時はここも更新。
+    // マイグレーションの内容検証は MigrationTest が担う）。
+    assertEquals("Database version should match current schema", 5, currentVersion)
   }
 
   @Test
   fun testOrphanedDataCleanup() = runBlocking {
-    // Given: 孤立したGPSポイントデータ
-    val orphanedPoint = GpsPointEntity(
-      id = 0,
-      trackId = 999, // 存在しないtrackId
-      latitude = 35.6762,
-      longitude = 139.6503,
-      altitude = 10.0,
-      accuracy = 5.0f,
-      speed = 0.0f,
-      bearing = 0.0f,
-      timestamp = Date(System.currentTimeMillis()),
-      createdAt = Date(),
+    // Given: 立ち寄り点を持つ正常な軌跡
+    val trackId = gpsTrackDao.insertTrack(createTestTrack(isActive = false))
+    gpsPointDao.insertPoint(
+      GpsPointEntity(
+        id = 0,
+        trackId = trackId,
+        latitude = 35.6762,
+        longitude = 139.6503,
+        altitude = 10.0,
+        accuracy = 5.0f,
+        speed = 0.0f,
+        bearing = 0.0f,
+        timestamp = Date(System.currentTimeMillis()),
+        createdAt = Date(),
+      ),
     )
-    gpsPointDao.insertPoint(orphanedPoint)
+
+    // FK 制約が有効なため、通常は孤立点（存在しない trackId）を作れない。
+    // 一時的に FK を切って親軌跡だけを消し、孤立点を意図的に作る（クリーンアップ機能の検証用）。
+    val db = database.openHelper.writableDatabase
+    db.execSQL("PRAGMA foreign_keys = OFF")
+    db.execSQL("DELETE FROM gps_tracks WHERE id = ?", arrayOf<Any>(trackId))
+    db.execSQL("PRAGMA foreign_keys = ON")
 
     // When: 孤立したポイントをカウント
     val orphanedCount = gpsPointDao.getOrphanedPointsCount()
