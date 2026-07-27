@@ -139,6 +139,12 @@ dependencies {
   // Coroutines
   implementation(libs.kotlinx.coroutines.android)
 
+  // kotlinx-serialization のバージョン統一（BOM）。
+  // room-testing が json 1.8.1 を引く一方、consistent resolution で core が
+  // 1.7.3 に固定され、MigrationTestHelper のスキーマ読み込みが版ずれで落ちる。
+  // BOM で core/json を 1.8.1 に揃える（androidTest 側も追従する）。
+  implementation(platform(libs.kotlinx.serialization.bom))
+
   // Security - Encrypted SharedPreferences
   implementation(libs.androidx.security.crypto)
 

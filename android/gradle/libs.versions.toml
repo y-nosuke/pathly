@@ -19,6 +19,7 @@ mapsCompose = "8.4.0"
 places = "5.3.0"
 accompanistPermissions = "0.37.3"
 kotlinxCoroutines = "1.11.0"
+kotlinxSerialization = "1.8.1"
 hiltNavigationCompose = "1.4.0"
 navigationCompose = "2.9.8"
 securityCrypto = "1.1.0"
@@ -71,6 +72,7 @@ accompanist-permissions = { group = "com.google.accompanist", name = "accompanis
 
 # Coroutines
 kotlinx-coroutines-android = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-android", version.ref = "kotlinxCoroutines" }
+kotlinx-serialization-bom = { group = "org.jetbrains.kotlinx", name = "kotlinx-serialization-bom", version.ref = "kotlinxSerialization" }
 turbine = { module = "app.cash.turbine:turbine", version.ref = "turbine" }
 
 [plugins]
