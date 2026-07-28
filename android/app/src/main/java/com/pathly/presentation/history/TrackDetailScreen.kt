@@ -177,6 +177,8 @@ fun TrackDetailScreen(
           onFocusStop = {
             focusTarget = LatLng(it.place.latitude, it.place.longitude)
             focusNonce++
+            // シートを畳んで地図を見せ、フォーカス移動に気付けるようにする。
+            scope.launch { sheetState.partialExpand() }
           },
           onEditStop = { editingStop = it },
           onDeleteStop = { deleteWithUndo(listOf(it.id)) },
