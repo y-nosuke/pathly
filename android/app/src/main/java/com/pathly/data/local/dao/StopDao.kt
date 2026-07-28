@@ -21,15 +21,16 @@ interface StopDao {
   @Query("DELETE FROM stops WHERE trackId = :trackId")
   suspend fun deleteByTrack(trackId: Long)
 
-  @Query("DELETE FROM stops WHERE id = :stopId")
-  suspend fun deleteById(stopId: Long)
+  @Query("DELETE FROM stops WHERE id IN (:stopIds)")
+  suspend fun deleteByIds(stopIds: List<Long>)
 
-  @Query("DELETE FROM stops WHERE placeId = :placeId")
-  suspend fun deleteByPlace(placeId: Long)
+  /** 指定した立ち寄りの実体（削除前のスナップショット取得・取り消し復元に使う）。 */
+  @Query("SELECT * FROM stops WHERE id IN (:stopIds)")
+  suspend fun getByIds(stopIds: List<Long>): List<StopEntity>
 
-  /** その場所への訪問のうち、指定経路以外のもの件数（場所ごと削除の可否判定）。 */
-  @Query("SELECT COUNT(*) FROM stops WHERE placeId = :placeId AND trackId != :trackId")
-  suspend fun countByPlaceInOtherTracks(placeId: Long, trackId: Long): Int
+  /** その場所への訪問の総数（経路を問わない）。0 かつ行きたい登録も無ければ場所ごと回収してよい。 */
+  @Query("SELECT COUNT(*) FROM stops WHERE placeId = :placeId")
+  suspend fun countByPlace(placeId: Long): Int
 
   @Transaction
   @Query("SELECT * FROM stops WHERE trackId = :trackId ORDER BY arrivalTime ASC")

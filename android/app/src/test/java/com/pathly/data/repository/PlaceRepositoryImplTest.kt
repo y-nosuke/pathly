@@ -4,7 +4,9 @@ import com.pathly.data.local.dao.PlaceDao
 import com.pathly.data.local.dao.PlaceResolutionDao
 import com.pathly.data.local.dao.SmoothedPointDao
 import com.pathly.data.local.dao.StopDao
+import com.pathly.data.local.dao.WishlistDao
 import com.pathly.data.local.entity.PlaceEntity
+import com.pathly.data.local.entity.PlaceResolutionEntity
 import com.pathly.data.local.entity.SmoothedPointEntity
 import com.pathly.data.local.entity.StopEntity
 import com.pathly.data.places.PlacesNameResolver
@@ -14,8 +16,10 @@ import io.mockk.mockk
 import io.mockk.slot
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.util.Date
 
@@ -25,12 +29,14 @@ class PlaceRepositoryImplTest {
   private val stopDao = mockk<StopDao>(relaxed = true)
   private val smoothedPointDao = mockk<SmoothedPointDao>(relaxed = true)
   private val placeResolutionDao = mockk<PlaceResolutionDao>(relaxed = true)
+  private val wishlistDao = mockk<WishlistDao>(relaxed = true)
   private val resolver = mockk<PlacesNameResolver>(relaxed = true)
   private val repository = PlaceRepositoryImpl(
     placeDao,
     stopDao,
     smoothedPointDao,
     placeResolutionDao,
+    wishlistDao,
     resolver,
   )
 
@@ -158,6 +164,80 @@ class PlaceRepositoryImplTest {
 
     // 未実施は行を作らない（後でキャッチアップ）。
     coVerify(exactly = 0) { placeResolutionDao.upsert(any()) }
+  }
+
+  private fun stopEntity(id: Long, placeId: Long) = StopEntity(
+    id = id,
+    placeId = placeId,
+    trackId = 1L,
+    arrivalTime = Date(0L),
+    departureTime = Date(60_000L),
+  )
+
+  @Test
+  fun deleteStops_orphanedPlaceIsDeleted_sharedPlaceIsKept() = runTest {
+    // stop 100 -> place 10（他に訪問なし＝孤立）, stop 200 -> place 20（他にも訪問が残る）
+    coEvery { stopDao.getByIds(listOf(100L, 200L)) } returns listOf(stopEntity(100L, 10L), stopEntity(200L, 20L))
+    coEvery { stopDao.countByPlace(10L) } returns 0
+    coEvery { stopDao.countByPlace(20L) } returns 1
+
+    val result = repository.deleteStops(listOf(100L, 200L))
+
+    coVerify { stopDao.deleteByIds(listOf(100L, 200L)) }
+    coVerify { placeDao.deleteById(10L) } // 孤立した場所ごと削除
+    coVerify(exactly = 0) { placeDao.deleteById(20L) } // 他訪問が残る場所は保持
+    assertEquals(2, result.stopsDeleted)
+    assertEquals(1, result.placesDeleted)
+    assertEquals(1, result.placesKept)
+  }
+
+  @Test
+  fun deleteStops_placeOnWishlist_isKeptEvenWithoutRemainingStops() = runTest {
+    // stop 100 -> place 10。stop は無くなるが行きたい登録があるので場所は残す。
+    coEvery { stopDao.getByIds(listOf(100L)) } returns listOf(stopEntity(100L, 10L))
+    coEvery { stopDao.countByPlace(10L) } returns 0
+    coEvery { wishlistDao.countByPlace(10L) } returns 1
+
+    val result = repository.deleteStops(listOf(100L))
+
+    coVerify { stopDao.deleteByIds(listOf(100L)) }
+    coVerify(exactly = 0) { placeDao.deleteById(10L) } // wishlist を巻き込まない
+    assertEquals(0, result.placesDeleted)
+    assertEquals(1, result.placesKept)
+  }
+
+  @Test
+  fun deleteStops_emptyList_isNoOp() = runTest {
+    val result = repository.deleteStops(emptyList())
+
+    coVerify(exactly = 0) { stopDao.deleteByIds(any()) }
+    assertEquals(0, result.stopsDeleted)
+  }
+
+  @Test
+  fun undoLastDeletion_restoresStopsAndOrphanedPlace() = runTest {
+    // 孤立 place を回収する削除 → 取り消しで place・解決ログ・stop を元IDのまま復元。
+    val stop = stopEntity(100L, 10L)
+    val place = PlaceEntity(id = 10L, latitude = 35.0, longitude = 139.0)
+    val resolution = PlaceResolutionEntity(10L, Date(0L), "gp-1")
+    coEvery { stopDao.getByIds(listOf(100L)) } returns listOf(stop)
+    coEvery { stopDao.countByPlace(10L) } returns 0
+    coEvery { wishlistDao.countByPlace(10L) } returns 0
+    coEvery { placeDao.getById(10L) } returns place
+    coEvery { placeResolutionDao.getByPlace(10L) } returns resolution
+
+    repository.deleteStops(listOf(100L))
+    val undone = repository.undoLastDeletion()
+
+    assertTrue(undone)
+    coVerify { placeDao.insert(place) }
+    coVerify { placeResolutionDao.upsert(resolution) }
+    coVerify { stopDao.insert(stop) }
+  }
+
+  @Test
+  fun undoLastDeletion_withoutPriorDeletion_returnsFalse() = runTest {
+    assertFalse(repository.undoLastDeletion())
   }
 
   @Test

@@ -1,6 +1,7 @@
 package com.pathly.presentation.history
 
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -15,12 +16,17 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.BottomSheetScaffold
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.SheetValue
 import androidx.compose.material3.Slider
+import androidx.compose.material3.SnackbarDuration
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -30,6 +36,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -83,8 +90,8 @@ fun TrackDetailScreen(
   onEditPlaceName: (placeId: Long, name: String) -> Unit = { _, _ -> },
   onResolveNames: () -> Unit = {},
   onReanalyze: () -> Unit = {},
-  onDeleteStop: (stopId: Long) -> Unit = {},
-  onDeletePlace: (placeId: Long, trackId: Long) -> Unit = { _, _ -> },
+  onDeleteStops: (stopIds: List<Long>) -> Unit = {},
+  onUndoDeletion: () -> Unit = {},
   onMessageShown: () -> Unit = {},
   onRegisterPlace: (lat: Double, lng: Double, name: String, wishlist: Boolean) -> Unit = { _, _, _, _ -> },
   // 地図スロット。null（既定）は実マップ（GoogleMap）を描画する。
@@ -102,7 +109,33 @@ fun TrackDetailScreen(
   var tuningMode by remember { mutableStateOf(false) }
   var tuningParams by remember { mutableStateOf(SmoothingParams()) }
   var editingStop by remember { mutableStateOf<Stop?>(null) }
-  var deletingStop by remember { mutableStateOf<Stop?>(null) }
+
+  // 複数選択削除。長押しで選択モードに入り、チェックで選ぶ。
+  var selectionMode by remember { mutableStateOf(false) }
+  val selectedStopIds = remember { mutableStateListOf<Long>() }
+
+  // 再解析などで stops が変わったら、消えた ID を選択から外す。空になったら選択モードを抜ける。
+  LaunchedEffect(stops) {
+    val ids = stops.mapTo(HashSet()) { it.id }
+    selectedStopIds.retainAll(ids)
+    if (selectedStopIds.isEmpty()) selectionMode = false
+  }
+
+  // 削除は確認ダイアログを出さず即時実行し、スナックバーの「取り消す」で元に戻せる。
+  val snackbarHostState = remember { SnackbarHostState() }
+  val deleteWithUndo: (List<Long>) -> Unit = { ids ->
+    if (ids.isNotEmpty()) {
+      onDeleteStops(ids)
+      scope.launch {
+        val result = snackbarHostState.showSnackbar(
+          message = "${ids.size}件を削除しました",
+          actionLabel = "取り消す",
+          duration = SnackbarDuration.Short,
+        )
+        if (result == SnackbarResult.ActionPerformed) onUndoDeletion()
+      }
+    }
+  }
 
   // タップした立ち寄りへ地図をフォーカスする（nonce で同じ場所の再タップにも反応）。
   var focusTarget by remember { mutableStateOf<LatLng?>(null) }
@@ -119,6 +152,7 @@ fun TrackDetailScreen(
     modifier = modifier.fillMaxSize(),
     scaffoldState = scaffoldState,
     sheetPeekHeight = peek,
+    snackbarHost = { SnackbarHost(snackbarHostState) },
     sheetContent = {
       if (tuningMode) {
         TuningSheet(
@@ -131,14 +165,37 @@ fun TrackDetailScreen(
           track = track,
           stops = stops,
           unresolvedCount = unresolvedCount,
+          selectionMode = selectionMode,
+          selectedStopIds = selectedStopIds,
           onFocusStop = {
             focusTarget = LatLng(it.place.latitude, it.place.longitude)
             focusNonce++
           },
           onEditStop = { editingStop = it },
-          onDeleteStop = { deletingStop = it },
+          onDeleteStop = { deleteWithUndo(listOf(it.id)) },
           onResolveNames = onResolveNames,
           onReanalyze = onReanalyze,
+          onEnterSelection = { stop ->
+            selectionMode = true
+            if (stop.id !in selectedStopIds) selectedStopIds.add(stop.id)
+          },
+          onToggleSelect = { stop ->
+            if (stop.id in selectedStopIds) selectedStopIds.remove(stop.id) else selectedStopIds.add(stop.id)
+          },
+          onSelectAll = {
+            val allSelected = selectedStopIds.size == stops.size
+            selectedStopIds.clear()
+            if (!allSelected) selectedStopIds.addAll(stops.map { it.id })
+          },
+          onCancelSelection = {
+            selectionMode = false
+            selectedStopIds.clear()
+          },
+          onDeleteSelected = {
+            deleteWithUndo(selectedStopIds.toList())
+            selectionMode = false
+            selectedStopIds.clear()
+          },
         )
       }
     },
@@ -255,21 +312,6 @@ fun TrackDetailScreen(
     )
   }
 
-  deletingStop?.let { stop ->
-    DeleteStopDialog(
-      stop = stop,
-      onDismiss = { deletingStop = null },
-      onDeleteStop = {
-        onDeleteStop(stop.id)
-        deletingStop = null
-      },
-      onDeletePlace = {
-        onDeletePlace(stop.place.id, stop.trackId)
-        deletingStop = null
-      },
-    )
-  }
-
   message?.let { text ->
     AlertDialog(
       onDismissRequest = onMessageShown,
@@ -288,33 +330,6 @@ fun TrackDetailScreen(
       },
     )
   }
-}
-
-@Composable
-private fun DeleteStopDialog(
-  stop: Stop,
-  onDismiss: () -> Unit,
-  onDeleteStop: () -> Unit,
-  onDeletePlace: () -> Unit,
-) {
-  val label = stop.place.name
-    ?: "%.5f, %.5f".format(stop.place.latitude, stop.place.longitude)
-  AlertDialog(
-    onDismissRequest = onDismiss,
-    title = { Text("削除") },
-    text = { Text("「$label」を削除します。") },
-    confirmButton = {
-      Column {
-        TextButton(onClick = onDeleteStop) { Text("この訪問だけ削除") }
-        TextButton(onClick = onDeletePlace) {
-          Text("場所ごと削除", color = MaterialTheme.colorScheme.error)
-        }
-      }
-    },
-    dismissButton = {
-      TextButton(onClick = onDismiss) { Text("キャンセル") }
-    },
-  )
 }
 
 @Composable
@@ -349,11 +364,18 @@ private fun TrackDetailSheet(
   track: GpsTrack,
   stops: List<Stop>,
   unresolvedCount: Int,
+  selectionMode: Boolean,
+  selectedStopIds: List<Long>,
   onFocusStop: (Stop) -> Unit,
   onEditStop: (Stop) -> Unit,
   onDeleteStop: (Stop) -> Unit,
   onResolveNames: () -> Unit,
   onReanalyze: () -> Unit,
+  onEnterSelection: (Stop) -> Unit,
+  onToggleSelect: (Stop) -> Unit,
+  onSelectAll: () -> Unit,
+  onCancelSelection: () -> Unit,
+  onDeleteSelected: () -> Unit,
   modifier: Modifier = Modifier,
 ) {
   Column(
@@ -364,6 +386,15 @@ private fun TrackDetailSheet(
       .padding(bottom = 24.dp),
     verticalArrangement = Arrangement.spacedBy(12.dp),
   ) {
+    if (selectionMode) {
+      SelectionBar(
+        selectedCount = selectedStopIds.size,
+        totalCount = stops.size,
+        onSelectAll = onSelectAll,
+        onDelete = onDeleteSelected,
+        onCancel = onCancelSelection,
+      )
+    }
     Row(
       modifier = Modifier.fillMaxWidth(),
       horizontalArrangement = Arrangement.SpaceBetween,
@@ -445,32 +476,78 @@ private fun TrackDetailSheet(
     stops.forEach { stop ->
       StopRow(
         stop = stop,
+        selectionMode = selectionMode,
+        selected = stop.id in selectedStopIds,
         onFocus = { onFocusStop(stop) },
         onEdit = { onEditStop(stop) },
         onDelete = { onDeleteStop(stop) },
+        onToggleSelect = { onToggleSelect(stop) },
+        onEnterSelection = { onEnterSelection(stop) },
       )
     }
   }
 }
 
 @Composable
+private fun SelectionBar(
+  selectedCount: Int,
+  totalCount: Int,
+  onSelectAll: () -> Unit,
+  onDelete: () -> Unit,
+  onCancel: () -> Unit,
+) {
+  Row(
+    modifier = Modifier.fillMaxWidth(),
+    horizontalArrangement = Arrangement.SpaceBetween,
+    verticalAlignment = Alignment.CenterVertically,
+  ) {
+    Text(
+      text = "${selectedCount}件選択中",
+      style = MaterialTheme.typography.titleMedium,
+      fontWeight = FontWeight.Bold,
+    )
+    Row(verticalAlignment = Alignment.CenterVertically) {
+      TextButton(onClick = onSelectAll) {
+        Text(if (selectedCount == totalCount && totalCount > 0) "全解除" else "全選択")
+      }
+      TextButton(onClick = onDelete, enabled = selectedCount > 0) {
+        Text("削除", color = MaterialTheme.colorScheme.error)
+      }
+      TextButton(onClick = onCancel) { Text("キャンセル") }
+    }
+  }
+}
+
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
 private fun StopRow(
   stop: Stop,
+  selectionMode: Boolean,
+  selected: Boolean,
   onFocus: () -> Unit,
   onEdit: () -> Unit,
   onDelete: () -> Unit,
+  onToggleSelect: () -> Unit,
+  onEnterSelection: () -> Unit,
 ) {
   val title = stop.place.name
     ?: "%.5f, %.5f".format(stop.place.latitude, stop.place.longitude)
   Row(
-    modifier = Modifier.fillMaxWidth(),
+    // 通常はタップでフォーカス、長押しで選択モード。選択モード中はタップで選択トグル。
+    modifier = Modifier
+      .fillMaxWidth()
+      .combinedClickable(
+        onClick = { if (selectionMode) onToggleSelect() else onFocus() },
+        onLongClick = { if (!selectionMode) onEnterSelection() },
+      ),
     verticalAlignment = Alignment.CenterVertically,
   ) {
-    // タップで地図をこの場所へフォーカス。
+    if (selectionMode) {
+      Checkbox(checked = selected, onCheckedChange = { onToggleSelect() })
+    }
     Column(
       modifier = Modifier
         .weight(1f)
-        .clickable(onClick = onFocus)
         .padding(vertical = 4.dp),
     ) {
       Text(
@@ -486,9 +563,11 @@ private fun StopRow(
         color = MaterialTheme.colorScheme.onSurfaceVariant,
       )
     }
-    TextButton(onClick = onEdit) { Text("編集") }
-    TextButton(onClick = onDelete) {
-      Text("削除", color = MaterialTheme.colorScheme.error)
+    if (!selectionMode) {
+      TextButton(onClick = onEdit) { Text("編集") }
+      TextButton(onClick = onDelete) {
+        Text("削除", color = MaterialTheme.colorScheme.error)
+      }
     }
   }
 }

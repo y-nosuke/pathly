@@ -1,6 +1,7 @@
 package com.pathly.domain.repository
 
 import com.pathly.domain.model.Stop
+import com.pathly.domain.model.StopDeletionResult
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.StateFlow
 
@@ -42,12 +43,17 @@ interface PlaceRepository {
    */
   suspend fun findOrCreatePlace(latitude: Double, longitude: Double): Long
 
-  /** 立ち寄り（訪問）1件を削除する。場所（place）は残す。 */
-  suspend fun deleteStop(stopId: Long)
+  /**
+   * 立ち寄り（訪問）を削除する（1件でも複数でも同じ経路）。選択した訪問はすべて消し、
+   * その結果どこからも参照されなくなった場所だけを場所ごと削除する。
+   * 他に訪問が残る場所（＝他の履歴でも使われている）や、行きたい登録がある場所は保持する。
+   * 取り消し（[undoLastDeletion]）用に、直近の削除内容を1件だけ控える。
+   */
+  suspend fun deleteStops(stopIds: List<Long>): StopDeletionResult
 
   /**
-   * 場所（place）ごと削除する（その場所の訪問・解決記録も消える）。
-   * ただし**他の経路にもその場所への訪問が残っている場合は削除せず false を返す**。
+   * 直近の [deleteStops] を取り消し、消した訪問と回収した場所を**元のIDのまま**復元する。
+   * 控えが無ければ何もしない。復元したら true を返す。
    */
-  suspend fun deletePlace(placeId: Long, trackId: Long): Boolean
+  suspend fun undoLastDeletion(): Boolean
 }
