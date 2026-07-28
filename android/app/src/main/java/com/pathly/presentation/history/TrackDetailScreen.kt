@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -45,6 +46,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -154,6 +156,15 @@ fun TrackDetailScreen(
   }
   val peek = if (tuningMode) tuningSheetPeekHeight else sheetPeekHeight
   val sheetHidden = sheetState.currentValue == SheetValue.Hidden
+  // シートの最大展開を画面の約55%までに抑え、展開しても地図が上に見えるようにする
+  // （立ち寄りを連続タップして地図で確認できる）。
+  val sheetMaxHeight = (LocalConfiguration.current.screenHeightDp * 0.55f).dp
+  // 地図のフォーカスは、シートに隠れない可視領域（上側）で中央に来るようパディングする。
+  val mapBottomPadding = when (sheetState.currentValue) {
+    SheetValue.Hidden -> 0.dp
+    SheetValue.Expanded -> sheetMaxHeight
+    else -> peek
+  }
 
   BottomSheetScaffold(
     modifier = modifier.fillMaxSize(),
@@ -174,11 +185,12 @@ fun TrackDetailScreen(
           unresolvedCount = unresolvedCount,
           selectionMode = selectionMode,
           selectedStopIds = selectedStopIds,
+          // シートは最大でも画面の約55%までなので、展開中でも地図が見える。
+          // タップでは畳まず地図だけ動かし、連続タップで確認できるようにする。
+          modifier = Modifier.height(sheetMaxHeight),
           onFocusStop = {
             focusTarget = LatLng(it.place.latitude, it.place.longitude)
             focusNonce++
-            // シートを畳んで地図を見せ、フォーカス移動に気付けるようにする。
-            scope.launch { sheetState.partialExpand() }
           },
           onEditStop = { editingStop = it },
           onDeleteStop = { deleteWithUndo(listOf(it.id)) },
@@ -227,7 +239,7 @@ fun TrackDetailScreen(
             showRawOverlay = tuningMode,
             focusTarget = focusTarget,
             focusNonce = focusNonce,
-            contentPadding = PaddingValues(bottom = if (sheetHidden) 0.dp else peek),
+            contentPadding = PaddingValues(bottom = mapBottomPadding),
             onPoiClick = { poiTarget = it },
             modifier = Modifier.fillMaxSize(),
           )
@@ -400,7 +412,9 @@ private fun TrackDetailSheet(
       )
     }
     Column(
+      // 固定ヘッダー（選択バー）の下で、残りの高さいっぱいにスクロールさせる。
       modifier = Modifier
+        .weight(1f, fill = false)
         .fillMaxWidth()
         .verticalScroll(rememberScrollState())
         .padding(horizontal = 20.dp)
