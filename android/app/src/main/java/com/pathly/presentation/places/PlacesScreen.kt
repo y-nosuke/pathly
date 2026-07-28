@@ -19,7 +19,6 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -35,6 +34,10 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.SnackbarDuration
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -84,32 +87,35 @@ fun PlacesListRoute(
   modifier: Modifier = Modifier,
 ) {
   val uiState by viewModel.uiState.collectAsStateWithLifecycle()
-  var deleteTarget by remember { mutableStateOf<PlaceListItem?>(null) }
+  val snackbarHostState = remember { SnackbarHostState() }
 
   uiState.errorMessage?.let { message ->
     LaunchedEffect(message) { viewModel.clearError() }
   }
 
-  PlacesListContent(
-    modifier = modifier,
-    state = uiState,
-    onAddByMap = onAddByMap,
-    onAddBySearch = onAddBySearch,
-    onFilterChange = viewModel::setFilter,
-    onItemClick = { onItemClick(it.place.id) },
-    onToggleWishlist = viewModel::toggleWishlist,
-    onDeleteRequest = { deleteTarget = it },
-  )
-
-  deleteTarget?.let { target ->
-    DeletePlaceDialog(
-      item = target,
-      onConfirm = {
-        viewModel.deletePlace(target.place.id)
-        deleteTarget = null
-      },
-      onDismiss = { deleteTarget = null },
+  // 削除（一覧・詳細どちらから消しても）を検知して取り消しスナックバーを出す。
+  LaunchedEffect(uiState.undoDeleteToken) {
+    if (uiState.undoDeleteToken == 0) return@LaunchedEffect
+    val result = snackbarHostState.showSnackbar(
+      message = "「${uiState.undoDeleteName ?: "場所"}」を削除しました",
+      actionLabel = "取り消す",
+      duration = SnackbarDuration.Short,
     )
+    if (result == SnackbarResult.ActionPerformed) viewModel.undoDelete()
+  }
+
+  Box(modifier = modifier.fillMaxSize()) {
+    PlacesListContent(
+      state = uiState,
+      onAddByMap = onAddByMap,
+      onAddBySearch = onAddBySearch,
+      onFilterChange = viewModel::setFilter,
+      onItemClick = { onItemClick(it.place.id) },
+      onToggleWishlist = viewModel::toggleWishlist,
+      // 確認ダイアログは出さず即時削除。取り消しは上のスナックバーから。
+      onDeleteRequest = { viewModel.deletePlace(it.place.id) },
+    )
+    SnackbarHost(snackbarHostState, modifier = Modifier.align(Alignment.BottomCenter))
   }
 }
 
@@ -166,11 +172,10 @@ fun PlaceDetailRoute(
   modifier: Modifier = Modifier,
 ) {
   val uiState by viewModel.uiState.collectAsStateWithLifecycle()
-  var deleteTarget by remember { mutableStateOf<PlaceListItem?>(null) }
 
   val item = uiState.items.firstOrNull { it.place.id == placeId }
   if (item == null) {
-    // 読み込み済みで見つからない（削除された）なら一覧へ戻す。
+    // 読み込み済みで見つからない（削除された）なら一覧へ戻す（取り消しは一覧のスナックバーで）。
     if (!uiState.isLoading) {
       LaunchedEffect(placeId) { onBack() }
     }
@@ -197,40 +202,9 @@ fun PlaceDetailRoute(
     onRegisterPoi = { lat, lng, name, wishlist ->
       viewModel.registerPlace(lat, lng, name, wishlist, Priority.MEDIUM, null)
     },
-    onDeleteRequest = { deleteTarget = item },
-  )
-
-  deleteTarget?.let { target ->
-    DeletePlaceDialog(
-      item = target,
-      onConfirm = {
-        viewModel.deletePlace(target.place.id)
-        deleteTarget = null
-        // 削除で items から消えると item == null になり、上の分岐で一覧へ戻る。
-      },
-      onDismiss = { deleteTarget = null },
-    )
-  }
-}
-
-@Composable
-private fun DeletePlaceDialog(
-  item: PlaceListItem,
-  onConfirm: () -> Unit,
-  onDismiss: () -> Unit,
-) {
-  AlertDialog(
-    onDismissRequest = onDismiss,
-    title = { Text("削除しますか？") },
-    text = { Text("「${item.displayName}」を削除します。") },
-    confirmButton = {
-      TextButton(onClick = onConfirm) {
-        Text("削除", color = MaterialTheme.colorScheme.error)
-      }
-    },
-    dismissButton = {
-      TextButton(onClick = onDismiss) { Text("キャンセル") }
-    },
+    // 確認ダイアログは出さず即時削除。items から消えると item == null になり一覧へ戻り、
+    // 取り消しスナックバーは一覧側で出る。
+    onDeleteRequest = { viewModel.deletePlace(item.place.id) },
   )
 }
 
