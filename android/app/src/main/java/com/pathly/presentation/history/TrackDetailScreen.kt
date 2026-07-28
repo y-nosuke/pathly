@@ -1,5 +1,6 @@
 package com.pathly.presentation.history
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
@@ -7,6 +8,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -44,6 +46,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -74,7 +77,6 @@ import com.pathly.util.DateFormatters
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
 
-private val sheetPeekHeight = 240.dp
 private val tuningSheetPeekHeight = 360.dp
 private val rawTrackColor = Color(0x66424242)
 
@@ -121,6 +123,12 @@ fun TrackDetailScreen(
     if (selectedStopIds.isEmpty()) selectionMode = false
   }
 
+  // 選択モード中のシステムバックは、画面を抜けるのではなく選択を解除する。
+  BackHandler(enabled = selectionMode) {
+    selectionMode = false
+    selectedStopIds.clear()
+  }
+
   // 削除は確認ダイアログを出さず即時実行し、スナックバーの「取り消す」で元に戻せる。
   val snackbarHostState = remember { SnackbarHostState() }
   val deleteWithUndo: (List<Long>) -> Unit = { ids ->
@@ -145,7 +153,10 @@ fun TrackDetailScreen(
   val displayPoints = remember(track, tuningMode, tuningParams) {
     if (tuningMode) TrackSmoother.smooth(track.points, tuningParams) else track.smoothedPoints
   }
-  val peek = if (tuningMode) tuningSheetPeekHeight else sheetPeekHeight
+  // 既定のピーク（＝ハーフ表示）は画面の約45%。ここが「地図＋一覧」を同時に見る状態で、
+  // 立ち寄りを連続タップして地図で確認できる。上までドラッグすると全画面一覧（Expanded）、
+  // 下スワイプで全画面地図（Hidden）になる（標準ボトムシートの2段スナップ＋隠す）。
+  val peek = if (tuningMode) tuningSheetPeekHeight else (LocalConfiguration.current.screenHeightDp * 0.45f).dp
   val sheetHidden = sheetState.currentValue == SheetValue.Hidden
 
   BottomSheetScaffold(
@@ -167,6 +178,9 @@ fun TrackDetailScreen(
           unresolvedCount = unresolvedCount,
           selectionMode = selectionMode,
           selectedStopIds = selectedStopIds,
+          // 全画面（Expanded）まで伸ばせるよう高さいっぱいにする。ハーフ表示はピークが担う。
+          // タップでは畳まず地図だけ動かし、連続タップで確認できるようにする。
+          modifier = Modifier.fillMaxHeight(),
           onFocusStop = {
             focusTarget = LatLng(it.place.latitude, it.place.longitude)
             focusNonce++
@@ -378,14 +392,9 @@ private fun TrackDetailSheet(
   onDeleteSelected: () -> Unit,
   modifier: Modifier = Modifier,
 ) {
-  Column(
-    modifier = modifier
-      .fillMaxWidth()
-      .verticalScroll(rememberScrollState())
-      .padding(horizontal = 20.dp)
-      .padding(bottom = 24.dp),
-    verticalArrangement = Arrangement.spacedBy(12.dp),
-  ) {
+  Column(modifier = modifier.fillMaxWidth()) {
+    // 選択モードのアクションはスクロールから外し、常に上部に固定する
+    // （選択後に削除まで戻る手間をなくす）。
     if (selectionMode) {
       SelectionBar(
         selectedCount = selectedStopIds.size,
@@ -395,95 +404,106 @@ private fun TrackDetailSheet(
         onCancel = onCancelSelection,
       )
     }
-    Row(
-      modifier = Modifier.fillMaxWidth(),
-      horizontalArrangement = Arrangement.SpaceBetween,
-      verticalAlignment = Alignment.CenterVertically,
+    Column(
+      // 固定ヘッダー（選択バー）の下で、残りの高さいっぱいにスクロールさせる。
+      modifier = Modifier
+        .weight(1f, fill = false)
+        .fillMaxWidth()
+        .verticalScroll(rememberScrollState())
+        .padding(horizontal = 20.dp)
+        .padding(bottom = 24.dp),
+      verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-      Text(
-        text = DateFormatters.DATE_FORMAT.format(track.startTime),
-        style = MaterialTheme.typography.titleLarge,
-        fontWeight = FontWeight.Bold,
-      )
-      if (track.isActive) {
-        Surface(
-          shape = RoundedCornerShape(20.dp),
-          color = MaterialTheme.colorScheme.primaryContainer,
-        ) {
-          Text(
-            text = "● 記録中",
-            style = MaterialTheme.typography.labelMedium,
-            color = MaterialTheme.colorScheme.onPrimaryContainer,
-            fontWeight = FontWeight.Medium,
-            modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
-          )
+      Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically,
+      ) {
+        Text(
+          text = DateFormatters.DATE_FORMAT.format(track.startTime),
+          style = MaterialTheme.typography.titleLarge,
+          fontWeight = FontWeight.Bold,
+        )
+        if (track.isActive) {
+          Surface(
+            shape = RoundedCornerShape(20.dp),
+            color = MaterialTheme.colorScheme.primaryContainer,
+          ) {
+            Text(
+              text = "● 記録中",
+              style = MaterialTheme.typography.labelMedium,
+              color = MaterialTheme.colorScheme.onPrimaryContainer,
+              fontWeight = FontWeight.Medium,
+              modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
+            )
+          }
         }
       }
-    }
 
-    val startText = DateFormatters.TIME_FORMAT.format(track.startTime)
-    val endTime = track.endTime
-    val subtitle = if (endTime != null) {
-      val durationMinutes = ((endTime.time - track.startTime.time) / 1000 / 60).toInt()
-      val hours = durationMinutes / 60
-      val minutes = durationMinutes % 60
-      val duration = if (hours > 0) "${hours}時間${minutes}分" else "${minutes}分"
-      "$startText – ${DateFormatters.TIME_FORMAT.format(endTime)} ・ $duration"
-    } else {
-      startText
-    }
-    Text(
-      text = subtitle + if (stops.isNotEmpty()) " ・ 立ち寄り${stops.size}件" else "",
-      style = MaterialTheme.typography.bodyMedium,
-      color = MaterialTheme.colorScheme.onSurfaceVariant,
-    )
+      val startText = DateFormatters.TIME_FORMAT.format(track.startTime)
+      val endTime = track.endTime
+      val subtitle = if (endTime != null) {
+        val durationMinutes = ((endTime.time - track.startTime.time) / 1000 / 60).toInt()
+        val hours = durationMinutes / 60
+        val minutes = durationMinutes % 60
+        val duration = if (hours > 0) "${hours}時間${minutes}分" else "${minutes}分"
+        "$startText – ${DateFormatters.TIME_FORMAT.format(endTime)} ・ $duration"
+      } else {
+        startText
+      }
+      Text(
+        text = subtitle + if (stops.isNotEmpty()) " ・ 立ち寄り${stops.size}件" else "",
+        style = MaterialTheme.typography.bodyMedium,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+      )
 
-    // 操作ボタンは上部（ピーク内）に置いて常に押せるようにする。
-    if (track.points.size >= 2 && !track.isActive) {
-      ActionChip(
-        text = "再解析",
-        container = MaterialTheme.colorScheme.tertiaryContainer,
-        content = MaterialTheme.colorScheme.onTertiaryContainer,
-        onClick = onReanalyze,
-      )
-    }
-    if (unresolvedCount > 0) {
-      ActionChip(
-        text = "場所を取得（未取得 ${unresolvedCount}件）",
-        container = MaterialTheme.colorScheme.secondaryContainer,
-        content = MaterialTheme.colorScheme.onSecondaryContainer,
-        onClick = onResolveNames,
-      )
-    }
+      // 操作ボタンは上部（ピーク内）に置いて常に押せるようにする。
+      if (track.points.size >= 2 && !track.isActive) {
+        ActionChip(
+          text = "再解析",
+          container = MaterialTheme.colorScheme.tertiaryContainer,
+          content = MaterialTheme.colorScheme.onTertiaryContainer,
+          onClick = onReanalyze,
+        )
+      }
+      if (unresolvedCount > 0) {
+        ActionChip(
+          text = "場所を取得（未取得 ${unresolvedCount}件）",
+          container = MaterialTheme.colorScheme.secondaryContainer,
+          content = MaterialTheme.colorScheme.onSecondaryContainer,
+          onClick = onResolveNames,
+        )
+      }
 
-    val distanceKm = (track.totalDistanceMeters / 1000.0 * 100).roundToInt() / 100.0
-    Row(
-      modifier = Modifier.fillMaxWidth(),
-      horizontalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
-      StatTile(
-        value = "${distanceKm}km",
-        label = "移動距離",
-        modifier = Modifier.weight(1f),
-      )
-      StatTile(
-        value = "${track.points.size}",
-        label = "地点数",
-        modifier = Modifier.weight(1f),
-      )
-    }
+      val distanceKm = (track.totalDistanceMeters / 1000.0 * 100).roundToInt() / 100.0
+      Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+      ) {
+        StatTile(
+          value = "${distanceKm}km",
+          label = "移動距離",
+          modifier = Modifier.weight(1f),
+        )
+        StatTile(
+          value = "${track.points.size}",
+          label = "地点数",
+          modifier = Modifier.weight(1f),
+        )
+      }
 
-    stops.forEach { stop ->
-      StopRow(
-        stop = stop,
-        selectionMode = selectionMode,
-        selected = stop.id in selectedStopIds,
-        onFocus = { onFocusStop(stop) },
-        onEdit = { onEditStop(stop) },
-        onDelete = { onDeleteStop(stop) },
-        onToggleSelect = { onToggleSelect(stop) },
-        onEnterSelection = { onEnterSelection(stop) },
-      )
+      stops.forEach { stop ->
+        StopRow(
+          stop = stop,
+          selectionMode = selectionMode,
+          selected = stop.id in selectedStopIds,
+          onFocus = { onFocusStop(stop) },
+          onEdit = { onEditStop(stop) },
+          onDelete = { onDeleteStop(stop) },
+          onToggleSelect = { onToggleSelect(stop) },
+          onEnterSelection = { onEnterSelection(stop) },
+        )
+      }
     }
   }
 }
@@ -496,24 +516,32 @@ private fun SelectionBar(
   onDelete: () -> Unit,
   onCancel: () -> Unit,
 ) {
-  Row(
+  // 固定ヘッダー。地図・一覧と区別できるよう淡い背景を敷く。
+  Surface(
+    color = MaterialTheme.colorScheme.surfaceVariant,
     modifier = Modifier.fillMaxWidth(),
-    horizontalArrangement = Arrangement.SpaceBetween,
-    verticalAlignment = Alignment.CenterVertically,
   ) {
-    Text(
-      text = "${selectedCount}件選択中",
-      style = MaterialTheme.typography.titleMedium,
-      fontWeight = FontWeight.Bold,
-    )
-    Row(verticalAlignment = Alignment.CenterVertically) {
-      TextButton(onClick = onSelectAll) {
-        Text(if (selectedCount == totalCount && totalCount > 0) "全解除" else "全選択")
+    Row(
+      modifier = Modifier
+        .fillMaxWidth()
+        .padding(start = 16.dp, end = 8.dp, top = 4.dp, bottom = 4.dp),
+      horizontalArrangement = Arrangement.SpaceBetween,
+      verticalAlignment = Alignment.CenterVertically,
+    ) {
+      Text(
+        text = "${selectedCount}件選択中",
+        style = MaterialTheme.typography.titleMedium,
+        fontWeight = FontWeight.Bold,
+      )
+      Row(verticalAlignment = Alignment.CenterVertically) {
+        TextButton(onClick = onSelectAll) {
+          Text(if (selectedCount == totalCount && totalCount > 0) "全解除" else "全選択")
+        }
+        TextButton(onClick = onDelete, enabled = selectedCount > 0) {
+          Text("削除", color = MaterialTheme.colorScheme.error)
+        }
+        TextButton(onClick = onCancel) { Text("キャンセル") }
       }
-      TextButton(onClick = onDelete, enabled = selectedCount > 0) {
-        Text("削除", color = MaterialTheme.colorScheme.error)
-      }
-      TextButton(onClick = onCancel) { Text("キャンセル") }
     }
   }
 }
