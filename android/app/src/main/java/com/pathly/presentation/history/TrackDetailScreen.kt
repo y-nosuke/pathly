@@ -156,9 +156,9 @@ fun TrackDetailScreen(
   }
   val peek = if (tuningMode) tuningSheetPeekHeight else sheetPeekHeight
   val sheetHidden = sheetState.currentValue == SheetValue.Hidden
-  // シートの最大展開を画面の約55%までに抑え、展開しても地図が上に見えるようにする
-  // （立ち寄りを連続タップして地図で確認できる）。
-  val sheetMaxHeight = (LocalConfiguration.current.screenHeightDp * 0.55f).dp
+  // シートの最大展開を画面の約45%までに抑え、地図（約55%）が少し広く常に上に見える
+  // ようにする（立ち寄りを連続タップして地図で確認できる）。
+  val sheetMaxHeight = (LocalConfiguration.current.screenHeightDp * 0.45f).dp
   // 地図のフォーカスは、シートに隠れない可視領域（上側）で中央に来るようパディングする。
   val mapBottomPadding = when (sheetState.currentValue) {
     SheetValue.Hidden -> 0.dp
