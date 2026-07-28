@@ -1,5 +1,6 @@
 package com.pathly.presentation.history
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
@@ -119,6 +120,12 @@ fun TrackDetailScreen(
     val ids = stops.mapTo(HashSet()) { it.id }
     selectedStopIds.retainAll(ids)
     if (selectedStopIds.isEmpty()) selectionMode = false
+  }
+
+  // 選択モード中のシステムバックは、画面を抜けるのではなく選択を解除する。
+  BackHandler(enabled = selectionMode) {
+    selectionMode = false
+    selectedStopIds.clear()
   }
 
   // 削除は確認ダイアログを出さず即時実行し、スナックバーの「取り消す」で元に戻せる。
