@@ -8,9 +8,9 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -77,7 +77,6 @@ import com.pathly.util.DateFormatters
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
 
-private val sheetPeekHeight = 240.dp
 private val tuningSheetPeekHeight = 360.dp
 private val rawTrackColor = Color(0x66424242)
 
@@ -154,17 +153,11 @@ fun TrackDetailScreen(
   val displayPoints = remember(track, tuningMode, tuningParams) {
     if (tuningMode) TrackSmoother.smooth(track.points, tuningParams) else track.smoothedPoints
   }
-  val peek = if (tuningMode) tuningSheetPeekHeight else sheetPeekHeight
+  // 既定のピーク（＝ハーフ表示）は画面の約45%。ここが「地図＋一覧」を同時に見る状態で、
+  // 立ち寄りを連続タップして地図で確認できる。上までドラッグすると全画面一覧（Expanded）、
+  // 下スワイプで全画面地図（Hidden）になる（標準ボトムシートの2段スナップ＋隠す）。
+  val peek = if (tuningMode) tuningSheetPeekHeight else (LocalConfiguration.current.screenHeightDp * 0.45f).dp
   val sheetHidden = sheetState.currentValue == SheetValue.Hidden
-  // シートの最大展開を画面の約45%までに抑え、地図（約55%）が少し広く常に上に見える
-  // ようにする（立ち寄りを連続タップして地図で確認できる）。
-  val sheetMaxHeight = (LocalConfiguration.current.screenHeightDp * 0.45f).dp
-  // 地図のフォーカスは、シートに隠れない可視領域（上側）で中央に来るようパディングする。
-  val mapBottomPadding = when (sheetState.currentValue) {
-    SheetValue.Hidden -> 0.dp
-    SheetValue.Expanded -> sheetMaxHeight
-    else -> peek
-  }
 
   BottomSheetScaffold(
     modifier = modifier.fillMaxSize(),
@@ -185,9 +178,9 @@ fun TrackDetailScreen(
           unresolvedCount = unresolvedCount,
           selectionMode = selectionMode,
           selectedStopIds = selectedStopIds,
-          // シートは最大でも画面の約55%までなので、展開中でも地図が見える。
+          // 全画面（Expanded）まで伸ばせるよう高さいっぱいにする。ハーフ表示はピークが担う。
           // タップでは畳まず地図だけ動かし、連続タップで確認できるようにする。
-          modifier = Modifier.height(sheetMaxHeight),
+          modifier = Modifier.fillMaxHeight(),
           onFocusStop = {
             focusTarget = LatLng(it.place.latitude, it.place.longitude)
             focusNonce++
@@ -239,7 +232,7 @@ fun TrackDetailScreen(
             showRawOverlay = tuningMode,
             focusTarget = focusTarget,
             focusNonce = focusNonce,
-            contentPadding = PaddingValues(bottom = mapBottomPadding),
+            contentPadding = PaddingValues(bottom = if (sheetHidden) 0.dp else peek),
             onPoiClick = { poiTarget = it },
             modifier = Modifier.fillMaxSize(),
           )
