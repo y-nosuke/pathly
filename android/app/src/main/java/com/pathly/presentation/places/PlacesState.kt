@@ -26,6 +26,10 @@ data class PlacesState(
   val isLoading: Boolean = false,
   val errorMessage: String? = null,
   val search: SearchState = SearchState(),
+  // 削除のたびに増やすワンショット通知。一覧側がこれを監視して取り消しスナックバーを出す。
+  val undoDeleteToken: Int = 0,
+  // 直近に削除した場所の表示名（スナックバー文言用）。
+  val undoDeleteName: String? = null,
 ) {
   /** 現在の絞り込みを適用した一覧。 */
   val filteredItems: List<PlaceListItem>

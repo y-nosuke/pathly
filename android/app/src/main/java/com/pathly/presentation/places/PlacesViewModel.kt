@@ -185,13 +185,32 @@ class PlacesViewModel @Inject constructor(
     _uiState.value = _uiState.value.copy(search = _uiState.value.search.copy(result = null))
   }
 
-  /** 場所そのものを削除する（行きたい・立ち寄り記録も一緒に消える）。 */
+  /**
+   * 場所そのものを削除する（行きたい登録・解決ログも一緒に消える）。確認ダイアログは出さず
+   * 即時削除し、一覧側のスナックバーから [undoDelete] で取り消せる（undoToken で通知）。
+   */
   fun deletePlace(placeId: Long) {
     viewModelScope.launch {
+      val name = _uiState.value.items.firstOrNull { it.place.id == placeId }?.displayName
       try {
         wishlistRepository.deletePlace(placeId)
+        _uiState.value = _uiState.value.copy(
+          undoDeleteToken = _uiState.value.undoDeleteToken + 1,
+          undoDeleteName = name,
+        )
       } catch (e: Exception) {
         _uiState.value = _uiState.value.copy(errorMessage = "削除に失敗しました: ${e.message}")
+      }
+    }
+  }
+
+  /** 直近の削除を取り消して元に戻す（スナックバーの「取り消す」）。 */
+  fun undoDelete() {
+    viewModelScope.launch {
+      try {
+        wishlistRepository.undoLastPlaceDeletion()
+      } catch (e: Exception) {
+        _uiState.value = _uiState.value.copy(errorMessage = "取り消しに失敗しました: ${e.message}")
       }
     }
   }

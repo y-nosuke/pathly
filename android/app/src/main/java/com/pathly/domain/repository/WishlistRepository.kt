@@ -50,6 +50,13 @@ interface WishlistRepository {
    * 場所そのものを削除する（行きたい登録・解決ログは CASCADE で一緒に消える）。
    * **立ち寄り（stops）がある場所は消さない**方針のため、呼び出し側で stops のある場所は
    * 削除させないこと（UI で非活性）。stops がある place を渡すと FK 制約で失敗する。
+   * 取り消し（[undoLastPlaceDeletion]）用に、直近の削除内容を1件だけ控える。
    */
   suspend fun deletePlace(placeId: Long)
+
+  /**
+   * 直近の [deletePlace] を取り消し、消した場所・行きたい登録・解決ログを
+   * **元のIDのまま**復元する。控えが無ければ何もしない。復元したら true を返す。
+   */
+  suspend fun undoLastPlaceDeletion(): Boolean
 }
