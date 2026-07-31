@@ -232,7 +232,6 @@ private fun TrackDetailRoute(
     message = message,
     onEditPlaceName = viewModel::updatePlaceName,
     onResolveNames = { viewModel.resolveNames() },
-    onReanalyze = { viewModel.reanalyze() },
     onDeleteStops = { stopIds -> viewModel.deleteStops(stopIds) },
     onUndoDeletion = { viewModel.undoDeletion() },
     onMessageShown = { viewModel.clearMessage() },

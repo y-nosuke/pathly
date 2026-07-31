@@ -21,8 +21,8 @@ import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 /**
- * 詳細画面の立ち寄り表示・編集と、補正後軌跡の表示・再解析。
- * 検出・命名は自動では行わず（開いても検出しない）、再解析／場所を取得ボタンで明示的に行う。
+ * 詳細画面の立ち寄り表示・編集と、補正後軌跡の表示。
+ * 検出・命名は自動では行わず（開いても検出しない）、記録中の自動検出と「場所を取得」ボタンでのみ行う。
  */
 @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
 @HiltViewModel
@@ -35,7 +35,7 @@ class TrackDetailViewModel @Inject constructor(
   private val _stops = MutableStateFlow<List<Stop>>(emptyList())
   val stops: StateFlow<List<Stop>> = _stops.asStateFlow()
 
-  // 保存済みの補正後点列を反映したトラック。再解析すると更新される。
+  // 保存済みの補正後点列を反映したトラック。読み込み時に一度だけ設定する。
   private val _displayTrack = MutableStateFlow<GpsTrack?>(null)
   val displayTrack: StateFlow<GpsTrack?> = _displayTrack.asStateFlow()
 
@@ -107,15 +107,5 @@ class TrackDetailViewModel @Inject constructor(
 
   fun clearMessage() {
     _message.value = null
-  }
-
-  /** 再解析: 軌跡を再補正 → 立ち寄りを検出し直し → 命名する。 */
-  fun reanalyze() {
-    val trackId = loadedTrackId.value ?: return
-    viewModelScope.launch {
-      gpsTrackRepository.recomputeSmoothed(trackId)
-      placeRepository.redetectStops(trackId)
-      _displayTrack.value = gpsTrackRepository.getTrackById(trackId)
-    }
   }
 }

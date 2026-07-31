@@ -126,21 +126,6 @@ class PlaceRepositoryImplTest {
   }
 
   @Test
-  fun redetectStops_deletesThenDetects() = runTest {
-    coEvery { smoothedPointDao.getByTrack(1L) } returns finishedVisitPoints()
-    coEvery { stopDao.countByTrack(1L) } returns 0
-    coEvery { placeDao.getAll() } returns emptyList()
-    coEvery { placeDao.insert(any()) } returns 10L
-    coEvery { stopDao.insert(any()) } returns 100L
-    coEvery { placeDao.getUnresolvedPlacesForTrack(1L) } returns emptyList()
-
-    repository.redetectStops(1L)
-
-    coVerify { stopDao.deleteByTrack(1L) }
-    coVerify { stopDao.insert(any()) }
-  }
-
-  @Test
   fun resolveUnresolvedNames_noMatch_recordsNullRow() = runTest {
     coEvery { placeDao.getPlacesWithoutGoogleIdForTrack(1L) } returns listOf(
       PlaceEntity(id = 5L, latitude = 35.0, longitude = 139.0),

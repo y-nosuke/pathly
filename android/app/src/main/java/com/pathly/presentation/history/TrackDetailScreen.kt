@@ -91,7 +91,6 @@ fun TrackDetailScreen(
   message: String? = null,
   onEditPlaceName: (placeId: Long, name: String) -> Unit = { _, _ -> },
   onResolveNames: () -> Unit = {},
-  onReanalyze: () -> Unit = {},
   onDeleteStops: (stopIds: List<Long>) -> Unit = {},
   onUndoDeletion: () -> Unit = {},
   onMessageShown: () -> Unit = {},
@@ -116,7 +115,7 @@ fun TrackDetailScreen(
   var selectionMode by remember { mutableStateOf(false) }
   val selectedStopIds = remember { mutableStateListOf<Long>() }
 
-  // 再解析などで stops が変わったら、消えた ID を選択から外す。空になったら選択モードを抜ける。
+  // 削除などで stops が変わったら、消えた ID を選択から外す。空になったら選択モードを抜ける。
   LaunchedEffect(stops) {
     val ids = stops.mapTo(HashSet()) { it.id }
     selectedStopIds.retainAll(ids)
@@ -188,7 +187,6 @@ fun TrackDetailScreen(
           onEditStop = { editingStop = it },
           onDeleteStop = { deleteWithUndo(listOf(it.id)) },
           onResolveNames = onResolveNames,
-          onReanalyze = onReanalyze,
           onEnterSelection = { stop ->
             selectionMode = true
             if (stop.id !in selectedStopIds) selectedStopIds.add(stop.id)
@@ -384,7 +382,6 @@ private fun TrackDetailSheet(
   onEditStop: (Stop) -> Unit,
   onDeleteStop: (Stop) -> Unit,
   onResolveNames: () -> Unit,
-  onReanalyze: () -> Unit,
   onEnterSelection: (Stop) -> Unit,
   onToggleSelect: (Stop) -> Unit,
   onSelectAll: () -> Unit,
@@ -458,14 +455,6 @@ private fun TrackDetailSheet(
       )
 
       // 操作ボタンは上部（ピーク内）に置いて常に押せるようにする。
-      if (track.points.size >= 2 && !track.isActive) {
-        ActionChip(
-          text = "再解析",
-          container = MaterialTheme.colorScheme.tertiaryContainer,
-          content = MaterialTheme.colorScheme.onTertiaryContainer,
-          onClick = onReanalyze,
-        )
-      }
       if (unresolvedCount > 0) {
         ActionChip(
           text = "場所を取得（未取得 ${unresolvedCount}件）",

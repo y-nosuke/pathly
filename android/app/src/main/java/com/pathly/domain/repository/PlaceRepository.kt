@@ -7,7 +7,7 @@ import kotlinx.coroutines.flow.StateFlow
 
 /**
  * 場所（places）と立ち寄り（stops）の永続化・命名を担う。
- * 検出・命名は「記録中」と「再解析／場所を取得ボタン」でのみ行う。
+ * 検出・命名は「記録中（自動）」と「場所を取得ボタン（命名のみ）」でのみ行う。
  * 詳細は docs/designs/places-and-stops.md を参照。
  */
 interface PlaceRepository {
@@ -27,9 +27,6 @@ interface PlaceRepository {
    * オンラインなら未解決の place を名前解決する。[isFinal] で末尾も確定する。
    */
   suspend fun updateStopsForTrack(trackId: Long, isFinal: Boolean)
-
-  /** 立ち寄りを作り直す（再解析）：stops を消して検出し直し、命名する。 */
-  suspend fun redetectStops(trackId: Long)
 
   /** その経路の未取得（googlePlaceId 無し）の place を Places で取り直す（手動「場所を取得」）。 */
   suspend fun resolveUnresolvedNames(trackId: Long)

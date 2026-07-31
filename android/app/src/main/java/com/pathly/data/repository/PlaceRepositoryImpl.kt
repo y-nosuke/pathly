@@ -46,7 +46,7 @@ class PlaceRepositoryImpl @Inject constructor(
 
   private val logger = Logger("PlaceRepositoryImpl")
 
-  // 記録中の検出・保存・命名と再解析を直列化する。
+  // 記録中の検出・保存・命名を直列化する。
   private val mutex = Mutex()
 
   private val _currentStop = MutableStateFlow<Stop?>(null)
@@ -65,19 +65,6 @@ class PlaceRepositoryImpl @Inject constructor(
       mutex.withLock { detectAndPersist(trackId, isFinal) }
     } catch (e: Exception) {
       logger.e("updateStopsForTrack failed for track $trackId", e)
-    }
-  }
-
-  override suspend fun redetectStops(trackId: Long) {
-    try {
-      mutex.withLock {
-        stopDao.deleteByTrack(trackId)
-        // 再解析は終了済みトラックが対象なので末尾まで確定させる。
-        detectAndPersist(trackId, isFinal = true)
-        logger.i("Redetected stops for track $trackId")
-      }
-    } catch (e: Exception) {
-      logger.e("redetectStops failed for track $trackId", e)
     }
   }
 

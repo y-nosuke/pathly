@@ -146,20 +146,6 @@ class GpsTrackRepositoryImpl @Inject constructor(
     }
   }
 
-  override suspend fun recomputeSmoothed(trackId: Long) {
-    try {
-      smoothingMutex.withLock {
-        // 記録中でなければ末尾まで確定させる。
-        val isFinal = gpsTrackDao.getTrackById(trackId)?.isActive != true
-        smoothedPointDao.deleteByTrack(trackId)
-        persistSmoothed(trackId, isFinal)
-        logger.i("Recomputed smoothed points for track $trackId (isFinal=$isFinal)")
-      }
-    } catch (e: Exception) {
-      logger.e("recomputeSmoothed failed for track $trackId", e)
-    }
-  }
-
   /**
    * 生データから補正後点列を計算し、確定済み（[isFinal] が false なら末尾 half を除く）だけを
    * すでに保存済みの分を超える範囲で差分INSERTする。確定プレフィックスは単調・安定なので

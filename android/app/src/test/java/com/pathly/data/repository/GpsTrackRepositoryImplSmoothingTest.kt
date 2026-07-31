@@ -91,18 +91,4 @@ class GpsTrackRepositoryImplSmoothingTest {
 
     coVerify(exactly = 0) { smoothedPointDao.insertAll(any()) }
   }
-
-  @Test
-  fun recomputeSmoothed_deletesThenRepersistsAll() = runTest {
-    coEvery { gpsTrackDao.getTrackById(1L) } returns null // 非アクティブ扱い → isFinal=true
-    coEvery { gpsPointDao.getPointsByTrackIdSync(1L) } returns straightPoints(6)
-    coEvery { smoothedPointDao.countByTrack(1L) } returns 0
-
-    repository.recomputeSmoothed(1L)
-
-    coVerify { smoothedPointDao.deleteByTrack(1L) }
-    val slot = slot<List<SmoothedPointEntity>>()
-    coVerify { smoothedPointDao.insertAll(capture(slot)) }
-    assertEquals(6, slot.captured.size)
-  }
 }
