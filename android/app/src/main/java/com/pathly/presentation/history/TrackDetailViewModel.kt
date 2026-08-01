@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.pathly.domain.model.GpsTrack
 import com.pathly.domain.model.Priority
 import com.pathly.domain.model.Stop
+import com.pathly.domain.model.StopCandidate
 import com.pathly.domain.repository.GpsTrackRepository
 import com.pathly.domain.repository.PlaceRepository
 import com.pathly.domain.repository.WishlistRepository
@@ -21,8 +22,9 @@ import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 /**
- * 詳細画面の立ち寄り表示・編集と、補正後軌跡の表示・再解析。
- * 検出・命名は自動では行わず（開いても検出しない）、再解析／場所を取得ボタンで明示的に行う。
+ * 詳細画面の立ち寄り表示・編集と、補正後軌跡の表示。
+ * 開いても自動検出はしない。検出は記録中（自動）と「再解析」（追加提案・非破壊）、
+ * 命名は加えて「場所を取得」ボタンで行う。
  */
 @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
 @HiltViewModel
@@ -35,13 +37,17 @@ class TrackDetailViewModel @Inject constructor(
   private val _stops = MutableStateFlow<List<Stop>>(emptyList())
   val stops: StateFlow<List<Stop>> = _stops.asStateFlow()
 
-  // 保存済みの補正後点列を反映したトラック。再解析すると更新される。
+  // 保存済みの補正後点列を反映したトラック。読み込み時に一度だけ設定する。
   private val _displayTrack = MutableStateFlow<GpsTrack?>(null)
   val displayTrack: StateFlow<GpsTrack?> = _displayTrack.asStateFlow()
 
   // 削除失敗などの一時メッセージ（表示したらクリアする）。
   private val _message = MutableStateFlow<String?>(null)
   val message: StateFlow<String?> = _message.asStateFlow()
+
+  // 再解析の候補（一覧に無い立ち寄り＋表示名）。null=非表示、空リスト=「候補なし」を表示。
+  private val _reanalyzeCandidates = MutableStateFlow<List<StopCandidate>?>(null)
+  val reanalyzeCandidates: StateFlow<List<StopCandidate>?> = _reanalyzeCandidates.asStateFlow()
 
   private val loadedTrackId = MutableStateFlow<Long?>(null)
 
@@ -109,13 +115,27 @@ class TrackDetailViewModel @Inject constructor(
     _message.value = null
   }
 
-  /** 再解析: 軌跡を再補正 → 立ち寄りを検出し直し → 命名する。 */
+  /**
+   * 再解析: その経路を検出し直し、**既存の立ち寄りに無い候補**を選択ダイアログに出す（非破壊）。
+   * 実際の追加は [addStops] でユーザーが選んだ分だけ行う。
+   */
   fun reanalyze() {
     val trackId = loadedTrackId.value ?: return
     viewModelScope.launch {
-      gpsTrackRepository.recomputeSmoothed(trackId)
-      placeRepository.redetectStops(trackId)
-      _displayTrack.value = gpsTrackRepository.getTrackById(trackId)
+      _reanalyzeCandidates.value = placeRepository.detectMissingStops(trackId)
     }
+  }
+
+  /** 再解析の候補から選んだ立ち寄りだけを追加する。既存の立ち寄りには触れない。 */
+  fun addStops(candidates: List<StopCandidate>) {
+    val trackId = loadedTrackId.value ?: return
+    _reanalyzeCandidates.value = null
+    if (candidates.isEmpty()) return
+    viewModelScope.launch { placeRepository.addStops(trackId, candidates) }
+  }
+
+  /** 再解析の候補ダイアログを閉じる（追加しない）。 */
+  fun dismissReanalyze() {
+    _reanalyzeCandidates.value = null
   }
 }

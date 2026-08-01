@@ -15,6 +15,7 @@ import com.pathly.domain.model.DetectedStop
 import com.pathly.domain.model.GpsPoint
 import com.pathly.domain.model.Place
 import com.pathly.domain.model.Stop
+import com.pathly.domain.model.StopCandidate
 import com.pathly.domain.model.StopDeletionResult
 import com.pathly.domain.model.StopDetector
 import com.pathly.domain.repository.PlaceRepository
@@ -46,7 +47,7 @@ class PlaceRepositoryImpl @Inject constructor(
 
   private val logger = Logger("PlaceRepositoryImpl")
 
-  // 記録中の検出・保存・命名と再解析を直列化する。
+  // 記録中の検出・保存・命名を直列化する。
   private val mutex = Mutex()
 
   private val _currentStop = MutableStateFlow<Stop?>(null)
@@ -68,17 +69,62 @@ class PlaceRepositoryImpl @Inject constructor(
     }
   }
 
-  override suspend fun redetectStops(trackId: Long) {
-    try {
-      mutex.withLock {
-        stopDao.deleteByTrack(trackId)
-        // 再解析は終了済みトラックが対象なので末尾まで確定させる。
-        detectAndPersist(trackId, isFinal = true)
-        logger.i("Redetected stops for track $trackId")
-      }
-    } catch (e: Exception) {
-      logger.e("redetectStops failed for track $trackId", e)
+  override suspend fun detectMissingStops(trackId: Long): List<StopCandidate> = mutex.withLock {
+    val smoothed = smoothedPointDao.getByTrack(trackId).map { it.toGpsPoint() }
+    val detected = StopDetector.detect(smoothed)
+    val existing = stopDao.getByTrack(trackId)
+    // 既存の立ち寄りと時間帯が重なる候補は「一覧に有る」とみなして除外する（非破壊・追加提案）。
+    val missing = detected.filter { candidate -> existing.none { timeOverlaps(candidate, it) } }
+    // 追加前の判断用に表示名を用意する（永続化はしない）。
+    missing.map { resolveCandidate(it) }
+  }
+
+  /**
+   * 候補に表示名を添える。近く（30m）に命名済み place があれば無料で再利用し、無ければ
+   * オンライン時のみ Places で1回引く。オフライン／POI無しは名前 null。永続化はしない。
+   */
+  private suspend fun resolveCandidate(d: DetectedStop): StopCandidate {
+    val nearbyNamed = placeDao.getAll().firstOrNull {
+      it.name != null && distanceMeters(it.latitude, it.longitude, d.latitude, d.longitude) <= DEDUPE_RADIUS_METERS
     }
+    if (nearbyNamed != null) {
+      val googleId = placeResolutionDao.getByPlace(nearbyNamed.id)?.googlePlaceId
+      return StopCandidate(d, nearbyNamed.name, nearbyNamed.address, googleId)
+    }
+    return when (val outcome = placesNameResolver.resolve(d.latitude, d.longitude)) {
+      is PlacesNameResolver.Outcome.Found -> StopCandidate(d, outcome.name, outcome.address, outcome.googlePlaceId)
+      PlacesNameResolver.Outcome.NoMatch, PlacesNameResolver.Outcome.NotAttempted -> StopCandidate(d)
+    }
+  }
+
+  override suspend fun addStops(trackId: Long, candidates: List<StopCandidate>): Int = mutex.withLock {
+    if (candidates.isEmpty()) return@withLock 0
+    for (candidate in candidates) {
+      val d = candidate.detected
+      val placeId = findOrCreatePlace(d.latitude, d.longitude)
+      stopDao.insert(
+        StopEntity(
+          placeId = placeId,
+          trackId = trackId,
+          arrivalTime = d.arrivalTime,
+          departureTime = d.departureTime,
+        ),
+      )
+      // 検出時に引いた名前を、まだ解決記録の無い place にだけ焼き込む（Places を二度叩かない）。
+      if (placeResolutionDao.getByPlace(placeId) == null && (candidate.name != null || candidate.googlePlaceId != null)) {
+        val place = placeDao.getById(placeId)
+        if (place?.name == null && candidate.name != null) {
+          placeDao.updateNameAndAddress(placeId, candidate.name, candidate.address, Date())
+        }
+        placeResolutionDao.upsert(PlaceResolutionEntity(placeId, Date(), candidate.googlePlaceId))
+      }
+    }
+    // 名前が付かなかった place（オフライン等）はオンライン時にキャッチアップする。
+    for (place in placeDao.getUnresolvedPlacesForTrack(trackId)) {
+      resolvePlace(place)
+    }
+    logger.i("Added ${candidates.size} stops for track $trackId")
+    candidates.size
   }
 
   override suspend fun resolveUnresolvedNames(trackId: Long) {
@@ -259,6 +305,9 @@ class PlaceRepositoryImpl @Inject constructor(
     val places: List<PlaceEntity>,
     val resolutions: List<PlaceResolutionEntity>,
   )
+
+  /** 検出候補と既存の立ち寄りの滞在時間帯が重なるか（重なれば同じ訪問とみなす）。 */
+  private fun timeOverlaps(candidate: DetectedStop, existing: StopEntity): Boolean = candidate.arrivalTime.before(existing.departureTime) && existing.arrivalTime.before(candidate.departureTime)
 
   private fun distanceMeters(lat1: Double, lon1: Double, lat2: Double, lon2: Double): Double {
     val dLat = Math.toRadians(lat2 - lat1)

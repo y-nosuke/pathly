@@ -2,15 +2,18 @@ package com.pathly.presentation.history
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -18,6 +21,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.BottomSheetScaffold
+import androidx.compose.material3.Button
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -49,6 +53,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.google.android.gms.maps.CameraUpdateFactory
 import com.google.android.gms.maps.model.BitmapDescriptorFactory
@@ -70,6 +75,7 @@ import com.pathly.domain.model.GpsPoint
 import com.pathly.domain.model.GpsTrack
 import com.pathly.domain.model.SmoothingParams
 import com.pathly.domain.model.Stop
+import com.pathly.domain.model.StopCandidate
 import com.pathly.domain.model.TrackSmoother
 import com.pathly.presentation.places.RegisterPlaceFromPoiDialog
 import com.pathly.ui.theme.TrackLineOrange
@@ -92,6 +98,9 @@ fun TrackDetailScreen(
   onEditPlaceName: (placeId: Long, name: String) -> Unit = { _, _ -> },
   onResolveNames: () -> Unit = {},
   onReanalyze: () -> Unit = {},
+  reanalyzeCandidates: List<StopCandidate>? = null,
+  onAddStops: (List<StopCandidate>) -> Unit = {},
+  onDismissReanalyze: () -> Unit = {},
   onDeleteStops: (stopIds: List<Long>) -> Unit = {},
   onUndoDeletion: () -> Unit = {},
   onMessageShown: () -> Unit = {},
@@ -116,7 +125,7 @@ fun TrackDetailScreen(
   var selectionMode by remember { mutableStateOf(false) }
   val selectedStopIds = remember { mutableStateListOf<Long>() }
 
-  // 再解析などで stops が変わったら、消えた ID を選択から外す。空になったら選択モードを抜ける。
+  // 削除などで stops が変わったら、消えた ID を選択から外す。空になったら選択モードを抜ける。
   LaunchedEffect(stops) {
     val ids = stops.mapTo(HashSet()) { it.id }
     selectedStopIds.retainAll(ids)
@@ -149,6 +158,17 @@ fun TrackDetailScreen(
   var focusTarget by remember { mutableStateOf<LatLng?>(null) }
   var focusNonce by remember { mutableIntStateOf(0) }
 
+  // 再解析の候補選択モード（候補があるあいだ）。地図にオレンジのピンで位置を見せ、
+  // 地図の上に**高さ固定のオーバーレイ**で候補を出す（シートは畳んで地図を常に見せる）。
+  val candidateMode = reanalyzeCandidates?.isNotEmpty() == true
+  val selectedCandidates = remember(reanalyzeCandidates) {
+    mutableStateListOf<Int>().apply { reanalyzeCandidates?.let { addAll(it.indices) } }
+  }
+  // 候補モード中のシステムバックは、画面を抜けるのではなく候補選択をやめる。
+  BackHandler(enabled = candidateMode) { onDismissReanalyze() }
+  // 候補オーバーレイの高さ（画面の約42%）。地図はこの分だけ下を空けてピンを隠さない。
+  val candidateOverlayHeight = (LocalConfiguration.current.screenHeightDp * 0.42f).dp
+
   // 地図に描く点列。調整モードではスライダーの値で補正する。
   val displayPoints = remember(track, tuningMode, tuningParams) {
     if (tuningMode) TrackSmoother.smooth(track.points, tuningParams) else track.smoothedPoints
@@ -156,7 +176,12 @@ fun TrackDetailScreen(
   // 既定のピーク（＝ハーフ表示）は画面の約45%。ここが「地図＋一覧」を同時に見る状態で、
   // 立ち寄りを連続タップして地図で確認できる。上までドラッグすると全画面一覧（Expanded）、
   // 下スワイプで全画面地図（Hidden）になる（標準ボトムシートの2段スナップ＋隠す）。
-  val peek = if (tuningMode) tuningSheetPeekHeight else (LocalConfiguration.current.screenHeightDp * 0.45f).dp
+  val peek = when {
+    tuningMode -> tuningSheetPeekHeight
+    // 候補モードではシートを畳み、地図＋オーバーレイに専念する。
+    candidateMode -> 0.dp
+    else -> (LocalConfiguration.current.screenHeightDp * 0.45f).dp
+  }
   val sheetHidden = sheetState.currentValue == SheetValue.Hidden
 
   BottomSheetScaffold(
@@ -171,6 +196,9 @@ fun TrackDetailScreen(
           params = tuningParams,
           onParamsChange = { tuningParams = it },
         )
+      } else if (candidateMode) {
+        // 候補は地図上のオーバーレイで選ぶのでシートは空にする（ピーク 0 で畳む）。
+        Spacer(Modifier.height(1.dp))
       } else {
         TrackDetailSheet(
           track = track,
@@ -229,10 +257,18 @@ fun TrackDetailScreen(
             track = track,
             displayPoints = displayPoints,
             stops = stops,
+            candidates = if (candidateMode) reanalyzeCandidates.orEmpty() else emptyList(),
             showRawOverlay = tuningMode,
             focusTarget = focusTarget,
             focusNonce = focusNonce,
-            contentPadding = PaddingValues(bottom = if (sheetHidden) 0.dp else peek),
+            // 候補モードは下のオーバーレイ分だけ空け、フォーカスがピンをその裏に隠さないようにする。
+            contentPadding = PaddingValues(
+              bottom = when {
+                candidateMode -> candidateOverlayHeight
+                sheetHidden -> 0.dp
+                else -> peek
+              },
+            ),
             onPoiClick = { poiTarget = it },
             modifier = Modifier.fillMaxSize(),
           )
@@ -293,8 +329,8 @@ fun TrackDetailScreen(
         }
       }
 
-      // シートを隠しているときは、下部中央に戻すボタンを出す。
-      if (sheetHidden && !tuningMode) {
+      // シートを隠しているときは、下部中央に戻すボタンを出す（候補モードでは出さない）。
+      if (sheetHidden && !tuningMode && !candidateMode) {
         Surface(
           onClick = { scope.launch { sheetState.partialExpand() } },
           shape = RoundedCornerShape(20.dp),
@@ -312,6 +348,28 @@ fun TrackDetailScreen(
           )
         }
       }
+
+      // 再解析の候補は、地図を常に見せたまま選べるよう下部の固定オーバーレイに出す。
+      if (candidateMode) {
+        CandidateOverlay(
+          candidates = reanalyzeCandidates.orEmpty(),
+          selectedIndices = selectedCandidates,
+          height = candidateOverlayHeight,
+          modifier = Modifier.align(Alignment.BottomCenter),
+          onToggle = { index ->
+            if (index in selectedCandidates) selectedCandidates.remove(index) else selectedCandidates.add(index)
+          },
+          onFocus = { candidate ->
+            focusTarget = LatLng(candidate.detected.latitude, candidate.detected.longitude)
+            focusNonce++
+          },
+          onConfirm = {
+            val picked = selectedCandidates.sorted().mapNotNull { reanalyzeCandidates?.getOrNull(it) }
+            onAddStops(picked)
+          },
+          onCancel = onDismissReanalyze,
+        )
+      }
     }
   }
 
@@ -323,6 +381,16 @@ fun TrackDetailScreen(
         onEditPlaceName(stop.place.id, name)
         editingStop = null
       },
+    )
+  }
+
+  // 候補ゼロのときだけダイアログで知らせる（候補があればシート＋地図で選ばせる）。
+  if (reanalyzeCandidates?.isEmpty() == true) {
+    AlertDialog(
+      onDismissRequest = onDismissReanalyze,
+      title = { Text("再解析") },
+      text = { Text("一覧に無い立ち寄りは見つかりませんでした。") },
+      confirmButton = { TextButton(onClick = onDismissReanalyze) { Text("閉じる") } },
     )
   }
 
@@ -371,6 +439,103 @@ private fun PlaceNameDialog(
       TextButton(onClick = onDismiss) { Text("キャンセル") }
     },
   )
+}
+
+/**
+ * 再解析の候補（一覧に無い立ち寄り）を選択して追加する**下部オーバーレイ**。
+ * 高さを [height] に固定し、地図の上に重ねる（地図は常に見えたまま）。リストは
+ * このカード内で独立スクロールするので、全画面にしなくても下の候補まで届く。
+ * 行タップ（[onFocus]）で地図をその候補へ寄せ、名前＋位置で確かめてから選べる。
+ */
+@Composable
+private fun CandidateOverlay(
+  candidates: List<StopCandidate>,
+  selectedIndices: List<Int>,
+  height: Dp,
+  onToggle: (Int) -> Unit,
+  onFocus: (StopCandidate) -> Unit,
+  onConfirm: () -> Unit,
+  onCancel: () -> Unit,
+  modifier: Modifier = Modifier,
+) {
+  Surface(
+    modifier = modifier
+      .fillMaxWidth()
+      .height(height),
+    shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),
+    color = MaterialTheme.colorScheme.surface,
+    shadowElevation = 8.dp,
+  ) {
+    Column(modifier = Modifier.fillMaxSize()) {
+      // 固定ヘッダー: 説明と操作。スクロールから外して常に押せるようにする。
+      Column(
+        modifier = Modifier
+          .fillMaxWidth()
+          .padding(horizontal = 20.dp)
+          .padding(top = 16.dp, bottom = 8.dp),
+        verticalArrangement = Arrangement.spacedBy(4.dp),
+      ) {
+        Text(
+          text = "一覧に無い立ち寄り ${candidates.size}件",
+          style = MaterialTheme.typography.titleMedium,
+          fontWeight = FontWeight.Bold,
+        )
+        Text(
+          text = "オレンジのピンが候補です。行をタップすると地図が寄ります。追加するものを選んでください。",
+          style = MaterialTheme.typography.bodySmall,
+          color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+      }
+      // 候補リスト（このカード内でスクロール）。
+      Column(
+        modifier = Modifier
+          .weight(1f)
+          .fillMaxWidth()
+          .verticalScroll(rememberScrollState())
+          .padding(horizontal = 20.dp),
+      ) {
+        candidates.forEachIndexed { index, candidate ->
+          Row(
+            modifier = Modifier
+              .fillMaxWidth()
+              .clickable { onFocus(candidate) }
+              .padding(vertical = 6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+          ) {
+            Checkbox(checked = index in selectedIndices, onCheckedChange = { onToggle(index) })
+            Column(modifier = Modifier.padding(start = 4.dp)) {
+              Text(
+                text = candidate.name ?: "名称未取得",
+                style = MaterialTheme.typography.bodyLarge,
+                fontWeight = FontWeight.Medium,
+              )
+              Text(
+                text = "${DateFormatters.TIME_FORMAT.format(candidate.detected.arrivalTime)} – " +
+                  "${DateFormatters.TIME_FORMAT.format(candidate.detected.departureTime)} ・ 滞在${candidate.detected.durationMinutes}分",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+              )
+            }
+          }
+        }
+      }
+      // 固定フッター: キャンセル／追加。
+      Row(
+        modifier = Modifier
+          .fillMaxWidth()
+          .padding(horizontal = 20.dp)
+          .padding(top = 8.dp, bottom = 16.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+      ) {
+        TextButton(onClick = onCancel, modifier = Modifier.weight(1f)) { Text("キャンセル") }
+        Button(
+          onClick = onConfirm,
+          enabled = selectedIndices.isNotEmpty(),
+          modifier = Modifier.weight(1f),
+        ) { Text("追加（${selectedIndices.size}件）") }
+      }
+    }
+  }
 }
 
 @Composable
@@ -458,21 +623,27 @@ private fun TrackDetailSheet(
       )
 
       // 操作ボタンは上部（ピーク内）に置いて常に押せるようにする。
-      if (track.points.size >= 2 && !track.isActive) {
-        ActionChip(
-          text = "再解析",
-          container = MaterialTheme.colorScheme.tertiaryContainer,
-          content = MaterialTheme.colorScheme.onTertiaryContainer,
-          onClick = onReanalyze,
-        )
-      }
-      if (unresolvedCount > 0) {
-        ActionChip(
-          text = "場所を取得（未取得 ${unresolvedCount}件）",
-          container = MaterialTheme.colorScheme.secondaryContainer,
-          content = MaterialTheme.colorScheme.onSecondaryContainer,
-          onClick = onResolveNames,
-        )
+      Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+      ) {
+        // 再解析: 一覧に無い立ち寄りを検出して、選択式で追加する（非破壊）。
+        if (track.points.size >= 2 && !track.isActive) {
+          ActionChip(
+            text = "再解析",
+            container = MaterialTheme.colorScheme.tertiaryContainer,
+            content = MaterialTheme.colorScheme.onTertiaryContainer,
+            onClick = onReanalyze,
+          )
+        }
+        if (unresolvedCount > 0) {
+          ActionChip(
+            text = "場所を取得（未取得 ${unresolvedCount}件）",
+            container = MaterialTheme.colorScheme.secondaryContainer,
+            content = MaterialTheme.colorScheme.onSecondaryContainer,
+            onClick = onResolveNames,
+          )
+        }
       }
 
       val distanceKm = (track.totalDistanceMeters / 1000.0 * 100).roundToInt() / 100.0
@@ -737,6 +908,7 @@ private fun TrackMapView(
   displayPoints: List<GpsPoint>,
   modifier: Modifier = Modifier,
   stops: List<Stop> = emptyList(),
+  candidates: List<StopCandidate> = emptyList(),
   showRawOverlay: Boolean = false,
   focusTarget: LatLng? = null,
   focusNonce: Int = 0,
@@ -840,6 +1012,20 @@ private fun TrackMapView(
         title = stop.place.name ?: "立ち寄り",
         snippet = "${DateFormatters.SHORT_TIME_FORMAT.format(stop.arrivalTime)} ・ 滞在${stop.durationMinutes}分",
         icon = BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_VIOLET),
+      )
+    }
+
+    // 再解析の候補（オレンジのピン）。既存（紫）と見分けられるようにする。
+    candidates.forEachIndexed { index, candidate ->
+      val d = candidate.detected
+      val candidateMarkerState = remember(index, d.latitude, d.longitude) {
+        MarkerState(position = LatLng(d.latitude, d.longitude))
+      }
+      Marker(
+        state = candidateMarkerState,
+        title = candidate.name ?: "候補（名称未取得）",
+        snippet = "${DateFormatters.SHORT_TIME_FORMAT.format(d.arrivalTime)} ・ 滞在${d.durationMinutes}分",
+        icon = BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_ORANGE),
       )
     }
   }
