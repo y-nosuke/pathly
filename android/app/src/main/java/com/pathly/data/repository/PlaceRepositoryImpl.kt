@@ -15,6 +15,7 @@ import com.pathly.domain.model.DetectedStop
 import com.pathly.domain.model.GpsPoint
 import com.pathly.domain.model.Place
 import com.pathly.domain.model.Stop
+import com.pathly.domain.model.StopCandidate
 import com.pathly.domain.model.StopDeletionResult
 import com.pathly.domain.model.StopDetector
 import com.pathly.domain.repository.PlaceRepository
@@ -68,17 +69,38 @@ class PlaceRepositoryImpl @Inject constructor(
     }
   }
 
-  override suspend fun detectMissingStops(trackId: Long): List<DetectedStop> = mutex.withLock {
+  override suspend fun detectMissingStops(trackId: Long): List<StopCandidate> = mutex.withLock {
     val smoothed = smoothedPointDao.getByTrack(trackId).map { it.toGpsPoint() }
     val detected = StopDetector.detect(smoothed)
     val existing = stopDao.getByTrack(trackId)
     // 既存の立ち寄りと時間帯が重なる候補は「一覧に有る」とみなして除外する（非破壊・追加提案）。
-    detected.filter { candidate -> existing.none { timeOverlaps(candidate, it) } }
+    val missing = detected.filter { candidate -> existing.none { timeOverlaps(candidate, it) } }
+    // 追加前の判断用に表示名を用意する（永続化はしない）。
+    missing.map { resolveCandidate(it) }
   }
 
-  override suspend fun addStops(trackId: Long, candidates: List<DetectedStop>): Int = mutex.withLock {
+  /**
+   * 候補に表示名を添える。近く（30m）に命名済み place があれば無料で再利用し、無ければ
+   * オンライン時のみ Places で1回引く。オフライン／POI無しは名前 null。永続化はしない。
+   */
+  private suspend fun resolveCandidate(d: DetectedStop): StopCandidate {
+    val nearbyNamed = placeDao.getAll().firstOrNull {
+      it.name != null && distanceMeters(it.latitude, it.longitude, d.latitude, d.longitude) <= DEDUPE_RADIUS_METERS
+    }
+    if (nearbyNamed != null) {
+      val googleId = placeResolutionDao.getByPlace(nearbyNamed.id)?.googlePlaceId
+      return StopCandidate(d, nearbyNamed.name, nearbyNamed.address, googleId)
+    }
+    return when (val outcome = placesNameResolver.resolve(d.latitude, d.longitude)) {
+      is PlacesNameResolver.Outcome.Found -> StopCandidate(d, outcome.name, outcome.address, outcome.googlePlaceId)
+      PlacesNameResolver.Outcome.NoMatch, PlacesNameResolver.Outcome.NotAttempted -> StopCandidate(d)
+    }
+  }
+
+  override suspend fun addStops(trackId: Long, candidates: List<StopCandidate>): Int = mutex.withLock {
     if (candidates.isEmpty()) return@withLock 0
-    for (d in candidates) {
+    for (candidate in candidates) {
+      val d = candidate.detected
       val placeId = findOrCreatePlace(d.latitude, d.longitude)
       stopDao.insert(
         StopEntity(
@@ -88,8 +110,16 @@ class PlaceRepositoryImpl @Inject constructor(
           departureTime = d.departureTime,
         ),
       )
+      // 検出時に引いた名前を、まだ解決記録の無い place にだけ焼き込む（Places を二度叩かない）。
+      if (placeResolutionDao.getByPlace(placeId) == null && (candidate.name != null || candidate.googlePlaceId != null)) {
+        val place = placeDao.getById(placeId)
+        if (place?.name == null && candidate.name != null) {
+          placeDao.updateNameAndAddress(placeId, candidate.name, candidate.address, Date())
+        }
+        placeResolutionDao.upsert(PlaceResolutionEntity(placeId, Date(), candidate.googlePlaceId))
+      }
     }
-    // 追加した place のうち未解決分をオンラインなら命名する（オフラインは行を作らず後でキャッチアップ）。
+    // 名前が付かなかった place（オフライン等）はオンライン時にキャッチアップする。
     for (place in placeDao.getUnresolvedPlacesForTrack(trackId)) {
       resolvePlace(place)
     }

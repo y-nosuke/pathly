@@ -2,10 +2,10 @@ package com.pathly.presentation.history
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.pathly.domain.model.DetectedStop
 import com.pathly.domain.model.GpsTrack
 import com.pathly.domain.model.Priority
 import com.pathly.domain.model.Stop
+import com.pathly.domain.model.StopCandidate
 import com.pathly.domain.repository.GpsTrackRepository
 import com.pathly.domain.repository.PlaceRepository
 import com.pathly.domain.repository.WishlistRepository
@@ -45,9 +45,9 @@ class TrackDetailViewModel @Inject constructor(
   private val _message = MutableStateFlow<String?>(null)
   val message: StateFlow<String?> = _message.asStateFlow()
 
-  // 再解析の候補（一覧に無い立ち寄り）。null=選択ダイアログ非表示、空リスト=「候補なし」を表示。
-  private val _reanalyzeCandidates = MutableStateFlow<List<DetectedStop>?>(null)
-  val reanalyzeCandidates: StateFlow<List<DetectedStop>?> = _reanalyzeCandidates.asStateFlow()
+  // 再解析の候補（一覧に無い立ち寄り＋表示名）。null=非表示、空リスト=「候補なし」を表示。
+  private val _reanalyzeCandidates = MutableStateFlow<List<StopCandidate>?>(null)
+  val reanalyzeCandidates: StateFlow<List<StopCandidate>?> = _reanalyzeCandidates.asStateFlow()
 
   private val loadedTrackId = MutableStateFlow<Long?>(null)
 
@@ -127,7 +127,7 @@ class TrackDetailViewModel @Inject constructor(
   }
 
   /** 再解析の候補から選んだ立ち寄りだけを追加する。既存の立ち寄りには触れない。 */
-  fun addStops(candidates: List<DetectedStop>) {
+  fun addStops(candidates: List<StopCandidate>) {
     val trackId = loadedTrackId.value ?: return
     _reanalyzeCandidates.value = null
     if (candidates.isEmpty()) return
