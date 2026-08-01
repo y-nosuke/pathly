@@ -277,8 +277,7 @@ class PlaceRepositoryImpl @Inject constructor(
   )
 
   /** 検出候補と既存の立ち寄りの滞在時間帯が重なるか（重なれば同じ訪問とみなす）。 */
-  private fun timeOverlaps(candidate: DetectedStop, existing: StopEntity): Boolean =
-    candidate.arrivalTime.before(existing.departureTime) && existing.arrivalTime.before(candidate.departureTime)
+  private fun timeOverlaps(candidate: DetectedStop, existing: StopEntity): Boolean = candidate.arrivalTime.before(existing.departureTime) && existing.arrivalTime.before(candidate.departureTime)
 
   private fun distanceMeters(lat1: Double, lon1: Double, lat2: Double, lon2: Double): Double {
     val dLat = Math.toRadians(lat2 - lat1)
