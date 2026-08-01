@@ -12,7 +12,6 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -20,6 +19,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.BottomSheetScaffold
+import androidx.compose.material3.Button
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -155,6 +155,18 @@ fun TrackDetailScreen(
   var focusTarget by remember { mutableStateOf<LatLng?>(null) }
   var focusNonce by remember { mutableIntStateOf(0) }
 
+  // 再解析の候補選択モード（候補があるあいだ）。地図にオレンジのピンで位置を見せ、シートで選ぶ。
+  val candidateMode = reanalyzeCandidates?.isNotEmpty() == true
+  val selectedCandidates = remember(reanalyzeCandidates) {
+    mutableStateListOf<Int>().apply { reanalyzeCandidates?.let { addAll(it.indices) } }
+  }
+  // 候補モードに入ったらシートを見える位置に出す（隠れていたら半開きに）。
+  LaunchedEffect(candidateMode) {
+    if (candidateMode && sheetState.currentValue == SheetValue.Hidden) sheetState.partialExpand()
+  }
+  // 候補モード中のシステムバックは、画面を抜けるのではなく候補選択をやめる。
+  BackHandler(enabled = candidateMode) { onDismissReanalyze() }
+
   // 地図に描く点列。調整モードではスライダーの値で補正する。
   val displayPoints = remember(track, tuningMode, tuningParams) {
     if (tuningMode) TrackSmoother.smooth(track.points, tuningParams) else track.smoothedPoints
@@ -176,6 +188,24 @@ fun TrackDetailScreen(
           track = track,
           params = tuningParams,
           onParamsChange = { tuningParams = it },
+        )
+      } else if (candidateMode) {
+        CandidateSelectionSheet(
+          candidates = reanalyzeCandidates.orEmpty(),
+          selectedIndices = selectedCandidates,
+          modifier = Modifier.fillMaxHeight(),
+          onToggle = { index ->
+            if (index in selectedCandidates) selectedCandidates.remove(index) else selectedCandidates.add(index)
+          },
+          onFocus = { candidate ->
+            focusTarget = LatLng(candidate.latitude, candidate.longitude)
+            focusNonce++
+          },
+          onConfirm = {
+            val picked = selectedCandidates.sorted().mapNotNull { reanalyzeCandidates?.getOrNull(it) }
+            onAddStops(picked)
+          },
+          onCancel = onDismissReanalyze,
         )
       } else {
         TrackDetailSheet(
@@ -235,6 +265,7 @@ fun TrackDetailScreen(
             track = track,
             displayPoints = displayPoints,
             stops = stops,
+            candidates = if (candidateMode) reanalyzeCandidates.orEmpty() else emptyList(),
             showRawOverlay = tuningMode,
             focusTarget = focusTarget,
             focusNonce = focusNonce,
@@ -332,11 +363,13 @@ fun TrackDetailScreen(
     )
   }
 
-  reanalyzeCandidates?.let { candidates ->
-    ReanalyzeCandidatesDialog(
-      candidates = candidates,
-      onDismiss = onDismissReanalyze,
-      onConfirm = onAddStops,
+  // 候補ゼロのときだけダイアログで知らせる（候補があればシート＋地図で選ばせる）。
+  if (reanalyzeCandidates?.isEmpty() == true) {
+    AlertDialog(
+      onDismissRequest = onDismissReanalyze,
+      title = { Text("再解析") },
+      text = { Text("一覧に無い立ち寄りは見つかりませんでした。") },
+      confirmButton = { TextButton(onClick = onDismissReanalyze) { Text("閉じる") } },
     )
   }
 
@@ -388,78 +421,83 @@ private fun PlaceNameDialog(
 }
 
 /**
- * 再解析の候補（一覧に無い立ち寄り）を選択式で追加するダイアログ。
- * 既定は全選択。チェックした候補だけを [onConfirm] に渡す。候補ゼロなら「見つからない」を出す。
+ * 再解析の候補（一覧に無い立ち寄り）を選択して追加するシート。
+ * 地図にオレンジのピンで位置が出ているので、行タップ（[onFocus]）で地図をその候補へ寄せて
+ * 「本当に立ち寄ったか」を位置で確かめてから選べる。チェックした分だけ [onConfirm] で追加する。
  */
 @Composable
-private fun ReanalyzeCandidatesDialog(
+private fun CandidateSelectionSheet(
   candidates: List<DetectedStop>,
-  onDismiss: () -> Unit,
-  onConfirm: (List<DetectedStop>) -> Unit,
+  selectedIndices: List<Int>,
+  onToggle: (Int) -> Unit,
+  onFocus: (DetectedStop) -> Unit,
+  onConfirm: () -> Unit,
+  onCancel: () -> Unit,
+  modifier: Modifier = Modifier,
 ) {
-  if (candidates.isEmpty()) {
-    AlertDialog(
-      onDismissRequest = onDismiss,
-      title = { Text("再解析") },
-      text = { Text("一覧に無い立ち寄りは見つかりませんでした。") },
-      confirmButton = { TextButton(onClick = onDismiss) { Text("閉じる") } },
-    )
-    return
-  }
-
-  // 既定で全選択。インデックスで選択状態を持つ。
-  val selected = remember(candidates) { mutableStateListOf<Int>().apply { addAll(candidates.indices) } }
-  val toggle = { index: Int -> if (index in selected) selected.remove(index) else selected.add(index) }
-
-  AlertDialog(
-    onDismissRequest = onDismiss,
-    title = { Text("立ち寄りを追加") },
-    text = {
-      Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text(
-          text = "一覧に無い立ち寄りが${candidates.size}件見つかりました。追加するものを選んでください。",
-          style = MaterialTheme.typography.bodyMedium,
-        )
-        Column(
+  Column(modifier = modifier.fillMaxWidth()) {
+    // 固定ヘッダー: 説明と操作。スクロールから外して常に押せるようにする。
+    Column(
+      modifier = Modifier
+        .fillMaxWidth()
+        .padding(horizontal = 20.dp)
+        .padding(top = 4.dp, bottom = 8.dp),
+      verticalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+      Text(
+        text = "一覧に無い立ち寄り ${candidates.size}件",
+        style = MaterialTheme.typography.titleMedium,
+        fontWeight = FontWeight.Bold,
+      )
+      Text(
+        text = "地図のオレンジのピンが候補です。行をタップすると地図がその位置に寄ります。追加するものを選んでください。",
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+      )
+      Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+      ) {
+        TextButton(onClick = onCancel) { Text("キャンセル") }
+        Button(
+          onClick = onConfirm,
+          enabled = selectedIndices.isNotEmpty(),
+        ) { Text("追加（${selectedIndices.size}件）") }
+      }
+    }
+    Column(
+      modifier = Modifier
+        .weight(1f, fill = false)
+        .fillMaxWidth()
+        .verticalScroll(rememberScrollState())
+        .padding(horizontal = 20.dp)
+        .padding(bottom = 24.dp),
+    ) {
+      candidates.forEachIndexed { index, candidate ->
+        Row(
           modifier = Modifier
             .fillMaxWidth()
-            .heightIn(max = 320.dp)
-            .verticalScroll(rememberScrollState()),
+            .clickable { onFocus(candidate) }
+            .padding(vertical = 4.dp),
+          verticalAlignment = Alignment.CenterVertically,
         ) {
-          candidates.forEachIndexed { index, candidate ->
-            Row(
-              modifier = Modifier
-                .fillMaxWidth()
-                .clickable { toggle(index) }
-                .padding(vertical = 4.dp),
-              verticalAlignment = Alignment.CenterVertically,
-            ) {
-              Checkbox(checked = index in selected, onCheckedChange = { toggle(index) })
-              Column(modifier = Modifier.padding(start = 4.dp)) {
-                Text(
-                  text = "${DateFormatters.TIME_FORMAT.format(candidate.arrivalTime)} – " +
-                    DateFormatters.TIME_FORMAT.format(candidate.departureTime),
-                  style = MaterialTheme.typography.bodyMedium,
-                )
-                Text(
-                  text = "滞在${candidate.durationMinutes}分",
-                  style = MaterialTheme.typography.bodySmall,
-                  color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-              }
-            }
+          Checkbox(checked = index in selectedIndices, onCheckedChange = { onToggle(index) })
+          Column(modifier = Modifier.padding(start = 4.dp)) {
+            Text(
+              text = "${DateFormatters.TIME_FORMAT.format(candidate.arrivalTime)} – " +
+                DateFormatters.TIME_FORMAT.format(candidate.departureTime),
+              style = MaterialTheme.typography.bodyMedium,
+            )
+            Text(
+              text = "滞在${candidate.durationMinutes}分",
+              style = MaterialTheme.typography.bodySmall,
+              color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
           }
         }
       }
-    },
-    confirmButton = {
-      TextButton(
-        onClick = { onConfirm(selected.sorted().map { candidates[it] }) },
-        enabled = selected.isNotEmpty(),
-      ) { Text("追加（${selected.size}件）") }
-    },
-    dismissButton = { TextButton(onClick = onDismiss) { Text("キャンセル") } },
-  )
+    }
+  }
 }
 
 @Composable
@@ -832,6 +870,7 @@ private fun TrackMapView(
   displayPoints: List<GpsPoint>,
   modifier: Modifier = Modifier,
   stops: List<Stop> = emptyList(),
+  candidates: List<DetectedStop> = emptyList(),
   showRawOverlay: Boolean = false,
   focusTarget: LatLng? = null,
   focusNonce: Int = 0,
@@ -935,6 +974,19 @@ private fun TrackMapView(
         title = stop.place.name ?: "立ち寄り",
         snippet = "${DateFormatters.SHORT_TIME_FORMAT.format(stop.arrivalTime)} ・ 滞在${stop.durationMinutes}分",
         icon = BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_VIOLET),
+      )
+    }
+
+    // 再解析の候補（オレンジのピン）。既存（紫）と見分けられるようにする。
+    candidates.forEachIndexed { index, candidate ->
+      val candidateMarkerState = remember(index, candidate.latitude, candidate.longitude) {
+        MarkerState(position = LatLng(candidate.latitude, candidate.longitude))
+      }
+      Marker(
+        state = candidateMarkerState,
+        title = "候補（一覧に無い立ち寄り）",
+        snippet = "${DateFormatters.SHORT_TIME_FORMAT.format(candidate.arrivalTime)} ・ 滞在${candidate.durationMinutes}分",
+        icon = BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_ORANGE),
       )
     }
   }
