@@ -236,6 +236,73 @@ class PlaceRepositoryImplTest {
   }
 
   @Test
+  fun addManualStop_typedName_setsNameWithoutResolution() = runTest {
+    coEvery { placeDao.getAll() } returns emptyList() // findOrCreatePlace で新規作成
+    coEvery { placeDao.insert(any()) } returns 10L
+    coEvery { stopDao.insert(any()) } returns 100L
+    coEvery { placeDao.getById(10L) } returns PlaceEntity(id = 10L, latitude = 35.0, longitude = 139.0)
+    coEvery { placeResolutionDao.getByPlace(10L) } returns null
+
+    val id = repository.addManualStop(1L, 35.0, 139.0, Date(0), Date(180_000), "手動カフェ", null)
+
+    assertEquals(100L, id)
+    coVerify { stopDao.insert(match { it.trackId == 1L && it.placeId == 10L }) }
+    // 手入力の名前は未命名の place に焼き込む。googlePlaceId は無いので解決記録は作らない。
+    coVerify { placeDao.updateNameAndAddress(10L, "手動カフェ", null, any()) }
+    coVerify(exactly = 0) { placeResolutionDao.upsert(any()) }
+    coVerify(exactly = 0) { resolver.resolve(any(), any()) }
+  }
+
+  @Test
+  fun addManualStop_poi_bakesInNameAndGooglePlaceId() = runTest {
+    coEvery { placeDao.getAll() } returns emptyList()
+    coEvery { placeDao.insert(any()) } returns 10L
+    coEvery { stopDao.insert(any()) } returns 100L
+    coEvery { placeDao.getById(10L) } returns PlaceEntity(id = 10L, latitude = 35.0, longitude = 139.0)
+    coEvery { placeResolutionDao.getByPlace(10L) } returns null
+
+    repository.addManualStop(1L, 35.0, 139.0, Date(0), Date(180_000), "スタバ", "gp-9")
+
+    // POI 由来なら googlePlaceId を解決記録に控え、あとで Places を叩き直さない。
+    coVerify { placeDao.updateNameAndAddress(10L, "スタバ", null, any()) }
+    coVerify { placeResolutionDao.upsert(match { it.placeId == 10L && it.googlePlaceId == "gp-9" }) }
+    coVerify(exactly = 0) { resolver.resolve(any(), any()) }
+  }
+
+  @Test
+  fun addManualStop_noName_leavesPlaceUnnamed() = runTest {
+    coEvery { placeDao.getAll() } returns emptyList()
+    coEvery { placeDao.insert(any()) } returns 10L
+    coEvery { stopDao.insert(any()) } returns 100L
+    coEvery { placeDao.getById(10L) } returns PlaceEntity(id = 10L, latitude = 35.0, longitude = 139.0)
+    coEvery { placeResolutionDao.getByPlace(10L) } returns null
+
+    repository.addManualStop(1L, 35.0, 139.0, Date(0), Date(180_000), null, null)
+
+    // 名前無しの手動追加は place を未命名のまま残す（あとで「場所を取得」で命名可）。
+    coVerify { stopDao.insert(any()) }
+    coVerify(exactly = 0) { placeDao.updateNameAndAddress(any(), any(), any(), any()) }
+    coVerify(exactly = 0) { placeResolutionDao.upsert(any()) }
+  }
+
+  @Test
+  fun addManualStop_reusesNearbyPlace_doesNotOverwriteExistingName() = runTest {
+    // すぐ近く（同座標）に命名済みの place がある → 再利用し、名前は上書きしない。
+    coEvery { placeDao.getAll() } returns listOf(
+      PlaceEntity(id = 7L, name = "自宅", latitude = 35.0, longitude = 139.0),
+    )
+    coEvery { stopDao.insert(any()) } returns 100L
+    coEvery { placeDao.getById(7L) } returns PlaceEntity(id = 7L, name = "自宅", latitude = 35.0, longitude = 139.0)
+    coEvery { placeResolutionDao.getByPlace(7L) } returns null
+
+    repository.addManualStop(1L, 35.0, 139.0, Date(0), Date(180_000), "別名", null)
+
+    coVerify { stopDao.insert(match { it.placeId == 7L }) }
+    coVerify(exactly = 0) { placeDao.insert(any()) } // 新規作成しない
+    coVerify(exactly = 0) { placeDao.updateNameAndAddress(any(), any(), any(), any()) } // 命名済みは守る
+  }
+
+  @Test
   fun resolveUnresolvedNames_noMatch_recordsNullRow() = runTest {
     coEvery { placeDao.getPlacesWithoutGoogleIdForTrack(1L) } returns listOf(
       PlaceEntity(id = 5L, latitude = 35.0, longitude = 139.0),
