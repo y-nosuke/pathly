@@ -1,5 +1,6 @@
 package com.pathly.domain.repository
 
+import com.pathly.domain.model.DetectedStop
 import com.pathly.domain.model.Stop
 import com.pathly.domain.model.StopDeletionResult
 import kotlinx.coroutines.flow.Flow
@@ -7,7 +8,7 @@ import kotlinx.coroutines.flow.StateFlow
 
 /**
  * 場所（places）と立ち寄り（stops）の永続化・命名を担う。
- * 検出・命名は「記録中（自動）」と「場所を取得ボタン（命名のみ）」でのみ行う。
+ * 検出は「記録中（自動）」と「再解析（追加提案・非破壊）」、命名は加えて「場所を取得ボタン」で行う。
  * 詳細は docs/designs/places-and-stops.md を参照。
  */
 interface PlaceRepository {
@@ -27,6 +28,20 @@ interface PlaceRepository {
    * オンラインなら未解決の place を名前解決する。[isFinal] で末尾も確定する。
    */
   suspend fun updateStopsForTrack(trackId: Long, isFinal: Boolean)
+
+  /**
+   * 再解析（追加提案）: その track を検出し直し、既存の立ち寄りと**時間帯が重ならない**
+   * 「一覧に無い」候補だけを返す。**永続化はしない（非破壊）**。到着時刻の昇順。
+   * 記録中に取りこぼした／誤って削除した立ち寄りを、ユーザーが選んで追加するために使う。
+   */
+  suspend fun detectMissingStops(trackId: Long): List<DetectedStop>
+
+  /**
+   * [detectMissingStops] で選んだ候補だけを立ち寄りとして追加保存する。
+   * findOrCreatePlace で place を確保（30m以内の命名済み place は再利用）し、
+   * オンラインなら未解決の place を命名する。**既存の立ち寄りには触れない**。追加件数を返す。
+   */
+  suspend fun addStops(trackId: Long, candidates: List<DetectedStop>): Int
 
   /** その経路の未取得（googlePlaceId 無し）の place を Places で取り直す（手動「場所を取得」）。 */
   suspend fun resolveUnresolvedNames(trackId: Long)

@@ -2,6 +2,7 @@ package com.pathly.presentation.history
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.pathly.domain.model.DetectedStop
 import com.pathly.domain.model.GpsTrack
 import com.pathly.domain.model.Priority
 import com.pathly.domain.model.Stop
@@ -22,7 +23,8 @@ import javax.inject.Inject
 
 /**
  * 詳細画面の立ち寄り表示・編集と、補正後軌跡の表示。
- * 検出・命名は自動では行わず（開いても検出しない）、記録中の自動検出と「場所を取得」ボタンでのみ行う。
+ * 開いても自動検出はしない。検出は記録中（自動）と「再解析」（追加提案・非破壊）、
+ * 命名は加えて「場所を取得」ボタンで行う。
  */
 @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
 @HiltViewModel
@@ -42,6 +44,10 @@ class TrackDetailViewModel @Inject constructor(
   // 削除失敗などの一時メッセージ（表示したらクリアする）。
   private val _message = MutableStateFlow<String?>(null)
   val message: StateFlow<String?> = _message.asStateFlow()
+
+  // 再解析の候補（一覧に無い立ち寄り）。null=選択ダイアログ非表示、空リスト=「候補なし」を表示。
+  private val _reanalyzeCandidates = MutableStateFlow<List<DetectedStop>?>(null)
+  val reanalyzeCandidates: StateFlow<List<DetectedStop>?> = _reanalyzeCandidates.asStateFlow()
 
   private val loadedTrackId = MutableStateFlow<Long?>(null)
 
@@ -107,5 +113,29 @@ class TrackDetailViewModel @Inject constructor(
 
   fun clearMessage() {
     _message.value = null
+  }
+
+  /**
+   * 再解析: その経路を検出し直し、**既存の立ち寄りに無い候補**を選択ダイアログに出す（非破壊）。
+   * 実際の追加は [addStops] でユーザーが選んだ分だけ行う。
+   */
+  fun reanalyze() {
+    val trackId = loadedTrackId.value ?: return
+    viewModelScope.launch {
+      _reanalyzeCandidates.value = placeRepository.detectMissingStops(trackId)
+    }
+  }
+
+  /** 再解析の候補から選んだ立ち寄りだけを追加する。既存の立ち寄りには触れない。 */
+  fun addStops(candidates: List<DetectedStop>) {
+    val trackId = loadedTrackId.value ?: return
+    _reanalyzeCandidates.value = null
+    if (candidates.isEmpty()) return
+    viewModelScope.launch { placeRepository.addStops(trackId, candidates) }
+  }
+
+  /** 再解析の候補ダイアログを閉じる（追加しない）。 */
+  fun dismissReanalyze() {
+    _reanalyzeCandidates.value = null
   }
 }

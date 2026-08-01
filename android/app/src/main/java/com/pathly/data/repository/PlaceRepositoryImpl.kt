@@ -68,6 +68,35 @@ class PlaceRepositoryImpl @Inject constructor(
     }
   }
 
+  override suspend fun detectMissingStops(trackId: Long): List<DetectedStop> = mutex.withLock {
+    val smoothed = smoothedPointDao.getByTrack(trackId).map { it.toGpsPoint() }
+    val detected = StopDetector.detect(smoothed)
+    val existing = stopDao.getByTrack(trackId)
+    // 既存の立ち寄りと時間帯が重なる候補は「一覧に有る」とみなして除外する（非破壊・追加提案）。
+    detected.filter { candidate -> existing.none { timeOverlaps(candidate, it) } }
+  }
+
+  override suspend fun addStops(trackId: Long, candidates: List<DetectedStop>): Int = mutex.withLock {
+    if (candidates.isEmpty()) return@withLock 0
+    for (d in candidates) {
+      val placeId = findOrCreatePlace(d.latitude, d.longitude)
+      stopDao.insert(
+        StopEntity(
+          placeId = placeId,
+          trackId = trackId,
+          arrivalTime = d.arrivalTime,
+          departureTime = d.departureTime,
+        ),
+      )
+    }
+    // 追加した place のうち未解決分をオンラインなら命名する（オフラインは行を作らず後でキャッチアップ）。
+    for (place in placeDao.getUnresolvedPlacesForTrack(trackId)) {
+      resolvePlace(place)
+    }
+    logger.i("Added ${candidates.size} stops for track $trackId")
+    candidates.size
+  }
+
   override suspend fun resolveUnresolvedNames(trackId: Long) {
     try {
       mutex.withLock {
@@ -246,6 +275,10 @@ class PlaceRepositoryImpl @Inject constructor(
     val places: List<PlaceEntity>,
     val resolutions: List<PlaceResolutionEntity>,
   )
+
+  /** 検出候補と既存の立ち寄りの滞在時間帯が重なるか（重なれば同じ訪問とみなす）。 */
+  private fun timeOverlaps(candidate: DetectedStop, existing: StopEntity): Boolean =
+    candidate.arrivalTime.before(existing.departureTime) && existing.arrivalTime.before(candidate.departureTime)
 
   private fun distanceMeters(lat1: Double, lon1: Double, lat2: Double, lon2: Double): Double {
     val dLat = Math.toRadians(lat2 - lat1)

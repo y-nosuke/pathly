@@ -50,6 +50,7 @@
 | 　└ 場所の同定（重複排除）   | find-or-create              | 30m以内の既存 place を再利用、無ければ新規作成                                  | `findOrCreatePlace`                              |
 | **名前解決**                 | resolve / resolution        | Google から場所名を**取得**（外部・オンライン・課金）。**自動**                 | `PlacesNameResolver.resolve`                     |
 | **命名**（手動）             | rename / edit name          | ユーザーが名前を付け替える                                                      | `updatePlaceName`                                |
+| **再解析**（追加提案）       | reanalyze                   | 検出し直して「一覧に無い候補」を挙げ、選択分だけ**追加**する（非破壊・opt-in）  | `detectMissingStops` / `addStops`                |
 
 ---
 
@@ -67,7 +68,12 @@
 
 - **解析と名前解決の関係**  
   解析は**ローカル計算のみ**（補正＋検出）。名前解決は**外部通信**なので解析に含めない。
-  解析は記録中に一度だけ走り、名前解決だけを後から「場所を取得」で再実行できる（生データから作り直す「再解析」は廃止。理由は [places-and-stops.md](./places-and-stops.md) 参照）。
+  解析は記録中に走り、名前解決だけを後から「場所を取得」で再実行できる。
+
+- **再解析（reanalyze）**  
+  かつては stops を全消しして作り直す**破壊的**操作だったが、削除した立ち寄りが復活する副作用のため
+  **追加提案型**に作り替えた。いまは「一覧に無い候補」を挙げて**選択分だけ追加**する非破壊操作
+  （既存 stop は消さない）。補正だけを作り直す旧 `recomputeSmoothed` は廃止。詳細は [places-and-stops.md](./places-and-stops.md) 参照。
 
 ---
 

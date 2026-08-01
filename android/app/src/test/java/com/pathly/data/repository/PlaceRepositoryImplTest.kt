@@ -10,6 +10,7 @@ import com.pathly.data.local.entity.PlaceResolutionEntity
 import com.pathly.data.local.entity.SmoothedPointEntity
 import com.pathly.data.local.entity.StopEntity
 import com.pathly.data.places.PlacesNameResolver
+import com.pathly.domain.model.DetectedStop
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.mockk
@@ -123,6 +124,71 @@ class PlaceRepositoryImplTest {
     // 記録終了なら末尾の滞在も確定して保存する。
     coVerify { stopDao.insert(any()) }
     assertNull(repository.currentStop.value)
+  }
+
+  @Test
+  fun detectMissingStops_noExisting_returnsAllDetected() = runTest {
+    coEvery { smoothedPointDao.getByTrack(1L) } returns finishedVisitPoints()
+    coEvery { stopDao.getByTrack(1L) } returns emptyList()
+
+    val result = repository.detectMissingStops(1L)
+
+    // 一覧が空なので検出した立ち寄りがそのまま候補になる。永続化はしない。
+    assertEquals(1, result.size)
+    coVerify(exactly = 0) { stopDao.insert(any()) }
+  }
+
+  @Test
+  fun detectMissingStops_overlappingExisting_isExcluded() = runTest {
+    coEvery { smoothedPointDao.getByTrack(1L) } returns finishedVisitPoints()
+    coEvery { stopDao.getByTrack(1L) } returns listOf(
+      StopEntity(id = 1L, placeId = 10L, trackId = 1L, arrivalTime = Date(0), departureTime = Date(240_000)),
+    )
+
+    val result = repository.detectMissingStops(1L)
+
+    // 既存の立ち寄りと時間帯が重なる候補は「一覧に有る」として除外される。
+    assertTrue(result.isEmpty())
+  }
+
+  @Test
+  fun detectMissingStops_nonOverlappingExisting_isKept() = runTest {
+    coEvery { smoothedPointDao.getByTrack(1L) } returns finishedVisitPoints()
+    coEvery { stopDao.getByTrack(1L) } returns listOf(
+      StopEntity(id = 1L, placeId = 10L, trackId = 1L, arrivalTime = Date(10_000_000), departureTime = Date(10_100_000)),
+    )
+
+    val result = repository.detectMissingStops(1L)
+
+    // 時間帯が重ならない既存があっても、取りこぼした候補は残す。
+    assertEquals(1, result.size)
+  }
+
+  @Test
+  fun addStops_persistsSelectedAndResolves() = runTest {
+    coEvery { placeDao.getAll() } returns emptyList()
+    coEvery { placeDao.insert(any()) } returns 10L
+    coEvery { stopDao.insert(any()) } returns 100L
+    coEvery { placeDao.getUnresolvedPlacesForTrack(1L) } returns listOf(
+      PlaceEntity(id = 10L, latitude = 35.0, longitude = 139.0),
+    )
+    coEvery { resolver.resolve(any(), any()) } returns
+      PlacesNameResolver.Outcome.Found("カフェ", "住所", "gp-1")
+
+    val candidate = DetectedStop(35.0, 139.0, Date(0), Date(240_000), pointCount = 5)
+    val added = repository.addStops(1L, listOf(candidate))
+
+    assertEquals(1, added)
+    coVerify { stopDao.insert(match { it.trackId == 1L && it.placeId == 10L }) }
+    coVerify { placeResolutionDao.upsert(match { it.placeId == 10L && it.googlePlaceId == "gp-1" }) }
+  }
+
+  @Test
+  fun addStops_empty_addsNothing() = runTest {
+    val added = repository.addStops(1L, emptyList())
+
+    assertEquals(0, added)
+    coVerify(exactly = 0) { stopDao.insert(any()) }
   }
 
   @Test

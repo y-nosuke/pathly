@@ -28,6 +28,10 @@ interface StopDao {
   @Query("SELECT * FROM stops WHERE id IN (:stopIds)")
   suspend fun getByIds(stopIds: List<Long>): List<StopEntity>
 
+  /** その経路の立ち寄り実体（再解析の重複判定で時間帯を参照する）。 */
+  @Query("SELECT * FROM stops WHERE trackId = :trackId")
+  suspend fun getByTrack(trackId: Long): List<StopEntity>
+
   /** その場所への訪問の総数（経路を問わない）。0 かつ行きたい登録も無ければ場所ごと回収してよい。 */
   @Query("SELECT COUNT(*) FROM stops WHERE placeId = :placeId")
   suspend fun countByPlace(placeId: Long): Int

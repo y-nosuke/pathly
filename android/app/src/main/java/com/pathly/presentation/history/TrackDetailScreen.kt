@@ -2,6 +2,7 @@ package com.pathly.presentation.history
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -11,6 +12,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -66,6 +68,7 @@ import com.google.maps.android.compose.Polyline
 import com.google.maps.android.compose.rememberCameraPositionState
 import com.pathly.BuildConfig
 import com.pathly.R
+import com.pathly.domain.model.DetectedStop
 import com.pathly.domain.model.GpsPoint
 import com.pathly.domain.model.GpsTrack
 import com.pathly.domain.model.SmoothingParams
@@ -91,6 +94,10 @@ fun TrackDetailScreen(
   message: String? = null,
   onEditPlaceName: (placeId: Long, name: String) -> Unit = { _, _ -> },
   onResolveNames: () -> Unit = {},
+  onReanalyze: () -> Unit = {},
+  reanalyzeCandidates: List<DetectedStop>? = null,
+  onAddStops: (List<DetectedStop>) -> Unit = {},
+  onDismissReanalyze: () -> Unit = {},
   onDeleteStops: (stopIds: List<Long>) -> Unit = {},
   onUndoDeletion: () -> Unit = {},
   onMessageShown: () -> Unit = {},
@@ -187,6 +194,7 @@ fun TrackDetailScreen(
           onEditStop = { editingStop = it },
           onDeleteStop = { deleteWithUndo(listOf(it.id)) },
           onResolveNames = onResolveNames,
+          onReanalyze = onReanalyze,
           onEnterSelection = { stop ->
             selectionMode = true
             if (stop.id !in selectedStopIds) selectedStopIds.add(stop.id)
@@ -324,6 +332,14 @@ fun TrackDetailScreen(
     )
   }
 
+  reanalyzeCandidates?.let { candidates ->
+    ReanalyzeCandidatesDialog(
+      candidates = candidates,
+      onDismiss = onDismissReanalyze,
+      onConfirm = onAddStops,
+    )
+  }
+
   message?.let { text ->
     AlertDialog(
       onDismissRequest = onMessageShown,
@@ -371,6 +387,81 @@ private fun PlaceNameDialog(
   )
 }
 
+/**
+ * 再解析の候補（一覧に無い立ち寄り）を選択式で追加するダイアログ。
+ * 既定は全選択。チェックした候補だけを [onConfirm] に渡す。候補ゼロなら「見つからない」を出す。
+ */
+@Composable
+private fun ReanalyzeCandidatesDialog(
+  candidates: List<DetectedStop>,
+  onDismiss: () -> Unit,
+  onConfirm: (List<DetectedStop>) -> Unit,
+) {
+  if (candidates.isEmpty()) {
+    AlertDialog(
+      onDismissRequest = onDismiss,
+      title = { Text("再解析") },
+      text = { Text("一覧に無い立ち寄りは見つかりませんでした。") },
+      confirmButton = { TextButton(onClick = onDismiss) { Text("閉じる") } },
+    )
+    return
+  }
+
+  // 既定で全選択。インデックスで選択状態を持つ。
+  val selected = remember(candidates) { mutableStateListOf<Int>().apply { addAll(candidates.indices) } }
+  val toggle = { index: Int -> if (index in selected) selected.remove(index) else selected.add(index) }
+
+  AlertDialog(
+    onDismissRequest = onDismiss,
+    title = { Text("立ち寄りを追加") },
+    text = {
+      Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(
+          text = "一覧に無い立ち寄りが${candidates.size}件見つかりました。追加するものを選んでください。",
+          style = MaterialTheme.typography.bodyMedium,
+        )
+        Column(
+          modifier = Modifier
+            .fillMaxWidth()
+            .heightIn(max = 320.dp)
+            .verticalScroll(rememberScrollState()),
+        ) {
+          candidates.forEachIndexed { index, candidate ->
+            Row(
+              modifier = Modifier
+                .fillMaxWidth()
+                .clickable { toggle(index) }
+                .padding(vertical = 4.dp),
+              verticalAlignment = Alignment.CenterVertically,
+            ) {
+              Checkbox(checked = index in selected, onCheckedChange = { toggle(index) })
+              Column(modifier = Modifier.padding(start = 4.dp)) {
+                Text(
+                  text = "${DateFormatters.TIME_FORMAT.format(candidate.arrivalTime)} – " +
+                    DateFormatters.TIME_FORMAT.format(candidate.departureTime),
+                  style = MaterialTheme.typography.bodyMedium,
+                )
+                Text(
+                  text = "滞在${candidate.durationMinutes}分",
+                  style = MaterialTheme.typography.bodySmall,
+                  color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+              }
+            }
+          }
+        }
+      }
+    },
+    confirmButton = {
+      TextButton(
+        onClick = { onConfirm(selected.sorted().map { candidates[it] }) },
+        enabled = selected.isNotEmpty(),
+      ) { Text("追加（${selected.size}件）") }
+    },
+    dismissButton = { TextButton(onClick = onDismiss) { Text("キャンセル") } },
+  )
+}
+
 @Composable
 private fun TrackDetailSheet(
   track: GpsTrack,
@@ -382,6 +473,7 @@ private fun TrackDetailSheet(
   onEditStop: (Stop) -> Unit,
   onDeleteStop: (Stop) -> Unit,
   onResolveNames: () -> Unit,
+  onReanalyze: () -> Unit,
   onEnterSelection: (Stop) -> Unit,
   onToggleSelect: (Stop) -> Unit,
   onSelectAll: () -> Unit,
@@ -455,13 +547,27 @@ private fun TrackDetailSheet(
       )
 
       // 操作ボタンは上部（ピーク内）に置いて常に押せるようにする。
-      if (unresolvedCount > 0) {
-        ActionChip(
-          text = "場所を取得（未取得 ${unresolvedCount}件）",
-          container = MaterialTheme.colorScheme.secondaryContainer,
-          content = MaterialTheme.colorScheme.onSecondaryContainer,
-          onClick = onResolveNames,
-        )
+      Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+      ) {
+        // 再解析: 一覧に無い立ち寄りを検出して、選択式で追加する（非破壊）。
+        if (track.points.size >= 2 && !track.isActive) {
+          ActionChip(
+            text = "再解析",
+            container = MaterialTheme.colorScheme.tertiaryContainer,
+            content = MaterialTheme.colorScheme.onTertiaryContainer,
+            onClick = onReanalyze,
+          )
+        }
+        if (unresolvedCount > 0) {
+          ActionChip(
+            text = "場所を取得（未取得 ${unresolvedCount}件）",
+            container = MaterialTheme.colorScheme.secondaryContainer,
+            content = MaterialTheme.colorScheme.onSecondaryContainer,
+            onClick = onResolveNames,
+          )
+        }
       }
 
       val distanceKm = (track.totalDistanceMeters / 1000.0 * 100).roundToInt() / 100.0

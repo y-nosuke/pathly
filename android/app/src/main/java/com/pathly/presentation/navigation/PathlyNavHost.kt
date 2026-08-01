@@ -223,6 +223,7 @@ private fun TrackDetailRoute(
   val stops by viewModel.stops.collectAsStateWithLifecycle()
   val unresolvedCount by viewModel.unresolvedCount.collectAsStateWithLifecycle()
   val message by viewModel.message.collectAsStateWithLifecycle()
+  val reanalyzeCandidates by viewModel.reanalyzeCandidates.collectAsStateWithLifecycle()
 
   TrackDetailScreen(
     track = track,
@@ -232,6 +233,10 @@ private fun TrackDetailRoute(
     message = message,
     onEditPlaceName = viewModel::updatePlaceName,
     onResolveNames = { viewModel.resolveNames() },
+    onReanalyze = { viewModel.reanalyze() },
+    reanalyzeCandidates = reanalyzeCandidates,
+    onAddStops = { viewModel.addStops(it) },
+    onDismissReanalyze = { viewModel.dismissReanalyze() },
     onDeleteStops = { stopIds -> viewModel.deleteStops(stopIds) },
     onUndoDeletion = { viewModel.undoDeletion() },
     onMessageShown = { viewModel.clearMessage() },
