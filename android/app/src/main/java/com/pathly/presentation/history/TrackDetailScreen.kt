@@ -100,6 +100,12 @@ private val rawTrackColor = Color(0x66424242)
 // 手動追加のハイライト（選択した滞在区間）。軌跡（オレンジ）・立ち寄り（紫）と見分ける青。
 private val manualHighlightColor = Color(0xFF1E88E5)
 
+// 既存の立ち寄りの滞在区間ハイライト（常時表示）。軌跡を潰さないよう半透明の太い帯にして下に敷く。
+private val stopSegmentColor = Color(0x552196F3)
+
+/** 立ち寄りの到着〜出発に対応する軌跡点（滞在区間）。時刻で範囲を切り出す（両端含む）。 */
+private fun stopSegmentPoints(points: List<GpsPoint>, stop: Stop): List<GpsPoint> = points.filter { !it.timestamp.before(stop.arrivalTime) && !it.timestamp.after(stop.departureTime) }
+
 // 手動追加で最初に仮置きする滞在時間（最寄り点からこの範囲を既定で選ぶ。あとで調整可）。
 private const val DEFAULT_MANUAL_STAY_MILLIS = 3 * 60 * 1000L
 
@@ -249,6 +255,15 @@ fun TrackDetailScreen(
   val displayPoints = remember(track, tuningMode, tuningParams) {
     if (tuningMode) TrackSmoother.smooth(track.points, tuningParams) else track.smoothedPoints
   }
+  // 立ち寄りの滞在区間（到着〜出発の軌跡点）。全件を軌跡の下に常時ハイライトする。
+  // 補正調整・候補選択・手動追加のときは、そちらのハイライトと干渉しないよう出さない。
+  val stopSegments = remember(track.smoothedPoints, stops, tuningMode, candidateMode, manualMode) {
+    if (tuningMode || candidateMode || manualMode) {
+      emptyList()
+    } else {
+      stops.mapNotNull { stop -> stopSegmentPoints(track.smoothedPoints, stop).takeIf { it.size >= 2 } }
+    }
+  }
   // 既定のピーク（＝ハーフ表示）は画面の約45%。ここが「地図＋一覧」を同時に見る状態で、
   // 立ち寄りを連続タップして地図で確認できる。上までドラッグすると全画面一覧（Expanded）、
   // 下スワイプで全画面地図（Hidden）になる（標準ボトムシートの2段スナップ＋隠す）。
@@ -348,6 +363,7 @@ fun TrackDetailScreen(
             showRawOverlay = tuningMode,
             manualPickTarget = if (manualMode) manualPick?.latLng else null,
             highlightPoints = manualHighlight,
+            stopSegments = stopSegments,
             focusTarget = focusTarget,
             focusNonce = focusNonce,
             // 候補・手動追加モードは下のオーバーレイ分だけ空け、フォーカスがピンをその裏に隠さないようにする。
@@ -1322,6 +1338,7 @@ private fun TrackMapView(
   showRawOverlay: Boolean = false,
   manualPickTarget: LatLng? = null,
   highlightPoints: List<GpsPoint> = emptyList(),
+  stopSegments: List<List<GpsPoint>> = emptyList(),
   focusTarget: LatLng? = null,
   focusNonce: Int = 0,
   contentPadding: PaddingValues = PaddingValues(0.dp),
@@ -1380,6 +1397,18 @@ private fun TrackMapView(
         color = rawTrackColor,
         width = 10f,
       )
+    }
+
+    // 立ち寄りの滞在区間を軌跡の「下」に半透明の帯で常時表示する（経路のどこで滞在したかが見える）。
+    // 軌跡ポリラインより先に描くことで、オレンジの軌跡が帯の上に残って潰れない。
+    stopSegments.forEach { segment ->
+      if (segment.size >= 2) {
+        Polyline(
+          points = segment.map { LatLng(it.latitude, it.longitude) },
+          color = stopSegmentColor,
+          width = 22f,
+        )
+      }
     }
 
     if (displayPoints.size >= 2) {
