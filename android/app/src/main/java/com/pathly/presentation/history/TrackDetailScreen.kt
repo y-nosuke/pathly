@@ -17,6 +17,8 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -28,6 +30,7 @@ import androidx.compose.material3.Checkbox
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RangeSlider
 import androidx.compose.material3.SheetValue
@@ -229,9 +232,12 @@ fun TrackDetailScreen(
     manualMode = false
     manualPick = null
   }
-  BackHandler(enabled = manualMode) { exitManual() }
+  // バックは2段階で戻す: 地点確定後は地点選択（マップ）に戻すだけ、地点選択中は追加モードを抜ける。
+  BackHandler(enabled = manualMode) {
+    if (manualPick != null) manualPick = null else exitManual()
+  }
   // 手動追加オーバーレイ（地点確定後）の高さ。地点を指す前は下部に細い案内だけ出す。
-  val manualOverlayHeight = (LocalConfiguration.current.screenHeightDp * 0.42f).dp
+  val manualOverlayHeight = (LocalConfiguration.current.screenHeightDp * 0.46f).dp
 
   // 地図に描く点列。調整モードではスライダーの値で補正する。
   val displayPoints = remember(track, tuningMode, tuningParams) {
@@ -497,7 +503,8 @@ fun TrackDetailScreen(
               exitManual()
               scope.launch { snackbarHostState.showSnackbar("立ち寄りを追加しました") }
             },
-            onCancel = exitManual,
+            // 編集からのキャンセルは追加モードを抜けず、地点選択（マップ）に戻すだけ。
+            onCancel = { manualPick = null },
           )
         }
       }
@@ -709,8 +716,9 @@ private fun ManualPickPrompt(
 
 /**
  * 手動追加で指した地点を立ち寄りとして登録する**下部オーバーレイ**。名前と、滞在した区間
- * （到着〜出発）をレンジスライダーで調整する。区間は地図に青くハイライトされ、経路のどこに
- * 対応するかが見える。高さを [height] に固定し、地図は上に見えたまま。
+ * （到着〜出発）を調整する。区間は地図に青くハイライトされ、経路のどこに対応するかが見える。
+ * 調整は**スライダー（粗）＋ ＋/−（1点ずつの微調整）**の2段構え。長い経路でも精密に合わせられる。
+ * 高さを [height] に固定し、地図は上に見えたまま。キャンセル/追加は下部に常に見える。
  */
 @Composable
 private fun ManualAddOverlay(
@@ -736,54 +744,121 @@ private fun ManualAddOverlay(
     color = MaterialTheme.colorScheme.surface,
     shadowElevation = 8.dp,
   ) {
-    Column(
-      modifier = Modifier
-        .fillMaxSize()
-        .verticalScroll(rememberScrollState())
-        .padding(horizontal = 20.dp)
-        .padding(top = 16.dp, bottom = 16.dp),
-      verticalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
-      Text(
-        text = "手動で立ち寄りを追加",
-        style = MaterialTheme.typography.titleMedium,
-        fontWeight = FontWeight.Bold,
-      )
-      OutlinedTextField(
-        value = name,
-        onValueChange = onNameChange,
-        label = { Text("名前（任意）") },
-        singleLine = true,
-        modifier = Modifier.fillMaxWidth(),
-      )
-      Text(
-        text = "${DateFormatters.TIME_FORMAT.format(arrivalTime)} – " +
-          "${DateFormatters.TIME_FORMAT.format(departureTime)} ・ 滞在${durationMinutes}分",
-        style = MaterialTheme.typography.bodyMedium,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-      )
-      Text(
-        text = "滞在した区間（青いハイライト部分）をスライダーで調整できます。",
-        style = MaterialTheme.typography.bodySmall,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-      )
-      RangeSlider(
-        value = arrivalIdx.toFloat()..departureIdx.toFloat(),
-        onValueChange = { range ->
-          val start = range.start.roundToInt().coerceIn(0, lastIdx)
-          val end = range.endInclusive.roundToInt().coerceIn(start, lastIdx)
-          onRangeChange(start, end)
-        },
-        valueRange = 0f..lastIdx.toFloat(),
-      )
+    Column(modifier = Modifier.fillMaxSize()) {
+      // 本文はスクロール（小さい画面でもボタンが隠れないよう、フッターは下に固定する）。
+      Column(
+        modifier = Modifier
+          .weight(1f)
+          .fillMaxWidth()
+          .verticalScroll(rememberScrollState())
+          .padding(horizontal = 20.dp)
+          .padding(top = 16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+      ) {
+        Text(
+          text = "手動で立ち寄りを追加",
+          style = MaterialTheme.typography.titleMedium,
+          fontWeight = FontWeight.Bold,
+        )
+        OutlinedTextField(
+          value = name,
+          onValueChange = onNameChange,
+          label = { Text("名前（任意）") },
+          singleLine = true,
+          modifier = Modifier.fillMaxWidth(),
+        )
+        Text(
+          text = "滞在${durationMinutes}分（青いハイライトが滞在区間）",
+          style = MaterialTheme.typography.bodyMedium,
+          color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Text(
+          text = "スライダーで大まかに、＋/− で1点ずつ微調整できます。",
+          style = MaterialTheme.typography.bodySmall,
+          color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        RangeSlider(
+          value = arrivalIdx.toFloat()..departureIdx.toFloat(),
+          onValueChange = { range ->
+            val start = range.start.roundToInt().coerceIn(0, lastIdx)
+            val end = range.endInclusive.roundToInt().coerceIn(start, lastIdx)
+            onRangeChange(start, end)
+          },
+          valueRange = 0f..lastIdx.toFloat(),
+        )
+        // 微調整（1点ずつ）。到着は出発を超えられず、出発は到着を下回れない。
+        StepperRow(
+          label = "到着",
+          time = arrivalTime,
+          minusEnabled = arrivalIdx > 0,
+          plusEnabled = arrivalIdx < departureIdx,
+          onMinus = { onRangeChange((arrivalIdx - 1).coerceAtLeast(0), departureIdx) },
+          onPlus = { onRangeChange((arrivalIdx + 1).coerceAtMost(departureIdx), departureIdx) },
+        )
+        StepperRow(
+          label = "出発",
+          time = departureTime,
+          minusEnabled = departureIdx > arrivalIdx,
+          plusEnabled = departureIdx < lastIdx,
+          onMinus = { onRangeChange(arrivalIdx, (departureIdx - 1).coerceAtLeast(arrivalIdx)) },
+          onPlus = { onRangeChange(arrivalIdx, (departureIdx + 1).coerceAtMost(lastIdx)) },
+        )
+      }
       Row(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+          .fillMaxWidth()
+          .padding(horizontal = 20.dp)
+          .padding(top = 8.dp, bottom = 16.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
       ) {
         TextButton(onClick = onCancel, modifier = Modifier.weight(1f)) { Text("キャンセル") }
         Button(onClick = onConfirm, modifier = Modifier.weight(1f)) { Text("追加") }
       }
     }
+  }
+}
+
+/** 到着／出発を1点ずつ微調整する行（時刻表示＋ −/＋）。 */
+@Composable
+private fun StepperRow(
+  label: String,
+  time: Date,
+  minusEnabled: Boolean,
+  plusEnabled: Boolean,
+  onMinus: () -> Unit,
+  onPlus: () -> Unit,
+) {
+  Row(
+    modifier = Modifier.fillMaxWidth(),
+    verticalAlignment = Alignment.CenterVertically,
+  ) {
+    Text(
+      text = label,
+      style = MaterialTheme.typography.bodyMedium,
+      color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
+    Text(
+      text = DateFormatters.TIME_FORMAT.format(time),
+      style = MaterialTheme.typography.titleMedium,
+      fontWeight = FontWeight.Medium,
+      modifier = Modifier.padding(start = 12.dp),
+    )
+    Spacer(modifier = Modifier.weight(1f))
+    OutlinedButton(
+      onClick = onMinus,
+      enabled = minusEnabled,
+      shape = CircleShape,
+      contentPadding = PaddingValues(0.dp),
+      modifier = Modifier.size(40.dp),
+    ) { Text("−", style = MaterialTheme.typography.titleLarge) }
+    Spacer(modifier = Modifier.width(8.dp))
+    OutlinedButton(
+      onClick = onPlus,
+      enabled = plusEnabled,
+      shape = CircleShape,
+      contentPadding = PaddingValues(0.dp),
+      modifier = Modifier.size(40.dp),
+    ) { Text("＋", style = MaterialTheme.typography.titleLarge) }
   }
 }
 
