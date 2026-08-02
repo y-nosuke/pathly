@@ -55,6 +55,8 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.res.painterResource
@@ -603,6 +605,9 @@ private fun StopNoteDialog(
   onConfirm: (String?) -> Unit,
 ) {
   var text by remember(stop.id) { mutableStateOf(stop.note ?: "") }
+  // 開いたらすぐ入力できるよう、メモ欄にフォーカスして IME を出す。
+  val focusRequester = remember { FocusRequester() }
+  LaunchedEffect(Unit) { focusRequester.requestFocus() }
   AlertDialog(
     onDismissRequest = onDismiss,
     title = { Text("メモ") },
@@ -619,7 +624,9 @@ private fun StopNoteDialog(
           onValueChange = { text = it },
           placeholder = { Text("この立ち寄りのメモ（例: 限定パフェが美味しかった）") },
           minLines = 3,
-          modifier = Modifier.fillMaxWidth(),
+          modifier = Modifier
+            .fillMaxWidth()
+            .focusRequester(focusRequester),
         )
       }
     },
