@@ -19,6 +19,7 @@ import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import java.util.Date
 import javax.inject.Inject
 
 /**
@@ -137,5 +138,23 @@ class TrackDetailViewModel @Inject constructor(
   /** 再解析の候補ダイアログを閉じる（追加しない）。 */
   fun dismissReanalyze() {
     _reanalyzeCandidates.value = null
+  }
+
+  /**
+   * 手動追加: ユーザーが地図で指した地点を立ち寄りとして追加する（検出に頼らない完全手動）。
+   * 到着／出発は画面側で最寄り軌跡点から決めて渡す。追加後は stops の Flow で自動反映される。
+   */
+  fun addManualStop(
+    latitude: Double,
+    longitude: Double,
+    arrivalTime: Date,
+    departureTime: Date,
+    name: String?,
+    googlePlaceId: String?,
+  ) {
+    val trackId = loadedTrackId.value ?: return
+    viewModelScope.launch {
+      placeRepository.addManualStop(trackId, latitude, longitude, arrivalTime, departureTime, name, googlePlaceId)
+    }
   }
 }

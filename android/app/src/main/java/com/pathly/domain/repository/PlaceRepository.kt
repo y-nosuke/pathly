@@ -5,6 +5,7 @@ import com.pathly.domain.model.StopCandidate
 import com.pathly.domain.model.StopDeletionResult
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.StateFlow
+import java.util.Date
 
 /**
  * 場所（places）と立ち寄り（stops）の永続化・命名を担う。
@@ -45,6 +46,23 @@ interface PlaceRepository {
    * **既存の立ち寄りには触れない**。追加件数を返す。
    */
   suspend fun addStops(trackId: Long, candidates: List<StopCandidate>): Int
+
+  /**
+   * 手動追加: 検出に頼らず、ユーザーが地図で指した地点を立ち寄りとして追加する（完全手動）。
+   * findOrCreatePlace で place を確保（30m以内の命名済み place は再利用）し、[name] があれば
+   * 未命名の place にだけ焼き込む。POI 由来の [googlePlaceId] があれば解決記録に控えて
+   * Places を叩かないようにする（名前が無ければ place は未取得のまま。あとで「場所を取得」で命名可）。
+   * 到着 [arrivalTime]／出発 [departureTime] は呼び出し側が最寄り軌跡点から決める。作成した stop の id を返す。
+   */
+  suspend fun addManualStop(
+    trackId: Long,
+    latitude: Double,
+    longitude: Double,
+    arrivalTime: Date,
+    departureTime: Date,
+    name: String?,
+    googlePlaceId: String?,
+  ): Long
 
   /** その経路の未取得（googlePlaceId 無し）の place を Places で取り直す（手動「場所を取得」）。 */
   suspend fun resolveUnresolvedNames(trackId: Long)

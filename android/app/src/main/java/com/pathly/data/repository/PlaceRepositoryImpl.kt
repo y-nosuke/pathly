@@ -127,6 +127,37 @@ class PlaceRepositoryImpl @Inject constructor(
     candidates.size
   }
 
+  override suspend fun addManualStop(
+    trackId: Long,
+    latitude: Double,
+    longitude: Double,
+    arrivalTime: Date,
+    departureTime: Date,
+    name: String?,
+    googlePlaceId: String?,
+  ): Long = mutex.withLock {
+    val placeId = findOrCreatePlace(latitude, longitude)
+    val stopId = stopDao.insert(
+      StopEntity(
+        placeId = placeId,
+        trackId = trackId,
+        arrivalTime = arrivalTime,
+        departureTime = departureTime,
+      ),
+    )
+    // 名前は未命名の place にだけ焼き込む（他の履歴で既に命名済みの共有 place を上書きしない）。
+    val trimmedName = name?.trim()?.ifBlank { null }
+    if (trimmedName != null && placeDao.getById(placeId)?.name == null) {
+      placeDao.updateNameAndAddress(placeId, trimmedName, null, Date())
+    }
+    // POI 由来の googlePlaceId があれば解決記録に控え、あとで Places を叩き直さないようにする。
+    if (googlePlaceId != null && placeResolutionDao.getByPlace(placeId) == null) {
+      placeResolutionDao.upsert(PlaceResolutionEntity(placeId, Date(), googlePlaceId))
+    }
+    logger.i("Added manual stop $stopId (place $placeId) for track $trackId")
+    stopId
+  }
+
   override suspend fun resolveUnresolvedNames(trackId: Long) {
     try {
       mutex.withLock {
