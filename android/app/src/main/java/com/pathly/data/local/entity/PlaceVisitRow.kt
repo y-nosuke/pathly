@@ -11,4 +11,6 @@ data class PlaceVisitRow(
   val trackStartTime: Date,
   val arrivalTime: Date,
   val departureTime: Date,
+  /** その訪問（stop）のメモ。null/空=メモ無し。 */
+  val note: String?,
 )

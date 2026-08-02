@@ -12,6 +12,8 @@ data class PlaceVisit(
   val outingDate: Date,
   val arrivalTime: Date,
   val departureTime: Date,
+  /** その訪問（stop）のメモ。null/空=メモ無し。場所詳細では表示のみ（編集は履歴詳細）。 */
+  val note: String? = null,
 ) {
   /** その場所での滞在時間（分・切り捨て）。 */
   val stayMinutes: Int get() = ((departureTime.time - arrivalTime.time) / 1000 / 60).toInt()

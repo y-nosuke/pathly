@@ -76,6 +76,11 @@ class TrackDetailViewModel @Inject constructor(
     viewModelScope.launch { placeRepository.updatePlaceName(placeId, name) }
   }
 
+  /** 立ち寄り（訪問）のメモを更新する（stop 単位。空文字なら消す）。 */
+  fun updateStopNote(stopId: Long, note: String?) {
+    viewModelScope.launch { placeRepository.updateStopNote(stopId, note) }
+  }
+
   /** 未取得の場所を Places で取り直す（手動・googlePlaceId 無しが対象）。 */
   fun resolveNames() {
     val trackId = loadedTrackId.value ?: return

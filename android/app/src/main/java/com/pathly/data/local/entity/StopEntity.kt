@@ -35,5 +35,7 @@ data class StopEntity(
   val trackId: Long,
   val arrivalTime: Date,
   val departureTime: Date,
+  /** その訪問のメモ（stop 単位。null/空=メモ無し）。場所名（place 単位）とは別物。 */
+  val note: String? = null,
   val createdAt: Date = Date(),
 )

@@ -175,6 +175,10 @@ class PlaceRepositoryImpl @Inject constructor(
     placeDao.updateName(placeId, name.trim().ifBlank { null }, Date())
   }
 
+  override suspend fun updateStopNote(stopId: Long, note: String?) {
+    stopDao.updateNote(stopId, note?.trim()?.ifBlank { null })
+  }
+
   override suspend fun deleteStops(stopIds: List<Long>): StopDeletionResult = mutex.withLock {
     if (stopIds.isEmpty()) {
       lastDeletion = null
@@ -305,6 +309,7 @@ class PlaceRepositoryImpl @Inject constructor(
     trackId = stop.trackId,
     arrivalTime = stop.arrivalTime,
     departureTime = stop.departureTime,
+    note = stop.note,
   )
 
   private fun PlaceEntity.toPlace(): Place = Place(

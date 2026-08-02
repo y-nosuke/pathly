@@ -161,6 +161,28 @@ object DatabaseMigrations {
   }
 
   /**
+   * バージョン5から6へのマイグレーション。
+   * 立ち寄り（訪問）ごとのメモを保存する stops.note 列を追加する
+   * （docs/designs/places-and-stops.md）。メモは stop 単位で、場所名（place 単位）とは別。
+   *
+   * DDL は Room がエンティティから生成するものと一致させること（起動時のスキーマ検証を通すため）。
+   */
+  val MIGRATION_5_6 = object : Migration(5, 6) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+      try {
+        Logger.i(TAG, "Starting migration from version 5 to 6")
+
+        db.execSQL("ALTER TABLE `stops` ADD COLUMN `note` TEXT")
+
+        Logger.i(TAG, "Migration from version 5 to 6 completed successfully")
+      } catch (e: Exception) {
+        Logger.e(TAG, "Migration from version 5 to 6 failed", e)
+        throw e
+      }
+    }
+  }
+
+  /**
    * 現在利用可能な全てのマイグレーション
    */
   val ALL_MIGRATIONS = arrayOf(
@@ -168,6 +190,7 @@ object DatabaseMigrations {
     MIGRATION_2_3,
     MIGRATION_3_4,
     MIGRATION_4_5,
+    MIGRATION_5_6,
     // 将来のマイグレーションをここに追加
   )
 

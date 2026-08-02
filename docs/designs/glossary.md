@@ -50,6 +50,7 @@
 | 　└ 場所の同定（重複排除）   | find-or-create              | 30m以内の既存 place を再利用、無ければ新規作成                                  | `findOrCreatePlace`                              |
 | **名前解決**                 | resolve / resolution        | Google から場所名を**取得**（外部・オンライン・課金）。**自動**                 | `PlacesNameResolver.resolve`                     |
 | **命名**（手動）             | rename / edit name          | ユーザーが名前を付け替える                                                      | `updatePlaceName`                                |
+| **メモ**（訪問メモ）         | note / stop note            | ユーザーがその**訪問**にメモを付ける（stop 単位。空で null）                    | `updateStopNote`                                 |
 | **再解析**（追加提案）       | reanalyze                   | 検出し直して「一覧に無い候補」を挙げ、選択分だけ**追加**する（非破壊・opt-in）  | `detectMissingStops` / `addStops`                |
 | **手動追加**（完全手動）     | manual add                  | 検出に頼らず地図で指した地点を立ち寄りとして**追加**する（非破壊）              | `addManualStop`                                  |
 
@@ -60,6 +61,10 @@
 - **命名 vs 名前解決**  
   自動（Google Places）は「**名前解決 resolve**」、手動（ユーザー）は「**命名 rename**」。
   名前解決は既にある施設名を*引いてくる*、命名はユーザーが*付ける*。`place_resolutions`・`resolve` と一貫。
+
+- **メモ（note）vs 命名（name）**  
+  **メモは stop（訪問）単位**、**名前は place（場所）単位**。同じ場所でもお出掛けごとに別メモを持てるが、
+  名前は place を共有する全訪問で同じ。メモ編集は履歴詳細の「メモ」ボタン、場所詳細の訪問一覧では表示のみ。
 
 - **確定（finalize / commit）**  
   「暫定 → 確定」を指す共通語。

@@ -12,6 +12,8 @@ data class Stop(
   val trackId: Long,
   val arrivalTime: Date,
   val departureTime: Date,
+  /** その訪問のメモ（stop 単位。null/空=メモ無し）。場所名（place 単位）とは別。 */
+  val note: String? = null,
 ) {
   /** 滞在時間（ミリ秒）。 */
   val durationMillis: Long get() = departureTime.time - arrivalTime.time

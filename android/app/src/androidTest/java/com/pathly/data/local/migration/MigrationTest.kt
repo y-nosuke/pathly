@@ -59,6 +59,41 @@ class MigrationTest {
     db.close()
   }
 
+  @Test
+  fun migrate5To6_addsStopNoteColumn() {
+    // v5 のスキーマで DB を作成し、FK 用に track と place を入れておく。
+    helper.createDatabase(TEST_DB, 5).apply {
+      execSQL(
+        "INSERT INTO gps_tracks (id, startTime, endTime, isActive, createdAt, updatedAt) " +
+          "VALUES (1, 0, NULL, 0, 0, 0)",
+      )
+      execSQL(
+        "INSERT INTO places (id, name, latitude, longitude, address, createdAt, updatedAt) " +
+          "VALUES (1, 'テスト場所', 35.0, 139.0, NULL, 0, 0)",
+      )
+      close()
+    }
+
+    // 5→6 を適用。生成スキーマが 6.json と一致しなければここで失敗する。
+    val db = helper.runMigrationsAndValidate(
+      TEST_DB,
+      6,
+      true,
+      DatabaseMigrations.MIGRATION_5_6,
+    )
+
+    // 追加した note 列に立ち寄りのメモを保存でき、保持されることを確認。
+    db.execSQL(
+      "INSERT INTO stops (id, placeId, trackId, arrivalTime, departureTime, note, createdAt) " +
+        "VALUES (1, 1, 1, 0, 60000, '限定パフェが美味しかった', 0)",
+    )
+    db.query("SELECT note FROM stops WHERE id = 1").use { cursor ->
+      assertTrue(cursor.moveToFirst())
+      assertEquals("限定パフェが美味しかった", cursor.getString(0))
+    }
+    db.close()
+  }
+
   companion object {
     private const val TEST_DB = "migration-test"
   }
