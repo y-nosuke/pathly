@@ -35,7 +35,7 @@ import com.pathly.util.Logger
     PlaceResolutionEntity::class,
     WishlistEntity::class,
   ],
-  version = 5,
+  version = 6,
   exportSchema = true,
 )
 @TypeConverters(DateConverter::class)

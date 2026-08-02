@@ -232,6 +232,7 @@ private fun TrackDetailRoute(
     unresolvedCount = unresolvedCount,
     message = message,
     onEditPlaceName = viewModel::updatePlaceName,
+    onEditStopNote = { stopId, note -> viewModel.updateStopNote(stopId, note) },
     onResolveNames = { viewModel.resolveNames() },
     onReanalyze = { viewModel.reanalyze() },
     reanalyzeCandidates = reanalyzeCandidates,

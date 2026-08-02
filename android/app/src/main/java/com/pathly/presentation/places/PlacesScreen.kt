@@ -994,6 +994,14 @@ private fun VisitRow(
       style = MaterialTheme.typography.bodySmall,
       color = MaterialTheme.colorScheme.onSurfaceVariant,
     )
+    // その訪問（stop）のメモがあれば表示する（編集は履歴詳細で・ここは確認のみ）。
+    visit.note?.takeIf { it.isNotBlank() }?.let { note ->
+      Text(
+        text = note,
+        style = MaterialTheme.typography.bodyMedium,
+        modifier = Modifier.padding(top = 2.dp),
+      )
+    }
   }
 }
 

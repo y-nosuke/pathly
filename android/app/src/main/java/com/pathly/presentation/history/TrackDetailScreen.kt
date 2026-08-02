@@ -55,10 +55,13 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.google.android.gms.maps.CameraUpdateFactory
@@ -138,6 +141,7 @@ fun TrackDetailScreen(
   unresolvedCount: Int = 0,
   message: String? = null,
   onEditPlaceName: (placeId: Long, name: String) -> Unit = { _, _ -> },
+  onEditStopNote: (stopId: Long, note: String?) -> Unit = { _, _ -> },
   onResolveNames: () -> Unit = {},
   onReanalyze: () -> Unit = {},
   reanalyzeCandidates: List<StopCandidate>? = null,
@@ -164,6 +168,8 @@ fun TrackDetailScreen(
   var tuningMode by remember { mutableStateOf(false) }
   var tuningParams by remember { mutableStateOf(SmoothingParams()) }
   var editingStop by remember { mutableStateOf<Stop?>(null) }
+  // メモ編集中の立ち寄り（stop 単位。名前編集 [editingStop] とは別ダイアログ）。
+  var editingNoteStop by remember { mutableStateOf<Stop?>(null) }
 
   // 複数選択削除。長押しで選択モードに入り、チェックで選ぶ。
   var selectionMode by remember { mutableStateOf(false) }
@@ -284,6 +290,7 @@ fun TrackDetailScreen(
             focusNonce++
           },
           onEditStop = { editingStop = it },
+          onEditStopNote = { editingNoteStop = it },
           onDeleteStop = { deleteWithUndo(listOf(it.id)) },
           onResolveNames = onResolveNames,
           onReanalyze = onReanalyze,
@@ -522,6 +529,17 @@ fun TrackDetailScreen(
     )
   }
 
+  editingNoteStop?.let { stop ->
+    StopNoteDialog(
+      stop = stop,
+      onDismiss = { editingNoteStop = null },
+      onConfirm = { note ->
+        onEditStopNote(stop.id, note)
+        editingNoteStop = null
+      },
+    )
+  }
+
   // 候補ゼロのときだけダイアログで知らせる（候補があればシート＋地図で選ばせる）。
   if (reanalyzeCandidates?.isEmpty() == true) {
     AlertDialog(
@@ -569,6 +587,48 @@ private fun PlaceNameDialog(
         singleLine = true,
         placeholder = { Text("例: スターバックス ◯◯店") },
       )
+    },
+    confirmButton = {
+      TextButton(onClick = { onConfirm(text) }) { Text("保存") }
+    },
+    dismissButton = {
+      TextButton(onClick = onDismiss) { Text("キャンセル") }
+    },
+  )
+}
+
+/** 立ち寄り（訪問）のメモを編集するダイアログ。stop 単位・複数行入力。空で保存すると消える。 */
+@Composable
+private fun StopNoteDialog(
+  stop: Stop,
+  onDismiss: () -> Unit,
+  onConfirm: (String?) -> Unit,
+) {
+  var text by remember(stop.id) { mutableStateOf(stop.note ?: "") }
+  // 開いたらすぐ入力できるよう、メモ欄にフォーカスして IME を出す。
+  val focusRequester = remember { FocusRequester() }
+  LaunchedEffect(Unit) { focusRequester.requestFocus() }
+  AlertDialog(
+    onDismissRequest = onDismiss,
+    title = { Text("メモ") },
+    text = {
+      Column {
+        Text(
+          text = stop.place.name ?: "%.5f, %.5f".format(stop.place.latitude, stop.place.longitude),
+          style = MaterialTheme.typography.bodyMedium,
+          color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Spacer(modifier = Modifier.height(8.dp))
+        OutlinedTextField(
+          value = text,
+          onValueChange = { text = it },
+          placeholder = { Text("この立ち寄りのメモ（例: 限定パフェが美味しかった）") },
+          minLines = 3,
+          modifier = Modifier
+            .fillMaxWidth()
+            .focusRequester(focusRequester),
+        )
+      }
     },
     confirmButton = {
       TextButton(onClick = { onConfirm(text) }) { Text("保存") }
@@ -872,6 +932,7 @@ private fun TrackDetailSheet(
   selectedStopIds: List<Long>,
   onFocusStop: (Stop) -> Unit,
   onEditStop: (Stop) -> Unit,
+  onEditStopNote: (Stop) -> Unit,
   onDeleteStop: (Stop) -> Unit,
   onResolveNames: () -> Unit,
   onReanalyze: () -> Unit,
@@ -1005,6 +1066,7 @@ private fun TrackDetailSheet(
           selected = stop.id in selectedStopIds,
           onFocus = { onFocusStop(stop) },
           onEdit = { onEditStop(stop) },
+          onEditNote = { onEditStopNote(stop) },
           onDelete = { onDeleteStop(stop) },
           onToggleSelect = { onToggleSelect(stop) },
           onEnterSelection = { onEnterSelection(stop) },
@@ -1060,12 +1122,14 @@ private fun StopRow(
   selected: Boolean,
   onFocus: () -> Unit,
   onEdit: () -> Unit,
+  onEditNote: () -> Unit,
   onDelete: () -> Unit,
   onToggleSelect: () -> Unit,
   onEnterSelection: () -> Unit,
 ) {
   val title = stop.place.name
     ?: "%.5f, %.5f".format(stop.place.latitude, stop.place.longitude)
+  val note = stop.note?.takeIf { it.isNotBlank() }
   Row(
     // 通常はタップでフォーカス、長押しで選択モード。選択モード中はタップで選択トグル。
     modifier = Modifier
@@ -1096,8 +1160,19 @@ private fun StopRow(
         style = MaterialTheme.typography.bodyMedium,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
       )
+      // メモがあれば時刻の下にインライン表示（長文は省略）。
+      if (note != null) {
+        Text(
+          text = note,
+          style = MaterialTheme.typography.bodyMedium,
+          maxLines = 2,
+          overflow = TextOverflow.Ellipsis,
+          modifier = Modifier.padding(top = 2.dp),
+        )
+      }
     }
     if (!selectionMode) {
+      TextButton(onClick = onEditNote) { Text(if (note != null) "メモ" else "＋メモ") }
       TextButton(onClick = onEdit) { Text("編集") }
       TextButton(onClick = onDelete) {
         Text("削除", color = MaterialTheme.colorScheme.error)

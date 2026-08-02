@@ -413,4 +413,16 @@ class PlaceRepositoryImplTest {
     repository.updatePlaceName(5L, "  カフェ  ")
     coVerify { placeDao.updateName(5L, "カフェ", any()) }
   }
+
+  @Test
+  fun updateStopNote_trimsWhitespace() = runTest {
+    repository.updateStopNote(100L, "  限定パフェが美味しかった  ")
+    coVerify { stopDao.updateNote(100L, "限定パフェが美味しかった") }
+  }
+
+  @Test
+  fun updateStopNote_blankBecomesNull() = runTest {
+    repository.updateStopNote(100L, "   ")
+    coVerify { stopDao.updateNote(100L, null) }
+  }
 }

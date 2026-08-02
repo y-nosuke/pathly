@@ -98,6 +98,7 @@ gps_tracks 1 ──< stops >── 1 places
 | trackId       | INTEGER | NOT NULL, FK→gps_tracks(id) | どの経路での訪問か |
 | arrivalTime   | INTEGER | NOT NULL                    | 到着時刻           |
 | departureTime | INTEGER | NOT NULL                    | 出発時刻           |
+| note          | TEXT    | NULL                        | 訪問メモ（v6追加） |
 | createdAt     | INTEGER | NOT NULL                    | 作成日時           |
 
 - インデックス: `stops(placeId)`, `stops(trackId)`
@@ -107,6 +108,11 @@ gps_tracks 1 ──< stops >── 1 places
 
 > `stops` は「経路と場所の関連（訪問）」テーブルでもある。命名対象を track で絞るときは
 > `stops` を JOIN して `trackId` で絞る（グローバルに全 place を叩かない）。
+
+> **メモ（note）は stop 単位・場所名は place 単位。** メモはその**訪問**に紐づく（同じ場所でも
+> お出掛けごとに別のメモを持てる）。場所名は place を共有する全訪問で同じ。編集は履歴詳細の立ち寄り行の
+> 「メモ」ボタンから（`updateStopNote`。空で保存すると null に戻す）。場所詳細の訪問一覧では**表示のみ**。
+> 空文字は保存せず null にそろえる（未入力＝null の一貫性）。
 
 ### place_resolutions テーブル（Google解決ログ）
 

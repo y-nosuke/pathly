@@ -36,6 +36,10 @@ interface StopDao {
   @Query("SELECT COUNT(*) FROM stops WHERE placeId = :placeId")
   suspend fun countByPlace(placeId: Long): Int
 
+  /** 立ち寄り（訪問）のメモを更新する（stop 単位。null/空=メモ無し）。 */
+  @Query("UPDATE stops SET note = :note WHERE id = :stopId")
+  suspend fun updateNote(stopId: Long, note: String?)
+
   @Transaction
   @Query("SELECT * FROM stops WHERE trackId = :trackId ORDER BY arrivalTime ASC")
   fun getStopsWithPlaceByTrack(trackId: Long): Flow<List<StopWithPlace>>
@@ -43,7 +47,7 @@ interface StopDao {
   /** その場所を含むお出掛け（経路）の一覧。新しい順。「場所→関連経路の一覧」に使う。 */
   @Query(
     "SELECT s.trackId AS trackId, t.startTime AS trackStartTime, " +
-      "s.arrivalTime AS arrivalTime, s.departureTime AS departureTime " +
+      "s.arrivalTime AS arrivalTime, s.departureTime AS departureTime, s.note AS note " +
       "FROM stops s INNER JOIN gps_tracks t ON t.id = s.trackId " +
       "WHERE s.placeId = :placeId " +
       "ORDER BY t.startTime DESC",

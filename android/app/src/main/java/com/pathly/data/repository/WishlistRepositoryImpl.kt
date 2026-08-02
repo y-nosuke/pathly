@@ -42,6 +42,7 @@ class WishlistRepositoryImpl @Inject constructor(
         outingDate = it.trackStartTime,
         arrivalTime = it.arrivalTime,
         departureTime = it.departureTime,
+        note = it.note,
       )
     }
   }

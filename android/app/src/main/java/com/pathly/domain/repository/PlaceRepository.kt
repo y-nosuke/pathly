@@ -70,6 +70,9 @@ interface PlaceRepository {
   /** 場所の表示名を手動で更新する（命名。空文字なら未命名に戻す）。 */
   suspend fun updatePlaceName(placeId: Long, name: String)
 
+  /** 立ち寄り（訪問）のメモを更新する（stop 単位。空文字なら null に戻す）。場所名とは別物。 */
+  suspend fun updateStopNote(stopId: Long, note: String?)
+
   /**
    * 近く（30m以内）に既存の場所があれば再利用し、無ければ新規作成して place の id を返す。
    * 立ち寄りと行きたい場所で同じ場所を共有するための同定（重複排除）。
