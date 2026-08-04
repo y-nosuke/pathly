@@ -242,7 +242,7 @@ Google Places を「叩いたか」を place 単位で記録する。places を�
 Web API 直叩きではなく **Places SDK for Android（New）** を使う。
 Android アプリ制限付きの API キー（地図と共用）を**そのまま安全に**使えるため。
 
-- 依存: `com.google.android.libraries.places:places:5.1.1`（minSdk 24。本アプリは 34 でOK）
+- 依存: Places SDK for Android（New）（`com.google.android.libraries.places`。バージョンは Gradle 定義を正とする）
 - 初期化: `PathlyApplication.onCreate` で **`Places.initializeWithNewPlacesApiEnabled(context, BuildConfig.GOOGLE_MAPS_API_KEY)`**
   - New API 面（`searchNearby`）を使うため、旧 `Places.initialize(...)` ではなくこちらを呼ぶ
 - 呼び出し: `PlacesClient.searchNearby(SearchNearbyRequest)`
