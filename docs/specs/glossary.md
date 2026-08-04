@@ -3,7 +3,7 @@
 位置情報の処理で使う用語を、**日本語（議論用）**と**英語（コードの識別子）**で対応させる。
 変数名・関数名・テーブル名をブレさせないための共通辞書。
 
-関連設計: [gps-smoothing.md](./gps-smoothing.md)（補正）／[places-and-stops.md](./places-and-stops.md)（場所・立ち寄り）
+関連設計: [gps-smoothing.md](../designs/gps-smoothing.md)（補正）／[places-and-stops.md](../designs/places-and-stops.md)（場所・立ち寄り）
 
 ---
 
@@ -79,7 +79,7 @@
 - **再解析（reanalyze）**  
   かつては stops を全消しして作り直す**破壊的**操作だったが、削除した立ち寄りが復活する副作用のため
   **追加提案型**に作り替えた。いまは「一覧に無い候補」を挙げて**選択分だけ追加**する非破壊操作
-  （既存 stop は消さない）。補正だけを作り直す旧 `recomputeSmoothed` は廃止。詳細は [places-and-stops.md](./places-and-stops.md) 参照。
+  （既存 stop は消さない）。補正だけを作り直す旧 `recomputeSmoothed` は廃止。詳細は [places-and-stops.md](../designs/places-and-stops.md) 参照。
 
 - **再解析 vs 手動追加**  
   どちらも非破壊で立ち寄りを**足す**が、**再解析**は検出器が見つけた候補から選ぶ（＝検出できる立ち寄りの救済）。

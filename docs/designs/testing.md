@@ -163,22 +163,22 @@ fun historyScreen_initialState_showsTitle() {
 
 #### テストライブラリ構成
 
+バージョンは Gradle（`gradle/libs.versions.toml` / `build.gradle.kts`）を正とする。ここでは役割で挙げる。
+
 ```kotlin
 // ユニットテスト
-testImplementation("junit:junit:4.13.2")
-testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.7.3")
-testImplementation("androidx.arch.core:core-testing:2.2.0")
-testImplementation("io.mockk:mockk:1.13.8")
-testImplementation("app.cash.turbine:turbine:1.0.0")
+testImplementation("junit:junit")                              // JUnit4
+testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test") // コルーチン
+testImplementation("androidx.arch.core:core-testing")          // LiveData/Arch 同期実行
+testImplementation("io.mockk:mockk")                           // モック
+testImplementation("app.cash.turbine:turbine")                 // Flow/StateFlow のテスト
 
 // インストルメンテーションテスト
-androidTestImplementation("androidx.test.ext:junit:1.1.5")
-androidTestImplementation("androidx.test.espresso:espresso-core:3.5.1")
-androidTestImplementation("androidx.compose.ui:ui-test-junit4")
-androidTestImplementation("androidx.arch.core:core-testing:2.2.0")
-androidTestImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.7.3")
-androidTestImplementation("androidx.room:room-testing:2.6.1")
-androidTestImplementation("io.mockk:mockk-android:1.13.8")
+androidTestImplementation("androidx.test.ext:junit")
+androidTestImplementation("androidx.test.espresso:espresso-core")
+androidTestImplementation("androidx.compose.ui:ui-test-junit4") // Compose UIテスト
+androidTestImplementation("androidx.room:room-testing")         // Room マイグレーション
+androidTestImplementation("io.mockk:mockk-android")
 ```
 
 #### Gradle設定（重要）
@@ -460,16 +460,20 @@ Expected at most 1 node but found 3 nodes
 
 ## 継続的インテグレーション
 
-### GitHub Actions対応（将来実装予定）
+### GitHub Actions（実装済み）
+
+`.github/workflows/android-build.yml` が main への push / PR で動く。`./gradlew build` 一発で
+**ユニットテスト・lint・assemble(debug/release)** をまとめて実行し、debug APK と lint/test レポートを
+アーティファクトとして保存する（同一ブランチの新 push で進行中の実行はキャンセル）。
 
 ```yaml
-# .github/workflows/android-tests.yml
-- name: Run Unit Tests
-  run: ./gradlew test
-
-- name: Run Instrumentation Tests
-  run: ./gradlew connectedAndroidTest
+# .github/workflows/android-build.yml（要点）
+- name: Build, test and lint
+  run: ./gradlew build # test + lint + assemble をまとめて実行
 ```
+
+> インストルメンテーションテスト（`connectedAndroidTest`）はエミュレータが要るため CI では回さず、
+> 実機／ローカルのエミュレータで確認する。
 
 ### テストカバレッジ目標
 

@@ -5,7 +5,7 @@
 GPSの生データはノイズで「経路がぐちゃぐちゃ」になり、距離も実際より膨らむ。これを補正して、表示される軌跡と移動距離を実際に近づける。
 
 > 対応する要望: [requirements.md](../requirements.md) の「記録した経路をきれいに見たい／正確な距離を知りたい」。ロードマップ Phase 2「GPSノイズ除去（位置補正）」。
-> 用語の日英対応（生データ・補正後の点列・補正・平滑化など）は [glossary.md](./glossary.md) を参照。
+> 用語の日英対応（生データ・補正後の点列・補正・平滑化など）は [glossary.md](../specs/glossary.md) を参照。
 > データモデル（`smoothed_points` 等）は [../specs/model.md](../specs/model.md) を参照。
 
 ## 設計方針
@@ -143,16 +143,16 @@ Room は v2→v3。破壊的フォールバックは無効なので `DatabaseMig
 
 ## 実装マップ
 
-| 役割                           | 場所                                                                              |
-| ------------------------------ | --------------------------------------------------------------------------------- |
-| 補正ロジック・指標             | `domain/model/TrackSmoother.kt`（`SmoothingParams` 含む）                         |
-| トラックの補正後点・距離       | `domain/model/GpsTrack.kt`（`smoothedPoints` / `totalDistanceMeters`）            |
-| 詳細画面の描画・調整UI         | `presentation/history/TrackDetailScreen.kt`                                       |
-| 記録画面のライブ描画           | `presentation/tracking/TrackingScreen.kt`                                         |
-| 記録間隔の設定                 | `data/settings/SettingsRepository.kt` / 設定画面                                  |
-| 記録中の増分補正・保存（予定） | `service/LocationTrackingService.kt`                                              |
-| 補正後の永続化（予定）         | `data/local/entity/SmoothedPointEntity.kt` / `data/local/dao/SmoothedPointDao.kt` |
-| 再補正の実行（予定）           | 詳細画面 → Repository（該当trackを全DELETE→再INSERT）                             |
+| 役割                             | 場所                                                                                                                       |
+| -------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| 補正ロジック・指標               | `domain/model/TrackSmoother.kt`（`SmoothingParams` 含む）                                                                  |
+| トラックの補正後点・距離         | `domain/model/GpsTrack.kt`（`smoothedPoints` / `totalDistanceMeters`）                                                     |
+| 詳細画面の描画・調整UI           | `presentation/history/TrackDetailScreen.kt`                                                                                |
+| 記録画面のライブ描画             | `presentation/tracking/TrackingScreen.kt`                                                                                  |
+| 記録間隔の設定                   | `data/settings/SettingsRepository.kt` / 設定画面                                                                           |
+| 記録中の増分補正・保存           | `service/LocationTrackingService.kt` → `GpsTrackRepository.updateSmoothedForTrack`（`persistSmoothed` で確定ぶんのみ追記） |
+| 補正後の永続化                   | `data/local/entity/SmoothedPointEntity.kt` / `data/local/dao/SmoothedPointDao.kt`                                          |
+| 補正調整（デバッグ・プレビュー） | 詳細画面の `ic_tune`（スライダーで補正を試すのみ。永続化はしない）                                                         |
 
 ## 決めた値の反映
 

@@ -27,8 +27,8 @@ Pathlyは位置情報を扱うアプリとして、ユーザーの個人情報�
 #### Room データベース暗号化
 
 ```kotlin
-// SQLCipher使用によるRoom暗号化
-implementation("net.zetetic:android-database-sqlcipher:4.5.4")
+// SQLCipher使用によるRoom暗号化（バージョンは Gradle 定義を正とする）
+implementation("net.zetetic:android-database-sqlcipher")
 
 // 暗号化データベース初期化
 val passphrase = generateSecurePassphrase()

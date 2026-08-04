@@ -14,7 +14,7 @@
 
 ## 用語・データの流れ
 
-> 用語の日英対応（データ・処理）は [glossary.md](./glossary.md) にまとめている。本節は流れの説明。
+> 用語の日英対応（データ・処理）は [glossary.md](../specs/glossary.md) にまとめている。本節は流れの説明。
 
 位置に関するデータは、段階を追って「点の集まり」から「意味のある場所」へと変換される。
 
@@ -242,7 +242,7 @@ Google Places を「叩いたか」を place 単位で記録する。places を�
 Web API 直叩きではなく **Places SDK for Android（New）** を使う。
 Android アプリ制限付きの API キー（地図と共用）を**そのまま安全に**使えるため。
 
-- 依存: `com.google.android.libraries.places:places:5.1.1`（minSdk 24。本アプリは 34 でOK）
+- 依存: Places SDK for Android（New）（`com.google.android.libraries.places`。バージョンは Gradle 定義を正とする）
 - 初期化: `PathlyApplication.onCreate` で **`Places.initializeWithNewPlacesApiEnabled(context, BuildConfig.GOOGLE_MAPS_API_KEY)`**
   - New API 面（`searchNearby`）を使うため、旧 `Places.initialize(...)` ではなくこちらを呼ぶ
 - 呼び出し: `PlacesClient.searchNearby(SearchNearbyRequest)`
@@ -335,21 +335,21 @@ places が track から独立し、解決状態も `place_resolutions` に分離
 
 ## 実装マップ
 
-| 要素                     | ファイル                                                                          |
-| ------------------------ | --------------------------------------------------------------------------------- |
-| 検出（既存）             | `domain/model/StopDetector.kt`（返り値は `DetectedStop`）                         |
-| ドメイン                 | `domain/model/Place.kt`, `Stop.kt`, `DetectedStop.kt`                             |
-| Entity（既存）           | `data/local/entity/PlaceEntity.kt`, `StopEntity.kt`, `StopWithPlace.kt`           |
-| Entity（予定）           | `data/local/entity/PlaceResolutionEntity.kt`                                      |
-| DAO                      | `data/local/dao/PlaceDao.kt`, `StopDao.kt`, `PlaceResolutionDao.kt`（予定）       |
-| マイグレーション         | `DatabaseMigrations.kt`（1→2 済 / 立ち寄り記録中対応は次バージョンで追加）        |
-| Places 呼び出し          | `data/places/PlacesNameResolver.kt`（+ オンライン判定）                           |
-| 記録中の検出・保存(予定) | `service/LocationTrackingService.kt` → `PlaceRepository.updateStopsForTrack`      |
-| ライブ立ち寄り中(予定)   | 記録中サービスの `StateFlow`（非永続）→ `presentation/tracking/TrackingScreen.kt` |
-| 再解析（追加提案）       | `detectMissingStops` / `addStops`（非破壊）＋ 詳細画面の選択ダイアログ            |
-| 完全手動追加             | `addManualStop`（非破壊）＋ 詳細画面の追加モード（地図タップ＋区間レンジ調整）    |
-| リポジトリ               | `domain/repository/PlaceRepository.kt` / `data/repository/PlaceRepositoryImpl.kt` |
-| 画面                     | `presentation/history/TrackDetailScreen.kt`（+ 詳細用 ViewModel）                 |
+| 要素               | ファイル                                                                               |
+| ------------------ | -------------------------------------------------------------------------------------- |
+| 検出（既存）       | `domain/model/StopDetector.kt`（返り値は `DetectedStop`）                              |
+| ドメイン           | `domain/model/Place.kt`, `Stop.kt`, `DetectedStop.kt`                                  |
+| Entity             | `data/local/entity/PlaceEntity.kt`, `StopEntity.kt`（`note` 含む）, `StopWithPlace.kt` |
+| Entity             | `data/local/entity/PlaceResolutionEntity.kt`                                           |
+| DAO                | `data/local/dao/PlaceDao.kt`, `StopDao.kt`, `PlaceResolutionDao.kt`                    |
+| マイグレーション   | `DatabaseMigrations.kt`（1→6 を保持。v4: place_resolutions / v6: stops.note）          |
+| Places 呼び出し    | `data/places/PlacesNameResolver.kt`（+ オンライン判定）                                |
+| 記録中の検出・保存 | `service/LocationTrackingService.kt` → `PlaceRepository.updateStopsForTrack`           |
+| ライブ立ち寄り中   | 記録中サービスの `StateFlow`（非永続）→ `presentation/tracking/TrackingScreen.kt`      |
+| 再解析（追加提案） | `detectMissingStops` / `addStops`（非破壊）＋ 詳細画面の選択ダイアログ                 |
+| 完全手動追加       | `addManualStop`（非破壊）＋ 詳細画面の追加モード（地図タップ＋区間レンジ調整）         |
+| リポジトリ         | `domain/repository/PlaceRepository.kt` / `data/repository/PlaceRepositoryImpl.kt`      |
+| 画面               | `presentation/history/TrackDetailScreen.kt`（+ 詳細用 ViewModel）                      |
 
 ---
 
