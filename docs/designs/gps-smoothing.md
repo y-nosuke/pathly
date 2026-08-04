@@ -5,7 +5,7 @@
 GPSの生データはノイズで「経路がぐちゃぐちゃ」になり、距離も実際より膨らむ。これを補正して、表示される軌跡と移動距離を実際に近づける。
 
 > 対応する要望: [requirements.md](../requirements.md) の「記録した経路をきれいに見たい／正確な距離を知りたい」。ロードマップ Phase 2「GPSノイズ除去（位置補正）」。
-> 用語の日英対応（生データ・補正後の点列・補正・平滑化など）は [glossary.md](./glossary.md) を参照。
+> 用語の日英対応（生データ・補正後の点列・補正・平滑化など）は [glossary.md](../specs/glossary.md) を参照。
 > データモデル（`smoothed_points` 等）は [../specs/model.md](../specs/model.md) を参照。
 
 ## 設計方針

@@ -26,12 +26,12 @@
 | [specs/features.md](specs/features.md) | GPS記録機能のユースケース仕様    |
 | [specs/screens.md](specs/screens.md)   | 画面仕様（UI・ナビゲーション）   |
 | [specs/model.md](specs/model.md)       | データモデル（概念モデル・ER図） |
+| [specs/glossary.md](specs/glossary.md) | 用語集（データ・処理の日英対応） |
 
 ### 設計（How）
 
 | ファイル                                                   | 内容                                   |
 | ---------------------------------------------------------- | -------------------------------------- |
-| [designs/glossary.md](designs/glossary.md)                 | 用語集（データ・処理の日英対応）       |
 | [designs/architecture.md](designs/architecture.md)         | アーキテクチャ・プロジェクト構成       |
 | [designs/security.md](designs/security.md)                 | セキュリティ設計                       |
 | [designs/logging.md](designs/logging.md)                   | ログ方針・実装                         |
