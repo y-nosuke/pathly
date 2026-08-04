@@ -100,8 +100,9 @@ private val rawTrackColor = Color(0x66424242)
 // 手動追加のハイライト（選択した滞在区間）。軌跡（オレンジ）・立ち寄り（紫）と見分ける青。
 private val manualHighlightColor = Color(0xFF1E88E5)
 
-// 既存の立ち寄りの滞在区間ハイライト（常時表示）。軌跡を潰さないよう半透明の太い帯にして下に敷く。
-private val stopSegmentColor = Color(0x552196F3)
+// 既存の立ち寄りの滞在区間ハイライト（常時表示）。オレンジ/赤の軌跡に負けないよう、濃い青の太い帯を
+// 下に敷く（軌跡は上に細く残る）。薄い青だと軌跡に埋もれて見えないため不透明寄りの濃色にする。
+private val stopSegmentColor = Color(0xF00D47A1)
 
 /** 立ち寄りの到着〜出発に対応する軌跡点（滞在区間）。時刻で範囲を切り出す（両端含む）。 */
 private fun stopSegmentPoints(points: List<GpsPoint>, stop: Stop): List<GpsPoint> = points.filter { !it.timestamp.before(stop.arrivalTime) && !it.timestamp.after(stop.departureTime) }
@@ -1406,7 +1407,7 @@ private fun TrackMapView(
         Polyline(
           points = segment.map { LatLng(it.latitude, it.longitude) },
           color = stopSegmentColor,
-          width = 22f,
+          width = 26f,
         )
       }
     }
