@@ -143,16 +143,16 @@ Room は v2→v3。破壊的フォールバックは無効なので `DatabaseMig
 
 ## 実装マップ
 
-| 役割                           | 場所                                                                              |
-| ------------------------------ | --------------------------------------------------------------------------------- |
-| 補正ロジック・指標             | `domain/model/TrackSmoother.kt`（`SmoothingParams` 含む）                         |
-| トラックの補正後点・距離       | `domain/model/GpsTrack.kt`（`smoothedPoints` / `totalDistanceMeters`）            |
-| 詳細画面の描画・調整UI         | `presentation/history/TrackDetailScreen.kt`                                       |
-| 記録画面のライブ描画           | `presentation/tracking/TrackingScreen.kt`                                         |
-| 記録間隔の設定                 | `data/settings/SettingsRepository.kt` / 設定画面                                  |
-| 記録中の増分補正・保存（予定） | `service/LocationTrackingService.kt`                                              |
-| 補正後の永続化（予定）         | `data/local/entity/SmoothedPointEntity.kt` / `data/local/dao/SmoothedPointDao.kt` |
-| 再補正の実行（予定）           | 詳細画面 → Repository（該当trackを全DELETE→再INSERT）                             |
+| 役割                             | 場所                                                                                                                       |
+| -------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| 補正ロジック・指標               | `domain/model/TrackSmoother.kt`（`SmoothingParams` 含む）                                                                  |
+| トラックの補正後点・距離         | `domain/model/GpsTrack.kt`（`smoothedPoints` / `totalDistanceMeters`）                                                     |
+| 詳細画面の描画・調整UI           | `presentation/history/TrackDetailScreen.kt`                                                                                |
+| 記録画面のライブ描画             | `presentation/tracking/TrackingScreen.kt`                                                                                  |
+| 記録間隔の設定                   | `data/settings/SettingsRepository.kt` / 設定画面                                                                           |
+| 記録中の増分補正・保存           | `service/LocationTrackingService.kt` → `GpsTrackRepository.updateSmoothedForTrack`（`persistSmoothed` で確定ぶんのみ追記） |
+| 補正後の永続化                   | `data/local/entity/SmoothedPointEntity.kt` / `data/local/dao/SmoothedPointDao.kt`                                          |
+| 補正調整（デバッグ・プレビュー） | 詳細画面の `ic_tune`（スライダーで補正を試すのみ。永続化はしない）                                                         |
 
 ## 決めた値の反映
 

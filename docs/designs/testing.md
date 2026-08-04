@@ -460,16 +460,20 @@ Expected at most 1 node but found 3 nodes
 
 ## 継続的インテグレーション
 
-### GitHub Actions対応（将来実装予定）
+### GitHub Actions（実装済み）
+
+`.github/workflows/android-build.yml` が main への push / PR で動く。`./gradlew build` 一発で
+**ユニットテスト・lint・assemble(debug/release)** をまとめて実行し、debug APK と lint/test レポートを
+アーティファクトとして保存する（同一ブランチの新 push で進行中の実行はキャンセル）。
 
 ```yaml
-# .github/workflows/android-tests.yml
-- name: Run Unit Tests
-  run: ./gradlew test
-
-- name: Run Instrumentation Tests
-  run: ./gradlew connectedAndroidTest
+# .github/workflows/android-build.yml（要点）
+- name: Build, test and lint
+  run: ./gradlew build # test + lint + assemble をまとめて実行
 ```
+
+> インストルメンテーションテスト（`connectedAndroidTest`）はエミュレータが要るため CI では回さず、
+> 実機／ローカルのエミュレータで確認する。
 
 ### テストカバレッジ目標
 

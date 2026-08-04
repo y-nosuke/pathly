@@ -8,11 +8,12 @@ Android Room（SQLite）によるローカルデータモデル。GPS 軌跡の�
 ## データベース構成
 
 - **DB**: PathlyDatabase（Room）
-- **バージョン**: 4
+- **バージョン**: 6
   - v2: places / stops を追加
   - v3: smoothed_points を追加
   - v4: place_resolutions（Google 解決ログ）を追加
-  - v5（予定）: wishlist（行きたい場所）を追加（[../designs/wishlist.md](../designs/wishlist.md)）
+  - v5: wishlist（行きたい場所）を追加（[../designs/wishlist.md](../designs/wishlist.md)）
+  - v6: stops.note（立ち寄りメモ・訪問単位）を追加（[../designs/places-and-stops.md](../designs/places-and-stops.md)）
 - **マイグレーション**: 破壊的フォールバックは無効。スキーマ変更は `DatabaseMigrations` に正式マイグレーションを追加する。
 
 ## ER 図（概念モデル）
@@ -68,6 +69,7 @@ erDiagram
     Long trackId FK
     Date arrivalTime
     Date departureTime
+    String note
   }
   place_resolutions {
     Long placeId PK
@@ -91,9 +93,9 @@ erDiagram
 | **gps_points**        | 原 GPS 座標（無改変で保持）                    | gps_tracks に属す                                                    |
 | **smoothed_points**   | 補正（スムージング）後の点列。原データと併存   | gps_tracks に属す／sourcePointId で生点を辿れる                      |
 | **places**            | 場所そのもの（経路から独立して永続）           | stops から参照される                                                 |
-| **stops**             | 立ち寄り（訪問）。places と gps_tracks を結ぶ  | 経路削除で消える（場所は残す）                                       |
+| **stops**             | 立ち寄り（訪問）。places と gps_tracks を結ぶ  | 経路削除で消える（場所は残す）／訪問メモ `note` を持つ               |
 | **place_resolutions** | 場所名の解決ログ（行の有無＝問い合わせ済みか） | places に 1:0..1                                                     |
-| **wishlist**（予定）  | 行きたい場所（優先度・メモ・訪問済み）         | places に 1:0..1（[../designs/wishlist.md](../designs/wishlist.md)） |
+| **wishlist**          | 行きたい場所（優先度・メモ・訪問済み）         | places に 1:0..1（[../designs/wishlist.md](../designs/wishlist.md)） |
 
 ### 関連と削除規則（要点）
 
