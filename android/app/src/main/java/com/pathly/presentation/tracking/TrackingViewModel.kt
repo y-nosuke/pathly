@@ -236,15 +236,22 @@ class TrackingViewModel @Inject constructor(
   }
 
   /**
-   * 記録画面のマップで POI をタップして場所を登録する。行きたい ON なら wishlist にも入れる。
-   * 登録後は「場所」タブに現れる（優先度・メモは場所タブで編集）。
+   * 記録画面のマップで POI をタップして場所を登録する。メモは常に保存し、行きたい ON なら
+   * 優先度つきで wishlist にも入れる。登録後は「場所」タブに現れる。
    */
-  fun registerPlace(latitude: Double, longitude: Double, name: String?, wishlist: Boolean) {
+  fun registerPlace(
+    latitude: Double,
+    longitude: Double,
+    name: String?,
+    wishlist: Boolean,
+    priority: Priority,
+    memo: String?,
+  ) {
     viewModelScope.launch {
       try {
-        val placeId = wishlistRepository.registerPlace(latitude, longitude, name)
+        val placeId = wishlistRepository.registerPlace(latitude, longitude, name, memo)
         if (wishlist) {
-          wishlistRepository.addToWishlist(placeId, Priority.MEDIUM)
+          wishlistRepository.addToWishlist(placeId, priority)
         }
         _uiState.value = _uiState.value.copy(placeRegisteredMessage = "「${name?.ifBlank { null } ?: "場所"}」を登録しました")
       } catch (e: Exception) {

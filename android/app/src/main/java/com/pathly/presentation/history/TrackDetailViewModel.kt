@@ -102,13 +102,23 @@ class TrackDetailViewModel @Inject constructor(
     viewModelScope.launch { placeRepository.undoLastDeletion() }
   }
 
-  /** 振り返り中の地図で POI をタップして場所を登録する。行きたい ON なら wishlist にも入れる。 */
-  fun registerPlace(latitude: Double, longitude: Double, name: String?, wishlist: Boolean) {
+  /**
+   * 振り返り中の地図で POI をタップして場所を登録する。メモは常に保存し、行きたい ON なら
+   * 優先度つきで wishlist にも入れる。
+   */
+  fun registerPlace(
+    latitude: Double,
+    longitude: Double,
+    name: String?,
+    wishlist: Boolean,
+    priority: Priority,
+    memo: String?,
+  ) {
     viewModelScope.launch {
       try {
-        val placeId = wishlistRepository.registerPlace(latitude, longitude, name)
+        val placeId = wishlistRepository.registerPlace(latitude, longitude, name, memo)
         if (wishlist) {
-          wishlistRepository.addToWishlist(placeId, Priority.MEDIUM)
+          wishlistRepository.addToWishlist(placeId, priority)
         }
         _message.value = "「${name?.ifBlank { null } ?: "場所"}」を登録しました"
       } catch (e: Exception) {

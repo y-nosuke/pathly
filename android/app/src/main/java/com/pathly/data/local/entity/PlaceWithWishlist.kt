@@ -19,6 +19,7 @@ data class PlaceWithWishlist(
   val createdAt: Date,
   val updatedAt: Date,
   // google_places（未解決なら null）
+  val googlePlaceId: String?,
   val googleName: String?,
   val googleAddress: String?,
   val category: String?,

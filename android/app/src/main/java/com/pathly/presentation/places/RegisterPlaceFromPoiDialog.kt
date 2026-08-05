@@ -20,20 +20,23 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.google.android.gms.maps.model.PointOfInterest
+import com.pathly.domain.model.Priority
 
 /**
  * 地図上の施設（POI）をタップしたときに出す共通の登録ダイアログ。
  * 記録画面・経路詳細・場所詳細のどのマップからでも使う（シートや入力欄と干渉しないようモーダル）。
- * 名前は POI 名で初期化。行きたい ON なら呼び出し側で wishlist にも入れる。
+ * 「追加」フローと項目を揃える（名前・メモ・行きたい・優先度）。メモは常時、優先度は行きたい ON のとき。
  */
 @Composable
 internal fun RegisterPlaceFromPoiDialog(
   poi: PointOfInterest,
   onDismiss: () -> Unit,
-  onRegister: (name: String, wishlist: Boolean) -> Unit,
+  onRegister: (name: String, wishlist: Boolean, priority: Priority, memo: String?) -> Unit,
 ) {
   var name by remember(poi) { mutableStateOf(poi.name) }
+  var memo by remember(poi) { mutableStateOf("") }
   var wishlist by remember(poi) { mutableStateOf(false) }
+  var priority by remember(poi) { mutableStateOf(Priority.MEDIUM) }
 
   AlertDialog(
     onDismissRequest = onDismiss,
@@ -48,6 +51,13 @@ internal fun RegisterPlaceFromPoiDialog(
           modifier = Modifier.fillMaxWidth(),
         )
         Spacer(modifier = Modifier.height(8.dp))
+        OutlinedTextField(
+          value = memo,
+          onValueChange = { memo = it },
+          label = { Text("メモ（任意）") },
+          modifier = Modifier.fillMaxWidth(),
+        )
+        Spacer(modifier = Modifier.height(8.dp))
         Row(
           modifier = Modifier.fillMaxWidth(),
           horizontalArrangement = Arrangement.SpaceBetween,
@@ -56,10 +66,14 @@ internal fun RegisterPlaceFromPoiDialog(
           Text("行きたいに登録")
           Switch(checked = wishlist, onCheckedChange = { wishlist = it })
         }
+        if (wishlist) {
+          Spacer(modifier = Modifier.height(8.dp))
+          PrioritySelector(selected = priority, onSelect = { priority = it })
+        }
       }
     },
     confirmButton = {
-      TextButton(onClick = { onRegister(name, wishlist) }) { Text("登録") }
+      TextButton(onClick = { onRegister(name, wishlist, priority, memo.ifBlank { null }) }) { Text("登録") }
     },
     dismissButton = {
       TextButton(onClick = onDismiss) { Text("キャンセル") }

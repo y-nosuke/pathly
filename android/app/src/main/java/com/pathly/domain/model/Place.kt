@@ -24,6 +24,8 @@ data class Place(
   val googleName: String?,
   val googleAddress: String?,
   val category: String?,
+  /** Google の place ID（Google マップで施設ページを開く参照キー）。未解決は null。 */
+  val googlePlaceId: String?,
   val createdAt: Date,
   val updatedAt: Date,
 ) {

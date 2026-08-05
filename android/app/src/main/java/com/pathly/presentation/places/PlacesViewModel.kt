@@ -106,12 +106,22 @@ class PlacesViewModel @Inject constructor(
     }
   }
 
-  /** 詳細の保存: 行きたいの優先度（wishlist）と場所のメモ（places.note）をまとめて更新する。 */
-  fun updatePlanning(wishlistId: Long, placeId: Long, priority: Priority, note: String?) {
+  /** 場所のメモ（places.note）を更新する（行きたい登録と独立）。 */
+  fun updateNote(placeId: Long, note: String?) {
+    viewModelScope.launch {
+      try {
+        wishlistRepository.updatePlaceNote(placeId, note)
+      } catch (e: Exception) {
+        _uiState.value = _uiState.value.copy(errorMessage = "更新に失敗しました: ${e.message}")
+      }
+    }
+  }
+
+  /** 行きたいの優先度を更新する。 */
+  fun updatePriority(wishlistId: Long, priority: Priority) {
     viewModelScope.launch {
       try {
         wishlistRepository.updateWishlist(wishlistId, priority)
-        wishlistRepository.updatePlaceNote(placeId, note)
       } catch (e: Exception) {
         _uiState.value = _uiState.value.copy(errorMessage = "更新に失敗しました: ${e.message}")
       }

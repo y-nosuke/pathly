@@ -84,6 +84,7 @@ class PlacesTextSearcher @Inject constructor(
         Place.Field.ID,
         Place.Field.DISPLAY_NAME,
         Place.Field.FORMATTED_ADDRESS,
+        Place.Field.PRIMARY_TYPE_DISPLAY_NAME,
         Place.Field.LOCATION,
       )
       val builder = FetchPlaceRequest.builder(placeId, fields)
@@ -95,6 +96,7 @@ class PlacesTextSearcher @Inject constructor(
         googlePlaceId = place.id?.takeIf { it.isNotBlank() } ?: placeId,
         name = place.displayName?.takeIf { it.isNotBlank() },
         address = place.formattedAddress?.takeIf { it.isNotBlank() },
+        category = place.primaryTypeDisplayName?.takeIf { it.isNotBlank() },
         latitude = latLng.latitude,
         longitude = latLng.longitude,
       )

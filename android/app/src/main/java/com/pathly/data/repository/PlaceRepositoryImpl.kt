@@ -93,11 +93,12 @@ class PlaceRepositoryImpl @Inject constructor(
       val google = googlePlaceDao.getByPlace(place.id)
       val name = place.name ?: google?.name
       if (name != null) {
-        return StopCandidate(d, name, google?.address, google?.googlePlaceId)
+        return StopCandidate(d, name, google?.address, google?.category, google?.googlePlaceId)
       }
     }
     return when (val outcome = placesNameResolver.resolve(d.latitude, d.longitude)) {
-      is PlacesNameResolver.Outcome.Found -> StopCandidate(d, outcome.name, outcome.address, outcome.googlePlaceId)
+      is PlacesNameResolver.Outcome.Found ->
+        StopCandidate(d, outcome.name, outcome.address, outcome.category, outcome.googlePlaceId)
       PlacesNameResolver.Outcome.NoMatch, PlacesNameResolver.Outcome.NotAttempted -> StopCandidate(d)
     }
   }
@@ -120,7 +121,7 @@ class PlaceRepositoryImpl @Inject constructor(
       if (placeResolutionDao.getByPlace(placeId) == null && candidate.googlePlaceId != null) {
         if (googlePlaceDao.getByPlace(placeId) == null) {
           googlePlaceDao.upsert(
-            GooglePlaceEntity(placeId, candidate.googlePlaceId, candidate.name, candidate.address),
+            GooglePlaceEntity(placeId, candidate.googlePlaceId, candidate.name, candidate.address, candidate.category),
           )
         }
         placeResolutionDao.upsert(PlaceResolutionEntity(placeId, Date()))
@@ -297,7 +298,7 @@ class PlaceRepositoryImpl @Inject constructor(
     when (val outcome = placesNameResolver.resolve(place.latitude, place.longitude)) {
       is PlacesNameResolver.Outcome.Found -> {
         googlePlaceDao.upsert(
-          GooglePlaceEntity(place.id, outcome.googlePlaceId, outcome.name, outcome.address),
+          GooglePlaceEntity(place.id, outcome.googlePlaceId, outcome.name, outcome.address, outcome.category),
         )
         placeResolutionDao.upsert(PlaceResolutionEntity(place.id, Date()))
       }
@@ -336,6 +337,7 @@ class PlaceRepositoryImpl @Inject constructor(
     googleName = google?.name,
     googleAddress = google?.address,
     category = google?.category,
+    googlePlaceId = google?.googlePlaceId,
     createdAt = createdAt,
     updatedAt = updatedAt,
   )

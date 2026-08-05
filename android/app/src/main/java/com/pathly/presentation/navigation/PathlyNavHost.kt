@@ -244,6 +244,8 @@ private fun TrackDetailRoute(
       viewModel.addManualStop(lat, lng, arrival, departure, name, googlePlaceId)
     },
     onMessageShown = { viewModel.clearMessage() },
-    onRegisterPlace = { lat, lng, name, wishlist -> viewModel.registerPlace(lat, lng, name, wishlist) },
+    onRegisterPlace = { lat, lng, name, wishlist, priority, memo ->
+      viewModel.registerPlace(lat, lng, name, wishlist, priority, memo)
+    },
   )
 }

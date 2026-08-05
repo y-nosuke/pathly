@@ -217,8 +217,8 @@ fun TrackingScreen(
     RegisterPlaceFromPoiDialog(
       poi = poi,
       onDismiss = { poiTarget = null },
-      onRegister = { name, wishlist ->
-        viewModel.registerPlace(poi.latLng.latitude, poi.latLng.longitude, name, wishlist)
+      onRegister = { name, wishlist, priority, memo ->
+        viewModel.registerPlace(poi.latLng.latitude, poi.latLng.longitude, name, wishlist, priority, memo)
         poiTarget = null
       },
     )

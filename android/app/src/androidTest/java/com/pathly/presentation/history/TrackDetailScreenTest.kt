@@ -407,6 +407,7 @@ class TrackDetailScreenTest {
       googleName = null,
       googleAddress = null,
       category = null,
+      googlePlaceId = null,
       createdAt = Date(0L),
       updatedAt = Date(0L),
     )

@@ -69,7 +69,7 @@ class WishlistRepositoryImpl @Inject constructor(
     // 検索結果は Google 由来なので google_places に記録（places.name はユーザー名専用）。
     // 表示は google_places.name にフォールバックするので、名前は自動で出る。
     googlePlaceDao.upsert(
-      GooglePlaceEntity(placeId, result.googlePlaceId, result.name, result.address),
+      GooglePlaceEntity(placeId, result.googlePlaceId, result.name, result.address, result.category),
     )
     // 問い合わせlog に記録 → 以後は自動命名で Nearby を叩かない。
     placeResolutionDao.upsert(PlaceResolutionEntity(placeId, Date()))
@@ -163,6 +163,7 @@ class WishlistRepositoryImpl @Inject constructor(
       googleName = googleName,
       googleAddress = googleAddress,
       category = category,
+      googlePlaceId = googlePlaceId,
       createdAt = createdAt,
       updatedAt = updatedAt,
     ),

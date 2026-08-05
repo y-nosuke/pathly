@@ -78,7 +78,7 @@ class PlaceRepositoryImplTest {
       PlaceEntity(id = 10L, latitude = 35.0, longitude = 139.0),
     )
     coEvery { resolver.resolve(any(), any()) } returns
-      PlacesNameResolver.Outcome.Found("カフェ", "住所", "gp-1")
+      PlacesNameResolver.Outcome.Found("カフェ", "住所", "カフェ・喫茶", "gp-1")
 
     repository.updateStopsForTrack(1L, isFinal = false)
 
@@ -109,7 +109,7 @@ class PlaceRepositoryImplTest {
     coEvery { placeDao.getUnresolvedPlacesForTrack(1L) } returns emptyList()
     coEvery { placeResolutionDao.getByPlace(20L) } returns null
     coEvery { resolver.resolve(any(), any()) } returns
-      PlacesNameResolver.Outcome.Found("カフェ", "住所", "gp-2")
+      PlacesNameResolver.Outcome.Found("カフェ", "住所", "カフェ・喫茶", "gp-2")
 
     repository.updateStopsForTrack(1L, isFinal = false)
 
@@ -158,7 +158,7 @@ class PlaceRepositoryImplTest {
     coEvery { stopDao.getByTrack(1L) } returns emptyList()
     coEvery { placeDao.getAll() } returns emptyList()
     coEvery { resolver.resolve(any(), any()) } returns
-      PlacesNameResolver.Outcome.Found("カフェ", "住所", "gp-1")
+      PlacesNameResolver.Outcome.Found("カフェ", "住所", "カフェ・喫茶", "gp-1")
 
     val result = repository.detectMissingStops(1L)
 
