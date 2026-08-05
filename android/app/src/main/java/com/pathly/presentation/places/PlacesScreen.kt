@@ -193,8 +193,8 @@ fun PlaceDetailRoute(
     onBack = onBack,
     onToggleWishlist = { viewModel.toggleWishlist(item) },
     onSaveName = { name -> viewModel.renamePlace(item.place.id, name) },
-    onSaveWishlist = { priority, memo ->
-      item.wishlistId?.let { viewModel.updateWishlist(it, priority, memo) }
+    onSavePlanning = { priority, note ->
+      item.wishlistId?.let { viewModel.updatePlanning(it, item.place.id, priority, note) }
     },
     onToggleVisited = { visited ->
       item.wishlistId?.let { viewModel.setVisited(it, visited) }
@@ -374,7 +374,7 @@ private fun PlaceItemRow(
         }
 
         // 住所（1行）。メモは詳細で見る。
-        item.place.address?.takeIf { it.isNotBlank() }?.let { address ->
+        item.place.googleAddress?.takeIf { it.isNotBlank() }?.let { address ->
           Spacer(modifier = Modifier.height(2.dp))
           Text(
             text = address,
@@ -581,7 +581,7 @@ private fun PlaceDetailContent(
   onBack: () -> Unit,
   onToggleWishlist: () -> Unit,
   onSaveName: (name: String) -> Unit,
-  onSaveWishlist: (priority: Priority, memo: String?) -> Unit,
+  onSavePlanning: (priority: Priority, note: String?) -> Unit,
   onToggleVisited: (Boolean) -> Unit,
   onRegisterPoi: (lat: Double, lng: Double, name: String, wishlist: Boolean) -> Unit,
   onOpenTrack: (trackId: Long) -> Unit,
@@ -591,12 +591,12 @@ private fun PlaceDetailContent(
   var poiTarget by remember { mutableStateOf<PointOfInterest?>(null) }
   val savedName = item.place.name ?: ""
   val savedPriority = item.priority ?: Priority.MEDIUM
-  val savedMemo = item.memo ?: ""
+  val savedNote = item.note ?: ""
   var name by remember(item.place.id) { mutableStateOf(savedName) }
   var priority by remember(item.wishlistId) { mutableStateOf(savedPriority) }
-  var memo by remember(item.wishlistId) { mutableStateOf(savedMemo) }
+  var note by remember(item.place.id) { mutableStateOf(savedNote) }
   val nameChanged = name.trim() != savedName.trim()
-  val wishlistChanged = item.isWishlisted && (priority != savedPriority || memo.trim() != savedMemo.trim())
+  val wishlistChanged = item.isWishlisted && (priority != savedPriority || note.trim() != savedNote.trim())
   val hasChanges = nameChanged || wishlistChanged
 
   // 下部カードの高さを測り、その分マップ下部に余白を入れてピンがカードに隠れないようにする。
@@ -663,7 +663,7 @@ private fun PlaceDetailContent(
           )
           WishlistFlagButton(active = item.isWishlisted, onClick = onToggleWishlist)
         }
-        item.place.address?.let { address ->
+        item.place.googleAddress?.let { address ->
           Spacer(modifier = Modifier.height(4.dp))
           Text(
             text = address,
@@ -678,8 +678,8 @@ private fun PlaceDetailContent(
 
           Spacer(modifier = Modifier.height(8.dp))
           OutlinedTextField(
-            value = memo,
-            onValueChange = { memo = it },
+            value = note,
+            onValueChange = { note = it },
             label = { Text("メモ") },
             modifier = Modifier.fillMaxWidth(),
           )
@@ -714,7 +714,7 @@ private fun PlaceDetailContent(
         Button(
           onClick = {
             if (nameChanged) onSaveName(name)
-            if (wishlistChanged) onSaveWishlist(priority, memo.ifBlank { null })
+            if (wishlistChanged) onSavePlanning(priority, note.ifBlank { null })
           },
           enabled = hasChanges,
           modifier = Modifier.fillMaxWidth(),

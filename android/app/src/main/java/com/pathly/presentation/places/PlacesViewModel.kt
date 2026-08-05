@@ -69,9 +69,9 @@ class PlacesViewModel @Inject constructor(
   ) {
     viewModelScope.launch {
       try {
-        val placeId = wishlistRepository.registerPlace(latitude, longitude, name)
+        val placeId = wishlistRepository.registerPlace(latitude, longitude, name, memo)
         if (wishlist) {
-          wishlistRepository.addToWishlist(placeId, priority, memo)
+          wishlistRepository.addToWishlist(placeId, priority)
         }
       } catch (e: Exception) {
         _uiState.value = _uiState.value.copy(errorMessage = "登録に失敗しました: ${e.message}")
@@ -87,7 +87,7 @@ class PlacesViewModel @Inject constructor(
         if (wishlistId != null) {
           wishlistRepository.removeFromWishlist(wishlistId)
         } else {
-          wishlistRepository.addToWishlist(item.place.id, Priority.MEDIUM, null)
+          wishlistRepository.addToWishlist(item.place.id, Priority.MEDIUM)
         }
       } catch (e: Exception) {
         _uiState.value = _uiState.value.copy(errorMessage = "更新に失敗しました: ${e.message}")
@@ -106,10 +106,12 @@ class PlacesViewModel @Inject constructor(
     }
   }
 
-  fun updateWishlist(id: Long, priority: Priority, memo: String?) {
+  /** 詳細の保存: 行きたいの優先度（wishlist）と場所のメモ（places.note）をまとめて更新する。 */
+  fun updatePlanning(wishlistId: Long, placeId: Long, priority: Priority, note: String?) {
     viewModelScope.launch {
       try {
-        wishlistRepository.updateWishlist(id, priority, memo)
+        wishlistRepository.updateWishlist(wishlistId, priority)
+        wishlistRepository.updatePlaceNote(placeId, note)
       } catch (e: Exception) {
         _uiState.value = _uiState.value.copy(errorMessage = "更新に失敗しました: ${e.message}")
       }
@@ -170,8 +172,11 @@ class PlacesViewModel @Inject constructor(
     viewModelScope.launch {
       try {
         val placeId = wishlistRepository.registerSearchedPlace(result)
+        if (!memo.isNullOrBlank()) {
+          wishlistRepository.updatePlaceNote(placeId, memo)
+        }
         if (wishlist) {
-          wishlistRepository.addToWishlist(placeId, priority, memo)
+          wishlistRepository.addToWishlist(placeId, priority)
         }
         _uiState.value = _uiState.value.copy(search = SearchState())
       } catch (e: Exception) {

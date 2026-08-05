@@ -1,10 +1,12 @@
 package com.pathly.data.repository
 
+import com.pathly.data.local.dao.GooglePlaceDao
 import com.pathly.data.local.dao.PlaceDao
 import com.pathly.data.local.dao.PlaceResolutionDao
 import com.pathly.data.local.dao.SmoothedPointDao
 import com.pathly.data.local.dao.StopDao
 import com.pathly.data.local.dao.WishlistDao
+import com.pathly.data.local.entity.GooglePlaceEntity
 import com.pathly.data.local.entity.PlaceEntity
 import com.pathly.data.local.entity.PlaceResolutionEntity
 import com.pathly.data.local.entity.SmoothedPointEntity
@@ -41,6 +43,7 @@ class PlaceRepositoryImpl @Inject constructor(
   private val stopDao: StopDao,
   private val smoothedPointDao: SmoothedPointDao,
   private val placeResolutionDao: PlaceResolutionDao,
+  private val googlePlaceDao: GooglePlaceDao,
   private val wishlistDao: WishlistDao,
   private val placesNameResolver: PlacesNameResolver,
 ) : PlaceRepository {
@@ -84,12 +87,14 @@ class PlaceRepositoryImpl @Inject constructor(
    * オンライン時のみ Places で1回引く。オフライン／POI無しは名前 null。永続化はしない。
    */
   private suspend fun resolveCandidate(d: DetectedStop): StopCandidate {
-    val nearbyNamed = placeDao.getAll().firstOrNull {
-      it.name != null && distanceMeters(it.latitude, it.longitude, d.latitude, d.longitude) <= DEDUPE_RADIUS_METERS
-    }
-    if (nearbyNamed != null) {
-      val googleId = placeResolutionDao.getByPlace(nearbyNamed.id)?.googlePlaceId
-      return StopCandidate(d, nearbyNamed.name, nearbyNamed.address, googleId)
+    // 近く（30m）に「名前のある」place（自分の名前 or Google 名）があれば無料で再利用する。
+    for (place in placeDao.getAll()) {
+      if (distanceMeters(place.latitude, place.longitude, d.latitude, d.longitude) > DEDUPE_RADIUS_METERS) continue
+      val google = googlePlaceDao.getByPlace(place.id)
+      val name = place.name ?: google?.name
+      if (name != null) {
+        return StopCandidate(d, name, google?.address, google?.googlePlaceId)
+      }
     }
     return when (val outcome = placesNameResolver.resolve(d.latitude, d.longitude)) {
       is PlacesNameResolver.Outcome.Found -> StopCandidate(d, outcome.name, outcome.address, outcome.googlePlaceId)
@@ -110,13 +115,15 @@ class PlaceRepositoryImpl @Inject constructor(
           departureTime = d.departureTime,
         ),
       )
-      // 検出時に引いた名前を、まだ解決記録の無い place にだけ焼き込む（Places を二度叩かない）。
-      if (placeResolutionDao.getByPlace(placeId) == null && (candidate.name != null || candidate.googlePlaceId != null)) {
-        val place = placeDao.getById(placeId)
-        if (place?.name == null && candidate.name != null) {
-          placeDao.updateNameAndAddress(placeId, candidate.name, candidate.address, Date())
+      // 検出時に引いた Google データを、まだ解決記録の無い place にだけ焼き込む（Places を二度叩かない）。
+      // 名前は Google 由来なので google_places に入れる（places.name はユーザー名専用）。
+      if (placeResolutionDao.getByPlace(placeId) == null && candidate.googlePlaceId != null) {
+        if (googlePlaceDao.getByPlace(placeId) == null) {
+          googlePlaceDao.upsert(
+            GooglePlaceEntity(placeId, candidate.googlePlaceId, candidate.name, candidate.address),
+          )
         }
-        placeResolutionDao.upsert(PlaceResolutionEntity(placeId, Date(), candidate.googlePlaceId))
+        placeResolutionDao.upsert(PlaceResolutionEntity(placeId, Date()))
       }
     }
     // 名前が付かなかった place（オフライン等）はオンライン時にキャッチアップする。
@@ -145,14 +152,16 @@ class PlaceRepositoryImpl @Inject constructor(
         departureTime = departureTime,
       ),
     )
-    // 名前は未命名の place にだけ焼き込む（他の履歴で既に命名済みの共有 place を上書きしない）。
+    // 手入力の名前はユーザー名（places.name）として、未命名の place にだけ焼き込む
+    // （他の履歴で既に命名済みの共有 place を上書きしない）。
     val trimmedName = name?.trim()?.ifBlank { null }
     if (trimmedName != null && placeDao.getById(placeId)?.name == null) {
-      placeDao.updateNameAndAddress(placeId, trimmedName, null, Date())
+      placeDao.updateName(placeId, trimmedName, Date())
     }
-    // POI 由来の googlePlaceId があれば解決記録に控え、あとで Places を叩き直さないようにする。
-    if (googlePlaceId != null && placeResolutionDao.getByPlace(placeId) == null) {
-      placeResolutionDao.upsert(PlaceResolutionEntity(placeId, Date(), googlePlaceId))
+    // POI 由来の googlePlaceId があれば google_places に控え、あとで Places を叩き直さないようにする。
+    if (googlePlaceId != null && googlePlaceDao.getByPlace(placeId) == null) {
+      googlePlaceDao.upsert(GooglePlaceEntity(placeId, googlePlaceId))
+      placeResolutionDao.upsert(PlaceResolutionEntity(placeId, Date()))
     }
     logger.i("Added manual stop $stopId (place $placeId) for track $trackId")
     stopId
@@ -190,6 +199,7 @@ class PlaceRepositoryImpl @Inject constructor(
     stopDao.deleteByIds(stopIds)
     val deletedPlaces = mutableListOf<PlaceEntity>()
     val deletedResolutions = mutableListOf<PlaceResolutionEntity>()
+    val deletedGooglePlaces = mutableListOf<GooglePlaceEntity>()
     var placesDeleted = 0
     var placesKept = 0
     for (placeId in affectedPlaceIds) {
@@ -199,23 +209,25 @@ class PlaceRepositoryImpl @Inject constructor(
       if (stillReferenced) {
         placesKept++
       } else {
-        // 回収する place と解決ログを控えてから消す（place_resolutions は CASCADE で消える）。
+        // 回収する place と Google データ・解決ログを控えてから消す（子は CASCADE で消える）。
         placeDao.getById(placeId)?.let { deletedPlaces.add(it) }
         placeResolutionDao.getByPlace(placeId)?.let { deletedResolutions.add(it) }
+        googlePlaceDao.getByPlace(placeId)?.let { deletedGooglePlaces.add(it) }
         placeDao.deleteById(placeId)
         placesDeleted++
       }
     }
-    lastDeletion = DeletedSnapshot(deletedStops, deletedPlaces, deletedResolutions)
+    lastDeletion = DeletedSnapshot(deletedStops, deletedPlaces, deletedResolutions, deletedGooglePlaces)
     logger.i("Batch-deleted ${stopIds.size} stops (places: -$placesDeleted, kept $placesKept)")
     StopDeletionResult(stopsDeleted = stopIds.size, placesDeleted = placesDeleted, placesKept = placesKept)
   }
 
   override suspend fun undoLastDeletion(): Boolean = mutex.withLock {
     val snap = lastDeletion ?: return@withLock false
-    // FK 順に復元する: 先に place（stops/解決ログが参照）→ 解決ログ → stops。
+    // FK 順に復元する: 先に place（子が参照）→ Google データ・解決ログ → stops。
     // 明示的な id を持つ実体を再挿入するので、元の id のまま戻る。
     for (place in snap.places) placeDao.insert(place)
+    for (google in snap.googlePlaces) googlePlaceDao.upsert(google)
     for (resolution in snap.resolutions) placeResolutionDao.upsert(resolution)
     for (stop in snap.stops) stopDao.insert(stop)
     lastDeletion = null
@@ -273,22 +285,25 @@ class PlaceRepositoryImpl @Inject constructor(
     if (placeResolutionDao.getByPlace(placeId) == null) {
       placeDao.getById(placeId)?.let { resolvePlace(it) }
     }
-    val place = placeDao.getById(placeId)!!.toPlace()
+    val place = placeDao.getById(placeId)!!.toPlace(googlePlaceDao.getByPlace(placeId))
     return Stop(id = 0, place = place, trackId = trackId, arrivalTime = d.arrivalTime, departureTime = d.departureTime)
   }
 
-  /** place を Google で名前解決し、結果を place_resolutions に記録する（手動命名は上書きしない）。 */
+  /**
+   * place を Google で名前解決し、結果を google_places に記録する（place_resolutions は問い合わせlog）。
+   * Google 由来の名前・住所は google_places に入れる。places.name（ユーザー名）は触らない。
+   */
   private suspend fun resolvePlace(place: PlaceEntity) {
     when (val outcome = placesNameResolver.resolve(place.latitude, place.longitude)) {
       is PlacesNameResolver.Outcome.Found -> {
-        if (place.name == null) {
-          placeDao.updateNameAndAddress(place.id, outcome.name, outcome.address, Date())
-        }
-        placeResolutionDao.upsert(PlaceResolutionEntity(place.id, Date(), outcome.googlePlaceId))
+        googlePlaceDao.upsert(
+          GooglePlaceEntity(place.id, outcome.googlePlaceId, outcome.name, outcome.address),
+        )
+        placeResolutionDao.upsert(PlaceResolutionEntity(place.id, Date()))
       }
 
       PlacesNameResolver.Outcome.NoMatch ->
-        placeResolutionDao.upsert(PlaceResolutionEntity(place.id, Date(), null))
+        placeResolutionDao.upsert(PlaceResolutionEntity(place.id, Date()))
 
       PlacesNameResolver.Outcome.NotAttempted -> Unit // 行を作らず後でキャッチアップ
     }
@@ -305,19 +320,22 @@ class PlaceRepositoryImpl @Inject constructor(
 
   private fun StopWithPlace.toStop(): Stop = Stop(
     id = stop.id,
-    place = place.toPlace(),
+    place = place.toPlace(google),
     trackId = stop.trackId,
     arrivalTime = stop.arrivalTime,
     departureTime = stop.departureTime,
     note = stop.note,
   )
 
-  private fun PlaceEntity.toPlace(): Place = Place(
+  private fun PlaceEntity.toPlace(google: GooglePlaceEntity?): Place = Place(
     id = id,
     name = name,
     latitude = latitude,
     longitude = longitude,
-    address = address,
+    note = note,
+    googleName = google?.name,
+    googleAddress = google?.address,
+    category = google?.category,
     createdAt = createdAt,
     updatedAt = updatedAt,
   )
@@ -340,6 +358,7 @@ class PlaceRepositoryImpl @Inject constructor(
     val stops: List<StopEntity>,
     val places: List<PlaceEntity>,
     val resolutions: List<PlaceResolutionEntity>,
+    val googlePlaces: List<GooglePlaceEntity>,
   )
 
   /** 検出候補と既存の立ち寄りの滞在時間帯が重なるか（重なれば同じ訪問とみなす）。 */

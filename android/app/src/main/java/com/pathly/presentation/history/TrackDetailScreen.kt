@@ -631,7 +631,7 @@ private fun StopNoteDialog(
     text = {
       Column {
         Text(
-          text = stop.place.name ?: "%.5f, %.5f".format(stop.place.latitude, stop.place.longitude),
+          text = stop.place.displayName,
           style = MaterialTheme.typography.bodyMedium,
           color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
@@ -1144,8 +1144,7 @@ private fun StopRow(
   onToggleSelect: () -> Unit,
   onEnterSelection: () -> Unit,
 ) {
-  val title = stop.place.name
-    ?: "%.5f, %.5f".format(stop.place.latitude, stop.place.longitude)
+  val title = stop.place.displayName
   val note = stop.note?.takeIf { it.isNotBlank() }
   Row(
     // 通常はタップでフォーカス、長押しで選択モード。選択モード中はタップで選択トグル。
@@ -1453,7 +1452,7 @@ private fun TrackMapView(
       }
       Marker(
         state = stopMarkerState,
-        title = stop.place.name ?: "立ち寄り",
+        title = stop.place.name ?: stop.place.googleName ?: "立ち寄り",
         snippet = "${DateFormatters.SHORT_TIME_FORMAT.format(stop.arrivalTime)} ・ 滞在${stop.durationMinutes}分",
         icon = BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_VIOLET),
       )

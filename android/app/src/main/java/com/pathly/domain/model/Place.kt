@@ -1,19 +1,36 @@
 package com.pathly.domain.model
 
 import java.util.Date
+import java.util.Locale
 
 /**
- * 場所そのもの（経路とは独立）。立ち寄りで検出した場所・手動追加・将来の行きたい場所、
- * すべてここで管理する。詳細は docs/designs/places-and-stops.md を参照。
+ * 場所そのもの（経路とは独立）。立ち寄りで検出した場所・手動追加・行きたい場所、
+ * すべてここで管理する。詳細は docs/designs/place-info-enrichment.md を参照。
  *
- * @property name 表示名。null は未命名（Places 未解決 or 手動未入力）。
+ * 名前は「ユーザーが付けた名前（[name]）」と「Google 由来（[googleName]）」を分けて持ち、
+ * 表示は [displayName] のフォールバックで解決する（基本は Google 名、上書きがあれば自分の名前）。
+ *
+ * @property name 自分で付けた名前。null は未命名。
+ * @property googleName Google の施設名（未解決・POIに名前無しは null）。
+ * @property googleAddress Google の住所。
+ * @property category Google のカテゴリ（業種）。
  */
 data class Place(
   val id: Long,
   val name: String?,
   val latitude: Double,
   val longitude: Double,
-  val address: String?,
+  val note: String?,
+  val googleName: String?,
+  val googleAddress: String?,
+  val category: String?,
   val createdAt: Date,
   val updatedAt: Date,
-)
+) {
+  /** 表示名。自分の名前 → Google 名 → 住所 → 座標 の順にフォールバックする。 */
+  val displayName: String
+    get() = name
+      ?: googleName
+      ?: googleAddress
+      ?: String.format(Locale.US, "%.5f, %.5f", latitude, longitude)
+}

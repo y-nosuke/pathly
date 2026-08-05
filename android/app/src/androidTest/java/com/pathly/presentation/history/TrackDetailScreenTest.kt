@@ -403,7 +403,10 @@ class TrackDetailScreenTest {
       name = name,
       latitude = 35.0,
       longitude = 139.0,
-      address = null,
+      note = null,
+      googleName = null,
+      googleAddress = null,
+      category = null,
       createdAt = Date(0L),
       updatedAt = Date(0L),
     )

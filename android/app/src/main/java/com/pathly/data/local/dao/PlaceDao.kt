@@ -18,15 +18,18 @@ interface PlaceDao {
   suspend fun getAll(): List<PlaceEntity>
 
   /**
-   * 「場所」タブ用: 全ての場所を、行きたい登録（あれば）と立ち寄り件数付きで取得する。
-   * places / wishlist / stops を明示的に参照するので、いずれの変更にもリアクティブに追従する。
+   * 「場所」タブ用: 全ての場所を、Google 由来データ・行きたい登録（あれば）と立ち寄り件数付きで取得する。
+   * places / google_places / wishlist / stops を明示的に参照するので、いずれの変更にもリアクティブに追従する。
    */
   @Query(
     "SELECT p.id AS id, p.name AS name, p.latitude AS latitude, p.longitude AS longitude, " +
-      "p.address AS address, p.createdAt AS createdAt, p.updatedAt AS updatedAt, " +
-      "w.id AS wishlistId, w.priority AS priority, w.memo AS memo, w.visitedAt AS visitedAt, " +
+      "p.note AS note, p.createdAt AS createdAt, p.updatedAt AS updatedAt, " +
+      "g.name AS googleName, g.address AS googleAddress, g.category AS category, " +
+      "w.id AS wishlistId, w.priority AS priority, w.visitedAt AS visitedAt, " +
       "(SELECT COUNT(*) FROM stops s WHERE s.placeId = p.id) AS visitCount " +
-      "FROM places p LEFT JOIN wishlist w ON w.placeId = p.id " +
+      "FROM places p " +
+      "LEFT JOIN google_places g ON g.placeId = p.id " +
+      "LEFT JOIN wishlist w ON w.placeId = p.id " +
       "ORDER BY p.createdAt DESC",
   )
   fun getPlacesWithWishlist(): Flow<List<PlaceWithWishlist>>
@@ -47,12 +50,13 @@ interface PlaceDao {
 
   /**
    * ある経路の場所のうち、Google の place ID が付いていないもの（手動「場所を取得」の対象）。
-   * POI 無し（null 行）・過去失敗・未実施を、ユーザー操作で取り直すため。
+   * POI 無し・過去失敗・未実施を、ユーザー操作で取り直すため。
+   * 「取得済み」は google_places の行の有無で判定する（行がある＝googlePlaceId あり）。
    */
   @Query(
     "SELECT DISTINCT p.* FROM places p INNER JOIN stops s ON s.placeId = p.id " +
       "WHERE s.trackId = :trackId " +
-      "AND NOT EXISTS (SELECT 1 FROM place_resolutions r WHERE r.placeId = p.id AND r.googlePlaceId IS NOT NULL)",
+      "AND NOT EXISTS (SELECT 1 FROM google_places g WHERE g.placeId = p.id)",
   )
   suspend fun getPlacesWithoutGoogleIdForTrack(trackId: Long): List<PlaceEntity>
 
@@ -60,15 +64,15 @@ interface PlaceDao {
   @Query(
     "SELECT COUNT(DISTINCT p.id) FROM places p INNER JOIN stops s ON s.placeId = p.id " +
       "WHERE s.trackId = :trackId " +
-      "AND NOT EXISTS (SELECT 1 FROM place_resolutions r WHERE r.placeId = p.id AND r.googlePlaceId IS NOT NULL)",
+      "AND NOT EXISTS (SELECT 1 FROM google_places g WHERE g.placeId = p.id)",
   )
   fun countPlacesWithoutGoogleIdForTrack(trackId: Long): Flow<Int>
 
   @Query("UPDATE places SET name = :name, updatedAt = :updatedAt WHERE id = :id")
   suspend fun updateName(id: Long, name: String?, updatedAt: Date)
 
-  @Query("UPDATE places SET name = :name, address = :address, updatedAt = :updatedAt WHERE id = :id")
-  suspend fun updateNameAndAddress(id: Long, name: String?, address: String?, updatedAt: Date)
+  @Query("UPDATE places SET note = :note, updatedAt = :updatedAt WHERE id = :id")
+  suspend fun updateNote(id: Long, note: String?, updatedAt: Date)
 
   @Query("DELETE FROM places WHERE id = :id")
   suspend fun deleteById(id: Long)

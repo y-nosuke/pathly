@@ -20,25 +20,29 @@ interface WishlistRepository {
 
   /**
    * 座標から場所を登録する（地図タップ）。find-or-create（30m）で場所を同定し、
-   * [name] が非空で場所が未命名なら名前も設定する。行きたい登録はしない。返り値は place の id。
+   * [name] が非空で場所が未命名なら名前（ユーザー名）を設定し、[note] があればメモも設定する。
+   * 行きたい登録はしない。返り値は place の id。
    */
-  suspend fun registerPlace(latitude: Double, longitude: Double, name: String?): Long
+  suspend fun registerPlace(latitude: Double, longitude: Double, name: String?, note: String? = null): Long
 
   /**
    * キーワード検索の結果から場所を登録する。find-or-create（30m）で場所を同定し、
-   * 未命名なら名前・住所を設定、`place_resolutions` に googlePlaceId を記録する（以後 Nearby を叩かない）。
+   * Google 由来の名前・住所・place ID を google_places に記録する（以後 Nearby を叩かない）。
    * 返り値は place の id。行きたい登録はしない（呼び出し側で任意に [addToWishlist]）。
    */
   suspend fun registerSearchedPlace(result: PlaceSearchResult): Long
 
-  /** 場所の名前を手動で設定・変更する（空文字なら未命名に戻す）。 */
+  /** 場所の名前（ユーザー名）を手動で設定・変更する（空文字なら未命名に戻す）。 */
   suspend fun renamePlace(placeId: Long, name: String)
 
-  /** その場所を「行きたい」に登録する。既に登録済みなら既存の wishlist id を返す。 */
-  suspend fun addToWishlist(placeId: Long, priority: Priority, memo: String?): Long
+  /** 場所のメモ（places.note）を更新する（空文字なら null に戻す）。 */
+  suspend fun updatePlaceNote(placeId: Long, note: String?)
 
-  /** 行きたいの優先度・メモを更新する。 */
-  suspend fun updateWishlist(id: Long, priority: Priority, memo: String?)
+  /** その場所を「行きたい」に登録する。既に登録済みなら既存の wishlist id を返す。 */
+  suspend fun addToWishlist(placeId: Long, priority: Priority): Long
+
+  /** 行きたいの優先度を更新する。 */
+  suspend fun updateWishlist(id: Long, priority: Priority)
 
   /** 訪問済み/未訪問を切り替える。 */
   suspend fun setVisited(id: Long, visited: Boolean)

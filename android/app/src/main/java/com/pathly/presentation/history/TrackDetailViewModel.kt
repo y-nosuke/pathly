@@ -108,7 +108,7 @@ class TrackDetailViewModel @Inject constructor(
       try {
         val placeId = wishlistRepository.registerPlace(latitude, longitude, name)
         if (wishlist) {
-          wishlistRepository.addToWishlist(placeId, Priority.MEDIUM, null)
+          wishlistRepository.addToWishlist(placeId, Priority.MEDIUM)
         }
         _message.value = "「${name?.ifBlank { null } ?: "場所"}」を登録しました"
       } catch (e: Exception) {

@@ -94,6 +94,53 @@ class MigrationTest {
     db.close()
   }
 
+  @Test
+  fun migrate6To7_separatesGoogleData_andMigratesMemoToNote() {
+    // v6 のスキーマで DB を作成し、住所つき place・解決済み（googlePlaceId 有）・memo つき wishlist を入れる。
+    helper.createDatabase(TEST_DB, 6).apply {
+      execSQL(
+        "INSERT INTO places (id, name, latitude, longitude, address, createdAt, updatedAt) " +
+          "VALUES (1, NULL, 35.0, 139.0, '東京都千代田区', 0, 0)",
+      )
+      execSQL(
+        "INSERT INTO place_resolutions (placeId, resolvedAt, googlePlaceId) VALUES (1, 100, 'gp-1')",
+      )
+      execSQL(
+        "INSERT INTO wishlist (id, placeId, priority, memo, visitedAt, createdAt, updatedAt) " +
+          "VALUES (1, 1, 2, 'また行きたい', NULL, 0, 0)",
+      )
+      close()
+    }
+
+    // 6→7 を適用。生成スキーマが 7.json と一致しなければここで失敗する。
+    val db = helper.runMigrationsAndValidate(
+      TEST_DB,
+      7,
+      true,
+      DatabaseMigrations.MIGRATION_6_7,
+    )
+
+    // wishlist.memo が places.note に移送されている。
+    db.query("SELECT note FROM places WHERE id = 1").use { cursor ->
+      assertTrue(cursor.moveToFirst())
+      assertEquals("また行きたい", cursor.getString(0))
+    }
+
+    // 解決済みの googlePlaceId と places.address が google_places に移送されている。
+    db.query("SELECT googlePlaceId, address FROM google_places WHERE placeId = 1").use { cursor ->
+      assertTrue(cursor.moveToFirst())
+      assertEquals("gp-1", cursor.getString(0))
+      assertEquals("東京都千代田区", cursor.getString(1))
+    }
+
+    // wishlist は priority を保持したまま（memo 列は削除済み）。
+    db.query("SELECT priority FROM wishlist WHERE id = 1").use { cursor ->
+      assertTrue(cursor.moveToFirst())
+      assertEquals(2, cursor.getInt(0))
+    }
+    db.close()
+  }
+
   companion object {
     private const val TEST_DB = "migration-test"
   }

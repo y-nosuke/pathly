@@ -2,6 +2,7 @@ package com.pathly.di
 
 import android.content.Context
 import com.pathly.data.local.PathlyDatabase
+import com.pathly.data.local.dao.GooglePlaceDao
 import com.pathly.data.local.dao.GpsPointDao
 import com.pathly.data.local.dao.GpsTrackDao
 import com.pathly.data.local.dao.PlaceDao
@@ -46,6 +47,9 @@ object DatabaseModule {
 
   @Provides
   fun providePlaceResolutionDao(database: PathlyDatabase): PlaceResolutionDao = database.placeResolutionDao()
+
+  @Provides
+  fun provideGooglePlaceDao(database: PathlyDatabase): GooglePlaceDao = database.googlePlaceDao()
 
   @Provides
   fun provideWishlistDao(database: PathlyDatabase): WishlistDao = database.wishlistDao()
