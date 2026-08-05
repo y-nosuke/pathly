@@ -17,10 +17,12 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
@@ -54,6 +56,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
@@ -1077,44 +1080,35 @@ private fun VisitRow(
 // 共通
 // ---------------------------------------------------------------------------
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun PrioritySelector(
   selected: Priority,
   onSelect: (Priority) -> Unit,
   modifier: Modifier = Modifier,
 ) {
-  // 3チップを等幅で分ける（狭いダイアログでも折り返さないよう weight＋1行固定）。
-  Row(
-    modifier = modifier.fillMaxWidth(),
-    horizontalArrangement = Arrangement.spacedBy(8.dp),
-  ) {
-    priorityOptions.forEach { (priority, label) ->
-      FilterChip(
-        selected = selected == priority,
-        onClick = { onSelect(priority) },
-        label = {
-          Text(
-            text = label,
-            maxLines = 1,
-            softWrap = false,
-            textAlign = TextAlign.Center,
-            modifier = Modifier.fillMaxWidth(),
-          )
-        },
-        modifier = Modifier.weight(1f),
+  // 星レーティング: タップした位置がそのままレベル（低=★☆☆ / 中=★★☆ / 高=★★★）。
+  // 1タップで任意のレベルにでき、上げる/下げるも一発。狭いダイアログでも星1列で収まる。
+  val level = selected.value + 1 // 1..3
+  Row(modifier = modifier, verticalAlignment = Alignment.CenterVertically) {
+    Text(
+      text = "優先度",
+      style = MaterialTheme.typography.bodyMedium,
+      color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
+    Spacer(modifier = Modifier.width(8.dp))
+    (1..3).forEach { i ->
+      Text(
+        text = if (i <= level) "★" else "☆",
+        style = MaterialTheme.typography.headlineSmall,
+        color = MaterialTheme.colorScheme.primary,
+        modifier = Modifier
+          .clip(CircleShape)
+          .clickable { onSelect(Priority.fromValue(i - 1)) }
+          .padding(6.dp),
       )
     }
   }
 }
-
-// 狭いダイアログでも 3 チップが 1 行に収まるよう、星だけにする（レベルは塗りつぶし数で分かる。
-// 一覧カードの「行きたい ★★★」表記とも揃う）。
-private val priorityOptions = listOf(
-  Priority.HIGH to "★★★",
-  Priority.MEDIUM to "★★☆",
-  Priority.LOW to "★☆☆",
-)
 
 private fun priorityStars(priority: Priority): String = when (priority) {
   Priority.HIGH -> "★★★"
