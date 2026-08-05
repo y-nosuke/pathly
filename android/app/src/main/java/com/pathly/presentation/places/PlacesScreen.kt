@@ -1108,10 +1108,12 @@ internal fun PrioritySelector(
   }
 }
 
+// 狭いダイアログでも 3 チップが 1 行に収まるよう、星だけにする（レベルは塗りつぶし数で分かる。
+// 一覧カードの「行きたい ★★★」表記とも揃う）。
 private val priorityOptions = listOf(
-  Priority.HIGH to "高 ★★★",
-  Priority.MEDIUM to "中 ★★☆",
-  Priority.LOW to "低 ★☆☆",
+  Priority.HIGH to "★★★",
+  Priority.MEDIUM to "★★☆",
+  Priority.LOW to "★☆☆",
 )
 
 private fun priorityStars(priority: Priority): String = when (priority) {
