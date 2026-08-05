@@ -10,6 +10,7 @@ import com.pathly.data.local.entity.PlaceEntity
 import com.pathly.data.local.entity.PlaceResolutionEntity
 import com.pathly.data.local.entity.PlaceWithWishlist
 import com.pathly.data.local.entity.WishlistEntity
+import com.pathly.data.places.PlacesTextSearcher
 import com.pathly.domain.model.Place
 import com.pathly.domain.model.PlaceListItem
 import com.pathly.domain.model.PlaceSearchResult
@@ -32,6 +33,7 @@ class WishlistRepositoryImpl @Inject constructor(
   private val googlePlaceDao: GooglePlaceDao,
   private val stopDao: StopDao,
   private val placeRepository: PlaceRepository,
+  private val placesTextSearcher: PlacesTextSearcher,
 ) : WishlistRepository {
 
   private val logger = Logger("WishlistRepositoryImpl")
@@ -50,7 +52,13 @@ class WishlistRepositoryImpl @Inject constructor(
     }
   }
 
-  override suspend fun registerPlace(latitude: Double, longitude: Double, name: String?, note: String?): Long {
+  override suspend fun registerPlace(
+    latitude: Double,
+    longitude: Double,
+    name: String?,
+    note: String?,
+    googlePlaceId: String?,
+  ): Long {
     val placeId = placeRepository.findOrCreatePlace(latitude, longitude)
     // 名前が指定され、かつ場所が未命名のときだけ命名する（既存の命名は上書きしない）。
     val trimmedName = name?.trim()?.ifBlank { null }
@@ -60,6 +68,20 @@ class WishlistRepositoryImpl @Inject constructor(
     val trimmedNote = note?.trim()?.ifBlank { null }
     if (trimmedNote != null) {
       placeDao.updateNote(placeId, trimmedNote, Date())
+    }
+    // POI 由来なら Google データ（カテゴリ・住所）を取得して保存する（未取得の place にだけ）。
+    // これで詳細にカテゴリが出て、Google マップで施設ページを開ける。
+    if (googlePlaceId != null && googlePlaceDao.getByPlace(placeId) == null) {
+      val result = placesTextSearcher.fetch(googlePlaceId)
+      googlePlaceDao.upsert(
+        if (result != null) {
+          GooglePlaceEntity(placeId, result.googlePlaceId, result.name, result.address, result.category)
+        } else {
+          // オフライン等で取れなくても id だけ控える（Google マップは施設ページで開ける）。
+          GooglePlaceEntity(placeId, googlePlaceId)
+        },
+      )
+      placeResolutionDao.upsert(PlaceResolutionEntity(placeId, Date()))
     }
     return placeId
   }

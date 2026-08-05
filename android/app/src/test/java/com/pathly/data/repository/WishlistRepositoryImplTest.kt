@@ -9,6 +9,7 @@ import com.pathly.data.local.entity.GooglePlaceEntity
 import com.pathly.data.local.entity.PlaceEntity
 import com.pathly.data.local.entity.PlaceResolutionEntity
 import com.pathly.data.local.entity.WishlistEntity
+import com.pathly.data.places.PlacesTextSearcher
 import com.pathly.domain.repository.PlaceRepository
 import io.mockk.coEvery
 import io.mockk.coVerify
@@ -27,6 +28,7 @@ class WishlistRepositoryImplTest {
   private val googlePlaceDao = mockk<GooglePlaceDao>(relaxed = true)
   private val stopDao = mockk<StopDao>(relaxed = true)
   private val placeRepository = mockk<PlaceRepository>(relaxed = true)
+  private val placesTextSearcher = mockk<PlacesTextSearcher>(relaxed = true)
   private val repository = WishlistRepositoryImpl(
     wishlistDao,
     placeDao,
@@ -34,6 +36,7 @@ class WishlistRepositoryImplTest {
     googlePlaceDao,
     stopDao,
     placeRepository,
+    placesTextSearcher,
   )
 
   @Test

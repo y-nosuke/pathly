@@ -66,10 +66,11 @@ class PlacesViewModel @Inject constructor(
     wishlist: Boolean,
     priority: Priority,
     memo: String?,
+    googlePlaceId: String? = null,
   ) {
     viewModelScope.launch {
       try {
-        val placeId = wishlistRepository.registerPlace(latitude, longitude, name, memo)
+        val placeId = wishlistRepository.registerPlace(latitude, longitude, name, memo, googlePlaceId)
         if (wishlist) {
           wishlistRepository.addToWishlist(placeId, priority)
         }

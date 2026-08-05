@@ -21,9 +21,17 @@ interface WishlistRepository {
   /**
    * 座標から場所を登録する（地図タップ）。find-or-create（30m）で場所を同定し、
    * [name] が非空で場所が未命名なら名前（ユーザー名）を設定し、[note] があればメモも設定する。
+   * [googlePlaceId]（POI タップ由来）があれば Google データ（カテゴリ・住所）を取得して
+   * `google_places` に保存する（詳細でカテゴリ表示・Google マップで施設ページを開けるようにする）。
    * 行きたい登録はしない。返り値は place の id。
    */
-  suspend fun registerPlace(latitude: Double, longitude: Double, name: String?, note: String? = null): Long
+  suspend fun registerPlace(
+    latitude: Double,
+    longitude: Double,
+    name: String?,
+    note: String? = null,
+    googlePlaceId: String? = null,
+  ): Long
 
   /**
    * キーワード検索の結果から場所を登録する。find-or-create（30m）で場所を同定し、

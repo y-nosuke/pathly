@@ -160,8 +160,8 @@ fun TrackDetailScreen(
   onAddManualStop: (lat: Double, lng: Double, arrival: Date, departure: Date, name: String?, googlePlaceId: String?) -> Unit =
     { _, _, _, _, _, _ -> },
   onMessageShown: () -> Unit = {},
-  onRegisterPlace: (lat: Double, lng: Double, name: String, wishlist: Boolean, priority: Priority, memo: String?) -> Unit =
-    { _, _, _, _, _, _ -> },
+  onRegisterPlace: (lat: Double, lng: Double, name: String, wishlist: Boolean, priority: Priority, memo: String?, googlePlaceId: String?) -> Unit =
+    { _, _, _, _, _, _, _ -> },
   // 地図スロット。null（既定）は実マップ（GoogleMap）を描画する。
   // テストは空スロット（{}）を渡し、GMS 依存の地図描画を避けてシート・オーバーレイだけを検証する。
   mapContent: (@Composable () -> Unit)? = null,
@@ -582,7 +582,7 @@ fun TrackDetailScreen(
       poi = poi,
       onDismiss = { poiTarget = null },
       onRegister = { name, wishlist, priority, memo ->
-        onRegisterPlace(poi.latLng.latitude, poi.latLng.longitude, name, wishlist, priority, memo)
+        onRegisterPlace(poi.latLng.latitude, poi.latLng.longitude, name, wishlist, priority, memo, poi.placeId)
         poiTarget = null
       },
     )

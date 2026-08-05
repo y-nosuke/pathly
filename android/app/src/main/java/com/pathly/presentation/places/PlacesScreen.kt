@@ -135,8 +135,8 @@ fun AddPlaceRoute(
   AddPlaceContent(
     modifier = modifier,
     onCancel = onDone,
-    onSave = { lat, lng, name, wishlist, priority, memo ->
-      viewModel.registerPlace(lat, lng, name, wishlist, priority, memo)
+    onSave = { lat, lng, name, wishlist, priority, memo, googlePlaceId ->
+      viewModel.registerPlace(lat, lng, name, wishlist, priority, memo, googlePlaceId)
       onDone()
     },
   )
@@ -206,8 +206,8 @@ fun PlaceDetailRoute(
     onToggleVisited = { visited ->
       item.wishlistId?.let { viewModel.setVisited(it, visited) }
     },
-    onRegisterPoi = { lat, lng, name, wishlist, priority, memo ->
-      viewModel.registerPlace(lat, lng, name, wishlist, priority, memo)
+    onRegisterPoi = { lat, lng, name, wishlist, priority, memo, googlePlaceId ->
+      viewModel.registerPlace(lat, lng, name, wishlist, priority, memo, googlePlaceId)
     },
     // 確認ダイアログは出さず即時削除。items から消えると item == null になり一覧へ戻り、
     // 取り消しスナックバーは一覧側で出る。
@@ -451,10 +451,11 @@ private fun WishlistFlagButton(
 @Composable
 private fun AddPlaceContent(
   onCancel: () -> Unit,
-  onSave: (lat: Double, lng: Double, name: String?, wishlist: Boolean, priority: Priority, memo: String?) -> Unit,
+  onSave: (lat: Double, lng: Double, name: String?, wishlist: Boolean, priority: Priority, memo: String?, googlePlaceId: String?) -> Unit,
   modifier: Modifier = Modifier,
 ) {
   var picked by remember { mutableStateOf<LatLng?>(null) }
+  var pickedPlaceId by remember { mutableStateOf<String?>(null) }
   var name by remember { mutableStateOf("") }
   var memo by remember { mutableStateOf("") }
   var priority by remember { mutableStateOf(Priority.MEDIUM) }
@@ -473,14 +474,16 @@ private fun AddPlaceContent(
         mapToolbarEnabled = false,
         myLocationButtonEnabled = false,
       ),
-      // アイコン（POI）をタップしたら名前を自動で入れる。
+      // アイコン（POI）をタップしたら名前を自動で入れ、Google の placeId も控える（カテゴリ取得用）。
       onPOIClick = { poi ->
         picked = poi.latLng
+        pickedPlaceId = poi.placeId
         name = poi.name.orEmpty()
       },
-      // 何もない場所をタップしたら空欄で。
+      // 何もない場所をタップしたら空欄で（POI ではないので placeId 無し）。
       onMapClick = { latLng ->
         picked = latLng
+        pickedPlaceId = null
         name = ""
       },
     ) {
@@ -565,7 +568,13 @@ private fun AddPlaceContent(
           Spacer(modifier = Modifier.height(12.dp))
 
           Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            OutlinedButton(onClick = { picked = null }, modifier = Modifier.weight(1f)) {
+            OutlinedButton(
+              onClick = {
+                picked = null
+                pickedPlaceId = null
+              },
+              modifier = Modifier.weight(1f),
+            ) {
               Text("選び直す")
             }
             Button(
@@ -578,6 +587,7 @@ private fun AddPlaceContent(
                     wishlist,
                     priority,
                     memo.ifBlank { null },
+                    pickedPlaceId,
                   )
                 }
               },
@@ -606,7 +616,7 @@ private fun PlaceDetailContent(
   onSaveNote: (note: String?) -> Unit,
   onSavePriority: (priority: Priority) -> Unit,
   onToggleVisited: (Boolean) -> Unit,
-  onRegisterPoi: (lat: Double, lng: Double, name: String, wishlist: Boolean, priority: Priority, memo: String?) -> Unit,
+  onRegisterPoi: (lat: Double, lng: Double, name: String, wishlist: Boolean, priority: Priority, memo: String?, googlePlaceId: String?) -> Unit,
   onOpenTrack: (trackId: Long) -> Unit,
   onDeleteRequest: () -> Unit,
   modifier: Modifier = Modifier,
@@ -816,7 +826,7 @@ private fun PlaceDetailContent(
       poi = poi,
       onDismiss = { poiTarget = null },
       onRegister = { name, wishlist, priority, memo ->
-        onRegisterPoi(poi.latLng.latitude, poi.latLng.longitude, name, wishlist, priority, memo)
+        onRegisterPoi(poi.latLng.latitude, poi.latLng.longitude, name, wishlist, priority, memo, poi.placeId)
         poiTarget = null
       },
     )
@@ -1071,12 +1081,25 @@ internal fun PrioritySelector(
   onSelect: (Priority) -> Unit,
   modifier: Modifier = Modifier,
 ) {
-  Row(modifier = modifier, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+  // 3チップを等幅で分ける（狭いダイアログでも折り返さないよう weight＋1行固定）。
+  Row(
+    modifier = modifier.fillMaxWidth(),
+    horizontalArrangement = Arrangement.spacedBy(8.dp),
+  ) {
     priorityOptions.forEach { (priority, label) ->
       FilterChip(
         selected = selected == priority,
         onClick = { onSelect(priority) },
-        label = { Text(label) },
+        label = {
+          Text(
+            text = label,
+            maxLines = 1,
+            softWrap = false,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.fillMaxWidth(),
+          )
+        },
+        modifier = Modifier.weight(1f),
       )
     }
   }
