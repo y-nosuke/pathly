@@ -3,6 +3,7 @@ package com.pathly.presentation.history
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.pathly.domain.model.GpsTrack
+import com.pathly.domain.model.PlaceSearchResult
 import com.pathly.domain.model.Priority
 import com.pathly.domain.model.Stop
 import com.pathly.domain.model.StopCandidate
@@ -127,6 +128,9 @@ class TrackDetailViewModel @Inject constructor(
       }
     }
   }
+
+  /** POI 登録ダイアログのプレビュー用: placeId から施設情報（カテゴリ等）を取得する。 */
+  suspend fun fetchPoiDetails(googlePlaceId: String): PlaceSearchResult? = wishlistRepository.fetchPlaceDetails(googlePlaceId)
 
   fun clearMessage() {
     _message.value = null

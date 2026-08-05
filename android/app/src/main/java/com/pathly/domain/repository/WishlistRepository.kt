@@ -19,6 +19,13 @@ interface WishlistRepository {
   fun getVisits(placeId: Long): Flow<List<PlaceVisit>>
 
   /**
+   * Google の place ID から施設情報（名前・住所・カテゴリ）を取得する（POI 登録ダイアログの
+   * プレビュー用）。結果は直近1件がキャッシュされ、続く登録時の取得で使い回される（二度叩かない）。
+   * オフライン・失敗時は null。
+   */
+  suspend fun fetchPlaceDetails(googlePlaceId: String): PlaceSearchResult?
+
+  /**
    * 座標から場所を登録する（地図タップ）。find-or-create（30m）で場所を同定し、
    * [name] が非空で場所が未命名なら名前（ユーザー名）を設定し、[note] があればメモも設定する。
    * [googlePlaceId]（POI タップ由来）があれば Google データ（カテゴリ・住所）を取得して

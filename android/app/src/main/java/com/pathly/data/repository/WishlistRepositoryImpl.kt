@@ -52,6 +52,8 @@ class WishlistRepositoryImpl @Inject constructor(
     }
   }
 
+  override suspend fun fetchPlaceDetails(googlePlaceId: String): PlaceSearchResult? = placesTextSearcher.fetch(googlePlaceId)
+
   override suspend fun registerPlace(
     latitude: Double,
     longitude: Double,

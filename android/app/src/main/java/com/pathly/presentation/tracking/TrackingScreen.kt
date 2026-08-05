@@ -217,6 +217,7 @@ fun TrackingScreen(
     RegisterPlaceFromPoiDialog(
       poi = poi,
       onDismiss = { poiTarget = null },
+      onFetchDetails = viewModel::fetchPoiDetails,
       onRegister = { name, wishlist, priority, memo ->
         viewModel.registerPlace(
           poi.latLng.latitude,

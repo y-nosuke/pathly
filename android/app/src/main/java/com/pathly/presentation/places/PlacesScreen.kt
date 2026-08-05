@@ -209,6 +209,7 @@ fun PlaceDetailRoute(
     onRegisterPoi = { lat, lng, name, wishlist, priority, memo, googlePlaceId ->
       viewModel.registerPlace(lat, lng, name, wishlist, priority, memo, googlePlaceId)
     },
+    onFetchPoiDetails = viewModel::fetchPoiDetails,
     // 確認ダイアログは出さず即時削除。items から消えると item == null になり一覧へ戻り、
     // 取り消しスナックバーは一覧側で出る。
     onDeleteRequest = { viewModel.deletePlace(item.place.id) },
@@ -617,6 +618,7 @@ private fun PlaceDetailContent(
   onSavePriority: (priority: Priority) -> Unit,
   onToggleVisited: (Boolean) -> Unit,
   onRegisterPoi: (lat: Double, lng: Double, name: String, wishlist: Boolean, priority: Priority, memo: String?, googlePlaceId: String?) -> Unit,
+  onFetchPoiDetails: suspend (googlePlaceId: String) -> PlaceSearchResult?,
   onOpenTrack: (trackId: Long) -> Unit,
   onDeleteRequest: () -> Unit,
   modifier: Modifier = Modifier,
@@ -825,6 +827,7 @@ private fun PlaceDetailContent(
     RegisterPlaceFromPoiDialog(
       poi = poi,
       onDismiss = { poiTarget = null },
+      onFetchDetails = onFetchPoiDetails,
       onRegister = { name, wishlist, priority, memo ->
         onRegisterPoi(poi.latLng.latitude, poi.latLng.longitude, name, wishlist, priority, memo, poi.placeId)
         poiTarget = null

@@ -82,6 +82,7 @@ import com.pathly.BuildConfig
 import com.pathly.R
 import com.pathly.domain.model.GpsPoint
 import com.pathly.domain.model.GpsTrack
+import com.pathly.domain.model.PlaceSearchResult
 import com.pathly.domain.model.Priority
 import com.pathly.domain.model.SmoothingParams
 import com.pathly.domain.model.Stop
@@ -162,6 +163,7 @@ fun TrackDetailScreen(
   onMessageShown: () -> Unit = {},
   onRegisterPlace: (lat: Double, lng: Double, name: String, wishlist: Boolean, priority: Priority, memo: String?, googlePlaceId: String?) -> Unit =
     { _, _, _, _, _, _, _ -> },
+  onFetchPoiDetails: suspend (googlePlaceId: String) -> PlaceSearchResult? = { null },
   // 地図スロット。null（既定）は実マップ（GoogleMap）を描画する。
   // テストは空スロット（{}）を渡し、GMS 依存の地図描画を避けてシート・オーバーレイだけを検証する。
   mapContent: (@Composable () -> Unit)? = null,
@@ -581,6 +583,7 @@ fun TrackDetailScreen(
     RegisterPlaceFromPoiDialog(
       poi = poi,
       onDismiss = { poiTarget = null },
+      onFetchDetails = onFetchPoiDetails,
       onRegister = { name, wishlist, priority, memo ->
         onRegisterPlace(poi.latLng.latitude, poi.latLng.longitude, name, wishlist, priority, memo, poi.placeId)
         poiTarget = null

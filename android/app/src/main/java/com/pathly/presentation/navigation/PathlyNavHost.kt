@@ -247,5 +247,6 @@ private fun TrackDetailRoute(
     onRegisterPlace = { lat, lng, name, wishlist, priority, memo, googlePlaceId ->
       viewModel.registerPlace(lat, lng, name, wishlist, priority, memo, googlePlaceId)
     },
+    onFetchPoiDetails = viewModel::fetchPoiDetails,
   )
 }

@@ -58,6 +58,9 @@ class PlacesViewModel @Inject constructor(
   /** その場所を含むお出掛け（経路）の一覧。詳細画面で購読する。 */
   fun visitsFor(placeId: Long): Flow<List<PlaceVisit>> = wishlistRepository.getVisits(placeId)
 
+  /** POI 登録ダイアログのプレビュー用: placeId から施設情報（カテゴリ等）を取得する。 */
+  suspend fun fetchPoiDetails(googlePlaceId: String): PlaceSearchResult? = wishlistRepository.fetchPlaceDetails(googlePlaceId)
+
   /** 地図タップからの登録。行きたいONのときだけ wishlist にも入れる。 */
   fun registerPlace(
     latitude: Double,
