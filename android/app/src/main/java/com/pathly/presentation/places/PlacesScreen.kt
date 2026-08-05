@@ -1119,17 +1119,29 @@ private fun priorityStars(priority: Priority): String = when (priority) {
 
 private val DEFAULT_LOCATION = LatLng(35.6762, 139.6503) // 東京駅
 
-/**
- * Google マップアプリ（無ければ Web）で場所を開く。googlePlaceId があれば施設ページを
- * ピンポイントで開き、無ければ座標で開く。詳細は docs/designs/place-info-enrichment.md。
- */
+/** [Place] を Google マップで開く（詳細画面用の薄いラッパ）。 */
 private fun openInGoogleMaps(context: Context, place: Place) {
-  val uri = if (place.googlePlaceId != null) {
-    val query = Uri.encode(place.displayName)
-    Uri.parse("https://www.google.com/maps/search/?api=1&query=$query&query_place_id=${place.googlePlaceId}")
+  openPlaceInGoogleMaps(context, place.googlePlaceId, place.latitude, place.longitude, place.displayName)
+}
+
+/**
+ * Google マップアプリ（無ければ Web）で場所を開く。[googlePlaceId] があれば施設ページを
+ * ピンポイントで開き（写真・口コミ・営業時間）、無ければ座標で開く。API 呼び出しなし＝課金ゼロ。
+ * 詳細は docs/designs/place-info-enrichment.md。
+ */
+internal fun openPlaceInGoogleMaps(
+  context: Context,
+  googlePlaceId: String?,
+  latitude: Double,
+  longitude: Double,
+  label: String,
+) {
+  val uri = if (googlePlaceId != null) {
+    val query = Uri.encode(label)
+    Uri.parse("https://www.google.com/maps/search/?api=1&query=$query&query_place_id=$googlePlaceId")
   } else {
-    val label = Uri.encode(place.displayName)
-    Uri.parse("geo:${place.latitude},${place.longitude}?q=${place.latitude},${place.longitude}($label)")
+    val enc = Uri.encode(label)
+    Uri.parse("geo:$latitude,$longitude?q=$latitude,$longitude($enc)")
   }
   val intent = Intent(Intent.ACTION_VIEW, uri).setPackage("com.google.android.apps.maps")
   try {

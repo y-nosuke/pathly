@@ -7,6 +7,8 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Icon
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -18,8 +20,11 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import com.google.android.gms.maps.model.PointOfInterest
+import com.pathly.R
 import com.pathly.domain.model.Priority
 
 /**
@@ -37,6 +42,7 @@ internal fun RegisterPlaceFromPoiDialog(
   var memo by remember(poi) { mutableStateOf("") }
   var wishlist by remember(poi) { mutableStateOf(false) }
   var priority by remember(poi) { mutableStateOf(Priority.MEDIUM) }
+  val context = LocalContext.current
 
   AlertDialog(
     onDismissRequest = onDismiss,
@@ -50,6 +56,23 @@ internal fun RegisterPlaceFromPoiDialog(
           singleLine = true,
           modifier = Modifier.fillMaxWidth(),
         )
+        Spacer(modifier = Modifier.height(8.dp))
+        // 登録前でも Google マップで施設ページ（写真・口コミ・営業時間）を確認できる。
+        OutlinedButton(
+          onClick = {
+            openPlaceInGoogleMaps(
+              context,
+              poi.placeId,
+              poi.latLng.latitude,
+              poi.latLng.longitude,
+              poi.name,
+            )
+          },
+          modifier = Modifier.fillMaxWidth(),
+        ) {
+          Icon(painter = painterResource(R.drawable.ic_place), contentDescription = null)
+          Text(text = " Google マップで開く")
+        }
         Spacer(modifier = Modifier.height(8.dp))
         OutlinedTextField(
           value = memo,
