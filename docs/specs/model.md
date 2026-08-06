@@ -15,7 +15,8 @@ erDiagram
   gps_tracks ||--o{ smoothed_points : "補正結果"
   gps_tracks ||--o{ stops : "立ち寄り"
   places ||--o{ stops : "訪問先"
-  places ||--o| place_resolutions : "名前解決ログ"
+  places ||--o| place_resolutions : "問い合わせログ"
+  places ||--o| google_places : "Google由来データ"
   places ||--o| wishlist : "行きたい"
   gps_points |o--o{ smoothed_points : "由来(sourcePointId)"
 
@@ -50,7 +51,7 @@ erDiagram
     String name
     Double latitude
     Double longitude
-    String address
+    String note
   }
   stops {
     Long id PK
@@ -63,34 +64,41 @@ erDiagram
   place_resolutions {
     Long placeId PK
     Date resolvedAt
+  }
+  google_places {
+    Long placeId PK
     String googlePlaceId
+    String name
+    String address
+    String category
   }
   wishlist {
     Long id PK
     Long placeId FK
     Int priority
-    String memo
     Date visitedAt
   }
 ```
 
 ## エンティティ一覧
 
-| エンティティ          | 役割                                           | 主な関連                                               |
-| --------------------- | ---------------------------------------------- | ------------------------------------------------------ |
-| **gps_tracks**        | お出掛け 1 回分の記録セッション                | gps_points / smoothed_points / stops を従える          |
-| **gps_points**        | 原 GPS 座標（無改変で保持）                    | gps_tracks に属す                                      |
-| **smoothed_points**   | 補正（スムージング）後の点列。原データと併存   | gps_tracks に属す／sourcePointId で生点を辿れる        |
-| **places**            | 場所そのもの（経路から独立して永続）           | stops から参照される                                   |
-| **stops**             | 立ち寄り（訪問）。places と gps_tracks を結ぶ  | 経路削除で消える（場所は残す）／訪問メモ `note` を持つ |
-| **place_resolutions** | 場所名の解決ログ（行の有無＝問い合わせ済みか） | places に 1:0..1                                       |
-| **wishlist**          | 行きたい場所（優先度・メモ・訪問済み）         | places に 1:0..1                                       |
+| エンティティ          | 役割                                                 | 主な関連                                               |
+| --------------------- | ---------------------------------------------------- | ------------------------------------------------------ |
+| **gps_tracks**        | お出掛け 1 回分の記録セッション                      | gps_points / smoothed_points / stops を従える          |
+| **gps_points**        | 原 GPS 座標（無改変で保持）                          | gps_tracks に属す                                      |
+| **smoothed_points**   | 補正（スムージング）後の点列。原データと併存         | gps_tracks に属す／sourcePointId で生点を辿れる        |
+| **places**            | 場所そのもの（ユーザー入力＝自分の名前・メモ・座標） | stops から参照される                                   |
+| **stops**             | 立ち寄り（訪問）。places と gps_tracks を結ぶ        | 経路削除で消える（場所は残す）／訪問メモ `note` を持つ |
+| **place_resolutions** | Google 問い合わせログ（行の有無＝問い合わせ済みか）  | places に 1:0..1                                       |
+| **google_places**     | Google 由来データ（place ID・名前・住所・カテゴリ）  | places に 1:0..1（行＝該当 POI あり）                  |
+| **wishlist**          | 行きたい場所（優先度・訪問済み。メモは places.note） | places に 1:0..1                                       |
 
 ### 関連と削除規則（要点）
 
 - `gps_tracks` を削除すると、配下の `gps_points` / `smoothed_points` / `stops` も削除される（CASCADE）。
 - `stops` を削除しても概念上は `places` を残す（場所は複数の立ち寄りで再利用されるため）。ただし履歴画面の削除ではアプリ側で**孤立回収**を行い、削除後にどの `stops` からも参照されず `wishlist` にも無い place は場所ごと消す。
-- `place_resolutions` は `places` に従属し、場所の削除で一緒に消える。
+- `place_resolutions` / `google_places` は `places` に従属し、場所の削除で一緒に消える。
+  Google 由来（名前・住所・カテゴリ）は `google_places` に分離し、`places` はユーザー入力（自分の名前・メモ）のみ保持する。
 - `smoothed_points.sourcePointId` は由来の生点への参照（トレース用・任意）。DB 上の外部キー制約は張らない。
 - `wishlist` は `places` に従属し（1 place 1件・placeId は UNIQUE）、place の削除で一緒に消える。ただし place は通常消さない（再利用のため静的に保つ）。
 

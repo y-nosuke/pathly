@@ -58,6 +58,9 @@ class PlacesViewModel @Inject constructor(
   /** その場所を含むお出掛け（経路）の一覧。詳細画面で購読する。 */
   fun visitsFor(placeId: Long): Flow<List<PlaceVisit>> = wishlistRepository.getVisits(placeId)
 
+  /** POI 登録ダイアログのプレビュー用: placeId から施設情報（カテゴリ等）を取得する。 */
+  suspend fun fetchPoiDetails(googlePlaceId: String): PlaceSearchResult? = wishlistRepository.fetchPlaceDetails(googlePlaceId)
+
   /** 地図タップからの登録。行きたいONのときだけ wishlist にも入れる。 */
   fun registerPlace(
     latitude: Double,
@@ -66,12 +69,13 @@ class PlacesViewModel @Inject constructor(
     wishlist: Boolean,
     priority: Priority,
     memo: String?,
+    googlePlaceId: String? = null,
   ) {
     viewModelScope.launch {
       try {
-        val placeId = wishlistRepository.registerPlace(latitude, longitude, name)
+        val placeId = wishlistRepository.registerPlace(latitude, longitude, name, memo, googlePlaceId)
         if (wishlist) {
-          wishlistRepository.addToWishlist(placeId, priority, memo)
+          wishlistRepository.addToWishlist(placeId, priority)
         }
       } catch (e: Exception) {
         _uiState.value = _uiState.value.copy(errorMessage = "登録に失敗しました: ${e.message}")
@@ -87,7 +91,7 @@ class PlacesViewModel @Inject constructor(
         if (wishlistId != null) {
           wishlistRepository.removeFromWishlist(wishlistId)
         } else {
-          wishlistRepository.addToWishlist(item.place.id, Priority.MEDIUM, null)
+          wishlistRepository.addToWishlist(item.place.id, Priority.MEDIUM)
         }
       } catch (e: Exception) {
         _uiState.value = _uiState.value.copy(errorMessage = "更新に失敗しました: ${e.message}")
@@ -106,10 +110,22 @@ class PlacesViewModel @Inject constructor(
     }
   }
 
-  fun updateWishlist(id: Long, priority: Priority, memo: String?) {
+  /** 場所のメモ（places.note）を更新する（行きたい登録と独立）。 */
+  fun updateNote(placeId: Long, note: String?) {
     viewModelScope.launch {
       try {
-        wishlistRepository.updateWishlist(id, priority, memo)
+        wishlistRepository.updatePlaceNote(placeId, note)
+      } catch (e: Exception) {
+        _uiState.value = _uiState.value.copy(errorMessage = "更新に失敗しました: ${e.message}")
+      }
+    }
+  }
+
+  /** 行きたいの優先度を更新する。 */
+  fun updatePriority(wishlistId: Long, priority: Priority) {
+    viewModelScope.launch {
+      try {
+        wishlistRepository.updateWishlist(wishlistId, priority)
       } catch (e: Exception) {
         _uiState.value = _uiState.value.copy(errorMessage = "更新に失敗しました: ${e.message}")
       }
@@ -170,8 +186,11 @@ class PlacesViewModel @Inject constructor(
     viewModelScope.launch {
       try {
         val placeId = wishlistRepository.registerSearchedPlace(result)
+        if (!memo.isNullOrBlank()) {
+          wishlistRepository.updatePlaceNote(placeId, memo)
+        }
         if (wishlist) {
-          wishlistRepository.addToWishlist(placeId, priority, memo)
+          wishlistRepository.addToWishlist(placeId, priority)
         }
         _uiState.value = _uiState.value.copy(search = SearchState())
       } catch (e: Exception) {

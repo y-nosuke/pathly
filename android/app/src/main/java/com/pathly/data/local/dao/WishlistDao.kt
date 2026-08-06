@@ -28,8 +28,8 @@ interface WishlistDao {
   @Query("SELECT COUNT(*) FROM wishlist WHERE placeId = :placeId")
   suspend fun countByPlace(placeId: Long): Int
 
-  @Query("UPDATE wishlist SET priority = :priority, memo = :memo, updatedAt = :updatedAt WHERE id = :id")
-  suspend fun updateFields(id: Long, priority: Int, memo: String?, updatedAt: Date)
+  @Query("UPDATE wishlist SET priority = :priority, updatedAt = :updatedAt WHERE id = :id")
+  suspend fun updateFields(id: Long, priority: Int, updatedAt: Date)
 
   @Query("UPDATE wishlist SET visitedAt = :visitedAt, updatedAt = :updatedAt WHERE id = :id")
   suspend fun updateVisited(id: Long, visitedAt: Date?, updatedAt: Date)

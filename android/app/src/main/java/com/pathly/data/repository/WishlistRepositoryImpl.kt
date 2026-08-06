@@ -1,13 +1,16 @@
 package com.pathly.data.repository
 
+import com.pathly.data.local.dao.GooglePlaceDao
 import com.pathly.data.local.dao.PlaceDao
 import com.pathly.data.local.dao.PlaceResolutionDao
 import com.pathly.data.local.dao.StopDao
 import com.pathly.data.local.dao.WishlistDao
+import com.pathly.data.local.entity.GooglePlaceEntity
 import com.pathly.data.local.entity.PlaceEntity
 import com.pathly.data.local.entity.PlaceResolutionEntity
 import com.pathly.data.local.entity.PlaceWithWishlist
 import com.pathly.data.local.entity.WishlistEntity
+import com.pathly.data.places.PlacesTextSearcher
 import com.pathly.domain.model.Place
 import com.pathly.domain.model.PlaceListItem
 import com.pathly.domain.model.PlaceSearchResult
@@ -27,8 +30,10 @@ class WishlistRepositoryImpl @Inject constructor(
   private val wishlistDao: WishlistDao,
   private val placeDao: PlaceDao,
   private val placeResolutionDao: PlaceResolutionDao,
+  private val googlePlaceDao: GooglePlaceDao,
   private val stopDao: StopDao,
   private val placeRepository: PlaceRepository,
+  private val placesTextSearcher: PlacesTextSearcher,
 ) : WishlistRepository {
 
   private val logger = Logger("WishlistRepositoryImpl")
@@ -47,24 +52,51 @@ class WishlistRepositoryImpl @Inject constructor(
     }
   }
 
-  override suspend fun registerPlace(latitude: Double, longitude: Double, name: String?): Long {
+  override suspend fun fetchPlaceDetails(googlePlaceId: String): PlaceSearchResult? = placesTextSearcher.fetch(googlePlaceId)
+
+  override suspend fun registerPlace(
+    latitude: Double,
+    longitude: Double,
+    name: String?,
+    note: String?,
+    googlePlaceId: String?,
+  ): Long {
     val placeId = placeRepository.findOrCreatePlace(latitude, longitude)
     // 名前が指定され、かつ場所が未命名のときだけ命名する（既存の命名は上書きしない）。
     val trimmedName = name?.trim()?.ifBlank { null }
     if (trimmedName != null && placeDao.getById(placeId)?.name == null) {
       placeDao.updateName(placeId, trimmedName, Date())
     }
+    val trimmedNote = note?.trim()?.ifBlank { null }
+    if (trimmedNote != null) {
+      placeDao.updateNote(placeId, trimmedNote, Date())
+    }
+    // POI 由来なら Google データ（カテゴリ・住所）を取得して保存する（未取得の place にだけ）。
+    // これで詳細にカテゴリが出て、Google マップで施設ページを開ける。
+    if (googlePlaceId != null && googlePlaceDao.getByPlace(placeId) == null) {
+      val result = placesTextSearcher.fetch(googlePlaceId)
+      googlePlaceDao.upsert(
+        if (result != null) {
+          GooglePlaceEntity(placeId, result.googlePlaceId, result.name, result.address, result.category)
+        } else {
+          // オフライン等で取れなくても id だけ控える（Google マップは施設ページで開ける）。
+          GooglePlaceEntity(placeId, googlePlaceId)
+        },
+      )
+      placeResolutionDao.upsert(PlaceResolutionEntity(placeId, Date()))
+    }
     return placeId
   }
 
   override suspend fun registerSearchedPlace(result: PlaceSearchResult): Long {
     val placeId = placeRepository.findOrCreatePlace(result.latitude, result.longitude)
-    // 未命名なら検索結果の名前・住所を設定（既存の命名は上書きしない）。
-    if (placeDao.getById(placeId)?.name == null) {
-      placeDao.updateNameAndAddress(placeId, result.name, result.address, Date())
-    }
-    // googlePlaceId を解決ログに記録 → 以後は自動命名で Nearby を叩かない。
-    placeResolutionDao.upsert(PlaceResolutionEntity(placeId, Date(), result.googlePlaceId))
+    // 検索結果は Google 由来なので google_places に記録（places.name はユーザー名専用）。
+    // 表示は google_places.name にフォールバックするので、名前は自動で出る。
+    googlePlaceDao.upsert(
+      GooglePlaceEntity(placeId, result.googlePlaceId, result.name, result.address, result.category),
+    )
+    // 問い合わせlog に記録 → 以後は自動命名で Nearby を叩かない。
+    placeResolutionDao.upsert(PlaceResolutionEntity(placeId, Date()))
     logger.i("Registered searched place $placeId (google=${result.googlePlaceId})")
     return placeId
   }
@@ -73,7 +105,11 @@ class WishlistRepositoryImpl @Inject constructor(
     placeDao.updateName(placeId, name.trim().ifBlank { null }, Date())
   }
 
-  override suspend fun addToWishlist(placeId: Long, priority: Priority, memo: String?): Long {
+  override suspend fun updatePlaceNote(placeId: Long, note: String?) {
+    placeDao.updateNote(placeId, note?.trim()?.ifBlank { null }, Date())
+  }
+
+  override suspend fun addToWishlist(placeId: Long, priority: Priority): Long {
     // 同じ場所を二重登録しない（placeId は UNIQUE）。既にあれば既存を返す。
     wishlistDao.getByPlaceId(placeId)?.let { return it.id }
     val now = Date()
@@ -81,7 +117,6 @@ class WishlistRepositoryImpl @Inject constructor(
       WishlistEntity(
         placeId = placeId,
         priority = priority.value,
-        memo = memo?.trim()?.ifBlank { null },
         visitedAt = null,
         createdAt = now,
         updatedAt = now,
@@ -91,8 +126,8 @@ class WishlistRepositoryImpl @Inject constructor(
     return id
   }
 
-  override suspend fun updateWishlist(id: Long, priority: Priority, memo: String?) {
-    wishlistDao.updateFields(id, priority.value, memo?.trim()?.ifBlank { null }, Date())
+  override suspend fun updateWishlist(id: Long, priority: Priority) {
+    wishlistDao.updateFields(id, priority.value, Date())
   }
 
   override suspend fun setVisited(id: Long, visited: Boolean) {
@@ -116,6 +151,7 @@ class WishlistRepositoryImpl @Inject constructor(
       place = place,
       wishlist = wishlistDao.getByPlaceId(placeId),
       resolution = placeResolutionDao.getByPlace(placeId),
+      google = googlePlaceDao.getByPlace(placeId),
     )
     placeDao.deleteById(placeId)
     logger.i("Deleted place $placeId")
@@ -123,8 +159,9 @@ class WishlistRepositoryImpl @Inject constructor(
 
   override suspend fun undoLastPlaceDeletion(): Boolean {
     val snap = lastDeletedPlace ?: return false
-    // FK 順に復元する: 先に place（wishlist / 解決ログが参照）→ 子（明示IDのまま再挿入）。
+    // FK 順に復元する: 先に place（子が参照）→ 子（明示IDのまま再挿入）。
     placeDao.insert(snap.place)
+    snap.google?.let { googlePlaceDao.upsert(it) }
     snap.resolution?.let { placeResolutionDao.upsert(it) }
     snap.wishlist?.let { wishlistDao.insert(it) }
     lastDeletedPlace = null
@@ -137,6 +174,7 @@ class WishlistRepositoryImpl @Inject constructor(
     val place: PlaceEntity,
     val wishlist: WishlistEntity?,
     val resolution: PlaceResolutionEntity?,
+    val google: GooglePlaceEntity?,
   )
 
   private fun PlaceWithWishlist.toPlaceListItem(): PlaceListItem = PlaceListItem(
@@ -145,13 +183,16 @@ class WishlistRepositoryImpl @Inject constructor(
       name = name,
       latitude = latitude,
       longitude = longitude,
-      address = address,
+      note = note,
+      googleName = googleName,
+      googleAddress = googleAddress,
+      category = category,
+      googlePlaceId = googlePlaceId,
       createdAt = createdAt,
       updatedAt = updatedAt,
     ),
     wishlistId = wishlistId,
     priority = priority?.let { Priority.fromValue(it) },
-    memo = memo,
     visitedAt = visitedAt,
     visitCount = visitCount,
   )

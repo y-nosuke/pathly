@@ -30,17 +30,24 @@
 
 ### 設計（How）
 
-| ファイル                                                   | 内容                                   |
-| ---------------------------------------------------------- | -------------------------------------- |
-| [designs/architecture.md](designs/architecture.md)         | アーキテクチャ・プロジェクト構成       |
-| [designs/security.md](designs/security.md)                 | セキュリティ設計                       |
-| [designs/logging.md](designs/logging.md)                   | ログ方針・実装                         |
-| [designs/performance.md](designs/performance.md)           | パフォーマンス設計（電力・メモリ・DB） |
-| [designs/gps-smoothing.md](designs/gps-smoothing.md)       | GPS軌跡の補正（スムージング）設計      |
-| [designs/places-and-stops.md](designs/places-and-stops.md) | 場所・立ち寄りの永続化と命名設計       |
-| [designs/wishlist.md](designs/wishlist.md)                 | 行きたい場所・「場所」タブの設計       |
-| [designs/testing.md](designs/testing.md)                   | テスト戦略                             |
-| [designs/cloud-database.md](designs/cloud-database.md)     | クラウドDB・同期設計（将来）           |
+| ファイル                                                             | 内容                                   |
+| -------------------------------------------------------------------- | -------------------------------------- |
+| [designs/architecture.md](designs/architecture.md)                   | アーキテクチャ・プロジェクト構成       |
+| [designs/security.md](designs/security.md)                           | セキュリティ設計                       |
+| [designs/logging.md](designs/logging.md)                             | ログ方針・実装                         |
+| [designs/performance.md](designs/performance.md)                     | パフォーマンス設計（電力・メモリ・DB） |
+| [designs/gps-smoothing.md](designs/gps-smoothing.md)                 | GPS軌跡の補正（スムージング）設計      |
+| [designs/places-and-stops.md](designs/places-and-stops.md)           | 場所・立ち寄りの永続化と命名設計       |
+| [designs/wishlist.md](designs/wishlist.md)                           | 行きたい場所・「場所」タブの設計       |
+| [designs/place-info-enrichment.md](designs/place-info-enrichment.md) | 場所情報の拡充とデータ分離（v7）       |
+| [designs/testing.md](designs/testing.md)                             | テスト戦略                             |
+| [designs/cloud-database.md](designs/cloud-database.md)               | クラウドDB・同期設計（将来）           |
+
+### 決定（Why this way）
+
+| ファイル     | 内容                                       |
+| ------------ | ------------------------------------------ |
+| [adr/](adr/) | アーキテクチャ決定記録（決定と背景・没案） |
 
 ---
 
@@ -48,9 +55,11 @@
 
 - **新しい要望が出たら** → まず `requirements.md` に「〜したい」を追記（日付付き）
 - **作り方を決めたら** → `specs/`（何を）と `designs/`（どう）に落とす
+- **設計上の分かれ道を決めたら** → `adr/` に決定を1枚（なぜ・没案）。設計書には現状だけ残す
 - **進捗** → `roadmap.md` で管理（要望書には進捗を書かない）
 
 ### 書くときの原則
 
 - **依存は一方向（specs は designs に依存しない）** → 参照リンクは `designs → specs`（要望・仕様）に向ける。`specs → designs` のリンクは張らない（仕様は実現方法を知らずに成立させる）。
-- **コードを見れば分かることは書かない** → 現行コードの写し（クラス本体・ディレクトリツリー・依存バージョンのピン留めなど）は、いずれ実装とズレて誤情報になるため docs に置かない。docs に書くのは**コードからは読み取れないもの**＝「なぜそうしたか（設計判断）」「何をしたいか（仕様・要望）」「未実装の設計案・ポリシー」。具体値（バージョン・シグネチャ等）は実コード／Gradle 定義を正とし、docs からは参照に留める。
+- **コードを見れば分かることは書かない** → 現行コードの写し（クラス本体・ディレクトリツリー・依存バージョンのピン留めなど）は、いずれ実装とズレて誤情報になるため docs に置かない。docs に書くのは**コードからは読み取れないもの**＝「何をしたいか（仕様・要望）」「今どうなっているか（設計）」「未実装の設計案・ポリシー」。具体値（バージョン・シグネチャ等）は実コード／Gradle 定義を正とし、docs からは参照に留める。
+- **設計判断（なぜ・没案）は ADR に、設計書には現状の概略を** → 設計書は「今どうなっているか」を読むためのもの。決定の背景・却下した案は [adr/](adr/) に 1 決定 1 ファイルで残し、設計書からは参照リンクに留める（設計書が経緯で薄まらないように）。

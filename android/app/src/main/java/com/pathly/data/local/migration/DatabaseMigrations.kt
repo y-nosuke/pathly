@@ -183,6 +183,62 @@ object DatabaseMigrations {
   }
 
   /**
+   * バージョン6から7へのマイグレーション。場所データを Google 由来とユーザー入力に分離する
+   * （docs/designs/place-info-enrichment.md / adr/0001）。
+   *
+   * - places に note を追加（wishlist.memo を移送）
+   * - google_places を新設（解決済みの googlePlaceId と places.address を移送）
+   * - 不要列を削除: places.address / wishlist.memo / place_resolutions.googlePlaceId
+   *
+   * minSdk 34（SQLite 3.35+）の `ALTER TABLE ... DROP COLUMN` を使い、列を落とす前に中身を移送する。
+   * DDL は Room がエンティティから生成するものと一致させること（起動時のスキーマ検証を通すため）。
+   */
+  val MIGRATION_6_7 = object : Migration(6, 7) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+      try {
+        Logger.i(TAG, "Starting migration from version 6 to 7")
+
+        // 1. places に note を追加し、wishlist.memo を移送する（落とす前に読む）。
+        db.execSQL("ALTER TABLE `places` ADD COLUMN `note` TEXT")
+        db.execSQL(
+          "UPDATE `places` SET `note` = " +
+            "(SELECT w.`memo` FROM `wishlist` w WHERE w.`placeId` = `places`.`id`) " +
+            "WHERE EXISTS " +
+            "(SELECT 1 FROM `wishlist` w WHERE w.`placeId` = `places`.`id` AND w.`memo` IS NOT NULL)",
+        )
+
+        // 2. google_places を作り、解決済み（googlePlaceId 非 null）＋places.address を移送する。
+        db.execSQL(
+          "CREATE TABLE IF NOT EXISTS `google_places` (" +
+            "`placeId` INTEGER NOT NULL, " +
+            "`googlePlaceId` TEXT NOT NULL, " +
+            "`name` TEXT, " +
+            "`address` TEXT, " +
+            "`category` TEXT, " +
+            "PRIMARY KEY(`placeId`), " +
+            "FOREIGN KEY(`placeId`) REFERENCES `places`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+        )
+        db.execSQL(
+          "INSERT INTO `google_places` (`placeId`, `googlePlaceId`, `name`, `address`, `category`) " +
+            "SELECT r.`placeId`, r.`googlePlaceId`, NULL, p.`address`, NULL " +
+            "FROM `place_resolutions` r JOIN `places` p ON p.`id` = r.`placeId` " +
+            "WHERE r.`googlePlaceId` IS NOT NULL",
+        )
+
+        // 3. 移送し終えた不要列を落とす。
+        db.execSQL("ALTER TABLE `places` DROP COLUMN `address`")
+        db.execSQL("ALTER TABLE `wishlist` DROP COLUMN `memo`")
+        db.execSQL("ALTER TABLE `place_resolutions` DROP COLUMN `googlePlaceId`")
+
+        Logger.i(TAG, "Migration from version 6 to 7 completed successfully")
+      } catch (e: Exception) {
+        Logger.e(TAG, "Migration from version 6 to 7 failed", e)
+        throw e
+      }
+    }
+  }
+
+  /**
    * 現在利用可能な全てのマイグレーション
    */
   val ALL_MIGRATIONS = arrayOf(
@@ -191,6 +247,7 @@ object DatabaseMigrations {
     MIGRATION_3_4,
     MIGRATION_4_5,
     MIGRATION_5_6,
+    MIGRATION_6_7,
     // 将来のマイグレーションをここに追加
   )
 

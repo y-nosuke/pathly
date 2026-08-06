@@ -12,6 +12,7 @@ import android.provider.Settings
 import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.pathly.domain.model.PlaceSearchResult
 import com.pathly.domain.model.Priority
 import com.pathly.domain.repository.GpsTrackRepository
 import com.pathly.domain.repository.PlaceRepository
@@ -236,15 +237,23 @@ class TrackingViewModel @Inject constructor(
   }
 
   /**
-   * 記録画面のマップで POI をタップして場所を登録する。行きたい ON なら wishlist にも入れる。
-   * 登録後は「場所」タブに現れる（優先度・メモは場所タブで編集）。
+   * 記録画面のマップで POI をタップして場所を登録する。メモは常に保存し、行きたい ON なら
+   * 優先度つきで wishlist にも入れる。登録後は「場所」タブに現れる。
    */
-  fun registerPlace(latitude: Double, longitude: Double, name: String?, wishlist: Boolean) {
+  fun registerPlace(
+    latitude: Double,
+    longitude: Double,
+    name: String?,
+    wishlist: Boolean,
+    priority: Priority,
+    memo: String?,
+    googlePlaceId: String? = null,
+  ) {
     viewModelScope.launch {
       try {
-        val placeId = wishlistRepository.registerPlace(latitude, longitude, name)
+        val placeId = wishlistRepository.registerPlace(latitude, longitude, name, memo, googlePlaceId)
         if (wishlist) {
-          wishlistRepository.addToWishlist(placeId, Priority.MEDIUM, null)
+          wishlistRepository.addToWishlist(placeId, priority)
         }
         _uiState.value = _uiState.value.copy(placeRegisteredMessage = "「${name?.ifBlank { null } ?: "場所"}」を登録しました")
       } catch (e: Exception) {
@@ -252,6 +261,9 @@ class TrackingViewModel @Inject constructor(
       }
     }
   }
+
+  /** POI 登録ダイアログのプレビュー用: placeId から施設情報（カテゴリ等）を取得する。 */
+  suspend fun fetchPoiDetails(googlePlaceId: String): PlaceSearchResult? = wishlistRepository.fetchPlaceDetails(googlePlaceId)
 
   fun clearPlaceRegisteredMessage() {
     _uiState.value = _uiState.value.copy(placeRegisteredMessage = null)

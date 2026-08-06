@@ -45,6 +45,11 @@ class PlacesTextSearcher @Inject constructor(
   @Volatile
   private var sessionToken: AutocompleteSessionToken? = null
 
+  // 直近の fetch 結果を1件だけ控える。同じ placeId を続けて引くとき（POIダイアログの表示 →
+  // 同じ場所の登録）に Places を二度叩かないための最小キャッシュ。
+  @Volatile
+  private var lastFetch: Pair<String, PlaceSearchResult>? = null
+
   /** 検索画面を開いたときに呼ぶ。新しいセッショントークンを用意する。 */
   fun startSession() {
     sessionToken = AutocompleteSessionToken.newInstance()
@@ -76,6 +81,8 @@ class PlacesTextSearcher @Inject constructor(
 
   /** 候補を確定して座標つきの結果を得る。セッションはここで終了する（トークンを破棄）。 */
   suspend fun fetch(placeId: String): PlaceSearchResult? = withContext(Dispatchers.IO) {
+    // 直近と同じ placeId なら控えを返す（Places を二度叩かない）。
+    lastFetch?.let { if (it.first == placeId) return@withContext it.second }
     if (!isOnline()) return@withContext null
     val placesClient = client ?: return@withContext null
     val token = sessionToken
@@ -84,6 +91,7 @@ class PlacesTextSearcher @Inject constructor(
         Place.Field.ID,
         Place.Field.DISPLAY_NAME,
         Place.Field.FORMATTED_ADDRESS,
+        Place.Field.PRIMARY_TYPE_DISPLAY_NAME,
         Place.Field.LOCATION,
       )
       val builder = FetchPlaceRequest.builder(placeId, fields)
@@ -95,9 +103,10 @@ class PlacesTextSearcher @Inject constructor(
         googlePlaceId = place.id?.takeIf { it.isNotBlank() } ?: placeId,
         name = place.displayName?.takeIf { it.isNotBlank() },
         address = place.formattedAddress?.takeIf { it.isNotBlank() },
+        category = place.primaryTypeDisplayName?.takeIf { it.isNotBlank() },
         latitude = latLng.latitude,
         longitude = latLng.longitude,
-      )
+      ).also { lastFetch = placeId to it }
     } catch (e: Exception) {
       logger.w("fetchPlace failed for $placeId", e)
       null

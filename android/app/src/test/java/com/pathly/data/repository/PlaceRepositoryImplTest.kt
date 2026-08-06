@@ -1,10 +1,12 @@
 package com.pathly.data.repository
 
+import com.pathly.data.local.dao.GooglePlaceDao
 import com.pathly.data.local.dao.PlaceDao
 import com.pathly.data.local.dao.PlaceResolutionDao
 import com.pathly.data.local.dao.SmoothedPointDao
 import com.pathly.data.local.dao.StopDao
 import com.pathly.data.local.dao.WishlistDao
+import com.pathly.data.local.entity.GooglePlaceEntity
 import com.pathly.data.local.entity.PlaceEntity
 import com.pathly.data.local.entity.PlaceResolutionEntity
 import com.pathly.data.local.entity.SmoothedPointEntity
@@ -31,6 +33,7 @@ class PlaceRepositoryImplTest {
   private val stopDao = mockk<StopDao>(relaxed = true)
   private val smoothedPointDao = mockk<SmoothedPointDao>(relaxed = true)
   private val placeResolutionDao = mockk<PlaceResolutionDao>(relaxed = true)
+  private val googlePlaceDao = mockk<GooglePlaceDao>(relaxed = true)
   private val wishlistDao = mockk<WishlistDao>(relaxed = true)
   private val resolver = mockk<PlacesNameResolver>(relaxed = true)
   private val repository = PlaceRepositoryImpl(
@@ -38,6 +41,7 @@ class PlaceRepositoryImplTest {
     stopDao,
     smoothedPointDao,
     placeResolutionDao,
+    googlePlaceDao,
     wishlistDao,
     resolver,
   )
@@ -74,7 +78,7 @@ class PlaceRepositoryImplTest {
       PlaceEntity(id = 10L, latitude = 35.0, longitude = 139.0),
     )
     coEvery { resolver.resolve(any(), any()) } returns
-      PlacesNameResolver.Outcome.Found("カフェ", "住所", "gp-1")
+      PlacesNameResolver.Outcome.Found("カフェ", "住所", "カフェ・喫茶", "gp-1")
 
     repository.updateStopsForTrack(1L, isFinal = false)
 
@@ -82,8 +86,14 @@ class PlaceRepositoryImplTest {
     coVerify { stopDao.insert(capture(stopSlot)) }
     assertEquals(10L, stopSlot.captured.placeId)
     assertEquals(1L, stopSlot.captured.trackId)
-    coVerify { placeDao.updateNameAndAddress(10L, "カフェ", "住所", any()) }
-    coVerify { placeResolutionDao.upsert(match { it.placeId == 10L && it.googlePlaceId == "gp-1" }) }
+    // Google 由来の名前・住所は google_places に入れる（places.name はユーザー名専用）。
+    coVerify {
+      googlePlaceDao.upsert(
+        match { it.placeId == 10L && it.googlePlaceId == "gp-1" && it.name == "カフェ" && it.address == "住所" },
+      )
+    }
+    coVerify { placeResolutionDao.upsert(match { it.placeId == 10L }) }
+    coVerify(exactly = 0) { placeDao.updateName(any(), any(), any()) }
     // 離脱済みなので「立ち寄り中」は無い。
     assertNull(repository.currentStop.value)
   }
@@ -99,7 +109,7 @@ class PlaceRepositoryImplTest {
     coEvery { placeDao.getUnresolvedPlacesForTrack(1L) } returns emptyList()
     coEvery { placeResolutionDao.getByPlace(20L) } returns null
     coEvery { resolver.resolve(any(), any()) } returns
-      PlacesNameResolver.Outcome.Found("カフェ", "住所", "gp-2")
+      PlacesNameResolver.Outcome.Found("カフェ", "住所", "カフェ・喫茶", "gp-2")
 
     repository.updateStopsForTrack(1L, isFinal = false)
 
@@ -108,7 +118,8 @@ class PlaceRepositoryImplTest {
     val current = repository.currentStop.value
     assertNotNull(current)
     assertEquals(20L, current!!.place.id)
-    coVerify { placeResolutionDao.upsert(match { it.placeId == 20L && it.googlePlaceId == "gp-2" }) }
+    coVerify { googlePlaceDao.upsert(match { it.placeId == 20L && it.googlePlaceId == "gp-2" }) }
+    coVerify { placeResolutionDao.upsert(match { it.placeId == 20L }) }
   }
 
   @Test
@@ -147,7 +158,7 @@ class PlaceRepositoryImplTest {
     coEvery { stopDao.getByTrack(1L) } returns emptyList()
     coEvery { placeDao.getAll() } returns emptyList()
     coEvery { resolver.resolve(any(), any()) } returns
-      PlacesNameResolver.Outcome.Found("カフェ", "住所", "gp-1")
+      PlacesNameResolver.Outcome.Found("カフェ", "住所", "カフェ・喫茶", "gp-1")
 
     val result = repository.detectMissingStops(1L)
 
@@ -164,9 +175,9 @@ class PlaceRepositoryImplTest {
     coEvery { stopDao.getByTrack(1L) } returns emptyList()
     // 候補座標のすぐ近くに命名済みの place がある → それを再利用し Places は叩かない。
     coEvery { placeDao.getAll() } returns listOf(
-      PlaceEntity(id = 7L, name = "自宅", latitude = 35.0, longitude = 139.0, address = "住所"),
+      PlaceEntity(id = 7L, name = "自宅", latitude = 35.0, longitude = 139.0),
     )
-    coEvery { placeResolutionDao.getByPlace(7L) } returns null
+    coEvery { googlePlaceDao.getByPlace(7L) } returns null
 
     val result = repository.detectMissingStops(1L)
 
@@ -208,6 +219,7 @@ class PlaceRepositoryImplTest {
     coEvery { placeDao.insert(any()) } returns 10L
     coEvery { stopDao.insert(any()) } returns 100L
     coEvery { placeResolutionDao.getByPlace(10L) } returns null
+    coEvery { googlePlaceDao.getByPlace(10L) } returns null
     coEvery { placeDao.getById(10L) } returns PlaceEntity(id = 10L, latitude = 35.0, longitude = 139.0)
     // 検出時に名前を焼き込むので、命名のための Places 呼び出しは不要。
     coEvery { placeDao.getUnresolvedPlacesForTrack(1L) } returns emptyList()
@@ -222,8 +234,13 @@ class PlaceRepositoryImplTest {
 
     assertEquals(1, added)
     coVerify { stopDao.insert(match { it.trackId == 1L && it.placeId == 10L }) }
-    coVerify { placeDao.updateNameAndAddress(10L, "カフェ", "住所", any()) }
-    coVerify { placeResolutionDao.upsert(match { it.placeId == 10L && it.googlePlaceId == "gp-1" }) }
+    // 検出時に引いた Google データは google_places に焼き込む（places.name はユーザー名専用）。
+    coVerify {
+      googlePlaceDao.upsert(
+        match { it.placeId == 10L && it.googlePlaceId == "gp-1" && it.name == "カフェ" && it.address == "住所" },
+      )
+    }
+    coVerify { placeResolutionDao.upsert(match { it.placeId == 10L }) }
     coVerify(exactly = 0) { resolver.resolve(any(), any()) }
   }
 
@@ -247,8 +264,9 @@ class PlaceRepositoryImplTest {
 
     assertEquals(100L, id)
     coVerify { stopDao.insert(match { it.trackId == 1L && it.placeId == 10L }) }
-    // 手入力の名前は未命名の place に焼き込む。googlePlaceId は無いので解決記録は作らない。
-    coVerify { placeDao.updateNameAndAddress(10L, "手動カフェ", null, any()) }
+    // 手入力の名前はユーザー名として未命名の place に焼き込む。googlePlaceId は無いので記録を作らない。
+    coVerify { placeDao.updateName(10L, "手動カフェ", any()) }
+    coVerify(exactly = 0) { googlePlaceDao.upsert(any()) }
     coVerify(exactly = 0) { placeResolutionDao.upsert(any()) }
     coVerify(exactly = 0) { resolver.resolve(any(), any()) }
   }
@@ -260,12 +278,14 @@ class PlaceRepositoryImplTest {
     coEvery { stopDao.insert(any()) } returns 100L
     coEvery { placeDao.getById(10L) } returns PlaceEntity(id = 10L, latitude = 35.0, longitude = 139.0)
     coEvery { placeResolutionDao.getByPlace(10L) } returns null
+    coEvery { googlePlaceDao.getByPlace(10L) } returns null
 
     repository.addManualStop(1L, 35.0, 139.0, Date(0), Date(180_000), "スタバ", "gp-9")
 
-    // POI 由来なら googlePlaceId を解決記録に控え、あとで Places を叩き直さない。
-    coVerify { placeDao.updateNameAndAddress(10L, "スタバ", null, any()) }
-    coVerify { placeResolutionDao.upsert(match { it.placeId == 10L && it.googlePlaceId == "gp-9" }) }
+    // 手入力名はユーザー名（places.name）。POI 由来の googlePlaceId は google_places に控える。
+    coVerify { placeDao.updateName(10L, "スタバ", any()) }
+    coVerify { googlePlaceDao.upsert(match { it.placeId == 10L && it.googlePlaceId == "gp-9" }) }
+    coVerify { placeResolutionDao.upsert(match { it.placeId == 10L }) }
     coVerify(exactly = 0) { resolver.resolve(any(), any()) }
   }
 
@@ -281,7 +301,8 @@ class PlaceRepositoryImplTest {
 
     // 名前無しの手動追加は place を未命名のまま残す（あとで「場所を取得」で命名可）。
     coVerify { stopDao.insert(any()) }
-    coVerify(exactly = 0) { placeDao.updateNameAndAddress(any(), any(), any(), any()) }
+    coVerify(exactly = 0) { placeDao.updateName(any(), any(), any()) }
+    coVerify(exactly = 0) { googlePlaceDao.upsert(any()) }
     coVerify(exactly = 0) { placeResolutionDao.upsert(any()) }
   }
 
@@ -299,7 +320,7 @@ class PlaceRepositoryImplTest {
 
     coVerify { stopDao.insert(match { it.placeId == 7L }) }
     coVerify(exactly = 0) { placeDao.insert(any()) } // 新規作成しない
-    coVerify(exactly = 0) { placeDao.updateNameAndAddress(any(), any(), any(), any()) } // 命名済みは守る
+    coVerify(exactly = 0) { placeDao.updateName(any(), any(), any()) } // 命名済みは守る
   }
 
   @Test
@@ -311,8 +332,8 @@ class PlaceRepositoryImplTest {
 
     repository.resolveUnresolvedNames(1L)
 
-    coVerify { placeResolutionDao.upsert(match { it.placeId == 5L && it.googlePlaceId == null }) }
-    coVerify(exactly = 0) { placeDao.updateNameAndAddress(any(), any(), any(), any()) }
+    coVerify { placeResolutionDao.upsert(match { it.placeId == 5L }) }
+    coVerify(exactly = 0) { googlePlaceDao.upsert(any()) }
   }
 
   @Test
@@ -378,21 +399,24 @@ class PlaceRepositoryImplTest {
 
   @Test
   fun undoLastDeletion_restoresStopsAndOrphanedPlace() = runTest {
-    // 孤立 place を回収する削除 → 取り消しで place・解決ログ・stop を元IDのまま復元。
+    // 孤立 place を回収する削除 → 取り消しで place・Google データ・解決ログ・stop を元IDのまま復元。
     val stop = stopEntity(100L, 10L)
     val place = PlaceEntity(id = 10L, latitude = 35.0, longitude = 139.0)
-    val resolution = PlaceResolutionEntity(10L, Date(0L), "gp-1")
+    val resolution = PlaceResolutionEntity(10L, Date(0L))
+    val google = GooglePlaceEntity(10L, "gp-1", "カフェ", "住所")
     coEvery { stopDao.getByIds(listOf(100L)) } returns listOf(stop)
     coEvery { stopDao.countByPlace(10L) } returns 0
     coEvery { wishlistDao.countByPlace(10L) } returns 0
     coEvery { placeDao.getById(10L) } returns place
     coEvery { placeResolutionDao.getByPlace(10L) } returns resolution
+    coEvery { googlePlaceDao.getByPlace(10L) } returns google
 
     repository.deleteStops(listOf(100L))
     val undone = repository.undoLastDeletion()
 
     assertTrue(undone)
     coVerify { placeDao.insert(place) }
+    coVerify { googlePlaceDao.upsert(google) }
     coVerify { placeResolutionDao.upsert(resolution) }
     coVerify { stopDao.insert(stop) }
   }

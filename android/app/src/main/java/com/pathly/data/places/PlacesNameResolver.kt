@@ -36,6 +36,7 @@ class PlacesNameResolver @Inject constructor(
     data class Found(
       val name: String?,
       val address: String?,
+      val category: String?,
       val googlePlaceId: String,
     ) : Outcome
 
@@ -62,6 +63,7 @@ class PlacesNameResolver @Inject constructor(
         Place.Field.ID,
         Place.Field.DISPLAY_NAME,
         Place.Field.FORMATTED_ADDRESS,
+        Place.Field.PRIMARY_TYPE_DISPLAY_NAME,
       )
       val request = SearchNearbyRequest.builder(circle, fields)
         .setMaxResultCount(1)
@@ -73,7 +75,8 @@ class PlacesNameResolver @Inject constructor(
       val googlePlaceId = place.id?.takeIf { it.isNotBlank() } ?: return@withContext Outcome.NoMatch
       val name = place.displayName?.takeIf { it.isNotBlank() }
       val address = place.formattedAddress?.takeIf { it.isNotBlank() }
-      Outcome.Found(name, address, googlePlaceId)
+      val category = place.primaryTypeDisplayName?.takeIf { it.isNotBlank() }
+      Outcome.Found(name, address, category, googlePlaceId)
     } catch (e: Exception) {
       logger.w("searchNearby failed for ($latitude, $longitude)", e)
       Outcome.NotAttempted

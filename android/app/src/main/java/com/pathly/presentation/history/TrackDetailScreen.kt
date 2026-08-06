@@ -82,6 +82,8 @@ import com.pathly.BuildConfig
 import com.pathly.R
 import com.pathly.domain.model.GpsPoint
 import com.pathly.domain.model.GpsTrack
+import com.pathly.domain.model.PlaceSearchResult
+import com.pathly.domain.model.Priority
 import com.pathly.domain.model.SmoothingParams
 import com.pathly.domain.model.Stop
 import com.pathly.domain.model.StopCandidate
@@ -159,7 +161,9 @@ fun TrackDetailScreen(
   onAddManualStop: (lat: Double, lng: Double, arrival: Date, departure: Date, name: String?, googlePlaceId: String?) -> Unit =
     { _, _, _, _, _, _ -> },
   onMessageShown: () -> Unit = {},
-  onRegisterPlace: (lat: Double, lng: Double, name: String, wishlist: Boolean) -> Unit = { _, _, _, _ -> },
+  onRegisterPlace: (lat: Double, lng: Double, name: String, wishlist: Boolean, priority: Priority, memo: String?, googlePlaceId: String?) -> Unit =
+    { _, _, _, _, _, _, _ -> },
+  onFetchPoiDetails: suspend (googlePlaceId: String) -> PlaceSearchResult? = { null },
   // 地図スロット。null（既定）は実マップ（GoogleMap）を描画する。
   // テストは空スロット（{}）を渡し、GMS 依存の地図描画を避けてシート・オーバーレイだけを検証する。
   mapContent: (@Composable () -> Unit)? = null,
@@ -579,8 +583,9 @@ fun TrackDetailScreen(
     RegisterPlaceFromPoiDialog(
       poi = poi,
       onDismiss = { poiTarget = null },
-      onRegister = { name, wishlist ->
-        onRegisterPlace(poi.latLng.latitude, poi.latLng.longitude, name, wishlist)
+      onFetchDetails = onFetchPoiDetails,
+      onRegister = { name, wishlist, priority, memo ->
+        onRegisterPlace(poi.latLng.latitude, poi.latLng.longitude, name, wishlist, priority, memo, poi.placeId)
         poiTarget = null
       },
     )
@@ -631,7 +636,7 @@ private fun StopNoteDialog(
     text = {
       Column {
         Text(
-          text = stop.place.name ?: "%.5f, %.5f".format(stop.place.latitude, stop.place.longitude),
+          text = stop.place.displayName,
           style = MaterialTheme.typography.bodyMedium,
           color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
@@ -1144,8 +1149,7 @@ private fun StopRow(
   onToggleSelect: () -> Unit,
   onEnterSelection: () -> Unit,
 ) {
-  val title = stop.place.name
-    ?: "%.5f, %.5f".format(stop.place.latitude, stop.place.longitude)
+  val title = stop.place.displayName
   val note = stop.note?.takeIf { it.isNotBlank() }
   Row(
     // 通常はタップでフォーカス、長押しで選択モード。選択モード中はタップで選択トグル。
@@ -1453,7 +1457,7 @@ private fun TrackMapView(
       }
       Marker(
         state = stopMarkerState,
-        title = stop.place.name ?: "立ち寄り",
+        title = stop.place.name ?: stop.place.googleName ?: "立ち寄り",
         snippet = "${DateFormatters.SHORT_TIME_FORMAT.format(stop.arrivalTime)} ・ 滞在${stop.durationMinutes}分",
         icon = BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_VIOLET),
       )

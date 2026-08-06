@@ -6,11 +6,12 @@ import androidx.room.PrimaryKey
 import java.util.Date
 
 /**
- * Google Places に場所名を問い合わせた記録（解決ログ）。docs/designs/places-and-stops.md 参照。
+ * Google Places を「叩いたか」を place 単位で記録する問い合わせログ。
+ * docs/designs/place-info-enrichment.md / adr/0001 参照。
  *
- * places を静的に保つため、動的な解決状態（叩いたか・いつ・結果）はここに分離する。
+ * places を静的に保つため、動的な解決状態（叩いたか・いつ）はここに分離する。
  * **行がある＝問い合わせ済み**（結果の有無を問わず）。無ければ未実施。
- * [googlePlaceId] は見つかった Google の place ID。POI が無ければ null。
+ * 見つかった Google のデータ（place ID・名前等）は google_places に持つ。
  */
 @Entity(
   tableName = "place_resolutions",
@@ -27,5 +28,4 @@ data class PlaceResolutionEntity(
   @PrimaryKey
   val placeId: Long,
   val resolvedAt: Date,
-  val googlePlaceId: String? = null,
 )
