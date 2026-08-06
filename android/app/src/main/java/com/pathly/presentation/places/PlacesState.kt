@@ -80,7 +80,7 @@ data class PlacesState(
       val ascending: Comparator<PlaceListItem> = when (sort) {
         PlaceSort.REGISTERED -> compareBy { it.place.createdAt }
         PlaceSort.UPDATED -> compareBy { it.place.updatedAt }
-        // 未訪問（null）は昇順で先頭・降順で末尾になる。
+        // 実訪問の記録が無いもの（未訪問・手動で訪問済みにしただけ）は null で、昇順で先頭・降順で末尾。
         PlaceSort.VISITED -> compareBy(nullsFirst()) { it.visitRecencyAt }
         PlaceSort.VISIT_COUNT -> compareBy { it.visitCount }
         // 行きたい未登録は value 無し（-1）扱いで最下位。
