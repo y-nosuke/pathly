@@ -119,6 +119,7 @@ fun PlacesListRoute(
       state = uiState,
       onAddByMap = onAddByMap,
       onAddBySearch = onAddBySearch,
+      onClearFilters = viewModel::clearFilters,
       onToggleOnlyWishlisted = { viewModel.setOnlyWishlisted(!uiState.onlyWishlisted) },
       onVisitedFilterChange = viewModel::setVisitedFilter,
       onSortChange = viewModel::setSort,
@@ -227,6 +228,7 @@ private fun PlacesListContent(
   state: PlacesState,
   onAddByMap: () -> Unit,
   onAddBySearch: () -> Unit,
+  onClearFilters: () -> Unit,
   onToggleOnlyWishlisted: () -> Unit,
   onVisitedFilterChange: (VisitedFilter) -> Unit,
   onSortChange: (PlaceSort) -> Unit,
@@ -285,29 +287,26 @@ private fun PlacesListContent(
       horizontalArrangement = Arrangement.spacedBy(8.dp),
       verticalAlignment = Alignment.CenterVertically,
     ) {
+      // すべて: 絞り込みを全解除。何も絞っていないときは選択状態にして現在地を示す。
+      val noFilter = !state.onlyWishlisted && state.visitedFilter == VisitedFilter.ANY
+      FilterChip(
+        selected = noFilter,
+        onClick = onClearFilters,
+        label = { Text("すべて") },
+      )
       FilterChip(
         selected = state.onlyWishlisted,
         onClick = onToggleOnlyWishlisted,
         label = { Text("行きたい") },
       )
-      // 訪問済み/未訪問は排他。選択中をもう一度押すと解除（=指定なし）に戻す。
+      // 訪問状況は1つのトグルボタン。タップで 指定なし→訪問済み→未訪問→… と切り替わる。
       FilterChip(
-        selected = state.visitedFilter == VisitedFilter.VISITED,
+        selected = state.visitedFilter != VisitedFilter.ANY,
         onClick = {
-          onVisitedFilterChange(
-            if (state.visitedFilter == VisitedFilter.VISITED) VisitedFilter.ANY else VisitedFilter.VISITED,
-          )
+          val next = VisitedFilter.entries[(state.visitedFilter.ordinal + 1) % VisitedFilter.entries.size]
+          onVisitedFilterChange(next)
         },
-        label = { Text("訪問済み") },
-      )
-      FilterChip(
-        selected = state.visitedFilter == VisitedFilter.UNVISITED,
-        onClick = {
-          onVisitedFilterChange(
-            if (state.visitedFilter == VisitedFilter.UNVISITED) VisitedFilter.ANY else VisitedFilter.UNVISITED,
-          )
-        },
-        label = { Text("未訪問") },
+        label = { Text("訪問状況: ${state.visitedFilter.label}") },
       )
     }
 
@@ -366,6 +365,7 @@ private fun PlacesListContent(
           items(state.visibleItems, key = { it.place.id }) { item ->
             PlaceItemRow(
               item = item,
+              sort = state.sort,
               onClick = { onItemClick(item) },
               onToggleWishlist = { onToggleWishlist(item) },
               onDelete = { onDeleteRequest(item) },
@@ -381,6 +381,7 @@ private fun PlacesListContent(
 @Composable
 private fun PlaceItemRow(
   item: PlaceListItem,
+  sort: PlaceSort,
   onClick: () -> Unit,
   onToggleWishlist: () -> Unit,
   onDelete: () -> Unit,
@@ -451,6 +452,22 @@ private fun PlaceItemRow(
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
+          )
+        }
+
+        // 現在の並び順に対応する日付だけを小さく出す（何で並んでいるか分かる・常時全部は出さない）。
+        val sortDate: String? = when (sort) {
+          PlaceSort.REGISTERED -> "登録 " + DateFormatters.SHORT_DATE_FORMAT.format(item.place.createdAt)
+          PlaceSort.UPDATED -> "更新 " + DateFormatters.SHORT_DATE_FORMAT.format(item.place.updatedAt)
+          PlaceSort.VISITED -> item.visitRecencyAt?.let { "訪問 " + DateFormatters.SHORT_DATE_FORMAT.format(it) }
+          PlaceSort.PRIORITY, PlaceSort.NAME -> null
+        }
+        sortDate?.let {
+          Spacer(modifier = Modifier.height(2.dp))
+          Text(
+            text = it,
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
           )
         }
       }

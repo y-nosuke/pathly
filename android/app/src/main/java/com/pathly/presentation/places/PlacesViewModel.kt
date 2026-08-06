@@ -61,6 +61,11 @@ class PlacesViewModel @Inject constructor(
     _uiState.value = _uiState.value.copy(visitedFilter = filter)
   }
 
+  /** 絞り込みを全解除する（行きたい・訪問状況をまとめて指定なしに戻す）。並べ替えは保持。 */
+  fun clearFilters() {
+    _uiState.value = _uiState.value.copy(onlyWishlisted = false, visitedFilter = VisitedFilter.ANY)
+  }
+
   /** 並べ替えの変更。 */
   fun setSort(sort: PlaceSort) {
     _uiState.value = _uiState.value.copy(sort = sort)
