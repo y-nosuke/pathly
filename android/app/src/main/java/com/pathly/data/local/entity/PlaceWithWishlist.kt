@@ -29,4 +29,6 @@ data class PlaceWithWishlist(
   val visitedAt: Date?,
   // この場所への立ち寄り（訪問）件数。>0 なら実際に訪れている。
   val visitCount: Int,
+  // 直近の立ち寄り（arrivalTime の最大）。立ち寄りが無ければ null。訪問順の並べ替えに使う。
+  val lastStopAt: Date?,
 )

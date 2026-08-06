@@ -51,8 +51,32 @@ class PlacesViewModel @Inject constructor(
     }
   }
 
-  fun setFilter(filter: PlacesFilter) {
-    _uiState.value = _uiState.value.copy(filter = filter)
+  /** 行きたいの絞り込み（指定なし/行きたい/行きたい以外）。 */
+  fun setWishlistFilter(filter: WishlistFilter) {
+    _uiState.value = _uiState.value.copy(wishlistFilter = filter)
+  }
+
+  /** 訪問状況の絞り込み（指定なし/訪問済み/未訪問）。 */
+  fun setVisitedFilter(filter: VisitedFilter) {
+    _uiState.value = _uiState.value.copy(visitedFilter = filter)
+  }
+
+  /** 絞り込みを全解除する（行きたい・訪問状況をまとめて指定なしに戻す）。並べ替えは保持。 */
+  fun clearFilters() {
+    _uiState.value = _uiState.value.copy(
+      wishlistFilter = WishlistFilter.ANY,
+      visitedFilter = VisitedFilter.ANY,
+    )
+  }
+
+  /** 並べ替え軸の変更。軸ごとの既定の向き（新しい/多い/高いが先）に合わせる。 */
+  fun setSort(sort: PlaceSort) {
+    _uiState.value = _uiState.value.copy(sort = sort, sortDescending = sort.defaultDescending)
+  }
+
+  /** 並べ替えの昇順/降順を反転する。 */
+  fun toggleSortDirection() {
+    _uiState.value = _uiState.value.copy(sortDescending = !_uiState.value.sortDescending)
   }
 
   /** その場所を含むお出掛け（経路）の一覧。詳細画面で購読する。 */

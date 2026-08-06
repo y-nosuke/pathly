@@ -6,6 +6,7 @@ import android.content.Intent
 import android.net.Uri
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -118,7 +119,11 @@ fun PlacesListRoute(
       state = uiState,
       onAddByMap = onAddByMap,
       onAddBySearch = onAddBySearch,
-      onFilterChange = viewModel::setFilter,
+      onClearFilters = viewModel::clearFilters,
+      onWishlistFilterChange = viewModel::setWishlistFilter,
+      onVisitedFilterChange = viewModel::setVisitedFilter,
+      onSortChange = viewModel::setSort,
+      onToggleSortDirection = viewModel::toggleSortDirection,
       onItemClick = { onItemClick(it.place.id) },
       onToggleWishlist = viewModel::toggleWishlist,
       // 確認ダイアログは出さず即時削除。取り消しは上のスナックバーから。
@@ -224,7 +229,11 @@ private fun PlacesListContent(
   state: PlacesState,
   onAddByMap: () -> Unit,
   onAddBySearch: () -> Unit,
-  onFilterChange: (PlacesFilter) -> Unit,
+  onClearFilters: () -> Unit,
+  onWishlistFilterChange: (WishlistFilter) -> Unit,
+  onVisitedFilterChange: (VisitedFilter) -> Unit,
+  onSortChange: (PlaceSort) -> Unit,
+  onToggleSortDirection: () -> Unit,
   onItemClick: (PlaceListItem) -> Unit,
   onToggleWishlist: (PlaceListItem) -> Unit,
   onDeleteRequest: (PlaceListItem) -> Unit,
@@ -272,17 +281,67 @@ private fun PlacesListContent(
 
     Spacer(modifier = Modifier.height(12.dp))
 
-    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-      PlacesFilter.entries.forEach { filter ->
-        FilterChip(
-          selected = state.filter == filter,
-          onClick = { onFilterChange(filter) },
-          label = { Text(filter.label) },
-        )
+    // 絞り込みは2軸独立（行きたい / 訪問状況）。横に収まらない端末向けに横スクロール可。
+    Row(
+      modifier = Modifier
+        .fillMaxWidth()
+        .horizontalScroll(rememberScrollState()),
+      horizontalArrangement = Arrangement.spacedBy(8.dp),
+      verticalAlignment = Alignment.CenterVertically,
+    ) {
+      // すべて: 絞り込みを全解除。何も絞っていないときは選択状態にして現在地を示す。
+      FilterChip(
+        selected = state.noFilter,
+        onClick = onClearFilters,
+        label = { Text("すべて") },
+      )
+      // 行きたいは1つのトグル。タップで 指定なし→行きたい→行きたい以外→… と切り替わる。
+      FilterChip(
+        selected = state.wishlistFilter != WishlistFilter.ANY,
+        onClick = {
+          val next = WishlistFilter.entries[(state.wishlistFilter.ordinal + 1) % WishlistFilter.entries.size]
+          onWishlistFilterChange(next)
+        },
+        label = { Text(state.wishlistFilter.chipLabel) },
+      )
+      // 訪問状況も1つのトグル。タップで 指定なし→訪問済み→未訪問→… と切り替わる。
+      FilterChip(
+        selected = state.visitedFilter != VisitedFilter.ANY,
+        onClick = {
+          val next = VisitedFilter.entries[(state.visitedFilter.ordinal + 1) % VisitedFilter.entries.size]
+          onVisitedFilterChange(next)
+        },
+        label = { Text(state.visitedFilter.chipLabel) },
+      )
+    }
+
+    Spacer(modifier = Modifier.height(8.dp))
+
+    // 並べ替え（軸メニュー ＋ 昇順/降順トグル）。
+    Row(verticalAlignment = Alignment.CenterVertically) {
+      Box {
+        var sortOpen by remember { mutableStateOf(false) }
+        TextButton(onClick = { sortOpen = true }) {
+          Text(text = "並べ替え: ${state.sort.label} ▾")
+        }
+        DropdownMenu(expanded = sortOpen, onDismissRequest = { sortOpen = false }) {
+          PlaceSort.entries.forEach { sort ->
+            DropdownMenuItem(
+              text = { Text(sort.label) },
+              onClick = {
+                sortOpen = false
+                onSortChange(sort)
+              },
+            )
+          }
+        }
+      }
+      TextButton(onClick = onToggleSortDirection) {
+        Text(text = if (state.sortDescending) "降順 ↓" else "昇順 ↑")
       }
     }
 
-    Spacer(modifier = Modifier.height(12.dp))
+    Spacer(modifier = Modifier.height(8.dp))
 
     when {
       state.isLoading -> {
@@ -291,7 +350,7 @@ private fun PlacesListContent(
         }
       }
 
-      state.filteredItems.isEmpty() -> {
+      state.visibleItems.isEmpty() -> {
         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
           Text(
             text = "場所がありません\n「追加」から登録できます",
@@ -304,17 +363,19 @@ private fun PlacesListContent(
 
       else -> {
         val listState = rememberLazyListState()
-        // フィルタ切替時、または先頭の項目が変わったとき（＝新しい場所を追加したとき）に先頭へ。
-        // 追加した場所は先頭に入るが、リストはスクロール位置を保持するため明示的に戻す。
-        val topItemId = state.filteredItems.firstOrNull()?.place?.id
-        LaunchedEffect(state.filter, topItemId) { listState.scrollToItem(0) }
+        // 絞り込み・並べ替えを変えたとき、または先頭が変わったとき（＝追加時）に先頭へ戻す。
+        val topItemId = state.visibleItems.firstOrNull()?.place?.id
+        LaunchedEffect(state.wishlistFilter, state.visitedFilter, state.sort, state.sortDescending, topItemId) {
+          listState.scrollToItem(0)
+        }
         LazyColumn(
           state = listState,
           verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-          items(state.filteredItems, key = { it.place.id }) { item ->
+          items(state.visibleItems, key = { it.place.id }) { item ->
             PlaceItemRow(
               item = item,
+              sort = state.sort,
               onClick = { onItemClick(item) },
               onToggleWishlist = { onToggleWishlist(item) },
               onDelete = { onDeleteRequest(item) },
@@ -330,6 +391,7 @@ private fun PlacesListContent(
 @Composable
 private fun PlaceItemRow(
   item: PlaceListItem,
+  sort: PlaceSort,
   onClick: () -> Unit,
   onToggleWishlist: () -> Unit,
   onDelete: () -> Unit,
@@ -400,6 +462,23 @@ private fun PlaceItemRow(
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
+          )
+        }
+
+        // 現在の並び順に対応する日付だけを小さく出す（何で並んでいるか分かる・常時全部は出さない）。
+        val sortDate: String? = when (sort) {
+          PlaceSort.REGISTERED -> "登録 " + DateFormatters.SHORT_DATE_FORMAT.format(item.place.createdAt)
+          PlaceSort.UPDATED -> "更新 " + DateFormatters.SHORT_DATE_FORMAT.format(item.place.updatedAt)
+          PlaceSort.VISITED -> item.visitRecencyAt?.let { "訪問 " + DateFormatters.SHORT_DATE_FORMAT.format(it) }
+          // 訪問回数は既存の「✓ 訪問N回」バッジで分かるので追加表示しない。
+          PlaceSort.VISIT_COUNT, PlaceSort.PRIORITY, PlaceSort.NAME -> null
+        }
+        sortDate?.let {
+          Spacer(modifier = Modifier.height(2.dp))
+          Text(
+            text = it,
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
           )
         }
       }
