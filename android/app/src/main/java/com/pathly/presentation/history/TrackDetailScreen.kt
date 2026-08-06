@@ -2,6 +2,8 @@ package com.pathly.presentation.history
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
@@ -64,6 +66,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.google.android.gms.maps.CameraUpdateFactory
 import com.google.android.gms.maps.model.BitmapDescriptorFactory
 import com.google.android.gms.maps.model.CameraPosition
@@ -74,7 +77,9 @@ import com.google.maps.android.compose.GoogleMap
 import com.google.maps.android.compose.MapProperties
 import com.google.maps.android.compose.MapType
 import com.google.maps.android.compose.MapUiSettings
+import com.google.maps.android.compose.MapsComposeExperimentalApi
 import com.google.maps.android.compose.Marker
+import com.google.maps.android.compose.MarkerComposable
 import com.google.maps.android.compose.MarkerState
 import com.google.maps.android.compose.Polyline
 import com.google.maps.android.compose.rememberCameraPositionState
@@ -1333,6 +1338,26 @@ private fun StatTile(
   }
 }
 
+private val MarkerStartGreen = Color(0xFF2E9E5B)
+private val MarkerEndRed = Color(0xFFD24B45)
+private val MarkerActiveBlue = Color(0xFF3B82F6)
+private val MarkerStopViolet = Color(0xFF6A4BBC)
+
+/** 地図の丸バッジ型マーカー（白フチ＋中央にグリフ/番号）。出発・到着・立ち寄りで共用。 */
+@Composable
+private fun RouteBadgeMarker(bg: Color, content: @Composable () -> Unit) {
+  Box(
+    modifier = Modifier
+      .size(34.dp)
+      .background(bg, CircleShape)
+      .border(2.dp, Color.White, CircleShape),
+    contentAlignment = Alignment.Center,
+  ) {
+    content()
+  }
+}
+
+@OptIn(MapsComposeExperimentalApi::class)
 @Composable
 private fun TrackMapView(
   track: GpsTrack,
@@ -1427,40 +1452,80 @@ private fun TrackMapView(
       val startMarkerState = remember(startPoint) {
         MarkerState(position = LatLng(startPoint.latitude, startPoint.longitude))
       }
-      Marker(
+      // 出発は緑の ▶ グリフ（色だけでなく形でも「開始」と分かる）。
+      MarkerComposable(
+        "start",
+        startPoint.latitude,
+        startPoint.longitude,
         state = startMarkerState,
         title = "開始",
         snippet = "記録開始地点 - ${DateFormatters.TIME_FORMAT.format(track.startTime)}",
-        icon = BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_GREEN),
-      )
+      ) {
+        RouteBadgeMarker(bg = MarkerStartGreen) {
+          Icon(
+            painter = painterResource(R.drawable.ic_play_arrow),
+            contentDescription = null,
+            tint = Color.White,
+            modifier = Modifier.size(20.dp),
+          )
+        }
+      }
 
       val endPoint = displayPoints.last()
       val endMarkerState = remember(endPoint) {
         MarkerState(position = LatLng(endPoint.latitude, endPoint.longitude))
       }
-      Marker(
+      // 到着は赤の ■。記録中は青＋白丸（現在地）。
+      MarkerComposable(
+        "end",
+        endPoint.latitude,
+        endPoint.longitude,
+        track.isActive,
         state = endMarkerState,
         title = if (track.isActive) "現在地" else "終了",
         snippet = track.endTime?.let {
           "記録終了地点 - ${DateFormatters.TIME_FORMAT.format(it)}"
         } ?: "記録中の最新地点",
-        icon = BitmapDescriptorFactory.defaultMarker(
-          if (track.isActive) BitmapDescriptorFactory.HUE_BLUE else BitmapDescriptorFactory.HUE_RED,
-        ),
-      )
+      ) {
+        if (track.isActive) {
+          RouteBadgeMarker(bg = MarkerActiveBlue) {
+            Box(modifier = Modifier.size(12.dp).background(Color.White, CircleShape))
+          }
+        } else {
+          RouteBadgeMarker(bg = MarkerEndRed) {
+            Icon(
+              painter = painterResource(R.drawable.ic_stop),
+              contentDescription = null,
+              tint = Color.White,
+              modifier = Modifier.size(18.dp),
+            )
+          }
+        }
+      }
     }
 
-    // 立ち寄り場所（紫のピン）
-    stops.forEach { stop ->
+    // 立ち寄り場所（訪問順の番号つき紫バッジ）。番号でルートの順序が読める。
+    stops.forEachIndexed { index, stop ->
       val stopMarkerState = remember(stop.id, stop.place.latitude, stop.place.longitude) {
         MarkerState(position = LatLng(stop.place.latitude, stop.place.longitude))
       }
-      Marker(
+      MarkerComposable(
+        "stop",
+        stop.id,
+        index,
         state = stopMarkerState,
         title = stop.place.name ?: stop.place.googleName ?: "立ち寄り",
         snippet = "${DateFormatters.SHORT_TIME_FORMAT.format(stop.arrivalTime)} ・ 滞在${stop.durationMinutes}分",
-        icon = BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_VIOLET),
-      )
+      ) {
+        RouteBadgeMarker(bg = MarkerStopViolet) {
+          Text(
+            text = "${index + 1}",
+            color = Color.White,
+            fontWeight = FontWeight.Bold,
+            fontSize = 14.sp,
+          )
+        }
+      }
     }
 
     // 再解析の候補（オレンジのピン）。既存（紫）と見分けられるようにする。
