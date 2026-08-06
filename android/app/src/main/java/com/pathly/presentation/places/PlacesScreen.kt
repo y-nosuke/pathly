@@ -6,6 +6,7 @@ import android.content.Intent
 import android.net.Uri
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -118,7 +119,9 @@ fun PlacesListRoute(
       state = uiState,
       onAddByMap = onAddByMap,
       onAddBySearch = onAddBySearch,
-      onFilterChange = viewModel::setFilter,
+      onToggleOnlyWishlisted = { viewModel.setOnlyWishlisted(!uiState.onlyWishlisted) },
+      onVisitedFilterChange = viewModel::setVisitedFilter,
+      onSortChange = viewModel::setSort,
       onItemClick = { onItemClick(it.place.id) },
       onToggleWishlist = viewModel::toggleWishlist,
       // 確認ダイアログは出さず即時削除。取り消しは上のスナックバーから。
@@ -224,7 +227,9 @@ private fun PlacesListContent(
   state: PlacesState,
   onAddByMap: () -> Unit,
   onAddBySearch: () -> Unit,
-  onFilterChange: (PlacesFilter) -> Unit,
+  onToggleOnlyWishlisted: () -> Unit,
+  onVisitedFilterChange: (VisitedFilter) -> Unit,
+  onSortChange: (PlaceSort) -> Unit,
   onItemClick: (PlaceListItem) -> Unit,
   onToggleWishlist: (PlaceListItem) -> Unit,
   onDeleteRequest: (PlaceListItem) -> Unit,
@@ -272,17 +277,62 @@ private fun PlacesListContent(
 
     Spacer(modifier = Modifier.height(12.dp))
 
-    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-      PlacesFilter.entries.forEach { filter ->
-        FilterChip(
-          selected = state.filter == filter,
-          onClick = { onFilterChange(filter) },
-          label = { Text(filter.label) },
-        )
+    // 絞り込みは2軸独立（行きたい / 訪問状況）。横に収まらない端末向けに横スクロール可。
+    Row(
+      modifier = Modifier
+        .fillMaxWidth()
+        .horizontalScroll(rememberScrollState()),
+      horizontalArrangement = Arrangement.spacedBy(8.dp),
+      verticalAlignment = Alignment.CenterVertically,
+    ) {
+      FilterChip(
+        selected = state.onlyWishlisted,
+        onClick = onToggleOnlyWishlisted,
+        label = { Text("行きたい") },
+      )
+      // 訪問済み/未訪問は排他。選択中をもう一度押すと解除（=指定なし）に戻す。
+      FilterChip(
+        selected = state.visitedFilter == VisitedFilter.VISITED,
+        onClick = {
+          onVisitedFilterChange(
+            if (state.visitedFilter == VisitedFilter.VISITED) VisitedFilter.ANY else VisitedFilter.VISITED,
+          )
+        },
+        label = { Text("訪問済み") },
+      )
+      FilterChip(
+        selected = state.visitedFilter == VisitedFilter.UNVISITED,
+        onClick = {
+          onVisitedFilterChange(
+            if (state.visitedFilter == VisitedFilter.UNVISITED) VisitedFilter.ANY else VisitedFilter.UNVISITED,
+          )
+        },
+        label = { Text("未訪問") },
+      )
+    }
+
+    Spacer(modifier = Modifier.height(8.dp))
+
+    // 並べ替え（現在の並び順を表示）。
+    Box {
+      var sortOpen by remember { mutableStateOf(false) }
+      TextButton(onClick = { sortOpen = true }) {
+        Text(text = "並べ替え: ${state.sort.label} ▾")
+      }
+      DropdownMenu(expanded = sortOpen, onDismissRequest = { sortOpen = false }) {
+        PlaceSort.entries.forEach { sort ->
+          DropdownMenuItem(
+            text = { Text(sort.label) },
+            onClick = {
+              sortOpen = false
+              onSortChange(sort)
+            },
+          )
+        }
       }
     }
 
-    Spacer(modifier = Modifier.height(12.dp))
+    Spacer(modifier = Modifier.height(8.dp))
 
     when {
       state.isLoading -> {
@@ -291,7 +341,7 @@ private fun PlacesListContent(
         }
       }
 
-      state.filteredItems.isEmpty() -> {
+      state.visibleItems.isEmpty() -> {
         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
           Text(
             text = "場所がありません\n「追加」から登録できます",
@@ -304,15 +354,16 @@ private fun PlacesListContent(
 
       else -> {
         val listState = rememberLazyListState()
-        // フィルタ切替時、または先頭の項目が変わったとき（＝新しい場所を追加したとき）に先頭へ。
-        // 追加した場所は先頭に入るが、リストはスクロール位置を保持するため明示的に戻す。
-        val topItemId = state.filteredItems.firstOrNull()?.place?.id
-        LaunchedEffect(state.filter, topItemId) { listState.scrollToItem(0) }
+        // 絞り込み・並べ替えを変えたとき、または先頭が変わったとき（＝追加時）に先頭へ戻す。
+        val topItemId = state.visibleItems.firstOrNull()?.place?.id
+        LaunchedEffect(state.onlyWishlisted, state.visitedFilter, state.sort, topItemId) {
+          listState.scrollToItem(0)
+        }
         LazyColumn(
           state = listState,
           verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-          items(state.filteredItems, key = { it.place.id }) { item ->
+          items(state.visibleItems, key = { it.place.id }) { item ->
             PlaceItemRow(
               item = item,
               onClick = { onItemClick(item) },

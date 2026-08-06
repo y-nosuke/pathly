@@ -51,8 +51,19 @@ class PlacesViewModel @Inject constructor(
     }
   }
 
-  fun setFilter(filter: PlacesFilter) {
-    _uiState.value = _uiState.value.copy(filter = filter)
+  /** 「行きたいだけ」表示の切り替え。 */
+  fun setOnlyWishlisted(only: Boolean) {
+    _uiState.value = _uiState.value.copy(onlyWishlisted = only)
+  }
+
+  /** 訪問状況の絞り込み（指定なし/訪問済み/未訪問）。 */
+  fun setVisitedFilter(filter: VisitedFilter) {
+    _uiState.value = _uiState.value.copy(visitedFilter = filter)
+  }
+
+  /** 並べ替えの変更。 */
+  fun setSort(sort: PlaceSort) {
+    _uiState.value = _uiState.value.copy(sort = sort)
   }
 
   /** その場所を含むお出掛け（経路）の一覧。詳細画面で購読する。 */

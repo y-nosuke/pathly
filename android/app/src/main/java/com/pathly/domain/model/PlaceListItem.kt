@@ -13,6 +13,8 @@ data class PlaceListItem(
   val visitedAt: Date?,
   /** この場所への立ち寄り（訪問）件数。 */
   val visitCount: Int,
+  /** 直近の立ち寄り日時（arrivalTime の最大）。立ち寄りが無ければ null。 */
+  val lastStopAt: Date? = null,
 ) {
   /** 行きたいに登録済みか。 */
   val isWishlisted: Boolean get() = wishlistId != null
@@ -22,6 +24,9 @@ data class PlaceListItem(
 
   /** 訪問済みか（実際に立ち寄った記録がある、または手動で訪問済みにした）。 */
   val isVisited: Boolean get() = visitCount > 0 || visitedAt != null
+
+  /** 訪問順の並べ替え用: 実際の立ち寄りと手動訪問のうち新しい方。未訪問なら null。 */
+  val visitRecencyAt: Date? get() = listOfNotNull(lastStopAt, visitedAt).maxOrNull()
 
   /** 場所のメモ（places.note）。 */
   val note: String? get() = place.note

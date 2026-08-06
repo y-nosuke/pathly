@@ -26,7 +26,8 @@ interface PlaceDao {
       "p.note AS note, p.createdAt AS createdAt, p.updatedAt AS updatedAt, " +
       "g.googlePlaceId AS googlePlaceId, g.name AS googleName, g.address AS googleAddress, g.category AS category, " +
       "w.id AS wishlistId, w.priority AS priority, w.visitedAt AS visitedAt, " +
-      "(SELECT COUNT(*) FROM stops s WHERE s.placeId = p.id) AS visitCount " +
+      "(SELECT COUNT(*) FROM stops s WHERE s.placeId = p.id) AS visitCount, " +
+      "(SELECT MAX(s.arrivalTime) FROM stops s WHERE s.placeId = p.id) AS lastStopAt " +
       "FROM places p " +
       "LEFT JOIN google_places g ON g.placeId = p.id " +
       "LEFT JOIN wishlist w ON w.placeId = p.id " +

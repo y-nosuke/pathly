@@ -195,5 +195,6 @@ class WishlistRepositoryImpl @Inject constructor(
     priority = priority?.let { Priority.fromValue(it) },
     visitedAt = visitedAt,
     visitCount = visitCount,
+    lastStopAt = lastStopAt,
   )
 }
