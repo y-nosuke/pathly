@@ -468,6 +468,13 @@ private fun AddPlaceContent(
     details = pickedPlaceId?.let { onFetchDetails(it) }
   }
 
+  // 地点を選んだ後の戻るは、画面を閉じず選択を解除して地図に戻す（「選び直す」と同じ・検索追加の候補戻りと揃える）。
+  BackHandler(enabled = picked != null) {
+    picked = null
+    pickedPlaceId = null
+    details = null
+  }
+
   val cameraPositionState = rememberCameraPositionState {
     position = CameraPosition.fromLatLngZoom(DEFAULT_LOCATION, 12f)
   }
