@@ -142,6 +142,7 @@ fun AddPlaceRoute(
       viewModel.registerPlace(lat, lng, name, wishlist, priority, memo, googlePlaceId)
       onDone()
     },
+    onFetchDetails = viewModel::fetchPoiDetails,
   )
 }
 
@@ -164,8 +165,8 @@ fun SearchAddRoute(
     onSelectPrediction = viewModel::selectPrediction,
     onBackToPredictions = viewModel::clearSearchResult,
     onCancel = onDone,
-    onRegister = { result, wishlist, priority, memo ->
-      viewModel.registerSearchResult(result, wishlist, priority, memo)
+    onRegister = { result, name, wishlist, priority, memo ->
+      viewModel.registerSearchResult(result, name, wishlist, priority, memo)
       onDone()
     },
   )
@@ -200,14 +201,8 @@ fun PlaceDetailRoute(
     visits = visits,
     onOpenTrack = onOpenTrack,
     onBack = onBack,
-    onToggleWishlist = { viewModel.toggleWishlist(item) },
-    onSaveName = { name -> viewModel.renamePlace(item.place.id, name) },
-    onSaveNote = { note -> viewModel.updateNote(item.place.id, note) },
-    onSavePriority = { priority ->
-      item.wishlistId?.let { viewModel.updatePriority(it, priority) }
-    },
-    onToggleVisited = { visited ->
-      item.wishlistId?.let { viewModel.setVisited(it, visited) }
+    onSave = { name, note, wishlist, priority, visited ->
+      viewModel.savePlaceEdits(item, name, note, wishlist, priority, visited)
     },
     onRegisterPoi = { lat, lng, name, wishlist, priority, memo, googlePlaceId ->
       viewModel.registerPlace(lat, lng, name, wishlist, priority, memo, googlePlaceId)
@@ -456,6 +451,7 @@ private fun WishlistFlagButton(
 private fun AddPlaceContent(
   onCancel: () -> Unit,
   onSave: (lat: Double, lng: Double, name: String?, wishlist: Boolean, priority: Priority, memo: String?, googlePlaceId: String?) -> Unit,
+  onFetchDetails: suspend (googlePlaceId: String) -> PlaceSearchResult?,
   modifier: Modifier = Modifier,
 ) {
   var picked by remember { mutableStateOf<LatLng?>(null) }
@@ -464,6 +460,20 @@ private fun AddPlaceContent(
   var memo by remember { mutableStateOf("") }
   var priority by remember { mutableStateOf(Priority.MEDIUM) }
   var wishlist by remember { mutableStateOf(false) }
+  var details by remember { mutableStateOf<PlaceSearchResult?>(null) }
+  val context = LocalContext.current
+
+  // POI をタップしたら Google からカテゴリ・住所をプレビュー取得する（登録時の取得で使い回されるので二度叩かない）。
+  LaunchedEffect(pickedPlaceId) {
+    details = pickedPlaceId?.let { onFetchDetails(it) }
+  }
+
+  // 地点を選んだ後の戻るは、画面を閉じず選択を解除して地図に戻す（「選び直す」と同じ・検索追加の候補戻りと揃える）。
+  BackHandler(enabled = picked != null) {
+    picked = null
+    pickedPlaceId = null
+    details = null
+  }
 
   val cameraPositionState = rememberCameraPositionState {
     position = CameraPosition.fromLatLngZoom(DEFAULT_LOCATION, 12f)
@@ -484,11 +494,12 @@ private fun AddPlaceContent(
         pickedPlaceId = poi.placeId
         name = poi.name.orEmpty()
       },
-      // 何もない場所をタップしたら空欄で（POI ではないので placeId 無し）。
+      // 何もない場所をタップしたら空欄で（POI ではないので placeId 無し・プレビューも無し）。
       onMapClick = { latLng ->
         picked = latLng
         pickedPlaceId = null
         name = ""
+        details = null
       },
     ) {
       picked?.let { p ->
@@ -523,10 +534,15 @@ private fun AddPlaceContent(
         modifier = Modifier
           .align(Alignment.BottomCenter)
           .fillMaxWidth()
+          .heightIn(max = 460.dp)
           .padding(12.dp),
         shape = RoundedCornerShape(12.dp),
       ) {
-        Column(modifier = Modifier.padding(16.dp)) {
+        Column(
+          modifier = Modifier
+            .verticalScroll(rememberScrollState())
+            .padding(16.dp),
+        ) {
           Text(
             text = "この場所を登録",
             style = MaterialTheme.typography.titleMedium,
@@ -535,39 +551,22 @@ private fun AddPlaceContent(
 
           Spacer(modifier = Modifier.height(8.dp))
 
-          OutlinedTextField(
-            value = name,
-            onValueChange = { name = it },
-            label = { Text("名前（任意・後で取得も可）") },
-            singleLine = true,
-            modifier = Modifier.fillMaxWidth(),
+          PlaceFormBody(
+            name = name,
+            onNameChange = { name = it },
+            nameLabel = "名前（任意・後で取得も可）",
+            category = details?.category,
+            address = details?.address,
+            onOpenInMaps = picked?.let { p ->
+              { openPlaceInGoogleMaps(context, pickedPlaceId, p.latitude, p.longitude, name.ifBlank { "選択した場所" }) }
+            },
+            memo = memo,
+            onMemoChange = { memo = it },
+            wishlist = wishlist,
+            onWishlistChange = { wishlist = it },
+            priority = priority,
+            onPriorityChange = { priority = it },
           )
-
-          Spacer(modifier = Modifier.height(8.dp))
-
-          // メモは「行きたい」に関係なく常に入力できる。
-          OutlinedTextField(
-            value = memo,
-            onValueChange = { memo = it },
-            label = { Text("メモ（任意）") },
-            modifier = Modifier.fillMaxWidth(),
-          )
-
-          Spacer(modifier = Modifier.height(8.dp))
-
-          Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically,
-          ) {
-            Text("行きたいに登録")
-            Switch(checked = wishlist, onCheckedChange = { wishlist = it })
-          }
-
-          if (wishlist) {
-            Spacer(modifier = Modifier.height(8.dp))
-            PrioritySelector(selected = priority, onSelect = { priority = it })
-          }
 
           Spacer(modifier = Modifier.height(12.dp))
 
@@ -576,6 +575,7 @@ private fun AddPlaceContent(
               onClick = {
                 picked = null
                 pickedPlaceId = null
+                details = null
               },
               modifier = Modifier.weight(1f),
             ) {
@@ -615,11 +615,7 @@ private fun PlaceDetailContent(
   item: PlaceListItem,
   visits: List<PlaceVisit>,
   onBack: () -> Unit,
-  onToggleWishlist: () -> Unit,
-  onSaveName: (name: String) -> Unit,
-  onSaveNote: (note: String?) -> Unit,
-  onSavePriority: (priority: Priority) -> Unit,
-  onToggleVisited: (Boolean) -> Unit,
+  onSave: (name: String, note: String, wishlist: Boolean, priority: Priority, visited: Boolean) -> Unit,
   onRegisterPoi: (lat: Double, lng: Double, name: String, wishlist: Boolean, priority: Priority, memo: String?, googlePlaceId: String?) -> Unit,
   onFetchPoiDetails: suspend (googlePlaceId: String) -> PlaceSearchResult?,
   onOpenTrack: (trackId: Long) -> Unit,
@@ -627,16 +623,21 @@ private fun PlaceDetailContent(
   modifier: Modifier = Modifier,
 ) {
   var poiTarget by remember { mutableStateOf<PointOfInterest?>(null) }
+  val context = LocalContext.current
   val savedName = item.place.name ?: ""
   val savedPriority = item.priority ?: Priority.MEDIUM
   val savedNote = item.note ?: ""
+  // 編集はすべてローカルに溜め、「保存」でまとめて確定する（何が未保存かを一目で分かるように）。
   var name by remember(item.place.id) { mutableStateOf(savedName) }
-  var priority by remember(item.wishlistId) { mutableStateOf(savedPriority) }
   var note by remember(item.place.id) { mutableStateOf(savedNote) }
-  val nameChanged = name.trim() != savedName.trim()
-  val noteChanged = note.trim() != savedNote.trim()
-  val priorityChanged = item.isWishlisted && priority != savedPriority
-  val hasChanges = nameChanged || noteChanged || priorityChanged
+  var wishlist by remember(item.wishlistId) { mutableStateOf(item.isWishlisted) }
+  var priority by remember(item.wishlistId) { mutableStateOf(savedPriority) }
+  var visited by remember(item.wishlistId) { mutableStateOf(item.isManuallyVisited) }
+  val hasChanges = name.trim() != savedName.trim() ||
+    note.trim() != savedNote.trim() ||
+    wishlist != item.isWishlisted ||
+    (wishlist && priority != savedPriority) ||
+    (wishlist && item.visitCount == 0 && visited != item.isManuallyVisited)
 
   // 下部カードの高さを測り、その分マップ下部に余白を入れてピンがカードに隠れないようにする。
   var sheetHeightPx by remember { mutableIntStateOf(0) }
@@ -687,95 +688,47 @@ private fun PlaceDetailContent(
           .verticalScroll(rememberScrollState())
           .padding(16.dp),
       ) {
-        Row(
-          modifier = Modifier.fillMaxWidth(),
-          horizontalArrangement = Arrangement.spacedBy(8.dp),
-          verticalAlignment = Alignment.CenterVertically,
-        ) {
-          OutlinedTextField(
-            value = name,
-            onValueChange = { name = it },
-            label = { Text("名前") },
-            placeholder = { Text(item.displayName, maxLines = 1, overflow = TextOverflow.Ellipsis) },
-            singleLine = true,
-            modifier = Modifier.weight(1f),
-          )
-          WishlistFlagButton(active = item.isWishlisted, onClick = onToggleWishlist)
-        }
-        item.place.category?.takeIf { it.isNotBlank() }?.let { category ->
-          Spacer(modifier = Modifier.height(4.dp))
-          Text(
-            text = category,
-            style = MaterialTheme.typography.labelLarge,
-            color = MaterialTheme.colorScheme.primary,
-          )
-        }
-        item.place.googleAddress?.let { address ->
-          Spacer(modifier = Modifier.height(4.dp))
-          Text(
-            text = address,
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-          )
-        }
-
-        // Google マップアプリで開く（写真・口コミ・営業時間・経路案内は Google 側に委ねる）。
-        Spacer(modifier = Modifier.height(8.dp))
-        val context = LocalContext.current
-        OutlinedButton(
-          onClick = { openInGoogleMaps(context, item.place) },
-          modifier = Modifier.fillMaxWidth(),
-        ) {
-          Icon(painter = painterResource(R.drawable.ic_place), contentDescription = null)
-          Text(text = " Google マップで開く")
-        }
-
-        // メモは「行きたい」に関係なく常に編集できる（どんな場所か思い出す手がかり）。
-        Spacer(modifier = Modifier.height(12.dp))
-        OutlinedTextField(
-          value = note,
-          onValueChange = { note = it },
-          label = { Text("メモ") },
-          modifier = Modifier.fillMaxWidth(),
-        )
-
-        if (item.isWishlisted) {
-          Spacer(modifier = Modifier.height(12.dp))
-          PrioritySelector(selected = priority, onSelect = { priority = it })
-
-          Spacer(modifier = Modifier.height(8.dp))
-          if (item.visitCount > 0) {
-            Text(
-              text = "訪問済み（立ち寄り記録 ${item.visitCount} 件）",
-              style = MaterialTheme.typography.bodyMedium,
-              color = MaterialTheme.colorScheme.secondary,
-            )
-          } else {
-            Row(
-              modifier = Modifier.fillMaxWidth(),
-              horizontalArrangement = Arrangement.SpaceBetween,
-              verticalAlignment = Alignment.CenterVertically,
-            ) {
-              Text(text = if (item.isManuallyVisited) "訪問済み" else "未訪問")
-              Switch(checked = item.isManuallyVisited, onCheckedChange = onToggleVisited)
+        PlaceFormBody(
+          name = name,
+          onNameChange = { name = it },
+          nameLabel = "名前",
+          namePlaceholder = item.displayName,
+          category = item.place.category,
+          address = item.place.googleAddress,
+          onOpenInMaps = { openInGoogleMaps(context, item.place) },
+          memo = note,
+          onMemoChange = { note = it },
+          wishlist = wishlist,
+          onWishlistChange = { wishlist = it },
+          priority = priority,
+          onPriorityChange = { priority = it },
+          wishlistOffHint = "「行きたい」に登録すると、優先度を付けられます。",
+          // 立ち寄り記録がある場所は自動で訪問済み（切替不可・件数を表示）。無ければ手動トグル。
+          visitedContent = if (item.visitCount > 0) {
+            {
+              Text(
+                text = "訪問済み（立ち寄り記録 ${item.visitCount} 件）",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.secondary,
+              )
             }
-          }
-        } else {
-          Spacer(modifier = Modifier.height(8.dp))
-          Text(
-            text = "「行きたい」に登録すると、優先度を付けられます。",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-          )
-        }
+          } else {
+            {
+              Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+              ) {
+                Text(text = if (visited) "訪問済み" else "未訪問")
+                Switch(checked = visited, onCheckedChange = { visited = it })
+              }
+            }
+          },
+        )
 
         Spacer(modifier = Modifier.height(12.dp))
         Button(
-          onClick = {
-            if (nameChanged) onSaveName(name)
-            if (noteChanged) onSaveNote(note.ifBlank { null })
-            if (priorityChanged) onSavePriority(priority)
-          },
+          onClick = { onSave(name, note, wishlist, priority, visited) },
           enabled = hasChanges,
           modifier = Modifier.fillMaxWidth(),
         ) {
@@ -850,7 +803,7 @@ private fun SearchAddContent(
   onSelectPrediction: (String) -> Unit,
   onBackToPredictions: () -> Unit,
   onCancel: () -> Unit,
-  onRegister: (result: PlaceSearchResult, wishlist: Boolean, priority: Priority, memo: String?) -> Unit,
+  onRegister: (result: PlaceSearchResult, name: String?, wishlist: Boolean, priority: Priority, memo: String?) -> Unit,
   modifier: Modifier = Modifier,
 ) {
   val result = search.result
@@ -959,86 +912,102 @@ private fun PredictionRow(
 private fun SearchResultForm(
   result: PlaceSearchResult,
   onBack: () -> Unit,
-  onRegister: (result: PlaceSearchResult, wishlist: Boolean, priority: Priority, memo: String?) -> Unit,
+  onRegister: (result: PlaceSearchResult, name: String?, wishlist: Boolean, priority: Priority, memo: String?) -> Unit,
   modifier: Modifier = Modifier,
 ) {
+  var name by remember(result) { mutableStateOf(result.name.orEmpty()) }
   var wishlist by remember(result) { mutableStateOf(false) }
   var priority by remember(result) { mutableStateOf(Priority.MEDIUM) }
   var memo by remember(result) { mutableStateOf("") }
+  val context = LocalContext.current
 
-  Column(
-    modifier = modifier
-      .fillMaxSize()
-      .padding(16.dp),
-  ) {
-    Row(verticalAlignment = Alignment.CenterVertically) {
-      FilledTonalIconButton(onClick = onBack) {
-        Icon(painter = painterResource(R.drawable.ic_arrow_back), contentDescription = "候補に戻る")
+  // 下部カードの高さを測り、その分マップ下部に余白を入れてピンがカードに隠れないようにする。
+  var sheetHeightPx by remember { mutableIntStateOf(0) }
+  val density = LocalDensity.current
+  val position = LatLng(result.latitude, result.longitude)
+  val cameraPositionState = rememberCameraPositionState {
+    this.position = CameraPosition.fromLatLngZoom(position, 16f)
+  }
+
+  Box(modifier = modifier.fillMaxSize()) {
+    // 検索で選んだ場所を地図で示す（どこか視覚的に分かるように）。
+    GoogleMap(
+      modifier = Modifier.fillMaxSize(),
+      cameraPositionState = cameraPositionState,
+      contentPadding = PaddingValues(bottom = with(density) { sheetHeightPx.toDp() }),
+      uiSettings = MapUiSettings(
+        zoomControlsEnabled = false,
+        mapToolbarEnabled = false,
+        myLocationButtonEnabled = false,
+      ),
+    ) {
+      val markerState = remember(position) { MarkerState(position = position) }
+      Marker(state = markerState, title = result.name)
+    }
+
+    FilledTonalIconButton(
+      onClick = onBack,
+      modifier = Modifier
+        .align(Alignment.TopStart)
+        .padding(12.dp),
+    ) {
+      Icon(painter = painterResource(R.drawable.ic_arrow_back), contentDescription = "候補に戻る")
+    }
+
+    Card(
+      modifier = Modifier
+        .align(Alignment.BottomCenter)
+        .onSizeChanged { sheetHeightPx = it.height }
+        .fillMaxWidth()
+        .heightIn(max = 460.dp)
+        .padding(12.dp),
+      shape = RoundedCornerShape(12.dp),
+    ) {
+      Column(
+        modifier = Modifier
+          .verticalScroll(rememberScrollState())
+          .padding(16.dp),
+      ) {
+        Text(
+          text = "この場所を登録",
+          style = MaterialTheme.typography.titleMedium,
+          fontWeight = FontWeight.Bold,
+        )
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        PlaceFormBody(
+          name = name,
+          onNameChange = { name = it },
+          nameLabel = "名前",
+          category = result.category,
+          address = result.address,
+          onOpenInMaps = {
+            openPlaceInGoogleMaps(
+              context,
+              result.googlePlaceId,
+              result.latitude,
+              result.longitude,
+              name.ifBlank { result.name ?: "選択した場所" },
+            )
+          },
+          memo = memo,
+          onMemoChange = { memo = it },
+          wishlist = wishlist,
+          onWishlistChange = { wishlist = it },
+          priority = priority,
+          onPriorityChange = { priority = it },
+        )
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        Button(
+          onClick = { onRegister(result, name.ifBlank { null }, wishlist, priority, memo.ifBlank { null }) },
+          modifier = Modifier.fillMaxWidth(),
+        ) {
+          Text("登録")
+        }
       }
-      Spacer(modifier = Modifier.height(0.dp))
-      Text(
-        text = "この場所を登録",
-        style = MaterialTheme.typography.titleLarge,
-        fontWeight = FontWeight.Bold,
-        modifier = Modifier.padding(start = 8.dp),
-      )
-    }
-
-    Spacer(modifier = Modifier.height(12.dp))
-
-    Text(
-      text = result.name ?: "（名称なし）",
-      style = MaterialTheme.typography.titleMedium,
-      fontWeight = FontWeight.Bold,
-    )
-    result.category?.takeIf { it.isNotBlank() }?.let { category ->
-      Text(
-        text = category,
-        style = MaterialTheme.typography.labelLarge,
-        color = MaterialTheme.colorScheme.primary,
-      )
-    }
-    result.address?.let { address ->
-      Text(
-        text = address,
-        style = MaterialTheme.typography.bodyMedium,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-      )
-    }
-
-    Spacer(modifier = Modifier.height(16.dp))
-
-    // メモは「行きたい」に関係なく常に入力できる。
-    OutlinedTextField(
-      value = memo,
-      onValueChange = { memo = it },
-      label = { Text("メモ（任意）") },
-      modifier = Modifier.fillMaxWidth(),
-    )
-
-    Spacer(modifier = Modifier.height(16.dp))
-
-    Row(
-      modifier = Modifier.fillMaxWidth(),
-      horizontalArrangement = Arrangement.SpaceBetween,
-      verticalAlignment = Alignment.CenterVertically,
-    ) {
-      Text("行きたいに登録")
-      Switch(checked = wishlist, onCheckedChange = { wishlist = it })
-    }
-
-    if (wishlist) {
-      Spacer(modifier = Modifier.height(8.dp))
-      PrioritySelector(selected = priority, onSelect = { priority = it })
-    }
-
-    Spacer(modifier = Modifier.height(16.dp))
-
-    Button(
-      onClick = { onRegister(result, wishlist, priority, memo.ifBlank { null }) },
-      modifier = Modifier.fillMaxWidth(),
-    ) {
-      Text("登録")
     }
   }
 }
@@ -1079,6 +1048,99 @@ private fun VisitRow(
 // ---------------------------------------------------------------------------
 // 共通
 // ---------------------------------------------------------------------------
+
+/**
+ * 場所フォームの共通本体。地図で追加・検索で追加・POI 登録・詳細編集のどこでも同じ並びで
+ * 名前 → カテゴリ/住所（Google 由来・読取専用）→ Google マップで開く → メモ →
+ * 行きたいに登録（ラベル付きスイッチ）→ 優先度 →（編集のみ）訪問済み を出す。
+ * 送信ボタン・地図・履歴・削除などは呼び出し側が持つ。
+ */
+@Composable
+internal fun PlaceFormBody(
+  name: String,
+  onNameChange: (String) -> Unit,
+  nameLabel: String,
+  category: String?,
+  address: String?,
+  onOpenInMaps: (() -> Unit)?,
+  memo: String,
+  onMemoChange: (String) -> Unit,
+  wishlist: Boolean,
+  onWishlistChange: (Boolean) -> Unit,
+  priority: Priority,
+  onPriorityChange: (Priority) -> Unit,
+  modifier: Modifier = Modifier,
+  namePlaceholder: String? = null,
+  wishlistOffHint: String? = null,
+  visitedContent: (@Composable () -> Unit)? = null,
+) {
+  Column(modifier = modifier) {
+    OutlinedTextField(
+      value = name,
+      onValueChange = onNameChange,
+      label = { Text(nameLabel) },
+      placeholder = namePlaceholder?.let {
+        { Text(it, maxLines = 1, overflow = TextOverflow.Ellipsis) }
+      },
+      singleLine = true,
+      modifier = Modifier.fillMaxWidth(),
+    )
+
+    // Google 由来のカテゴリ・住所（あれば）。「どんな場所か」の手がかり。読取専用。
+    category?.takeIf { it.isNotBlank() }?.let { c ->
+      Spacer(modifier = Modifier.height(4.dp))
+      Text(text = c, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
+    }
+    address?.takeIf { it.isNotBlank() }?.let { a ->
+      Spacer(modifier = Modifier.height(4.dp))
+      Text(text = a, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+
+    // Google マップアプリで開く（写真・口コミ・営業時間・経路は Google に委ねる）。
+    onOpenInMaps?.let { open ->
+      Spacer(modifier = Modifier.height(8.dp))
+      OutlinedButton(onClick = open, modifier = Modifier.fillMaxWidth()) {
+        Icon(painter = painterResource(R.drawable.ic_place), contentDescription = null)
+        Text(text = " Google マップで開く")
+      }
+    }
+
+    // メモは「行きたい」に関係なく常に入力できる。
+    Spacer(modifier = Modifier.height(12.dp))
+    OutlinedTextField(
+      value = memo,
+      onValueChange = onMemoChange,
+      label = { Text("メモ（任意）") },
+      modifier = Modifier.fillMaxWidth(),
+    )
+
+    Spacer(modifier = Modifier.height(12.dp))
+    Row(
+      modifier = Modifier.fillMaxWidth(),
+      horizontalArrangement = Arrangement.SpaceBetween,
+      verticalAlignment = Alignment.CenterVertically,
+    ) {
+      Text("行きたいに登録")
+      Switch(checked = wishlist, onCheckedChange = onWishlistChange)
+    }
+
+    if (wishlist) {
+      Spacer(modifier = Modifier.height(12.dp))
+      PrioritySelector(selected = priority, onSelect = onPriorityChange)
+      visitedContent?.let { content ->
+        Spacer(modifier = Modifier.height(8.dp))
+        content()
+      }
+    } else if (wishlistOffHint != null) {
+      Spacer(modifier = Modifier.height(8.dp))
+      Text(
+        text = wishlistOffHint,
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+      )
+    }
+  }
+}
 
 @Composable
 internal fun PrioritySelector(
