@@ -142,6 +142,53 @@ class PlacesViewModel @Inject constructor(
     }
   }
 
+  /**
+   * 詳細画面の編集を一括で保存する（名前・メモ・行きたい・優先度・訪問済みを差分適用）。
+   * 「行きたい」を今つけた場合は addToWishlist の返す id で訪問済みも設定できるよう、
+   * 1コルーチンで順に処理する（個別コールバックだと新規 wishlistId を掴めないため）。
+   */
+  fun savePlaceEdits(
+    item: PlaceListItem,
+    name: String,
+    note: String,
+    wishlist: Boolean,
+    priority: Priority,
+    visited: Boolean,
+  ) {
+    viewModelScope.launch {
+      try {
+        if (name.trim() != (item.place.name ?: "").trim()) {
+          wishlistRepository.renamePlace(item.place.id, name.trim())
+        }
+        val newNote = note.ifBlank { null }
+        if (newNote != item.note) {
+          wishlistRepository.updatePlaceNote(item.place.id, newNote)
+        }
+        val wishlistId = item.wishlistId
+        when {
+          // 新たに「行きたい」へ。付けた直後の id で訪問済みも反映する。
+          wishlist && wishlistId == null -> {
+            val newId = wishlistRepository.addToWishlist(item.place.id, priority)
+            if (visited && item.visitCount == 0) wishlistRepository.setVisited(newId, true)
+          }
+          // 既に「行きたい」。優先度・訪問済みの変更分だけ反映する。
+          wishlist && wishlistId != null -> {
+            if (priority != item.priority) wishlistRepository.updateWishlist(wishlistId, priority)
+            if (item.visitCount == 0 && visited != item.isManuallyVisited) {
+              wishlistRepository.setVisited(wishlistId, visited)
+            }
+          }
+          // 「行きたい」を外す（場所自体は残す）。
+          !wishlist && wishlistId != null -> {
+            wishlistRepository.removeFromWishlist(wishlistId)
+          }
+        }
+      } catch (e: Exception) {
+        _uiState.value = _uiState.value.copy(errorMessage = "保存に失敗しました: ${e.message}")
+      }
+    }
+  }
+
   // ---- キーワード検索（追加＞検索して追加） ----
 
   private var predictJob: Job? = null
@@ -181,11 +228,24 @@ class PlacesViewModel @Inject constructor(
     }
   }
 
-  /** 検索結果を登録する。行きたい ON なら wishlist にも入れる。 */
-  fun registerSearchResult(result: PlaceSearchResult, wishlist: Boolean, priority: Priority, memo: String?) {
+  /**
+   * 検索結果を登録する。[name] が Google 由来の名前と違えばユーザー名として設定する。
+   * 行きたい ON なら wishlist にも入れる。
+   */
+  fun registerSearchResult(
+    result: PlaceSearchResult,
+    name: String?,
+    wishlist: Boolean,
+    priority: Priority,
+    memo: String?,
+  ) {
     viewModelScope.launch {
       try {
         val placeId = wishlistRepository.registerSearchedPlace(result)
+        val trimmed = name?.trim().orEmpty()
+        if (trimmed.isNotEmpty() && trimmed != result.name?.trim()) {
+          wishlistRepository.renamePlace(placeId, trimmed)
+        }
         if (!memo.isNullOrBlank()) {
           wishlistRepository.updatePlaceNote(placeId, memo)
         }
