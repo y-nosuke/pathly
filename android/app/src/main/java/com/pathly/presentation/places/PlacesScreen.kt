@@ -120,9 +120,10 @@ fun PlacesListRoute(
       onAddByMap = onAddByMap,
       onAddBySearch = onAddBySearch,
       onClearFilters = viewModel::clearFilters,
-      onToggleOnlyWishlisted = { viewModel.setOnlyWishlisted(!uiState.onlyWishlisted) },
+      onWishlistFilterChange = viewModel::setWishlistFilter,
       onVisitedFilterChange = viewModel::setVisitedFilter,
       onSortChange = viewModel::setSort,
+      onToggleSortDirection = viewModel::toggleSortDirection,
       onItemClick = { onItemClick(it.place.id) },
       onToggleWishlist = viewModel::toggleWishlist,
       // 確認ダイアログは出さず即時削除。取り消しは上のスナックバーから。
@@ -229,9 +230,10 @@ private fun PlacesListContent(
   onAddByMap: () -> Unit,
   onAddBySearch: () -> Unit,
   onClearFilters: () -> Unit,
-  onToggleOnlyWishlisted: () -> Unit,
+  onWishlistFilterChange: (WishlistFilter) -> Unit,
   onVisitedFilterChange: (VisitedFilter) -> Unit,
   onSortChange: (PlaceSort) -> Unit,
+  onToggleSortDirection: () -> Unit,
   onItemClick: (PlaceListItem) -> Unit,
   onToggleWishlist: (PlaceListItem) -> Unit,
   onDeleteRequest: (PlaceListItem) -> Unit,
@@ -288,46 +290,54 @@ private fun PlacesListContent(
       verticalAlignment = Alignment.CenterVertically,
     ) {
       // すべて: 絞り込みを全解除。何も絞っていないときは選択状態にして現在地を示す。
-      val noFilter = !state.onlyWishlisted && state.visitedFilter == VisitedFilter.ANY
       FilterChip(
-        selected = noFilter,
+        selected = state.noFilter,
         onClick = onClearFilters,
         label = { Text("すべて") },
       )
+      // 行きたいは1つのトグル。タップで 指定なし→行きたい→行きたい以外→… と切り替わる。
       FilterChip(
-        selected = state.onlyWishlisted,
-        onClick = onToggleOnlyWishlisted,
-        label = { Text("行きたい") },
+        selected = state.wishlistFilter != WishlistFilter.ANY,
+        onClick = {
+          val next = WishlistFilter.entries[(state.wishlistFilter.ordinal + 1) % WishlistFilter.entries.size]
+          onWishlistFilterChange(next)
+        },
+        label = { Text(state.wishlistFilter.chipLabel) },
       )
-      // 訪問状況は1つのトグルボタン。タップで 指定なし→訪問済み→未訪問→… と切り替わる。
+      // 訪問状況も1つのトグル。タップで 指定なし→訪問済み→未訪問→… と切り替わる。
       FilterChip(
         selected = state.visitedFilter != VisitedFilter.ANY,
         onClick = {
           val next = VisitedFilter.entries[(state.visitedFilter.ordinal + 1) % VisitedFilter.entries.size]
           onVisitedFilterChange(next)
         },
-        label = { Text("訪問状況: ${state.visitedFilter.label}") },
+        label = { Text(state.visitedFilter.chipLabel) },
       )
     }
 
     Spacer(modifier = Modifier.height(8.dp))
 
-    // 並べ替え（現在の並び順を表示）。
-    Box {
-      var sortOpen by remember { mutableStateOf(false) }
-      TextButton(onClick = { sortOpen = true }) {
-        Text(text = "並べ替え: ${state.sort.label} ▾")
-      }
-      DropdownMenu(expanded = sortOpen, onDismissRequest = { sortOpen = false }) {
-        PlaceSort.entries.forEach { sort ->
-          DropdownMenuItem(
-            text = { Text(sort.label) },
-            onClick = {
-              sortOpen = false
-              onSortChange(sort)
-            },
-          )
+    // 並べ替え（軸メニュー ＋ 昇順/降順トグル）。
+    Row(verticalAlignment = Alignment.CenterVertically) {
+      Box {
+        var sortOpen by remember { mutableStateOf(false) }
+        TextButton(onClick = { sortOpen = true }) {
+          Text(text = "並べ替え: ${state.sort.label} ▾")
         }
+        DropdownMenu(expanded = sortOpen, onDismissRequest = { sortOpen = false }) {
+          PlaceSort.entries.forEach { sort ->
+            DropdownMenuItem(
+              text = { Text(sort.label) },
+              onClick = {
+                sortOpen = false
+                onSortChange(sort)
+              },
+            )
+          }
+        }
+      }
+      TextButton(onClick = onToggleSortDirection) {
+        Text(text = if (state.sortDescending) "降順 ↓" else "昇順 ↑")
       }
     }
 
@@ -355,7 +365,7 @@ private fun PlacesListContent(
         val listState = rememberLazyListState()
         // 絞り込み・並べ替えを変えたとき、または先頭が変わったとき（＝追加時）に先頭へ戻す。
         val topItemId = state.visibleItems.firstOrNull()?.place?.id
-        LaunchedEffect(state.onlyWishlisted, state.visitedFilter, state.sort, topItemId) {
+        LaunchedEffect(state.wishlistFilter, state.visitedFilter, state.sort, state.sortDescending, topItemId) {
           listState.scrollToItem(0)
         }
         LazyColumn(
@@ -460,7 +470,8 @@ private fun PlaceItemRow(
           PlaceSort.REGISTERED -> "登録 " + DateFormatters.SHORT_DATE_FORMAT.format(item.place.createdAt)
           PlaceSort.UPDATED -> "更新 " + DateFormatters.SHORT_DATE_FORMAT.format(item.place.updatedAt)
           PlaceSort.VISITED -> item.visitRecencyAt?.let { "訪問 " + DateFormatters.SHORT_DATE_FORMAT.format(it) }
-          PlaceSort.PRIORITY, PlaceSort.NAME -> null
+          // 訪問回数は既存の「✓ 訪問N回」バッジで分かるので追加表示しない。
+          PlaceSort.VISIT_COUNT, PlaceSort.PRIORITY, PlaceSort.NAME -> null
         }
         sortDate?.let {
           Spacer(modifier = Modifier.height(2.dp))
