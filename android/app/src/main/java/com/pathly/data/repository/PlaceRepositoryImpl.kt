@@ -163,7 +163,13 @@ class PlaceRepositoryImpl @Inject constructor(
     googlePlaceId: String?,
   ): Long = mutex.withLock {
     // 手動追加はユーザーの明示操作なので USER 由来（自動回収から守る）。
-    val placeId = findOrCreatePlace(latitude, longitude, PlaceSource.USER)
+    // POI 候補を選んだ（googlePlaceId あり）ときは施設の同一性で同定（隣接店を分離）。座標は Google 座標。
+    // 無いときは座標同定にフォールバック。
+    val placeId = if (googlePlaceId != null) {
+      findOrCreateByGooglePlaceId(googlePlaceId, latitude, longitude, PlaceSource.USER).first
+    } else {
+      findOrCreatePlace(latitude, longitude, PlaceSource.USER)
+    }
     val stopId = stopDao.insert(
       StopEntity(
         placeId = placeId,
@@ -377,6 +383,22 @@ class PlaceRepositoryImpl @Inject constructor(
       return existing.id
     }
     return placeDao.insert(PlaceEntity(latitude = latitude, longitude = longitude, source = source.name))
+  }
+
+  override suspend fun findOrCreateByGooglePlaceId(
+    googlePlaceId: String,
+    latitude: Double,
+    longitude: Double,
+    source: PlaceSource,
+  ): Pair<Long, Boolean> {
+    googlePlaceDao.getPlaceIdByGoogleId(googlePlaceId)?.let { existingId ->
+      // 施設の同一性で再利用。ユーザーが触ったので USER に昇格して自動回収から守る。
+      if (source == PlaceSource.USER) placeDao.updateSource(existingId, PlaceSource.USER.name)
+      return existingId to true
+    }
+    // 座標同定はしない（隣接する別施設に相乗りしない）。POI の Google 座標で新規作成する。
+    val id = placeDao.insert(PlaceEntity(latitude = latitude, longitude = longitude, source = source.name))
+    return id to false
   }
 
   private fun StopWithPlace.toStop(): Stop = Stop(

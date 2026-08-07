@@ -145,9 +145,17 @@ Google Places を「叩いたか」を place 単位で記録する。places を�
 `findOrCreatePlace(lat, lon, source)` は新規作成時に由来を刻む。既存を再利用するとき、由来が `DETECTED` でも呼び出しが
 `USER` なら `USER` に昇格する（ユーザーが触った場所を自動回収から守る。降格はしない）。
 
-> 検討中（後続）: 同定を「`googlePlaceId` があれば ID で同定（隣接店を分離）／無ければ座標フォールバック」に拡張し、
-> 記録・履歴・場所詳細の地図に「登録済みの場所」を表示して**マーカータップで紐付け**できるようにする。詳細は
-> [../adr/0005-place-source-and-lifecycle.md](../adr/0005-place-source-and-lifecycle.md) の「今後の方針」。
+### 施設の同一性（googlePlaceId）での同定
+
+ユーザー操作で **`googlePlaceId` が分かるとき（POI タップ・キーワード検索・手動追加の候補選択）は、施設の
+同一性で同定**する（`findOrCreateByGooglePlaceId`）。同じ `googlePlaceId` の place を再利用し、無ければ
+**新規**（座標同定はしない＝30m以内の隣接する別施設に相乗りしない）。place の座標は POI の Google 座標で保存。
+POI タップで既に登録済みだったら「この場所は登録済みです」と軽く通知する。`googlePlaceId` が無いとき
+（空タップ・手入力・名前なし）と自動検出は、従来どおり座標同定（30m）にフォールバックする。
+
+> 検討中（後続）: 記録・履歴・場所詳細の地図に「登録済みの場所」を表示して**マーカータップで紐付け**できる
+> ようにし、表示 OFF のときは「近くに既存あり→紐付け/新規」の確認ダイアログを出す。さらに誤検知の**選び直し**
+> （この訪問だけ付け替え・Model B）。詳細は [../adr/0005-place-source-and-lifecycle.md](../adr/0005-place-source-and-lifecycle.md) の「今後の方針」。
 
 ---
 

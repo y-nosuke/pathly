@@ -13,6 +13,7 @@ import com.pathly.data.local.entity.WishlistEntity
 import com.pathly.data.places.PlacesTextSearcher
 import com.pathly.domain.model.Place
 import com.pathly.domain.model.PlaceListItem
+import com.pathly.domain.model.PlaceRegistration
 import com.pathly.domain.model.PlaceSearchResult
 import com.pathly.domain.model.PlaceSource
 import com.pathly.domain.model.PlaceVisit
@@ -61,8 +62,14 @@ class WishlistRepositoryImpl @Inject constructor(
     name: String?,
     note: String?,
     googlePlaceId: String?,
-  ): Long {
-    val placeId = placeRepository.findOrCreatePlace(latitude, longitude, PlaceSource.USER)
+  ): PlaceRegistration {
+    // POI 由来（googlePlaceId あり）は施設の同一性で同定（隣接店を分離・同一POIはまとめる）。
+    // 無ければ座標同定にフォールバック。
+    val (placeId, alreadyExisted) = if (googlePlaceId != null) {
+      placeRepository.findOrCreateByGooglePlaceId(googlePlaceId, latitude, longitude, PlaceSource.USER)
+    } else {
+      placeRepository.findOrCreatePlace(latitude, longitude, PlaceSource.USER) to false
+    }
     // 名前が指定され、かつ場所が未命名のときだけ命名する（既存の命名は上書きしない）。
     val trimmedName = name?.trim()?.ifBlank { null }
     if (trimmedName != null && placeDao.getById(placeId)?.name == null) {
@@ -86,11 +93,17 @@ class WishlistRepositoryImpl @Inject constructor(
       )
       placeResolutionDao.upsert(PlaceResolutionEntity(placeId, Date()))
     }
-    return placeId
+    return PlaceRegistration(placeId, alreadyExisted)
   }
 
   override suspend fun registerSearchedPlace(result: PlaceSearchResult): Long {
-    val placeId = placeRepository.findOrCreatePlace(result.latitude, result.longitude, PlaceSource.USER)
+    // 検索結果は施設の同一性で同定（同じ POI の再登録は同じ place にまとめる）。
+    val placeId = placeRepository.findOrCreateByGooglePlaceId(
+      result.googlePlaceId,
+      result.latitude,
+      result.longitude,
+      PlaceSource.USER,
+    ).first
     // 検索結果は Google 由来なので google_places に記録（places.name はユーザー名専用）。
     // 表示は google_places.name にフォールバックするので、名前は自動で出る。
     googlePlaceDao.upsert(

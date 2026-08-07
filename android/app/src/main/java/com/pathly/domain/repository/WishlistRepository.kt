@@ -1,6 +1,7 @@
 package com.pathly.domain.repository
 
 import com.pathly.domain.model.PlaceListItem
+import com.pathly.domain.model.PlaceRegistration
 import com.pathly.domain.model.PlaceSearchResult
 import com.pathly.domain.model.PlaceVisit
 import com.pathly.domain.model.Priority
@@ -38,7 +39,7 @@ interface WishlistRepository {
     name: String?,
     note: String? = null,
     googlePlaceId: String? = null,
-  ): Long
+  ): PlaceRegistration
 
   /**
    * キーワード検索の結果から場所を登録する。find-or-create（30m）で場所を同定し、

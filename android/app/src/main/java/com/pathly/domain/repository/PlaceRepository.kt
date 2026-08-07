@@ -96,6 +96,19 @@ interface PlaceRepository {
   ): Long
 
   /**
+   * **施設の同一性（googlePlaceId）で**同定する。同じ googlePlaceId を持つ place があれば再利用し、
+   * 無ければ新規作成する（座標同定はしない＝30m以内の隣接する別施設に相乗りしない）。座標は POI の
+   * Google 座標を渡す前提。返り値は (placeId, 既に登録済みだったか)。
+   * 呼び出し側は必要なら google_places に名前・住所・カテゴリを控える。
+   */
+  suspend fun findOrCreateByGooglePlaceId(
+    googlePlaceId: String,
+    latitude: Double,
+    longitude: Double,
+    source: PlaceSource = PlaceSource.USER,
+  ): Pair<Long, Boolean>
+
+  /**
    * 立ち寄り（訪問）を削除する（1件でも複数でも同じ経路）。選択した訪問はすべて消し、
    * その結果どこからも参照されなくなった場所だけを場所ごと削除する。
    * 他に訪問が残る場所（＝他の履歴でも使われている）や、行きたい登録がある場所は保持する。
