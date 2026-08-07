@@ -10,6 +10,7 @@ import com.google.android.libraries.places.api.model.CircularBounds
 import com.google.android.libraries.places.api.model.Place
 import com.google.android.libraries.places.api.net.PlacesClient
 import com.google.android.libraries.places.api.net.SearchNearbyRequest
+import com.pathly.domain.model.PlaceSearchResult
 import com.pathly.util.Logger
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
@@ -83,6 +84,51 @@ class PlacesNameResolver @Inject constructor(
     }
   }
 
+  /**
+   * 座標の近くの POI 候補を**複数**返す（距離が近い順）。手動追加で「候補から選ぶ」ために使う。
+   * 最寄り1件だけの [resolve] と違い、隣接する別の店（例: 富士そば/日高屋）を取り違えないよう
+   * ユーザーに選ばせる。オフライン・失敗時は空リスト。
+   */
+  suspend fun searchNearbyCandidates(
+    latitude: Double,
+    longitude: Double,
+    maxResults: Int = 6,
+  ): List<PlaceSearchResult> = withContext(Dispatchers.IO) {
+    if (!isOnline()) return@withContext emptyList()
+    val placesClient = client ?: return@withContext emptyList()
+    try {
+      val circle = CircularBounds.newInstance(LatLng(latitude, longitude), CANDIDATE_RADIUS_METERS)
+      val fields = listOf(
+        Place.Field.ID,
+        Place.Field.DISPLAY_NAME,
+        Place.Field.FORMATTED_ADDRESS,
+        Place.Field.PRIMARY_TYPE_DISPLAY_NAME,
+        Place.Field.LOCATION,
+      )
+      val request = SearchNearbyRequest.builder(circle, fields)
+        .setMaxResultCount(maxResults.coerceIn(1, 20))
+        .setRankPreference(SearchNearbyRequest.RankPreference.DISTANCE)
+        .build()
+
+      val response = Tasks.await(placesClient.searchNearby(request))
+      response.places.mapNotNull { place ->
+        val id = place.id?.takeIf { it.isNotBlank() } ?: return@mapNotNull null
+        val loc = place.location
+        PlaceSearchResult(
+          googlePlaceId = id,
+          name = place.displayName?.takeIf { it.isNotBlank() },
+          address = place.formattedAddress?.takeIf { it.isNotBlank() },
+          category = place.primaryTypeDisplayName?.takeIf { it.isNotBlank() },
+          latitude = loc?.latitude ?: latitude,
+          longitude = loc?.longitude ?: longitude,
+        )
+      }
+    } catch (e: Exception) {
+      logger.w("searchNearby candidates failed for ($latitude, $longitude)", e)
+      emptyList()
+    }
+  }
+
   /** インターネット接続が有効か。オフラインなら Places を叩かず [Outcome.NotAttempted] にする。 */
   private fun isOnline(): Boolean {
     val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
@@ -95,5 +141,8 @@ class PlacesNameResolver @Inject constructor(
 
   companion object {
     private const val SEARCH_RADIUS_METERS = 50.0
+
+    // 候補検索は取り違えを避けるため少し広めに取り、複数件から選ばせる。
+    private const val CANDIDATE_RADIUS_METERS = 80.0
   }
 }

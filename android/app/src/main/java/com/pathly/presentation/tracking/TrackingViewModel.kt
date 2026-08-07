@@ -286,6 +286,34 @@ class TrackingViewModel @Inject constructor(
   /** POI 登録ダイアログのプレビュー用: placeId から施設情報（カテゴリ等）を取得する。 */
   suspend fun fetchPoiDetails(googlePlaceId: String): PlaceSearchResult? = wishlistRepository.fetchPlaceDetails(googlePlaceId)
 
+  /** 手動追加の確認ダイアログ用: 座標の近くの POI 候補を複数取得する（取り違え回避）。 */
+  suspend fun nearbyPois(latitude: Double, longitude: Double): List<PlaceSearchResult> = placeRepository.nearbyPois(latitude, longitude)
+
+  /**
+   * 記録中に手動で立ち寄りを追加する（「今ここ」ボタン／地図タップ）。到着・出発は呼び出し側が
+   * 近傍の軌跡点から決めて渡す。名前は候補選択／手入力／空（未命名）のいずれか。
+   */
+  fun addManualStop(
+    latitude: Double,
+    longitude: Double,
+    arrivalTime: java.util.Date,
+    departureTime: java.util.Date,
+    name: String?,
+    googlePlaceId: String?,
+  ) {
+    val trackId = _uiState.value.currentTrackId ?: return
+    viewModelScope.launch {
+      try {
+        placeRepository.addManualStop(trackId, latitude, longitude, arrivalTime, departureTime, name, googlePlaceId)
+        _uiState.value = _uiState.value.copy(
+          placeRegisteredMessage = "立ち寄りを追加しました",
+        )
+      } catch (e: Exception) {
+        _uiState.value = _uiState.value.copy(errorMessage = "立ち寄りの追加に失敗しました: ${e.message}")
+      }
+    }
+  }
+
   fun clearPlaceRegisteredMessage() {
     _uiState.value = _uiState.value.copy(placeRegisteredMessage = null)
   }
