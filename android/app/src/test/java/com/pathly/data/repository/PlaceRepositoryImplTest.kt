@@ -1,12 +1,14 @@
 package com.pathly.data.repository
 
 import com.pathly.data.local.dao.GooglePlaceDao
+import com.pathly.data.local.dao.GpsPointDao
 import com.pathly.data.local.dao.PlaceDao
 import com.pathly.data.local.dao.PlaceResolutionDao
 import com.pathly.data.local.dao.SmoothedPointDao
 import com.pathly.data.local.dao.StopDao
 import com.pathly.data.local.dao.WishlistDao
 import com.pathly.data.local.entity.GooglePlaceEntity
+import com.pathly.data.local.entity.GpsPointEntity
 import com.pathly.data.local.entity.PlaceEntity
 import com.pathly.data.local.entity.PlaceResolutionEntity
 import com.pathly.data.local.entity.SmoothedPointEntity
@@ -32,6 +34,7 @@ class PlaceRepositoryImplTest {
   private val placeDao = mockk<PlaceDao>(relaxed = true)
   private val stopDao = mockk<StopDao>(relaxed = true)
   private val smoothedPointDao = mockk<SmoothedPointDao>(relaxed = true)
+  private val gpsPointDao = mockk<GpsPointDao>(relaxed = true)
   private val placeResolutionDao = mockk<PlaceResolutionDao>(relaxed = true)
   private val googlePlaceDao = mockk<GooglePlaceDao>(relaxed = true)
   private val wishlistDao = mockk<WishlistDao>(relaxed = true)
@@ -40,10 +43,19 @@ class PlaceRepositoryImplTest {
     placeDao,
     stopDao,
     smoothedPointDao,
+    gpsPointDao,
     placeResolutionDao,
     googlePlaceDao,
     wishlistDao,
     resolver,
+  )
+
+  private fun gp(lat: Double, lon: Double) = GpsPointEntity(
+    trackId = 1L,
+    latitude = lat,
+    longitude = lon,
+    accuracy = 5f,
+    timestamp = Date(),
   )
 
   private fun sp(lat: Double, lon: Double, timeSec: Long, seq: Int) = SmoothedPointEntity(
@@ -125,6 +137,8 @@ class PlaceRepositoryImplTest {
     coEvery { placeResolutionDao.getByPlace(20L) } returns null
     coEvery { resolver.resolve(any(), any()) } returns
       PlacesNameResolver.Outcome.Found("カフェ", "住所", "カフェ・喫茶", "gp-2")
+    // 生の現在地はまだ立ち寄りの中心にある＝滞在中。
+    coEvery { gpsPointDao.getLatestPoint(1L) } returns gp(35.0, 139.0)
 
     repository.updateStopsForTrack(1L, isFinal = false)
 
@@ -135,6 +149,28 @@ class PlaceRepositoryImplTest {
     assertEquals(20L, current!!.place.id)
     coVerify { googlePlaceDao.upsert(match { it.placeId == 20L && it.googlePlaceId == "gp-2" }) }
     coVerify { placeResolutionDao.upsert(match { it.placeId == 20L }) }
+  }
+
+  // 補正後の末尾はまだ滞在中でも、生の現在地が立ち寄りの半径外に出ていれば「立ち寄り中」表示は
+  // 即クリアする（補正の確定ラグや 50m を抜けきる分を待たない）。表示のみで保存には影響しない。
+  @Test
+  fun updateStops_whenLiveLocationLeftRadius_clearsCurrentStopDespiteLaggingSmoothed() = runTest {
+    coEvery { smoothedPointDao.getByTrackAfter(1L, any()) } returns dwellingPoints()
+    coEvery { stopDao.getByTrack(1L) } returns emptyList()
+    coEvery { placeDao.getAll() } returns emptyList()
+    coEvery { placeDao.insert(any()) } returns 20L
+    coEvery { placeDao.getById(20L) } returns
+      PlaceEntity(id = 20L, name = "カフェ", latitude = 35.0, longitude = 139.0)
+    coEvery { placeDao.getUnresolvedPlacesForTrack(1L) } returns emptyList()
+    coEvery { placeResolutionDao.getByPlace(20L) } returns null
+    // 生の現在地はクラスタ中心(≈35.0,139.0)から約1.4km離れている＝離脱済み。
+    coEvery { gpsPointDao.getLatestPoint(1L) } returns gp(35.0100, 139.0100)
+
+    repository.updateStopsForTrack(1L, isFinal = false)
+
+    // 滞在中は保存しないが、生の現在地が離れているので表示も出さない。
+    coVerify(exactly = 0) { stopDao.insert(any()) }
+    assertNull(repository.currentStop.value)
   }
 
   @Test
@@ -197,6 +233,8 @@ class PlaceRepositoryImplTest {
     coEvery { placeDao.getUnresolvedPlacesForTrack(1L) } returns emptyList()
     coEvery { placeResolutionDao.getByPlace(50L) } returns null
     coEvery { resolver.resolve(any(), any()) } returns PlacesNameResolver.Outcome.NotAttempted
+    // 生の現在地はクラスタB（滞在中）の中心付近にある＝滞在中。
+    coEvery { gpsPointDao.getLatestPoint(1L) } returns gp(35.0100, 139.0100)
 
     // パス1: ライブ検出でクラスタA（0-240s）を確定し、境界を A.departure(240s) まで進める
     // （末尾のクラスタB は滞在中で未確定＝currentStop）。
