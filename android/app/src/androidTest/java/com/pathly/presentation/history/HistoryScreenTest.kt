@@ -244,12 +244,15 @@ class HistoryScreenTest {
       }
     }
 
-    // When - オーバーフローメニューを開いてから「削除」を選ぶ。
+    // When - オーバーフローメニューを開いて「削除」を選び、確認ダイアログで「削除する」を押す。
     composeTestRule
       .onNodeWithContentDescription("その他")
       .performClick()
     composeTestRule
       .onNodeWithText("削除")
+      .performClick()
+    composeTestRule
+      .onNodeWithText("削除する")
       .performClick()
 
     // Then

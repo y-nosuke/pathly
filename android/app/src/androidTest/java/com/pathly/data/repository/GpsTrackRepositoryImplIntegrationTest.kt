@@ -48,6 +48,7 @@ class GpsTrackRepositoryImplIntegrationTest {
       database.gpsTrackDao(),
       database.gpsPointDao(),
       database.smoothedPointDao(),
+      database.stopDao(),
       encryptionHelper,
     )
   }

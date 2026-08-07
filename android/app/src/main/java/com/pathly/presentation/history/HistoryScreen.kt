@@ -57,6 +57,8 @@ fun HistoryScreen(
 
   // 名前を編集中の経路（null=ダイアログ非表示）。
   var renameTarget by remember { mutableStateOf<GpsTrack?>(null) }
+  // 削除確認中の経路（null=ダイアログ非表示）。削除は破壊的（点列・立ち寄りもCASCADEで消える）ため確認する。
+  var deleteTarget by remember { mutableStateOf<GpsTrack?>(null) }
 
   Column(
     modifier = modifier
@@ -149,7 +151,7 @@ fun HistoryScreen(
               onTrackClick = { onTrackClick(track) },
               onToggleFavorite = { viewModel.toggleFavorite(track) },
               onRenameClick = { renameTarget = track },
-              onDeleteClick = { viewModel.deleteTrack(track) },
+              onDeleteClick = { deleteTarget = track },
             )
           }
         }
@@ -170,6 +172,27 @@ fun HistoryScreen(
       onConfirm = { newName ->
         viewModel.renameTrack(target.id, newName)
         renameTarget = null
+      },
+    )
+  }
+
+  deleteTarget?.let { target ->
+    val label = target.name?.takeIf { it.isNotBlank() }
+      ?: DateFormatters.SHORT_DATE_FORMAT.format(target.startTime)
+    AlertDialog(
+      onDismissRequest = { deleteTarget = null },
+      title = { Text("記録を削除しますか？") },
+      text = { Text("「$label」の経路・立ち寄りをすべて削除します。この操作は元に戻せません。") },
+      confirmButton = {
+        TextButton(onClick = {
+          viewModel.deleteTrack(target)
+          deleteTarget = null
+        }) {
+          Text("削除する", color = MaterialTheme.colorScheme.error)
+        }
+      },
+      dismissButton = {
+        TextButton(onClick = { deleteTarget = null }) { Text("キャンセル") }
       },
     )
   }
