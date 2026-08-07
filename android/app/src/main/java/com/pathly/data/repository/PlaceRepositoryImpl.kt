@@ -199,6 +199,57 @@ class PlaceRepositoryImpl @Inject constructor(
 
   override suspend fun nearbyPois(latitude: Double, longitude: Double): List<PlaceSearchResult> = placesNameResolver.searchNearbyCandidates(latitude, longitude)
 
+  override suspend fun reassignStopPlace(stopId: Long, chosen: PlaceSearchResult?, customName: String?) = mutex.withLock {
+    val stop = stopDao.getByIds(listOf(stopId)).firstOrNull() ?: return@withLock
+    val oldPlaceId = stop.placeId
+    val trimmedName = customName?.trim()?.ifBlank { null }
+
+    val newPlaceId: Long = when {
+      // POI 候補を選んだ: 施設の同一性で同定した place へ付け替える（隣接店を分離）。
+      chosen != null -> {
+        val pid = findOrCreateByGooglePlaceId(chosen.googlePlaceId, chosen.latitude, chosen.longitude, PlaceSource.USER).first
+        if (googlePlaceDao.getByPlace(pid) == null) {
+          googlePlaceDao.upsert(
+            GooglePlaceEntity(pid, chosen.googlePlaceId, chosen.name, chosen.address, chosen.category),
+          )
+        }
+        if (placeResolutionDao.getByPlace(pid) == null) placeResolutionDao.upsert(PlaceResolutionEntity(pid, Date()))
+        pid
+      }
+      // 名前だけ手入力: 元の場所の座標で、新しい USER 場所を作る（座標同定せず隣接と分離）。
+      trimmedName != null -> {
+        val old = placeDao.getById(oldPlaceId)
+        val pid = placeDao.insert(
+          PlaceEntity(
+            name = trimmedName,
+            latitude = old?.latitude ?: 0.0,
+            longitude = old?.longitude ?: 0.0,
+            source = PlaceSource.USER.name,
+          ),
+        )
+        placeResolutionDao.upsert(PlaceResolutionEntity(pid, Date()))
+        pid
+      }
+      // 何も選ばれていなければ何もしない。
+      else -> return@withLock
+    }
+
+    if (newPlaceId == oldPlaceId) return@withLock // 同じ場所なら変更なし
+    stopDao.updatePlace(stopId, newPlaceId)
+    // 付け替えで参照が無くなった元の場所が検出由来なら回収する（誤検知の後始末）。
+    recycleIfOrphanedDetected(oldPlaceId)
+    logger.i("Reassigned stop $stopId from place $oldPlaceId to $newPlaceId")
+  }
+
+  /** 参照（訪問・行きたい）が無くなった場所が検出由来（DETECTED）なら回収する。子は CASCADE で消える。 */
+  private suspend fun recycleIfOrphanedDetected(placeId: Long) {
+    val place = placeDao.getById(placeId) ?: return
+    val referenced = stopDao.countByPlace(placeId) > 0 || wishlistDao.countByPlace(placeId) > 0
+    if (!referenced && place.source == PlaceSource.DETECTED.name) {
+      placeDao.deleteById(placeId)
+    }
+  }
+
   override suspend fun resolveUnresolvedNames(trackId: Long) {
     try {
       mutex.withLock {
