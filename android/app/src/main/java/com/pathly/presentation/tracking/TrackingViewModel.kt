@@ -272,11 +272,17 @@ class TrackingViewModel @Inject constructor(
   ) {
     viewModelScope.launch {
       try {
-        val placeId = wishlistRepository.registerPlace(latitude, longitude, name, memo, googlePlaceId)
+        val reg = wishlistRepository.registerPlace(latitude, longitude, name, memo, googlePlaceId)
         if (wishlist) {
-          wishlistRepository.addToWishlist(placeId, priority)
+          wishlistRepository.addToWishlist(reg.placeId, priority)
         }
-        _uiState.value = _uiState.value.copy(placeRegisteredMessage = "「${name?.ifBlank { null } ?: "場所"}」を登録しました")
+        _uiState.value = _uiState.value.copy(
+          placeRegisteredMessage = if (reg.alreadyExisted) {
+            "この場所は登録済みです"
+          } else {
+            "「${name?.ifBlank { null } ?: "場所"}」を登録しました"
+          },
+        )
       } catch (e: Exception) {
         _uiState.value = _uiState.value.copy(errorMessage = "場所の登録に失敗しました: ${e.message}")
       }

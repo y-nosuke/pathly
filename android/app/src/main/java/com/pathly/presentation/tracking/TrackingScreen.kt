@@ -307,8 +307,8 @@ fun TrackingScreen(
       target = target,
       points = uiState.currentTrack?.smoothedPoints.orEmpty(),
       onFetchCandidates = viewModel::nearbyPois,
-      onConfirm = { arrival, departure, name, googlePlaceId ->
-        viewModel.addManualStop(target.latitude, target.longitude, arrival, departure, name, googlePlaceId)
+      onConfirm = { lat, lng, arrival, departure, name, googlePlaceId ->
+        viewModel.addManualStop(lat, lng, arrival, departure, name, googlePlaceId)
         manualTarget = null
       },
       onDismiss = { manualTarget = null },
@@ -326,7 +326,7 @@ private fun ManualStopDialog(
   target: LatLng,
   points: List<GpsPoint>,
   onFetchCandidates: suspend (Double, Double) -> List<PlaceSearchResult>,
-  onConfirm: (arrival: Date, departure: Date, name: String?, googlePlaceId: String?) -> Unit,
+  onConfirm: (lat: Double, lng: Double, arrival: Date, departure: Date, name: String?, googlePlaceId: String?) -> Unit,
   onDismiss: () -> Unit,
 ) {
   val (arrival, departure) = remember(target, points) {
@@ -426,8 +426,12 @@ private fun ManualStopDialog(
     },
     confirmButton = {
       TextButton(onClick = {
-        val name = selected?.name ?: customName.trim().ifBlank { null }
-        onConfirm(arrival, departure, name, selected?.googlePlaceId)
+        val picked = selected
+        val name = picked?.name ?: customName.trim().ifBlank { null }
+        // 候補を選んだときは place を候補の Google 座標で保存（他経路と統一）。無ければタップ地点。
+        val lat = picked?.latitude ?: target.latitude
+        val lng = picked?.longitude ?: target.longitude
+        onConfirm(lat, lng, arrival, departure, name, picked?.googlePlaceId)
       }) {
         // 名前が決まっていなければ「名前なしで追加」を明示する。
         Text(if (selected == null && customName.isBlank()) "名前なしで追加" else "追加")

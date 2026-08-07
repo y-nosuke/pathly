@@ -97,9 +97,9 @@ class PlacesViewModel @Inject constructor(
   ) {
     viewModelScope.launch {
       try {
-        val placeId = wishlistRepository.registerPlace(latitude, longitude, name, memo, googlePlaceId)
+        val reg = wishlistRepository.registerPlace(latitude, longitude, name, memo, googlePlaceId)
         if (wishlist) {
-          wishlistRepository.addToWishlist(placeId, priority)
+          wishlistRepository.addToWishlist(reg.placeId, priority)
         }
       } catch (e: Exception) {
         _uiState.value = _uiState.value.copy(errorMessage = "登録に失敗しました: ${e.message}")

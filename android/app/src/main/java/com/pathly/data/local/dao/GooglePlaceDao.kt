@@ -15,4 +15,8 @@ interface GooglePlaceDao {
 
   @Query("SELECT * FROM google_places WHERE placeId = :placeId")
   suspend fun getByPlace(placeId: Long): GooglePlaceEntity?
+
+  /** その googlePlaceId を持つ place の id（施設の同一性での同定に使う）。無ければ null。 */
+  @Query("SELECT placeId FROM google_places WHERE googlePlaceId = :googlePlaceId LIMIT 1")
+  suspend fun getPlaceIdByGoogleId(googlePlaceId: String): Long?
 }

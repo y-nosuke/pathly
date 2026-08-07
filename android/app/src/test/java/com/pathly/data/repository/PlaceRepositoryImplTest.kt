@@ -392,6 +392,8 @@ class PlaceRepositoryImplTest {
     coEvery { placeDao.getById(10L) } returns PlaceEntity(id = 10L, latitude = 35.0, longitude = 139.0)
     coEvery { placeResolutionDao.getByPlace(10L) } returns null
     coEvery { googlePlaceDao.getByPlace(10L) } returns null
+    // その googlePlaceId の place はまだ無い → ID 同定で新規作成される。
+    coEvery { googlePlaceDao.getPlaceIdByGoogleId("gp-9") } returns null
 
     repository.addManualStop(1L, 35.0, 139.0, Date(0), Date(180_000), "スタバ", "gp-9")
 
@@ -400,6 +402,21 @@ class PlaceRepositoryImplTest {
     coVerify { googlePlaceDao.upsert(match { it.placeId == 10L && it.googlePlaceId == "gp-9" }) }
     coVerify { placeResolutionDao.upsert(match { it.placeId == 10L }) }
     coVerify(exactly = 0) { resolver.resolve(any(), any()) }
+  }
+
+  @Test
+  fun addManualStop_poiAlreadyRegistered_reusesPlaceByGoogleId() = runTest {
+    // 既に同じ googlePlaceId の place(77) がある → 施設の同一性で再利用し、新規作成しない。
+    coEvery { googlePlaceDao.getPlaceIdByGoogleId("gp-9") } returns 77L
+    coEvery { placeDao.getById(77L) } returns
+      PlaceEntity(id = 77L, name = "スタバ", latitude = 35.0, longitude = 139.0, source = "USER")
+    coEvery { stopDao.insert(any()) } returns 100L
+    coEvery { placeResolutionDao.getByPlace(77L) } returns PlaceResolutionEntity(77L, Date(0))
+
+    repository.addManualStop(1L, 35.0, 139.0, Date(0), Date(180_000), "スタバ", "gp-9")
+
+    coVerify { stopDao.insert(match { it.placeId == 77L }) }
+    coVerify(exactly = 0) { placeDao.insert(any()) } // 座標で新規作成しない（ID同定で再利用）
   }
 
   @Test
