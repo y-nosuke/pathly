@@ -55,13 +55,13 @@ import com.google.maps.android.compose.GoogleMap
 import com.google.maps.android.compose.MapProperties
 import com.google.maps.android.compose.MapType
 import com.google.maps.android.compose.MapUiSettings
-import com.google.maps.android.compose.Polyline
 import com.google.maps.android.compose.rememberCameraPositionState
 import com.pathly.R
 import com.pathly.domain.model.GpsTrack
 import com.pathly.domain.model.Stop
+import com.pathly.presentation.common.RouteMapContent
+import com.pathly.presentation.common.stopSegmentPoints
 import com.pathly.presentation.places.RegisterPlaceFromPoiDialog
-import com.pathly.ui.theme.TrackLineOrange
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.util.Date
@@ -104,6 +104,8 @@ fun TrackingScreen(
   }
 
   var poiTarget by remember { mutableStateOf<PointOfInterest?>(null) }
+  // 停止の誤爆防止（記録中の停止だけ確認を挟む）。
+  var showStopConfirm by remember { mutableStateOf(false) }
 
   Box(modifier = modifier.fillMaxSize()) {
     if (mapContent != null) {
@@ -113,6 +115,8 @@ fun TrackingScreen(
         hasPermission = uiState.hasLocationPermission,
         track = uiState.currentTrack,
         currentLocation = uiState.currentLocation,
+        stops = uiState.stops,
+        currentStop = uiState.currentStop,
         onPoiClick = { poiTarget = it },
         modifier = Modifier.fillMaxSize(),
       )
@@ -180,9 +184,7 @@ fun TrackingScreen(
       }
 
       if (uiState.isTracking) {
-        uiState.currentStop?.let { stop ->
-          CurrentStopCard(stop = stop, modifier = Modifier.fillMaxWidth())
-        }
+        // 「立ち寄り中」は地図上のマーカー（滞在時間ラベル付き）で示すので、下部カードは出さない。
         TrackingStatsCard(
           track = uiState.currentTrack,
           locationCount = uiState.locationCount,
@@ -207,10 +209,30 @@ fun TrackingScreen(
         RecordFab(
           isTracking = uiState.isTracking,
           onStartTracking = viewModel::startTracking,
-          onStopTracking = viewModel::stopTracking,
+          onStopTracking = { showStopConfirm = true },
         )
       }
     }
+  }
+
+  // 停止の確認ダイアログ（誤爆防止）。
+  if (showStopConfirm) {
+    AlertDialog(
+      onDismissRequest = { showStopConfirm = false },
+      title = { Text("記録を停止しますか？") },
+      text = { Text("記録を停止して履歴に保存します。") },
+      confirmButton = {
+        TextButton(onClick = {
+          showStopConfirm = false
+          viewModel.stopTracking()
+        }) {
+          Text("停止する")
+        }
+      },
+      dismissButton = {
+        TextButton(onClick = { showStopConfirm = false }) { Text("続ける") }
+      },
+    )
   }
 
   poiTarget?.let { poi ->
@@ -239,6 +261,8 @@ private fun TrackingMapView(
   hasPermission: Boolean,
   track: GpsTrack?,
   currentLocation: LocationInfo?,
+  stops: List<Stop>,
+  currentStop: Stop?,
   onPoiClick: (PointOfInterest) -> Unit,
   modifier: Modifier = Modifier,
 ) {
@@ -333,12 +357,27 @@ private fun TrackingMapView(
       // 施設アイコン（POI）をタップしたら場所登録ダイアログを開く
       onPOIClick = onPoiClick,
     ) {
-      val points = track?.smoothedPoints.orEmpty()
-      if (points.size >= 2) {
-        Polyline(
-          points = points.map { LatLng(it.latitude, it.longitude) },
-          color = TrackLineOrange,
-          width = 8f,
+      val displayPoints = track?.smoothedPoints.orEmpty()
+      if (track != null && displayPoints.size >= 2) {
+        // 確定済み立ち寄りの滞在区間（帯）。詳細画面と同じ描画。
+        val stopSegments = remember(displayPoints, stops) {
+          stops.mapNotNull { s ->
+            stopSegmentPoints(displayPoints, s.arrivalTime, s.departureTime).takeIf { it.size >= 2 }
+          }
+        }
+        // 立ち寄り中（ライブ）の滞在区間。
+        val currentSeg = remember(displayPoints, currentStop) {
+          currentStop?.let { stopSegmentPoints(displayPoints, it.arrivalTime, it.departureTime) }.orEmpty()
+        }
+        RouteMapContent(
+          track = track,
+          displayPoints = displayPoints,
+          stops = stops,
+          stopSegments = stopSegments,
+          currentStop = currentStop,
+          currentStopSegment = currentSeg,
+          // 記録中は端末の現在地ドットがあるので、終了/現在地マーカーは重複を避けて出さない。
+          showEndMarker = false,
         )
       }
     }
@@ -447,39 +486,6 @@ private fun RecordingStatusPill(
         text = elapsedText,
         style = MaterialTheme.typography.labelLarge,
         color = MaterialTheme.colorScheme.onErrorContainer,
-      )
-    }
-  }
-}
-
-@Composable
-private fun CurrentStopCard(
-  stop: Stop,
-  modifier: Modifier = Modifier,
-) {
-  val title = stop.place.name
-    ?: "%.5f, %.5f".format(stop.place.latitude, stop.place.longitude)
-  Surface(
-    modifier = modifier,
-    shape = RoundedCornerShape(16.dp),
-    color = MaterialTheme.colorScheme.tertiaryContainer,
-    shadowElevation = 4.dp,
-  ) {
-    Row(
-      modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp),
-      horizontalArrangement = Arrangement.spacedBy(10.dp),
-      verticalAlignment = Alignment.CenterVertically,
-    ) {
-      Text(
-        text = "● 立ち寄り中",
-        style = MaterialTheme.typography.labelMedium,
-        color = MaterialTheme.colorScheme.onTertiaryContainer,
-        fontWeight = FontWeight.Bold,
-      )
-      Text(
-        text = "$title ・ 滞在${stop.durationMinutes}分",
-        style = MaterialTheme.typography.bodyMedium,
-        color = MaterialTheme.colorScheme.onTertiaryContainer,
       )
     }
   }
