@@ -67,6 +67,21 @@ class PlaceRepositoryImplTest {
   // 50m圏内に4分滞在したまま（末尾まで滞在中）。確定していない＝立ち寄り中。
   private fun dwellingPoints() = finishedVisitPoints().dropLast(1)
 
+  // クラスタA [0-240s]（過去・確定できる）→ 約1.4km移動 → クラスタB [300-540s]（末尾まで滞在中）。
+  // 記録中は A が境界以前、B が境界より後（滞在中）になる。
+  private fun twoClustersDwellingAtTail() = listOf(
+    sp(35.0000, 139.0000, 0, 0),
+    sp(35.0001, 139.0000, 60, 1),
+    sp(35.0000, 139.0001, 120, 2),
+    sp(35.0001, 139.0001, 180, 3),
+    sp(35.0000, 139.0000, 240, 4),
+    sp(35.0100, 139.0100, 300, 5), // 遠くへ移動＝Aを離脱、Bの起点
+    sp(35.0101, 139.0100, 360, 6),
+    sp(35.0100, 139.0101, 420, 7),
+    sp(35.0101, 139.0101, 480, 8),
+    sp(35.0100, 139.0100, 540, 9),
+  )
+
   @Test
   fun updateStops_finalizedVisit_persistsStopAndResolvesName() = runTest {
     coEvery { smoothedPointDao.getByTrackAfter(1L, any()) } returns finishedVisitPoints()
@@ -161,6 +176,40 @@ class PlaceRepositoryImplTest {
     // 入らず、再挿入されないこと。
     repository.updateStopsForTrack(1L, isFinal = false)
     coVerify(exactly = 1) { stopDao.insert(any()) }
+  }
+
+  // 記録中の再解析は「境界（確定済みの過去）以前」だけを候補にする。滞在中・末尾はライブ検出に
+  // 任せて重複を防ぎつつ、記録中に誤って消した過去の立ち寄りは候補に出せること。
+  @Test
+  fun detectMissingStops_whileRecording_capsAtBoundary_offersPastExcludesTail() = runTest {
+    val points = twoClustersDwellingAtTail()
+    coEvery { smoothedPointDao.getByTrackAfter(1L, any()) } answers {
+      val afterMillis = secondArg<Long>()
+      points.filter { it.timestamp.time > afterMillis }
+    }
+    coEvery { smoothedPointDao.getByTrack(1L) } returns points
+    coEvery { stopDao.getByTrack(1L) } returns emptyList()
+    coEvery { placeDao.getAll() } returns emptyList()
+    coEvery { placeDao.insert(any()) } returns 50L
+    coEvery { placeDao.getById(50L) } returns
+      PlaceEntity(id = 50L, latitude = 35.01, longitude = 139.01)
+    coEvery { stopDao.insert(any()) } returns 500L
+    coEvery { placeDao.getUnresolvedPlacesForTrack(1L) } returns emptyList()
+    coEvery { placeResolutionDao.getByPlace(50L) } returns null
+    coEvery { resolver.resolve(any(), any()) } returns PlacesNameResolver.Outcome.NotAttempted
+
+    // パス1: ライブ検出でクラスタA（0-240s）を確定し、境界を A.departure(240s) まで進める
+    // （末尾のクラスタB は滞在中で未確定＝currentStop）。
+    repository.updateStopsForTrack(1L, isFinal = false)
+    assertNotNull(repository.currentStop.value)
+
+    // ユーザーが記録中に A を削除した想定（getByTrack は空）。再解析すると…
+    val candidates = repository.detectMissingStops(1L)
+
+    // 境界(240s)以前の A だけが候補に出る。滞在中の末尾 B（departure 540s）は出ない。
+    assertEquals(1, candidates.size)
+    assertEquals(Date(0L), candidates[0].detected.arrivalTime)
+    assertEquals(Date(240_000L), candidates[0].detected.departureTime)
   }
 
   @Test

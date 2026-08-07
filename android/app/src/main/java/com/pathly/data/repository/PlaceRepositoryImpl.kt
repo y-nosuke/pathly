@@ -80,7 +80,15 @@ class PlaceRepositoryImpl @Inject constructor(
 
   override suspend fun detectMissingStops(trackId: Long): List<StopCandidate> = mutex.withLock {
     val smoothed = smoothedPointDao.getByTrack(trackId).map { it.toGpsPoint() }
-    val detected = StopDetector.detect(smoothed)
+    // 記録中（この端末プロセスでライブ検出が動作中＝境界エントリがある）は、ライブ検出が
+    // 受け持つ末尾（境界より後）を候補から外し、確定済みの「過去」だけを対象にする。これで
+    // 「滞在中の立ち寄り」や、あとでライブ検出が確定保存する区間との二重登録を防ぐ。境界（＝最後に
+    // 確定した立ち寄りの departure）以前なら、記録中に誤って消した立ち寄りも候補に出せる。
+    // 終了済みの経路は境界エントリが無いので全点が対象（従来どおり）。
+    val boundaryMillis = detectionHighWaterMillis[trackId]
+    val detected = StopDetector.detect(smoothed).let { list ->
+      if (boundaryMillis != null) list.filter { it.departureTime.time <= boundaryMillis } else list
+    }
     val existing = stopDao.getByTrack(trackId)
     // 既存の立ち寄りと時間帯が重なる候補は「一覧に有る」とみなして除外する（非破壊・追加提案）。
     val missing = detected.filter { candidate -> existing.none { timeOverlaps(candidate, it) } }

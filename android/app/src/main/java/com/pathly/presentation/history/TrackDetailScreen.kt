@@ -1244,15 +1244,20 @@ private fun TrackSummaryHeader(
       horizontalArrangement = Arrangement.spacedBy(8.dp),
       verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-      // 再解析: 一覧に無い立ち寄りを検出して、選択式で追加する（非破壊）。
-      if (track.points.size >= 2 && !track.isActive) {
+      // 再解析: 一覧に無い立ち寄りを検出して、選択式で追加する（非破壊）。記録中も表示する
+      // （誤って消した立ち寄りの復旧用）。候補は境界以前＝「確定済みの過去」だけに絞られ、
+      // 滞在中・末尾はライブ検出に任せる（重複防止は PlaceRepositoryImpl.detectMissingStops 側）。
+      if (track.points.size >= 2) {
         ActionChip(
           text = "再解析",
           container = MaterialTheme.colorScheme.tertiaryContainer,
           content = MaterialTheme.colorScheme.onTertiaryContainer,
           onClick = onReanalyze,
         )
-        // 手動で追加: 検出に頼らず、地図で指した地点を立ち寄りとして足す（完全手動）。
+      }
+      // 手動で追加: 検出に頼らず、地図で指した地点を立ち寄りとして足す（完全手動）。到着/出発を
+      // 軌跡から仮置きするため、経路が伸び続ける記録中は避けて終了済みのみで表示する。
+      if (track.points.size >= 2 && !track.isActive) {
         ActionChip(
           text = "手動で追加",
           container = MaterialTheme.colorScheme.tertiaryContainer,
