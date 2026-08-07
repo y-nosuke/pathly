@@ -69,6 +69,7 @@ import com.pathly.domain.model.GpsTrack
 import com.pathly.domain.model.PlaceSearchResult
 import com.pathly.domain.model.Stop
 import com.pathly.presentation.common.RouteMapContent
+import com.pathly.presentation.common.StopReassignDialog
 import com.pathly.presentation.common.stopSegmentPoints
 import com.pathly.presentation.places.RegisterPlaceFromPoiDialog
 import com.pathly.util.DateFormatters
@@ -118,6 +119,8 @@ fun TrackingScreen(
   var showStopConfirm by remember { mutableStateOf(false) }
   // 手動で立ち寄りを追加する対象地点（「今ここ」または地図タップ）。非nullで確認ダイアログを出す。
   var manualTarget by remember { mutableStateOf<LatLng?>(null) }
+  // 立ち寄りマーカーをタップして「場所を選び直す」対象（誤検知の訂正）。
+  var reassignTarget by remember { mutableStateOf<Stop?>(null) }
 
   Box(modifier = modifier.fillMaxSize()) {
     if (mapContent != null) {
@@ -132,6 +135,8 @@ fun TrackingScreen(
         onPoiClick = { poiTarget = it },
         // 記録中は地図の空きタップで、その地点を手動立ち寄りとして追加できる。
         onMapClick = { latLng -> if (uiState.isTracking) manualTarget = latLng },
+        // 立ち寄りマーカーのタップで「場所を選び直す」（誤検知の訂正）。
+        onStopClick = { reassignTarget = it },
         modifier = Modifier.fillMaxSize(),
       )
     }
@@ -314,6 +319,18 @@ fun TrackingScreen(
       onDismiss = { manualTarget = null },
     )
   }
+
+  reassignTarget?.let { stop ->
+    StopReassignDialog(
+      stop = stop,
+      onFetchCandidates = viewModel::nearbyPois,
+      onConfirm = { chosen, customName ->
+        viewModel.reassignStop(stop.id, chosen, customName)
+        reassignTarget = null
+      },
+      onDismiss = { reassignTarget = null },
+    )
+  }
 }
 
 /**
@@ -474,6 +491,7 @@ private fun TrackingMapView(
   currentStop: Stop?,
   onPoiClick: (PointOfInterest) -> Unit,
   onMapClick: (LatLng) -> Unit,
+  onStopClick: (Stop) -> Unit,
   modifier: Modifier = Modifier,
 ) {
   val cameraPositionState = rememberCameraPositionState {
@@ -590,6 +608,7 @@ private fun TrackingMapView(
           currentStopSegment = currentSeg,
           // 記録中は端末の現在地ドットがあるので、終了/現在地マーカーは重複を避けて出さない。
           showEndMarker = false,
+          onStopClick = onStopClick,
         )
       }
     }

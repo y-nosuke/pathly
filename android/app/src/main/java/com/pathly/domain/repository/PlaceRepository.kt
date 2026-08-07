@@ -73,6 +73,14 @@ interface PlaceRepository {
    */
   suspend fun nearbyPois(latitude: Double, longitude: Double): List<PlaceSearchResult>
 
+  /**
+   * 誤検知の訂正: **この訪問（[stopId]）だけ**を、選び直した場所に付け替える（他の経路・訪問は不変）。
+   * [chosen]（POI 候補）があれば施設の同一性で同定した place へ、無ければ [customName] で新しい USER 場所を作る
+   * （どちらも座標同定はせず、隣接する別施設と分離する）。付け替えで参照が無くなった元の場所が
+   * 検出由来（DETECTED）なら自動回収する。名前・候補のどちらも無ければ何もしない。
+   */
+  suspend fun reassignStopPlace(stopId: Long, chosen: PlaceSearchResult?, customName: String?)
+
   /** その経路の未取得（googlePlaceId 無し）の place を Places で取り直す（手動「場所を取得」）。 */
   suspend fun resolveUnresolvedNames(trackId: Long)
 

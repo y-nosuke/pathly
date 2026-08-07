@@ -295,6 +295,17 @@ class TrackingViewModel @Inject constructor(
   /** 手動追加の確認ダイアログ用: 座標の近くの POI 候補を複数取得する（取り違え回避）。 */
   suspend fun nearbyPois(latitude: Double, longitude: Double): List<PlaceSearchResult> = placeRepository.nearbyPois(latitude, longitude)
 
+  /** 誤検知の訂正: この訪問だけを、選んだ候補／手入力名の場所へ付け替える。 */
+  fun reassignStop(stopId: Long, chosen: PlaceSearchResult?, customName: String?) {
+    viewModelScope.launch {
+      try {
+        placeRepository.reassignStopPlace(stopId, chosen, customName)
+      } catch (e: Exception) {
+        _uiState.value = _uiState.value.copy(errorMessage = "場所の選び直しに失敗しました: ${e.message}")
+      }
+    }
+  }
+
   /**
    * 記録中に手動で立ち寄りを追加する（「今ここ」ボタン／地図タップ）。到着・出発は呼び出し側が
    * 近傍の軌跡点から決めて渡す。名前は候補選択／手入力／空（未命名）のいずれか。

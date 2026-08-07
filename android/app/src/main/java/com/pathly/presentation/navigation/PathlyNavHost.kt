@@ -248,5 +248,7 @@ private fun TrackDetailRoute(
       viewModel.registerPlace(lat, lng, name, wishlist, priority, memo, googlePlaceId)
     },
     onFetchPoiDetails = viewModel::fetchPoiDetails,
+    onFetchNearbyPois = viewModel::nearbyPois,
+    onReassignStop = { stopId, chosen, customName -> viewModel.reassignStop(stopId, chosen, customName) },
   )
 }

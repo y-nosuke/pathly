@@ -15,6 +15,7 @@ import com.pathly.data.local.entity.SmoothedPointEntity
 import com.pathly.data.local.entity.StopEntity
 import com.pathly.data.places.PlacesNameResolver
 import com.pathly.domain.model.DetectedStop
+import com.pathly.domain.model.PlaceSearchResult
 import com.pathly.domain.model.StopCandidate
 import io.mockk.coEvery
 import io.mockk.coVerify
@@ -487,6 +488,44 @@ class PlaceRepositoryImplTest {
     arrivalTime = Date(0L),
     departureTime = Date(60_000L),
   )
+
+  @Test
+  fun reassignStopPlace_withChosenPoi_repointsStopAndRecyclesOldDetected() = runTest {
+    // stop 100 は元 place 10（検出由来・孤立）。選んだ POI(gp-9) の新 place(88) へ付け替える。
+    coEvery { stopDao.getByIds(listOf(100L)) } returns listOf(stopEntity(100L, 10L))
+    coEvery { placeDao.getById(10L) } returns
+      PlaceEntity(id = 10L, latitude = 35.0, longitude = 139.0, source = "DETECTED")
+    coEvery { googlePlaceDao.getPlaceIdByGoogleId("gp-9") } returns null
+    coEvery { placeDao.insert(any()) } returns 88L
+    coEvery { googlePlaceDao.getByPlace(88L) } returns null
+    coEvery { placeResolutionDao.getByPlace(88L) } returns null
+    coEvery { stopDao.countByPlace(10L) } returns 0
+    coEvery { wishlistDao.countByPlace(10L) } returns 0
+
+    val chosen = PlaceSearchResult("gp-9", "日高屋", "住所", "中華", 35.02, 139.02)
+    repository.reassignStopPlace(100L, chosen, null)
+
+    coVerify { stopDao.updatePlace(100L, 88L) } // この訪問だけ付け替え
+    coVerify { googlePlaceDao.upsert(match { it.placeId == 88L && it.googlePlaceId == "gp-9" }) }
+    coVerify { placeDao.deleteById(10L) } // 孤立した検出由来の元 place を回収
+  }
+
+  @Test
+  fun reassignStopPlace_withCustomName_createsNewUserPlace() = runTest {
+    coEvery { stopDao.getByIds(listOf(100L)) } returns listOf(stopEntity(100L, 10L))
+    coEvery { placeDao.getById(10L) } returns
+      PlaceEntity(id = 10L, latitude = 35.0, longitude = 139.0, source = "DETECTED")
+    coEvery { placeDao.insert(any()) } returns 88L
+    coEvery { stopDao.countByPlace(10L) } returns 0
+    coEvery { wishlistDao.countByPlace(10L) } returns 0
+
+    repository.reassignStopPlace(100L, null, "日高屋")
+
+    // 手入力名は新しい USER 場所として作る（座標同定せず分離）。
+    coVerify { placeDao.insert(match { it.name == "日高屋" && it.source == "USER" }) }
+    coVerify { stopDao.updatePlace(100L, 88L) }
+    coVerify { placeDao.deleteById(10L) }
+  }
 
   @Test
   fun deleteStops_orphanedDetectedPlaceIsDeleted_sharedPlaceIsKept() = runTest {

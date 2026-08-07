@@ -45,6 +45,10 @@ interface StopDao {
   @Query("UPDATE stops SET note = :note WHERE id = :stopId")
   suspend fun updateNote(stopId: Long, note: String?)
 
+  /** その立ち寄り（訪問）が指す場所を付け替える（誤検知の「この訪問だけ選び直し」）。 */
+  @Query("UPDATE stops SET placeId = :placeId WHERE id = :stopId")
+  suspend fun updatePlace(stopId: Long, placeId: Long)
+
   @Transaction
   @Query("SELECT * FROM stops WHERE trackId = :trackId ORDER BY arrivalTime ASC")
   fun getStopsWithPlaceByTrack(trackId: Long): Flow<List<StopWithPlace>>

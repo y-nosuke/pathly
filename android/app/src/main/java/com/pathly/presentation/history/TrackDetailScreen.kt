@@ -101,6 +101,7 @@ import com.pathly.domain.model.StopCandidate
 import com.pathly.domain.model.TrackSmoother
 import com.pathly.presentation.common.MarkerStopViolet
 import com.pathly.presentation.common.RouteMapContent
+import com.pathly.presentation.common.StopReassignDialog
 import com.pathly.presentation.common.stopSegmentPoints
 import com.pathly.presentation.places.RegisterPlaceFromPoiDialog
 import com.pathly.util.DateFormatters
@@ -173,6 +174,9 @@ fun TrackDetailScreen(
   onRegisterPlace: (lat: Double, lng: Double, name: String, wishlist: Boolean, priority: Priority, memo: String?, googlePlaceId: String?) -> Unit =
     { _, _, _, _, _, _, _ -> },
   onFetchPoiDetails: suspend (googlePlaceId: String) -> PlaceSearchResult? = { null },
+  // 誤検知の選び直し用: 座標の近くの POI 候補を取得／この訪問だけ付け替える。
+  onFetchNearbyPois: suspend (lat: Double, lng: Double) -> List<PlaceSearchResult> = { _, _ -> emptyList() },
+  onReassignStop: (stopId: Long, chosen: PlaceSearchResult?, customName: String?) -> Unit = { _, _, _ -> },
   // 地図スロット。null（既定）は実マップ（GoogleMap）を描画する。
   // テストは空スロット（{}）を渡し、GMS 依存の地図描画を避けてシート・オーバーレイだけを検証する。
   mapContent: (@Composable () -> Unit)? = null,
@@ -188,6 +192,8 @@ fun TrackDetailScreen(
   var editingStop by remember { mutableStateOf<Stop?>(null) }
   // メモ編集中の立ち寄り（stop 単位。名前編集 [editingStop] とは別ダイアログ）。
   var editingNoteStop by remember { mutableStateOf<Stop?>(null) }
+  // 「場所を選び直す」対象の立ち寄り（誤検知の訂正・この訪問だけ付け替え）。
+  var reassignTarget by remember { mutableStateOf<Stop?>(null) }
   // 地図↔一覧の連動用: 選択中の立ち寄り。地図のピン/一覧の行どちらから選んでも相互に強調・スクロールする。
   var highlightedStopId by remember { mutableStateOf<Long?>(null) }
 
@@ -502,6 +508,7 @@ fun TrackDetailScreen(
             },
             onEditStop = { editingStop = it },
             onEditStopNote = { editingNoteStop = it },
+            onReassignStop = { reassignTarget = it },
             onDeleteStop = { deleteWithUndo(listOf(it.id)) },
             onResolveNames = onResolveNames,
             onReanalyze = onReanalyze,
@@ -656,6 +663,18 @@ fun TrackDetailScreen(
         onEditStopNote(stop.id, note)
         editingNoteStop = null
       },
+    )
+  }
+
+  reassignTarget?.let { stop ->
+    StopReassignDialog(
+      stop = stop,
+      onFetchCandidates = onFetchNearbyPois,
+      onConfirm = { chosen, customName ->
+        onReassignStop(stop.id, chosen, customName)
+        reassignTarget = null
+      },
+      onDismiss = { reassignTarget = null },
     )
   }
 
@@ -1205,6 +1224,7 @@ private fun TrackDetailSheet(
   onFocusStop: (Stop) -> Unit,
   onEditStop: (Stop) -> Unit,
   onEditStopNote: (Stop) -> Unit,
+  onReassignStop: (Stop) -> Unit,
   onDeleteStop: (Stop) -> Unit,
   onResolveNames: () -> Unit,
   onReanalyze: () -> Unit,
@@ -1263,6 +1283,7 @@ private fun TrackDetailSheet(
           onFocus = { onFocusStop(stop) },
           onEdit = { onEditStop(stop) },
           onEditNote = { onEditStopNote(stop) },
+          onReassign = { onReassignStop(stop) },
           onDelete = { onDeleteStop(stop) },
           onToggleSelect = { onToggleSelect(stop) },
           onEnterSelection = { onEnterSelection(stop) },
@@ -1429,6 +1450,7 @@ private fun StopRow(
   onFocus: () -> Unit,
   onEdit: () -> Unit,
   onEditNote: () -> Unit,
+  onReassign: () -> Unit,
   onDelete: () -> Unit,
   onToggleSelect: () -> Unit,
   onEnterSelection: () -> Unit,
@@ -1496,6 +1518,8 @@ private fun StopRow(
     if (!selectionMode) {
       TextButton(onClick = onEditNote) { Text(if (note != null) "メモ" else "＋メモ") }
       TextButton(onClick = onEdit) { Text("編集") }
+      // 誤検知の訂正: この訪問だけ正しい場所へ付け替える。
+      TextButton(onClick = onReassign) { Text("選び直す") }
       TextButton(onClick = onDelete) {
         Text("削除", color = MaterialTheme.colorScheme.error)
       }

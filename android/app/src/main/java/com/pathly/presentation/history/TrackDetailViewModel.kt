@@ -136,6 +136,20 @@ class TrackDetailViewModel @Inject constructor(
   /** POI 登録ダイアログのプレビュー用: placeId から施設情報（カテゴリ等）を取得する。 */
   suspend fun fetchPoiDetails(googlePlaceId: String): PlaceSearchResult? = wishlistRepository.fetchPlaceDetails(googlePlaceId)
 
+  /** 誤検知の選び直し用: 座標の近くの POI 候補を取得する。 */
+  suspend fun nearbyPois(latitude: Double, longitude: Double): List<PlaceSearchResult> = placeRepository.nearbyPois(latitude, longitude)
+
+  /** 誤検知の訂正: この訪問だけを、選んだ候補／手入力名の場所へ付け替える。 */
+  fun reassignStop(stopId: Long, chosen: PlaceSearchResult?, customName: String?) {
+    viewModelScope.launch {
+      try {
+        placeRepository.reassignStopPlace(stopId, chosen, customName)
+      } catch (e: Exception) {
+        _message.value = "場所の選び直しに失敗しました: ${e.message}"
+      }
+    }
+  }
+
   fun clearMessage() {
     _message.value = null
   }
