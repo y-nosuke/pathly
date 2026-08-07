@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -36,6 +37,7 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -188,6 +190,8 @@ fun TrackDetailScreen(
   val screenHeightDp = LocalConfiguration.current.screenHeightDp.dp
   var tuningMode by remember { mutableStateOf(false) }
   var tuningParams by remember { mutableStateOf(SmoothingParams()) }
+  // デバッグビルドのみ: 生GPS点の付随情報（provider/各種精度/MSL/extras等）を確認するダイアログ。
+  var debugInfoOpen by remember { mutableStateOf(false) }
   var editingStop by remember { mutableStateOf<Stop?>(null) }
   // メモ編集中の立ち寄り（stop 単位。名前編集 [editingStop] とは別ダイアログ）。
   var editingNoteStop by remember { mutableStateOf<Stop?>(null) }
@@ -422,6 +426,23 @@ fun TrackDetailScreen(
             } else {
               MaterialTheme.colorScheme.onSurface
             },
+            modifier = Modifier.padding(8.dp),
+          )
+        }
+      }
+
+      // GPS点の付随情報を確認するデバッグダイアログを開くボタン（デバッグビルドのみ）。
+      if (BuildConfig.DEBUG && track.points.isNotEmpty()) {
+        Surface(
+          onClick = { debugInfoOpen = true },
+          shape = CircleShape,
+          color = MaterialTheme.colorScheme.surface,
+          shadowElevation = 4.dp,
+        ) {
+          Icon(
+            painter = painterResource(R.drawable.ic_list),
+            contentDescription = "GPS詳細（デバッグ）",
+            tint = MaterialTheme.colorScheme.onSurface,
             modifier = Modifier.padding(8.dp),
           )
         }
@@ -672,6 +693,93 @@ fun TrackDetailScreen(
       },
     )
   }
+
+  if (debugInfoOpen) {
+    GpsDebugDialog(points = track.points, onDismiss = { debugInfoOpen = false })
+  }
+}
+
+/**
+ * デバッグ用: 生 GPS 点（gps_points）の付随情報を確認するダイアログ。
+ * 保存はしているが通常 UI に出していない値（provider / 各種精度 / MSL 高度 / 単調時刻 / mock / extras）を
+ * 集計＋点ごとに一覧する。デバッグビルドからのみ開く。
+ */
+@Composable
+private fun GpsDebugDialog(
+  points: List<GpsPoint>,
+  onDismiss: () -> Unit,
+) {
+  fun f(v: Float?): String = v?.let { String.format("%.1f", it) } ?: "―"
+  fun d(v: Double?): String = v?.let { String.format("%.1f", it) } ?: "―"
+
+  val providers = points.mapNotNull { it.provider }.groupingBy { it }.eachCount()
+  val withVertical = points.count { it.verticalAccuracyMeters != null }
+  val withMsl = points.count { it.mslAltitudeMeters != null }
+  val withExtras = points.count { !it.extrasJson.isNullOrBlank() }
+  val mockCount = points.count { it.isMock }
+  val accuracies = points.map { it.accuracy }
+  val accSummary = if (accuracies.isEmpty()) {
+    "―"
+  } else {
+    "min ${f(accuracies.min())} / 平均 ${f(accuracies.average().toFloat())} / max ${f(accuracies.max())}"
+  }
+
+  AlertDialog(
+    onDismissRequest = onDismiss,
+    title = { Text("GPS詳細（デバッグ）") },
+    text = {
+      Column {
+        // 集計サマリ。
+        Text("点数: ${points.size}", style = MaterialTheme.typography.bodySmall)
+        Text(
+          "provider: " + (providers.entries.joinToString { "${it.key}×${it.value}" }.ifEmpty { "―" }),
+          style = MaterialTheme.typography.bodySmall,
+        )
+        Text("水平精度(m): $accSummary", style = MaterialTheme.typography.bodySmall)
+        Text(
+          "鉛直精度あり: $withVertical / MSL高度あり: $withMsl / extrasあり: $withExtras / mock: $mockCount",
+          style = MaterialTheme.typography.bodySmall,
+        )
+        HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+
+        // 点ごとの明細（多いのでスクロール）。
+        LazyColumn(modifier = Modifier.heightIn(max = 360.dp)) {
+          itemsIndexed(points) { i, p ->
+            Column(modifier = Modifier.padding(vertical = 4.dp)) {
+              Text(
+                "#$i  ${DateFormatters.TIME_FORMAT.format(p.timestamp)}" +
+                  (if (p.isMock) "  [MOCK]" else ""),
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.Bold,
+              )
+              Text(
+                "acc=${f(p.accuracy)} vacc=${f(p.verticalAccuracyMeters)} " +
+                  "sacc=${f(p.speedAccuracyMetersPerSecond)} bacc=${f(p.bearingAccuracyDegrees)}",
+                style = MaterialTheme.typography.bodySmall,
+              )
+              Text(
+                "alt=${d(p.altitude)} msl=${d(p.mslAltitudeMeters)}(±${f(p.mslAltitudeAccuracyMeters)}) " +
+                  "spd=${f(p.speed)} brg=${f(p.bearing)}",
+                style = MaterialTheme.typography.bodySmall,
+              )
+              Text(
+                "provider=${p.provider ?: "―"}  ert=${p.elapsedRealtimeNanos}",
+                style = MaterialTheme.typography.bodySmall,
+              )
+              if (!p.extrasJson.isNullOrBlank()) {
+                Text(
+                  "extras=${p.extrasJson}",
+                  style = MaterialTheme.typography.bodySmall,
+                  color = MaterialTheme.colorScheme.primary,
+                )
+              }
+            }
+          }
+        }
+      }
+    },
+    confirmButton = { TextButton(onClick = onDismiss) { Text("閉じる") } },
+  )
 }
 
 @Composable

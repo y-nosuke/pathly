@@ -42,8 +42,9 @@
 生バイナリ（`Parcel.marshall()`）では保存しない — その形式は将来の Android で読めなくなり得るため、
 かえって「あとで取れない」を招く。空/無し・直列化失敗なら `null`。
 
-これらは**保存だけ**行い、ドメインモデル `GpsPoint` にはまだ載せていない（距離計算・表示に使わないため）。
-必要になったら変換層（`GpsTrackRepositoryImpl`）で読み出す。
+これらは通常 UI には出さない（距離計算・表示に使わないため）。ドメインモデル `GpsPoint` には値を載せて
+おり（生点の変換 `GpsPointEntity.toGpsPoint` でのみ設定・補正後点では既定のまま）、確認用に経路詳細の
+**デバッグダイアログ**（デバッグビルドのみ・`GpsDebugDialog`）で集計＋点ごとに一覧できる。
 
 ## 実装マップ
 
@@ -51,5 +52,6 @@
 | -------------------- | ---------------------------------------------------------------------- |
 | バッチ全点保存       | `LocationTrackingService.onLocationResult` → `saveLocationsToDatabase` |
 | Location→Entity 変換 | `LocationTrackingService.Location.toGpsPointEntity`                    |
+| 確認用デバッグ表示   | `TrackDetailScreen.GpsDebugDialog`（BuildConfig.DEBUG のみ）           |
 | extras の JSON 化    | `LocationTrackingService.serializeExtras`（Bundle→JSON 文字列）        |
 | 列（付随情報）       | `GpsPointEntity` / `DatabaseMigrations.MIGRATION_8_9`（v9）            |
