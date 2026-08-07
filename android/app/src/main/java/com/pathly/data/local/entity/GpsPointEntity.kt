@@ -46,6 +46,11 @@ data class GpsPointEntity(
   val elapsedRealtimeNanos: Long = 0L,
   /** モック位置か（テスト・偽装位置の識別用）。Location.isMock。 */
   val isMock: Boolean = false,
+  /**
+   * Location.extras をベストエフォートで JSON 文字列化したもの。中身は provider 依存で不透明だが
+   * 「記録時にしか取れない」ため丸ごと保存する。空/無しなら null。バイナリではなくテキスト。
+   */
+  val extrasJson: String? = null,
   val timestamp: Date,
   val createdAt: Date = Date(),
 )

@@ -2,7 +2,7 @@
   "formatVersion": 1,
   "database": {
     "version": 9,
-    "identityHash": "d3aa6ad008c6dee88465a41b311b27b6",
+    "identityHash": "509ff49b44ae2707d126291785db3c80",
     "entities": [
       {
         "tableName": "gps_tracks",
@@ -64,7 +64,7 @@
       },
       {
         "tableName": "gps_points",
-        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `trackId` INTEGER NOT NULL, `latitude` REAL NOT NULL, `longitude` REAL NOT NULL, `altitude` REAL, `accuracy` REAL NOT NULL, `speed` REAL, `bearing` REAL, `provider` TEXT, `verticalAccuracyMeters` REAL, `speedAccuracyMetersPerSecond` REAL, `bearingAccuracyDegrees` REAL, `mslAltitudeMeters` REAL, `mslAltitudeAccuracyMeters` REAL, `elapsedRealtimeNanos` INTEGER NOT NULL, `isMock` INTEGER NOT NULL, `timestamp` INTEGER NOT NULL, `createdAt` INTEGER NOT NULL, FOREIGN KEY(`trackId`) REFERENCES `gps_tracks`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `trackId` INTEGER NOT NULL, `latitude` REAL NOT NULL, `longitude` REAL NOT NULL, `altitude` REAL, `accuracy` REAL NOT NULL, `speed` REAL, `bearing` REAL, `provider` TEXT, `verticalAccuracyMeters` REAL, `speedAccuracyMetersPerSecond` REAL, `bearingAccuracyDegrees` REAL, `mslAltitudeMeters` REAL, `mslAltitudeAccuracyMeters` REAL, `elapsedRealtimeNanos` INTEGER NOT NULL, `isMock` INTEGER NOT NULL, `extrasJson` TEXT, `timestamp` INTEGER NOT NULL, `createdAt` INTEGER NOT NULL, FOREIGN KEY(`trackId`) REFERENCES `gps_tracks`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
         "fields": [
           {
             "fieldPath": "id",
@@ -152,6 +152,11 @@
             "columnName": "isMock",
             "affinity": "INTEGER",
             "notNull": true
+          },
+          {
+            "fieldPath": "extrasJson",
+            "columnName": "extrasJson",
+            "affinity": "TEXT"
           },
           {
             "fieldPath": "timestamp",
@@ -592,7 +597,7 @@
     ],
     "setupQueries": [
       "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
-      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, 'd3aa6ad008c6dee88465a41b311b27b6')"
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '509ff49b44ae2707d126291785db3c80')"
     ]
   }
 }

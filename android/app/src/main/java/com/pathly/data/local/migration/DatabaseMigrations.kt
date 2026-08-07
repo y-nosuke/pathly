@@ -284,6 +284,8 @@ object DatabaseMigrations {
           "ALTER TABLE `gps_points` ADD COLUMN `elapsedRealtimeNanos` INTEGER NOT NULL DEFAULT 0",
         )
         db.execSQL("ALTER TABLE `gps_points` ADD COLUMN `isMock` INTEGER NOT NULL DEFAULT 0")
+        // extras（Bundle）を JSON 文字列化して保存する列（バイナリではなくテキスト）。
+        db.execSQL("ALTER TABLE `gps_points` ADD COLUMN `extrasJson` TEXT")
 
         Logger.i(TAG, "Migration from version 8 to 9 completed successfully")
       } catch (e: Exception) {

@@ -35,8 +35,12 @@
 | `mslAltitudeAccuracyMeters`    | `hasMslAltitudeAccuracy()`（API34+）       |
 | `elapsedRealtimeNanos`         | 端末起動からの単調時刻（壁時計ズレに強い） |
 | `isMock`                       | モック位置の識別                           |
+| `extrasJson`                   | `extras` を JSON 文字列化                  |
 
-`extras`（衛星数などの Bundle）は FusedLocationProvider では信頼できる形で載らないため保存しない。
+`extras`（Bundle）は provider 依存で中身が不透明だが、「記録時にしか取れない」ため**丸ごと保存する**。
+方式は**テキスト（JSON 文字列）**：スカラー/文字列はそのまま、それ以外は `toString()` で文字列化する。
+生バイナリ（`Parcel.marshall()`）では保存しない — その形式は将来の Android で読めなくなり得るため、
+かえって「あとで取れない」を招く。空/無し・直列化失敗なら `null`。
 
 これらは**保存だけ**行い、ドメインモデル `GpsPoint` にはまだ載せていない（距離計算・表示に使わないため）。
 必要になったら変換層（`GpsTrackRepositoryImpl`）で読み出す。
@@ -47,4 +51,5 @@
 | -------------------- | ---------------------------------------------------------------------- |
 | バッチ全点保存       | `LocationTrackingService.onLocationResult` → `saveLocationsToDatabase` |
 | Location→Entity 変換 | `LocationTrackingService.Location.toGpsPointEntity`                    |
+| extras の JSON 化    | `LocationTrackingService.serializeExtras`（Bundle→JSON 文字列）        |
 | 列（付随情報）       | `GpsPointEntity` / `DatabaseMigrations.MIGRATION_8_9`（v9）            |

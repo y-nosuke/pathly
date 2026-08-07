@@ -10,6 +10,7 @@ import android.location.Location
 import android.location.LocationManager
 import android.os.Binder
 import android.os.Build
+import android.os.Bundle
 import android.os.IBinder
 import android.os.Looper
 import android.util.Log
@@ -41,6 +42,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import org.json.JSONObject
 import java.util.Date
 import javax.inject.Inject
 
@@ -396,8 +398,39 @@ class LocationTrackingService : Service() {
     mslAltitudeAccuracyMeters = if (hasMslAltitudeAccuracy()) mslAltitudeAccuracyMeters else null,
     elapsedRealtimeNanos = elapsedRealtimeNanos,
     isMock = isMock,
+    extrasJson = serializeExtras(extras),
     timestamp = Date(time),
   )
+
+  /**
+   * Location.extras（Bundle）をベストエフォートで JSON 文字列に直す。中身は provider 依存で不透明だが、
+   * 記録時にしか取れないので丸ごと残す。スカラー/文字列はそのまま、それ以外は toString() で文字列化する
+   * （バイナリでは保存しない＝将来も可読）。空/無し、または直列化に失敗したら null。
+   */
+  @Suppress("DEPRECATION")
+  private fun serializeExtras(extras: Bundle?): String? {
+    if (extras == null || extras.isEmpty) return null
+    return try {
+      val json = JSONObject()
+      for (key in extras.keySet()) {
+        try {
+          when (val value = extras.get(key)) {
+            null -> json.put(key, JSONObject.NULL)
+            is String, is Boolean, is Int, is Long, is Double -> json.put(key, value)
+            is Float -> json.put(key, value.toDouble())
+            else -> json.put(key, value.toString())
+          }
+        } catch (e: Exception) {
+          // 1キーの失敗で全体を捨てない（残せるものは残す）。
+          Log.w("LocationService", "Failed to serialize extras key=$key", e)
+        }
+      }
+      json.toString().takeIf { it != "{}" }
+    } catch (e: Exception) {
+      Log.w("LocationService", "Failed to serialize location extras", e)
+      null
+    }
+  }
 
   private fun hasLocationPermission(): Boolean = PermissionUtils.hasLocationPermissions(this)
 
