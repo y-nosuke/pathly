@@ -3,6 +3,7 @@ package com.pathly.data.repository
 import com.pathly.data.local.dao.GpsPointDao
 import com.pathly.data.local.dao.GpsTrackDao
 import com.pathly.data.local.dao.SmoothedPointDao
+import com.pathly.data.local.dao.StopDao
 import com.pathly.data.local.entity.GpsPointEntity
 import com.pathly.data.local.entity.GpsTrackEntity
 import com.pathly.data.local.entity.SmoothedPointEntity
@@ -15,6 +16,7 @@ import com.pathly.util.EncryptionHelper
 import com.pathly.util.Logger
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.sync.Mutex
@@ -27,6 +29,7 @@ class GpsTrackRepositoryImpl @Inject constructor(
   private val gpsTrackDao: GpsTrackDao,
   private val gpsPointDao: GpsPointDao,
   private val smoothedPointDao: SmoothedPointDao,
+  private val stopDao: StopDao,
   private val encryptionHelper: EncryptionHelper,
 ) : GpsTrackRepository {
 
@@ -35,13 +38,19 @@ class GpsTrackRepositoryImpl @Inject constructor(
   // 補正後の書き込みを直列化する（記録中の各点更新と詳細画面の再補正が競合しないように）。
   private val smoothingMutex = Mutex()
 
-  override fun getAllTracks(): Flow<List<GpsTrack>> = gpsTrackDao.getAllTracksWithPoints()
-    .map { tracksWithPoints ->
-      tracksWithPoints.map { trackWithPoints ->
-        val points = trackWithPoints.points.map { it.toGpsPoint() }
-        trackWithPoints.track.toGpsTrack(points)
-      }
+  override fun getAllTracks(): Flow<List<GpsTrack>> = combine(
+    gpsTrackDao.getAllTracksWithPoints(),
+    stopDao.observeStopCountsByTrack(),
+  ) { tracksWithPoints, stopCounts ->
+    val countByTrack = stopCounts.associate { it.trackId to it.count }
+    tracksWithPoints.map { trackWithPoints ->
+      val points = trackWithPoints.points.map { it.toGpsPoint() }
+      trackWithPoints.track.toGpsTrack(
+        points = points,
+        stopCount = countByTrack[trackWithPoints.track.id] ?: 0,
+      )
     }
+  }
     .onEach { tracks ->
       logger.d("Retrieved ${tracks.size} tracks from local database")
     }
@@ -84,7 +93,11 @@ class GpsTrackRepositoryImpl @Inject constructor(
       }
 
       logger.d("Retrieved track $trackId with ${pointEntities.size} points")
-      trackEntity.toGpsTrack(pointEntities.map { it.toGpsPoint() }, smoothedOverride)
+      trackEntity.toGpsTrack(
+        points = pointEntities.map { it.toGpsPoint() },
+        stopCount = stopDao.countByTrack(trackId),
+        smoothedOverride = smoothedOverride,
+      )
     } catch (e: Exception) {
       logger.e("Repository operation failed", e)
       null
@@ -132,6 +145,27 @@ class GpsTrackRepositoryImpl @Inject constructor(
     try {
       gpsTrackDao.finishTrack(trackId, endTime)
       logger.i("Successfully finished track $trackId")
+    } catch (e: Exception) {
+      logger.e("Repository operation failed", e)
+      throw e
+    }
+  }
+
+  override suspend fun renameTrack(trackId: Long, name: String?) {
+    try {
+      // 空白のみは未命名（null）に正規化する。
+      gpsTrackDao.updateName(trackId, name?.trim()?.ifEmpty { null })
+      logger.i("Renamed track $trackId")
+    } catch (e: Exception) {
+      logger.e("Repository operation failed", e)
+      throw e
+    }
+  }
+
+  override suspend fun setFavorite(trackId: Long, favorite: Boolean) {
+    try {
+      gpsTrackDao.updateFavorite(trackId, favorite)
+      logger.i("Set favorite=$favorite for track $trackId")
     } catch (e: Exception) {
       logger.e("Repository operation failed", e)
       throw e
@@ -279,12 +313,16 @@ class GpsTrackRepositoryImpl @Inject constructor(
 
   private fun GpsTrackEntity.toGpsTrack(
     points: List<GpsPoint> = emptyList(),
+    stopCount: Int = 0,
     smoothedOverride: List<GpsPoint>? = null,
   ): GpsTrack = GpsTrack(
     id = this.id,
     startTime = this.startTime,
     endTime = this.endTime,
     isActive = this.isActive,
+    name = this.name,
+    isFavorite = this.isFavorite,
+    stopCount = stopCount,
     points = points,
     createdAt = this.createdAt,
     updatedAt = this.updatedAt,

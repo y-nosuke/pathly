@@ -38,7 +38,7 @@ import com.pathly.util.Logger
     GooglePlaceEntity::class,
     WishlistEntity::class,
   ],
-  version = 7,
+  version = 8,
   exportSchema = true,
 )
 @TypeConverters(DateConverter::class)

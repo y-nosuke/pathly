@@ -195,7 +195,7 @@ class HistoryScreenTest {
       .assertIsDisplayed()
 
     composeTestRule
-      .onNodeWithText("(2点)", substring = true)
+      .onNodeWithText("立ち寄り:", substring = true)
       .assertIsDisplayed()
   }
 
@@ -218,10 +218,9 @@ class HistoryScreenTest {
       }
     }
 
-    // When & Then - トラックアイテム全体がクリック可能（Cardのonclick）
-    // 特定のクリック可能要素を検証するのは困難なので、削除ボタンで代替
+    // When & Then - 名前編集・削除をまとめたオーバーフローメニュー（その他）がクリック可能。
     composeTestRule
-      .onNodeWithContentDescription("削除")
+      .onNodeWithContentDescription("その他")
       .assertIsDisplayed()
       .assertHasClickAction()
   }
@@ -245,9 +244,12 @@ class HistoryScreenTest {
       }
     }
 
-    // When
+    // When - オーバーフローメニューを開いてから「削除」を選ぶ。
     composeTestRule
-      .onNodeWithContentDescription("削除")
+      .onNodeWithContentDescription("その他")
+      .performClick()
+    composeTestRule
+      .onNodeWithText("削除")
       .performClick()
 
     // Then
@@ -258,9 +260,9 @@ class HistoryScreenTest {
   fun historyScreen_multipleTracks_displaysAllTracks() {
     // Given
     val tracks = listOf(
-      createSampleTrack(id = 1L, pointsCount = 5),
-      createSampleTrack(id = 2L, pointsCount = 3),
-      createSampleTrack(id = 3L, pointsCount = 0), // 0点のトラック
+      createSampleTrack(id = 1L, pointsCount = 5, stopCount = 5),
+      createSampleTrack(id = 2L, pointsCount = 3, stopCount = 3),
+      createSampleTrack(id = 3L, pointsCount = 0, stopCount = 0),
     )
 
     uiStateFlow.value = HistoryState(
@@ -281,21 +283,20 @@ class HistoryScreenTest {
 
     // Then
     composeTestRule
-      .onNodeWithText("(5点)", substring = true)
+      .onNodeWithText("立ち寄り: 5件", substring = true)
       .assertIsDisplayed()
 
     composeTestRule
-      .onNodeWithText("(3点)", substring = true)
+      .onNodeWithText("立ち寄り: 3件", substring = true)
       .assertIsDisplayed()
 
     composeTestRule
-      .onNodeWithText("(0点)", substring = true)
+      .onNodeWithText("立ち寄り: 0件", substring = true)
       .assertIsDisplayed()
 
-    // 削除ボタンが3つ存在することを確認（各トラックに1つずつ）
-    // Compose testでは同じcontentDescriptionの要素が複数ある場合、onAllNodesを使用
+    // 各トラックにオーバーフローメニュー（その他）が1つずつ存在することを確認。
     composeTestRule
-      .onAllNodesWithContentDescription("削除")
+      .onAllNodesWithContentDescription("その他")
       .assertCountEquals(3)
   }
 
@@ -428,11 +429,13 @@ class HistoryScreenTest {
   private fun createSampleTrack(
     id: Long = 1L,
     pointsCount: Int = 2,
+    stopCount: Int = 0,
   ): GpsTrack = GpsTrack(
     id = id,
     startTime = Date(System.currentTimeMillis() - 3600000),
     endTime = Date(),
     isActive = false,
+    stopCount = stopCount,
     points = createSamplePoints(pointsCount, trackId = id),
     createdAt = Date(),
     updatedAt = Date(),

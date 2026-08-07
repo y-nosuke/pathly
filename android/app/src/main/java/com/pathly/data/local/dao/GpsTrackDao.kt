@@ -49,6 +49,22 @@ interface GpsTrackDao {
     updatedAt: java.util.Date = java.util.Date(),
   )
 
+  /** 経路名を更新する（null/空で未命名に戻す）。 */
+  @Query("UPDATE gps_tracks SET name = :name, updatedAt = :updatedAt WHERE id = :trackId")
+  suspend fun updateName(
+    trackId: Long,
+    name: String?,
+    updatedAt: java.util.Date = java.util.Date(),
+  )
+
+  /** お気に入りフラグを更新する。 */
+  @Query("UPDATE gps_tracks SET isFavorite = :favorite, updatedAt = :updatedAt WHERE id = :trackId")
+  suspend fun updateFavorite(
+    trackId: Long,
+    favorite: Boolean,
+    updatedAt: java.util.Date = java.util.Date(),
+  )
+
   @Query("SELECT COUNT(*) FROM gps_tracks")
   suspend fun getTrackCount(): Int
 
