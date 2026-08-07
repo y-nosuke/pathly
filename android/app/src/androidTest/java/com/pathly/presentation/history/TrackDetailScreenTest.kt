@@ -90,12 +90,13 @@ class TrackDetailScreenTest {
       }
     }
 
+    // 1行スタッツに距離（km）と地点数（点）が出る
     composeTestRule
-      .onNodeWithText("移動距離")
+      .onNodeWithText("km", substring = true)
       .assertIsDisplayed()
 
     composeTestRule
-      .onNodeWithText("地点数")
+      .onNodeWithText("点", substring = true)
       .assertIsDisplayed()
   }
 
@@ -121,12 +122,12 @@ class TrackDetailScreenTest {
       }
     }
 
-    // 地点数タイルの値
+    // 1行スタッツの地点数
     composeTestRule
-      .onNodeWithText("8")
+      .onNodeWithText("8点", substring = true)
       .assertIsDisplayed()
 
-    // 距離タイルは実際の計算結果に依存するので km 表示があることだけ確認
+    // 距離は実際の計算結果に依存するので km 表示があることだけ確認
     composeTestRule
       .onNodeWithText("km", substring = true)
       .assertIsDisplayed()
@@ -204,9 +205,9 @@ class TrackDetailScreenTest {
       .onNodeWithText("GPSデータがありません")
       .assertIsDisplayed()
 
-    // 地点数タイルは 0
+    // 1行スタッツの距離は 0.0km
     composeTestRule
-      .onNodeWithText("0.0km")
+      .onNodeWithText("0.0km", substring = true)
       .assertIsDisplayed()
   }
 

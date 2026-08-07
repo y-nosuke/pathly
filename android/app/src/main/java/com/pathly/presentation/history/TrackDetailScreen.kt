@@ -1,32 +1,38 @@
 package com.pathly.presentation.history
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.core.Animatable
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.BottomSheetScaffold
 import androidx.compose.material3.Button
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -35,7 +41,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RangeSlider
-import androidx.compose.material3.SheetValue
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHost
@@ -44,8 +49,6 @@ import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.rememberBottomSheetScaffoldState
-import androidx.compose.material3.rememberStandardBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -57,10 +60,13 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -103,6 +109,9 @@ import kotlin.math.roundToInt
 
 private val tuningSheetPeekHeight = 360.dp
 private val rawTrackColor = Color(0x66424242)
+
+/** フローティングシートの開き具合。隠す（全画面地図）／ハーフ（地図＋一覧）／フル（一覧を大きく）。 */
+private enum class SheetDetent { HIDDEN, PEEK, FULL }
 
 // 手動追加のハイライト（選択した滞在区間）。軌跡（オレンジ）・立ち寄り（紫）と見分ける青。
 private val manualHighlightColor = Color(0xFF1E88E5)
@@ -174,22 +183,43 @@ fun TrackDetailScreen(
   mapContent: (@Composable () -> Unit)? = null,
 ) {
   var poiTarget by remember { mutableStateOf<PointOfInterest?>(null) }
-  // 下にスワイプでシートを隠せる（地図を全画面化）。戻すボタンで復帰する。
-  val sheetState = rememberStandardBottomSheetState(
-    initialValue = SheetValue.PartiallyExpanded,
-    skipHiddenState = false,
-  )
-  val scaffoldState = rememberBottomSheetScaffoldState(bottomSheetState = sheetState)
   val scope = rememberCoroutineScope()
+  val density = LocalDensity.current
+  val screenHeightDp = LocalConfiguration.current.screenHeightDp.dp
   var tuningMode by remember { mutableStateOf(false) }
   var tuningParams by remember { mutableStateOf(SmoothingParams()) }
   var editingStop by remember { mutableStateOf<Stop?>(null) }
   // メモ編集中の立ち寄り（stop 単位。名前編集 [editingStop] とは別ダイアログ）。
   var editingNoteStop by remember { mutableStateOf<Stop?>(null) }
+  // 地図↔一覧の連動用: 選択中の立ち寄り。地図のピン/一覧の行どちらから選んでも相互に強調・スクロールする。
+  var highlightedStopId by remember { mutableStateOf<Long?>(null) }
 
   // 複数選択削除。長押しで選択モードに入り、チェックで選ぶ。
   var selectionMode by remember { mutableStateOf(false) }
   val selectedStopIds = remember { mutableStateListOf<Long>() }
+
+  // --- 自前フローティングシートの開閉（地図の上に重ねる。標準ボトムシートは使わない）---
+  // 3段階: 隠す（全画面地図）/ ハーフ（地図＋一覧を同時に）/ フル（一覧を大きく、地図は上に少し覗く）。
+  // つまみ／上部のドラッグでシートだけを開閉し、一覧（LazyColumn）は独立してスクロールする。
+  val peekHeight = screenHeightDp * 0.45f
+  val fullHeight = screenHeightDp * 0.92f
+  val peekPx = with(density) { peekHeight.toPx() }
+  val fullPx = with(density) { fullHeight.toPx() }
+  var detent by remember { mutableStateOf(SheetDetent.PEEK) }
+  // 高さは Animatable(px)。ドラッグ中は snapTo で指に追従、離すと最寄りの段へ animateTo する。
+  val sheetHeightPx = remember { Animatable(peekPx) }
+  val settleTo: (SheetDetent) -> Unit = { target ->
+    detent = target
+    scope.launch {
+      sheetHeightPx.animateTo(
+        when (target) {
+          SheetDetent.HIDDEN -> 0f
+          SheetDetent.PEEK -> peekPx
+          SheetDetent.FULL -> fullPx
+        },
+      )
+    }
+  }
 
   // 削除などで stops が変わったら、消えた ID を選択から外す。空になったら選択モードを抜ける。
   LaunchedEffect(stops) {
@@ -274,202 +304,142 @@ fun TrackDetailScreen(
       stops.mapNotNull { stop -> stopSegmentPoints(track.smoothedPoints, stop).takeIf { it.size >= 2 } }
     }
   }
-  // 既定のピーク（＝ハーフ表示）は画面の約45%。ここが「地図＋一覧」を同時に見る状態で、
-  // 立ち寄りを連続タップして地図で確認できる。上までドラッグすると全画面一覧（Expanded）、
-  // 下スワイプで全画面地図（Hidden）になる（標準ボトムシートの2段スナップ＋隠す）。
-  val peek = when {
-    tuningMode -> tuningSheetPeekHeight
-    // 候補・手動追加モードではシートを畳み、地図＋オーバーレイに専念する。
-    candidateMode || manualMode -> 0.dp
-    else -> (LocalConfiguration.current.screenHeightDp * 0.45f).dp
-  }
-  val sheetHidden = sheetState.currentValue == SheetValue.Hidden
+  // シートが隠れているか（復帰ボタン表示・地図の下パディング判定に使う）。
+  val sheetHidden = detent == SheetDetent.HIDDEN
 
-  BottomSheetScaffold(
-    modifier = modifier.fillMaxSize(),
-    scaffoldState = scaffoldState,
-    sheetPeekHeight = peek,
-    snackbarHost = { SnackbarHost(snackbarHostState) },
-    sheetContent = {
-      if (tuningMode) {
-        TuningSheet(
-          track = track,
-          params = tuningParams,
-          onParamsChange = { tuningParams = it },
-        )
-      } else if (candidateMode || manualMode) {
-        // 候補選択・手動追加は地図上のオーバーレイで行うのでシートは空にする（ピーク 0 で畳む）。
-        Spacer(Modifier.height(1.dp))
+  Box(modifier = modifier.fillMaxSize()) {
+    // ---- 地図（全面／edge-to-edge。シートは地図の上に重ねる）----
+    if (track.points.isNotEmpty()) {
+      if (mapContent != null) {
+        mapContent()
       } else {
-        TrackDetailSheet(
-          track = track,
-          stops = stops,
-          unresolvedCount = unresolvedCount,
-          selectionMode = selectionMode,
-          selectedStopIds = selectedStopIds,
-          // 全画面（Expanded）まで伸ばせるよう高さいっぱいにする。ハーフ表示はピークが担う。
-          // タップでは畳まず地図だけ動かし、連続タップで確認できるようにする。
-          modifier = Modifier.fillMaxHeight(),
-          onFocusStop = {
-            focusTarget = LatLng(it.place.latitude, it.place.longitude)
-            focusNonce++
-          },
-          onEditStop = { editingStop = it },
-          onEditStopNote = { editingNoteStop = it },
-          onDeleteStop = { deleteWithUndo(listOf(it.id)) },
-          onResolveNames = onResolveNames,
-          onReanalyze = onReanalyze,
-          onManualAdd = {
-            manualPick = null
-            manualMode = true
-          },
-          onEnterSelection = { stop ->
-            selectionMode = true
-            if (stop.id !in selectedStopIds) selectedStopIds.add(stop.id)
-          },
-          onToggleSelect = { stop ->
-            if (stop.id in selectedStopIds) selectedStopIds.remove(stop.id) else selectedStopIds.add(stop.id)
-          },
-          onSelectAll = {
-            val allSelected = selectedStopIds.size == stops.size
-            selectedStopIds.clear()
-            if (!allSelected) selectedStopIds.addAll(stops.map { it.id })
-          },
-          onCancelSelection = {
-            selectionMode = false
-            selectedStopIds.clear()
-          },
-          onDeleteSelected = {
-            deleteWithUndo(selectedStopIds.toList())
-            selectionMode = false
-            selectedStopIds.clear()
-          },
-        )
-      }
-    },
-  ) { innerPadding ->
-    Box(
-      // 地図はシートの下まで敷き詰める（下スワイプで隠したとき黒帯が残らないよう、
-      // ボトムのインセットは効かせない）。上端のみステータスバー分を空ける。
-      modifier = Modifier
-        .fillMaxSize()
-        .padding(top = innerPadding.calculateTopPadding()),
-    ) {
-      if (track.points.isNotEmpty()) {
-        if (mapContent != null) {
-          mapContent()
+        // 手動追加で選んだ滞在区間（到着〜出発）の点列。地図に青くハイライトする。
+        val manualHighlight = if (manualMode && manualPick != null && manualPoints.size >= 2) {
+          manualPoints.subList(manualArrivalIdx, (manualDepartureIdx + 1).coerceAtMost(manualPoints.size))
         } else {
-          // 手動追加で選んだ滞在区間（到着〜出発）の点列。地図に青くハイライトする。
-          val manualHighlight = if (manualMode && manualPick != null && manualPoints.size >= 2) {
-            manualPoints.subList(manualArrivalIdx, (manualDepartureIdx + 1).coerceAtMost(manualPoints.size))
-          } else {
-            emptyList()
-          }
-          TrackMapView(
-            track = track,
-            displayPoints = displayPoints,
-            stops = stops,
-            candidates = if (candidateMode && !manualMode) reanalyzeCandidates.orEmpty() else emptyList(),
-            showRawOverlay = tuningMode,
-            manualPickTarget = if (manualMode) manualPick?.latLng else null,
-            highlightPoints = manualHighlight,
-            stopSegments = stopSegments,
-            focusTarget = focusTarget,
-            focusNonce = focusNonce,
-            // 候補・手動追加モードは下のオーバーレイ分だけ空け、フォーカスがピンをその裏に隠さないようにする。
-            contentPadding = PaddingValues(
-              bottom = when {
-                candidateMode -> candidateOverlayHeight
-                manualMode && manualPick != null -> manualOverlayHeight
-                manualMode -> 96.dp
-                sheetHidden -> 0.dp
-                else -> peek
-              },
-            ),
-            onPoiClick = { poi ->
-              if (manualMode) {
-                manualPick = ManualPick(poi.latLng, poi.name, poi.placeId)
-                focusTarget = poi.latLng
-                focusNonce++
-              } else {
-                poiTarget = poi
-              }
-            },
-            onMapClick = { latLng ->
-              if (manualMode) {
-                manualPick = ManualPick(latLng, null, null)
-                focusTarget = latLng
-                focusNonce++
-              }
-            },
-            modifier = Modifier.fillMaxSize(),
-          )
+          emptyList()
         }
-      } else {
-        Box(
+        TrackMapView(
+          track = track,
+          displayPoints = displayPoints,
+          stops = stops,
+          candidates = if (candidateMode && !manualMode) reanalyzeCandidates.orEmpty() else emptyList(),
+          showRawOverlay = tuningMode,
+          manualPickTarget = if (manualMode) manualPick?.latLng else null,
+          highlightPoints = manualHighlight,
+          stopSegments = stopSegments,
+          focusTarget = focusTarget,
+          focusNonce = focusNonce,
+          // フォーカスがピンをシート/オーバーレイの裏に隠さないよう、下端を空ける。
+          // 通常モードは現在の段（ハーフ/フル）の高さ分。ドラッグ中の逐次値ではなく確定値を使う。
+          contentPadding = PaddingValues(
+            bottom = when {
+              candidateMode -> candidateOverlayHeight
+              manualMode && manualPick != null -> manualOverlayHeight
+              manualMode -> 96.dp
+              tuningMode -> tuningSheetPeekHeight
+              detent == SheetDetent.HIDDEN -> 0.dp
+              detent == SheetDetent.FULL -> fullHeight
+              else -> peekHeight
+            },
+          ),
+          onPoiClick = { poi ->
+            if (manualMode) {
+              manualPick = ManualPick(poi.latLng, poi.name, poi.placeId)
+              focusTarget = poi.latLng
+              focusNonce++
+            } else {
+              poiTarget = poi
+            }
+          },
+          onMapClick = { latLng ->
+            if (manualMode) {
+              manualPick = ManualPick(latLng, null, null)
+              focusTarget = latLng
+              focusNonce++
+            }
+          },
+          // 地図の立ち寄りピンをタップ → 一覧の該当行を強調＆スクロール。畳んでいたらシートを開く。
+          onStopClick = { stop ->
+            highlightedStopId = stop.id
+            focusTarget = LatLng(stop.place.latitude, stop.place.longitude)
+            focusNonce++
+            if (detent == SheetDetent.HIDDEN) settleTo(SheetDetent.PEEK)
+          },
           modifier = Modifier.fillMaxSize(),
-          contentAlignment = Alignment.Center,
-        ) {
-          Text(
-            text = "GPSデータがありません",
-            style = MaterialTheme.typography.bodyLarge,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-          )
-        }
+        )
+      }
+    } else {
+      Box(
+        modifier = Modifier.fillMaxSize(),
+        contentAlignment = Alignment.Center,
+      ) {
+        Text(
+          text = "GPSデータがありません",
+          style = MaterialTheme.typography.bodyLarge,
+          color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+      }
+    }
+
+    // ---- 上部の丸ボタン（戻る／調整）。ソリッドバーは置かず地図の上に浮かせる ----
+    Row(
+      modifier = Modifier
+        .statusBarsPadding()
+        .padding(12.dp),
+      horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+      Surface(
+        onClick = onBackClick,
+        shape = CircleShape,
+        color = MaterialTheme.colorScheme.surface,
+        shadowElevation = 4.dp,
+      ) {
+        Icon(
+          painter = painterResource(R.drawable.ic_arrow_back),
+          contentDescription = "戻る",
+          modifier = Modifier.padding(8.dp),
+        )
       }
 
-      Row(
-        modifier = Modifier.padding(12.dp),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-      ) {
+      // 補正の調整はデバッグビルドのみ
+      if (BuildConfig.DEBUG && track.points.isNotEmpty()) {
         Surface(
-          onClick = onBackClick,
+          onClick = { tuningMode = !tuningMode },
           shape = CircleShape,
-          color = MaterialTheme.colorScheme.surface,
+          color = if (tuningMode) {
+            MaterialTheme.colorScheme.primary
+          } else {
+            MaterialTheme.colorScheme.surface
+          },
           shadowElevation = 4.dp,
         ) {
           Icon(
-            painter = painterResource(R.drawable.ic_arrow_back),
-            contentDescription = "戻る",
+            painter = painterResource(R.drawable.ic_tune),
+            contentDescription = "補正を調整",
+            tint = if (tuningMode) {
+              MaterialTheme.colorScheme.onPrimary
+            } else {
+              MaterialTheme.colorScheme.onSurface
+            },
             modifier = Modifier.padding(8.dp),
           )
         }
-
-        // 補正の調整はデバッグビルドのみ
-        if (BuildConfig.DEBUG && track.points.isNotEmpty()) {
-          Surface(
-            onClick = { tuningMode = !tuningMode },
-            shape = CircleShape,
-            color = if (tuningMode) {
-              MaterialTheme.colorScheme.primary
-            } else {
-              MaterialTheme.colorScheme.surface
-            },
-            shadowElevation = 4.dp,
-          ) {
-            Icon(
-              painter = painterResource(R.drawable.ic_tune),
-              contentDescription = "補正を調整",
-              tint = if (tuningMode) {
-                MaterialTheme.colorScheme.onPrimary
-              } else {
-                MaterialTheme.colorScheme.onSurface
-              },
-              modifier = Modifier.padding(8.dp),
-            )
-          }
-        }
       }
+    }
 
-      // シートを隠しているときは、下部中央に戻すボタンを出す（候補・手動追加モードでは出さない）。
-      if (sheetHidden && !tuningMode && !candidateMode && !manualMode) {
+    // ---- 通常モードのフローティングシート（つまみで開閉・一覧は独立スクロール）----
+    if (!tuningMode && !candidateMode && !manualMode) {
+      if (sheetHidden) {
+        // 隠しているときは、下部中央に復帰ボタンを出す。
         Surface(
-          onClick = { scope.launch { sheetState.partialExpand() } },
+          onClick = { settleTo(SheetDetent.PEEK) },
           shape = RoundedCornerShape(20.dp),
           color = MaterialTheme.colorScheme.surface,
           shadowElevation = 4.dp,
           modifier = Modifier
             .align(Alignment.BottomCenter)
+            .navigationBarsPadding()
             .padding(bottom = 24.dp),
         ) {
           Text(
@@ -479,69 +449,176 @@ fun TrackDetailScreen(
             modifier = Modifier.padding(horizontal = 20.dp, vertical = 10.dp),
           )
         }
-      }
-
-      // 再解析の候補は、地図を常に見せたまま選べるよう下部の固定オーバーレイに出す。
-      if (candidateMode) {
-        CandidateOverlay(
-          candidates = reanalyzeCandidates.orEmpty(),
-          selectedIndices = selectedCandidates,
-          height = candidateOverlayHeight,
+      } else {
+        FloatingStopSheet(
+          heightPx = { sheetHeightPx.value },
+          onDrag = { delta ->
+            scope.launch {
+              sheetHeightPx.snapTo((sheetHeightPx.value - delta).coerceIn(0f, fullPx))
+            }
+          },
+          onDragEnd = {
+            val h = sheetHeightPx.value
+            settleTo(
+              when {
+                h < peekPx * 0.55f -> SheetDetent.HIDDEN
+                h < (peekPx + fullPx) / 2f -> SheetDetent.PEEK
+                else -> SheetDetent.FULL
+              },
+            )
+          },
           modifier = Modifier.align(Alignment.BottomCenter),
-          onToggle = { index ->
-            if (index in selectedCandidates) selectedCandidates.remove(index) else selectedCandidates.add(index)
-          },
-          onFocus = { candidate ->
-            focusTarget = LatLng(candidate.detected.latitude, candidate.detected.longitude)
-            focusNonce++
-          },
-          onConfirm = {
-            val picked = selectedCandidates.sorted().mapNotNull { reanalyzeCandidates?.getOrNull(it) }
-            onAddStops(picked)
-          },
-          onCancel = onDismissReanalyze,
-        )
-      }
-
-      // 手動追加: 地点を指す前は案内、指したあとは入力＋区間調整のオーバーレイを出す。
-      if (manualMode) {
-        val pick = manualPick
-        if (pick == null) {
-          ManualPickPrompt(
-            modifier = Modifier.align(Alignment.BottomCenter),
-            onCancel = exitManual,
-          )
-        } else if (manualPoints.size >= 2) {
-          val arrival = manualPoints[manualArrivalIdx].timestamp
-          val departure = manualPoints[manualDepartureIdx].timestamp
-          ManualAddOverlay(
-            name = manualName,
-            onNameChange = { manualName = it },
-            arrivalTime = arrival,
-            departureTime = departure,
-            arrivalIdx = manualArrivalIdx,
-            departureIdx = manualDepartureIdx,
-            lastIdx = manualLastIdx,
-            height = manualOverlayHeight,
-            modifier = Modifier.align(Alignment.BottomCenter),
-            onRangeChange = { start, end ->
-              manualArrivalIdx = start
-              manualDepartureIdx = end
+        ) {
+          TrackDetailSheet(
+            track = track,
+            stops = stops,
+            unresolvedCount = unresolvedCount,
+            selectionMode = selectionMode,
+            selectedStopIds = selectedStopIds,
+            highlightedStopId = highlightedStopId,
+            modifier = Modifier
+              .weight(1f)
+              .fillMaxWidth(),
+            onFocusStop = {
+              highlightedStopId = it.id
+              focusTarget = LatLng(it.place.latitude, it.place.longitude)
+              focusNonce++
             },
-            onConfirm = {
-              val finalName = manualName.trim().ifBlank { null }
-              // 名前を POI 名から変えたら googlePlaceId は使わない（別名で解決記録を焼き込まない）。
-              val googleId = pick.googlePlaceId?.takeIf { finalName == pick.name }
-              onAddManualStop(pick.latLng.latitude, pick.latLng.longitude, arrival, departure, finalName, googleId)
-              exitManual()
-              scope.launch { snackbarHostState.showSnackbar("立ち寄りを追加しました") }
+            onEditStop = { editingStop = it },
+            onEditStopNote = { editingNoteStop = it },
+            onDeleteStop = { deleteWithUndo(listOf(it.id)) },
+            onResolveNames = onResolveNames,
+            onReanalyze = onReanalyze,
+            onManualAdd = {
+              manualPick = null
+              manualMode = true
             },
-            // 編集からのキャンセルは追加モードを抜けず、地点選択（マップ）に戻すだけ。
-            onCancel = { manualPick = null },
+            onEnterSelection = { stop ->
+              selectionMode = true
+              if (stop.id !in selectedStopIds) selectedStopIds.add(stop.id)
+            },
+            onToggleSelect = { stop ->
+              if (stop.id in selectedStopIds) selectedStopIds.remove(stop.id) else selectedStopIds.add(stop.id)
+            },
+            onSelectAll = {
+              val allSelected = selectedStopIds.size == stops.size
+              selectedStopIds.clear()
+              if (!allSelected) selectedStopIds.addAll(stops.map { it.id })
+            },
+            onCancelSelection = {
+              selectionMode = false
+              selectedStopIds.clear()
+            },
+            onDeleteSelected = {
+              deleteWithUndo(selectedStopIds.toList())
+              selectionMode = false
+              selectedStopIds.clear()
+            },
           )
         }
       }
     }
+
+    // ---- 補正の調整（デバッグ）: 地図の上に固定高さのパネルで出す ----
+    if (tuningMode) {
+      Surface(
+        modifier = Modifier
+          .align(Alignment.BottomCenter)
+          .fillMaxWidth()
+          .height(tuningSheetPeekHeight),
+        shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
+        color = MaterialTheme.colorScheme.surface,
+        shadowElevation = 12.dp,
+      ) {
+        Column(
+          modifier = Modifier
+            .fillMaxSize()
+            .navigationBarsPadding()
+            .verticalScroll(rememberScrollState()),
+        ) {
+          TuningSheet(
+            track = track,
+            params = tuningParams,
+            onParamsChange = { tuningParams = it },
+          )
+        }
+      }
+    }
+
+    // 再解析の候補は、地図を常に見せたまま選べるよう下部の固定オーバーレイに出す。
+    if (candidateMode) {
+      CandidateOverlay(
+        candidates = reanalyzeCandidates.orEmpty(),
+        selectedIndices = selectedCandidates,
+        height = candidateOverlayHeight,
+        modifier = Modifier
+          .align(Alignment.BottomCenter)
+          .navigationBarsPadding(),
+        onToggle = { index ->
+          if (index in selectedCandidates) selectedCandidates.remove(index) else selectedCandidates.add(index)
+        },
+        onFocus = { candidate ->
+          focusTarget = LatLng(candidate.detected.latitude, candidate.detected.longitude)
+          focusNonce++
+        },
+        onConfirm = {
+          val picked = selectedCandidates.sorted().mapNotNull { reanalyzeCandidates?.getOrNull(it) }
+          onAddStops(picked)
+        },
+        onCancel = onDismissReanalyze,
+      )
+    }
+
+    // 手動追加: 地点を指す前は案内、指したあとは入力＋区間調整のオーバーレイを出す。
+    if (manualMode) {
+      val pick = manualPick
+      if (pick == null) {
+        ManualPickPrompt(
+          modifier = Modifier
+            .align(Alignment.BottomCenter)
+            .navigationBarsPadding(),
+          onCancel = exitManual,
+        )
+      } else if (manualPoints.size >= 2) {
+        val arrival = manualPoints[manualArrivalIdx].timestamp
+        val departure = manualPoints[manualDepartureIdx].timestamp
+        ManualAddOverlay(
+          name = manualName,
+          onNameChange = { manualName = it },
+          arrivalTime = arrival,
+          departureTime = departure,
+          arrivalIdx = manualArrivalIdx,
+          departureIdx = manualDepartureIdx,
+          lastIdx = manualLastIdx,
+          height = manualOverlayHeight,
+          modifier = Modifier
+            .align(Alignment.BottomCenter)
+            .navigationBarsPadding(),
+          onRangeChange = { start, end ->
+            manualArrivalIdx = start
+            manualDepartureIdx = end
+          },
+          onConfirm = {
+            val finalName = manualName.trim().ifBlank { null }
+            // 名前を POI 名から変えたら googlePlaceId は使わない（別名で解決記録を焼き込まない）。
+            val googleId = pick.googlePlaceId?.takeIf { finalName == pick.name }
+            onAddManualStop(pick.latLng.latitude, pick.latLng.longitude, arrival, departure, finalName, googleId)
+            exitManual()
+            scope.launch { snackbarHostState.showSnackbar("立ち寄りを追加しました") }
+          },
+          // 編集からのキャンセルは追加モードを抜けず、地点選択（マップ）に戻すだけ。
+          onCancel = { manualPick = null },
+        )
+      }
+    }
+
+    // スナックバー（最前面）。シート/オーバーレイの上に出す。
+    SnackbarHost(
+      hostState = snackbarHostState,
+      modifier = Modifier
+        .align(Alignment.BottomCenter)
+        .navigationBarsPadding(),
+    )
   }
 
   editingStop?.let { stop ->
@@ -949,7 +1026,71 @@ private fun StepperRow(
   }
 }
 
-@OptIn(ExperimentalLayoutApi::class)
+/**
+ * 地図の上に重ねるフローティングシート。角丸＋影で"浮いている"見た目にし、上部のつまみを
+ * 上下ドラッグして高さ（段）を変える。中身（[content]）の一覧は独立してスクロールする。
+ * 高さは [heightPx]（px を返すラムダ）で受け取り、**このコンポーザブル内で読む**ことで、
+ * ドラッグ/アニメの再コンポーズを地図側に波及させない（地図のカクつき防止）。
+ */
+@Composable
+private fun FloatingStopSheet(
+  heightPx: () -> Float,
+  onDrag: (Float) -> Unit,
+  onDragEnd: () -> Unit,
+  modifier: Modifier = Modifier,
+  content: @Composable ColumnScope.() -> Unit,
+) {
+  val density = LocalDensity.current
+  Surface(
+    modifier = modifier
+      .fillMaxWidth()
+      .height(with(density) { heightPx().toDp() }),
+    shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
+    color = MaterialTheme.colorScheme.surface,
+    shadowElevation = 12.dp,
+  ) {
+    Column(
+      modifier = Modifier
+        .fillMaxSize()
+        .navigationBarsPadding(),
+    ) {
+      SheetDragHandle(onDrag = onDrag, onDragEnd = onDragEnd)
+      content()
+    }
+  }
+}
+
+/** シート上部のつまみ。縦ドラッグでシート高さを変える（一覧のスクロールとは独立）。 */
+@Composable
+private fun SheetDragHandle(
+  onDrag: (Float) -> Unit,
+  onDragEnd: () -> Unit,
+) {
+  Box(
+    modifier = Modifier
+      .fillMaxWidth()
+      .pointerInput(Unit) {
+        detectVerticalDragGestures(
+          onVerticalDrag = { _, dragAmount -> onDrag(dragAmount) },
+          onDragEnd = onDragEnd,
+          onDragCancel = onDragEnd,
+        )
+      }
+      .padding(vertical = 10.dp),
+    contentAlignment = Alignment.Center,
+  ) {
+    Box(
+      modifier = Modifier
+        .width(40.dp)
+        .height(4.dp)
+        .background(
+          MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f),
+          RoundedCornerShape(2.dp),
+        ),
+    )
+  }
+}
+
 @Composable
 private fun TrackDetailSheet(
   track: GpsTrack,
@@ -957,6 +1098,7 @@ private fun TrackDetailSheet(
   unresolvedCount: Int,
   selectionMode: Boolean,
   selectedStopIds: List<Long>,
+  highlightedStopId: Long?,
   onFocusStop: (Stop) -> Unit,
   onEditStop: (Stop) -> Unit,
   onEditStopNote: (Stop) -> Unit,
@@ -971,9 +1113,16 @@ private fun TrackDetailSheet(
   onDeleteSelected: () -> Unit,
   modifier: Modifier = Modifier,
 ) {
+  val listState = rememberLazyListState()
+  // 地図のピン／行タップで選ばれた立ち寄りを、一覧の見える位置へ寄せる（地図↔一覧の連動）。
+  LaunchedEffect(highlightedStopId, stops) {
+    val id = highlightedStopId ?: return@LaunchedEffect
+    val index = stops.indexOfFirst { it.id == id }
+    if (index >= 0) listState.animateScrollToItem(index)
+  }
+
   Column(modifier = modifier.fillMaxWidth()) {
-    // 選択モードのアクションはスクロールから外し、常に上部に固定する
-    // （選択後に削除まで戻る手間をなくす）。
+    // 固定ヘッダー（スクロールしても消えない）。選択中は選択バーへ差し替える。
     if (selectionMode) {
       SelectionBar(
         selectedCount = selectedStopIds.size,
@@ -982,113 +1131,30 @@ private fun TrackDetailSheet(
         onDelete = onDeleteSelected,
         onCancel = onCancelSelection,
       )
-    }
-    Column(
-      // 固定ヘッダー（選択バー）の下で、残りの高さいっぱいにスクロールさせる。
-      modifier = Modifier
-        .weight(1f, fill = false)
-        .fillMaxWidth()
-        .verticalScroll(rememberScrollState())
-        .padding(horizontal = 20.dp)
-        .padding(bottom = 24.dp),
-      verticalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
-      Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically,
-      ) {
-        Text(
-          text = DateFormatters.DATE_FORMAT.format(track.startTime),
-          style = MaterialTheme.typography.titleLarge,
-          fontWeight = FontWeight.Bold,
-        )
-        if (track.isActive) {
-          Surface(
-            shape = RoundedCornerShape(20.dp),
-            color = MaterialTheme.colorScheme.primaryContainer,
-          ) {
-            Text(
-              text = "● 記録中",
-              style = MaterialTheme.typography.labelMedium,
-              color = MaterialTheme.colorScheme.onPrimaryContainer,
-              fontWeight = FontWeight.Medium,
-              modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
-            )
-          }
-        }
-      }
-
-      val startText = DateFormatters.TIME_FORMAT.format(track.startTime)
-      val endTime = track.endTime
-      val subtitle = if (endTime != null) {
-        val durationMinutes = ((endTime.time - track.startTime.time) / 1000 / 60).toInt()
-        val hours = durationMinutes / 60
-        val minutes = durationMinutes % 60
-        val duration = if (hours > 0) "${hours}時間${minutes}分" else "${minutes}分"
-        "$startText – ${DateFormatters.TIME_FORMAT.format(endTime)} ・ $duration"
-      } else {
-        startText
-      }
-      Text(
-        text = subtitle + if (stops.isNotEmpty()) " ・ 立ち寄り${stops.size}件" else "",
-        style = MaterialTheme.typography.bodyMedium,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    } else {
+      TrackSummaryHeader(
+        track = track,
+        stops = stops,
+        unresolvedCount = unresolvedCount,
+        onResolveNames = onResolveNames,
+        onReanalyze = onReanalyze,
+        onManualAdd = onManualAdd,
       )
-
-      // 操作ボタンは上部（ピーク内）に置いて常に押せるようにする。
-      // チップが増えても収まるよう、幅が足りなければ次の行に折り返す（FlowRow）。
-      FlowRow(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
-      ) {
-        // 再解析: 一覧に無い立ち寄りを検出して、選択式で追加する（非破壊）。
-        if (track.points.size >= 2 && !track.isActive) {
-          ActionChip(
-            text = "再解析",
-            container = MaterialTheme.colorScheme.tertiaryContainer,
-            content = MaterialTheme.colorScheme.onTertiaryContainer,
-            onClick = onReanalyze,
-          )
-          // 手動で追加: 検出に頼らず、地図で指した地点を立ち寄りとして足す（完全手動）。
-          ActionChip(
-            text = "手動で追加",
-            container = MaterialTheme.colorScheme.tertiaryContainer,
-            content = MaterialTheme.colorScheme.onTertiaryContainer,
-            onClick = onManualAdd,
-          )
-        }
-        if (unresolvedCount > 0) {
-          ActionChip(
-            text = "場所を取得（未取得 ${unresolvedCount}件）",
-            container = MaterialTheme.colorScheme.secondaryContainer,
-            content = MaterialTheme.colorScheme.onSecondaryContainer,
-            onClick = onResolveNames,
-          )
-        }
-      }
-
-      val distanceKm = (track.totalDistanceMeters / 1000.0 * 100).roundToInt() / 100.0
-      Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
-      ) {
-        StatTile(
-          value = "${distanceKm}km",
-          label = "移動距離",
-          modifier = Modifier.weight(1f),
-        )
-        StatTile(
-          value = "${track.points.size}",
-          label = "地点数",
-          modifier = Modifier.weight(1f),
-        )
-      }
-
-      stops.forEach { stop ->
+    }
+    // 立ち寄り一覧（ここだけスクロール）。シートの残り領域を埋め、独立してスクロールする。
+    LazyColumn(
+      state = listState,
+      modifier = Modifier
+        .weight(1f)
+        .fillMaxWidth()
+        .padding(horizontal = 20.dp),
+      contentPadding = PaddingValues(top = 4.dp, bottom = 24.dp),
+    ) {
+      itemsIndexed(stops, key = { _, stop -> stop.id }) { index, stop ->
         StopRow(
           stop = stop,
+          number = index + 1,
+          highlighted = stop.id == highlightedStopId,
           selectionMode = selectionMode,
           selected = stop.id in selectedStopIds,
           onFocus = { onFocusStop(stop) },
@@ -1097,6 +1163,109 @@ private fun TrackDetailSheet(
           onDelete = { onDeleteStop(stop) },
           onToggleSelect = { onToggleSelect(stop) },
           onEnterSelection = { onEnterSelection(stop) },
+        )
+      }
+    }
+  }
+}
+
+/**
+ * 経路の固定ヘッダー。スクロールしても消えないよう一覧の外に置く。
+ * 大きなタイルはやめ、日付＋1行スタッツ（距離・地点数・時間・立ち寄り件数）＋操作ボタンにまとめる。
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun TrackSummaryHeader(
+  track: GpsTrack,
+  stops: List<Stop>,
+  unresolvedCount: Int,
+  onResolveNames: () -> Unit,
+  onReanalyze: () -> Unit,
+  onManualAdd: () -> Unit,
+) {
+  Column(
+    modifier = Modifier
+      .fillMaxWidth()
+      .padding(horizontal = 20.dp)
+      .padding(top = 8.dp, bottom = 8.dp),
+    verticalArrangement = Arrangement.spacedBy(6.dp),
+  ) {
+    Row(
+      modifier = Modifier.fillMaxWidth(),
+      horizontalArrangement = Arrangement.SpaceBetween,
+      verticalAlignment = Alignment.CenterVertically,
+    ) {
+      Text(
+        text = DateFormatters.DATE_FORMAT.format(track.startTime),
+        style = MaterialTheme.typography.titleLarge,
+        fontWeight = FontWeight.Bold,
+      )
+      if (track.isActive) {
+        Surface(
+          shape = RoundedCornerShape(20.dp),
+          color = MaterialTheme.colorScheme.primaryContainer,
+        ) {
+          Text(
+            text = "● 記録中",
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onPrimaryContainer,
+            fontWeight = FontWeight.Medium,
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
+          )
+        }
+      }
+    }
+
+    // 1行スタッツ: 距離 ・ 地点数 ・ 時間（記録中は「記録中」）・ 立ち寄り件数。
+    val distanceKm = (track.totalDistanceMeters / 1000.0 * 100).roundToInt() / 100.0
+    val endTime = track.endTime
+    val timePart = if (endTime != null) {
+      val durationMinutes = ((endTime.time - track.startTime.time) / 1000 / 60).toInt()
+      val hours = durationMinutes / 60
+      val minutes = durationMinutes % 60
+      if (hours > 0) "${hours}時間${minutes}分" else "${minutes}分"
+    } else {
+      "記録中"
+    }
+    val stats = buildList {
+      add("${distanceKm}km")
+      add("${track.points.size}点")
+      add(timePart)
+      if (stops.isNotEmpty()) add("立ち寄り${stops.size}件")
+    }.joinToString("　・　")
+    Text(
+      text = stats,
+      style = MaterialTheme.typography.bodyMedium,
+      color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
+
+    FlowRow(
+      modifier = Modifier.fillMaxWidth(),
+      horizontalArrangement = Arrangement.spacedBy(8.dp),
+      verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+      // 再解析: 一覧に無い立ち寄りを検出して、選択式で追加する（非破壊）。
+      if (track.points.size >= 2 && !track.isActive) {
+        ActionChip(
+          text = "再解析",
+          container = MaterialTheme.colorScheme.tertiaryContainer,
+          content = MaterialTheme.colorScheme.onTertiaryContainer,
+          onClick = onReanalyze,
+        )
+        // 手動で追加: 検出に頼らず、地図で指した地点を立ち寄りとして足す（完全手動）。
+        ActionChip(
+          text = "手動で追加",
+          container = MaterialTheme.colorScheme.tertiaryContainer,
+          content = MaterialTheme.colorScheme.onTertiaryContainer,
+          onClick = onManualAdd,
+        )
+      }
+      if (unresolvedCount > 0) {
+        ActionChip(
+          text = "場所を取得（未取得 ${unresolvedCount}件）",
+          container = MaterialTheme.colorScheme.secondaryContainer,
+          content = MaterialTheme.colorScheme.onSecondaryContainer,
+          onClick = onResolveNames,
         )
       }
     }
@@ -1145,6 +1314,8 @@ private fun SelectionBar(
 @Composable
 private fun StopRow(
   stop: Stop,
+  number: Int,
+  highlighted: Boolean,
   selectionMode: Boolean,
   selected: Boolean,
   onFocus: () -> Unit,
@@ -1158,16 +1329,33 @@ private fun StopRow(
   val note = stop.note?.takeIf { it.isNotBlank() }
   Row(
     // 通常はタップでフォーカス、長押しで選択モード。選択モード中はタップで選択トグル。
+    // 地図で選ばれている立ち寄りは薄く強調する（地図↔一覧の連動）。
     modifier = Modifier
       .fillMaxWidth()
+      .clip(RoundedCornerShape(10.dp))
+      .background(
+        if (highlighted) MaterialTheme.colorScheme.secondaryContainer else Color.Transparent,
+      )
       .combinedClickable(
         onClick = { if (selectionMode) onToggleSelect() else onFocus() },
         onLongClick = { if (!selectionMode) onEnterSelection() },
-      ),
+      )
+      .padding(horizontal = 4.dp, vertical = 4.dp),
     verticalAlignment = Alignment.CenterVertically,
   ) {
     if (selectionMode) {
       Checkbox(checked = selected, onCheckedChange = { onToggleSelect() })
+    } else {
+      // 訪問順の番号バッジ（地図のピン番号と対応）。
+      Box(
+        modifier = Modifier
+          .padding(end = 10.dp)
+          .size(26.dp)
+          .background(MarkerStopViolet, CircleShape),
+        contentAlignment = Alignment.Center,
+      ) {
+        Text(text = "$number", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+      }
     }
     Column(
       modifier = Modifier
@@ -1309,35 +1497,6 @@ private fun ActionChip(
   }
 }
 
-@Composable
-private fun StatTile(
-  value: String,
-  label: String,
-  modifier: Modifier = Modifier,
-) {
-  Surface(
-    modifier = modifier,
-    shape = RoundedCornerShape(12.dp),
-    color = MaterialTheme.colorScheme.surfaceVariant,
-  ) {
-    Column(
-      modifier = Modifier.padding(vertical = 12.dp),
-      horizontalAlignment = Alignment.CenterHorizontally,
-    ) {
-      Text(
-        text = value,
-        style = MaterialTheme.typography.titleLarge,
-        fontWeight = FontWeight.Bold,
-      )
-      Text(
-        text = label,
-        style = MaterialTheme.typography.bodySmall,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-      )
-    }
-  }
-}
-
 private val MarkerStartGreen = Color(0xFF2E9E5B)
 private val MarkerEndRed = Color(0xFFD24B45)
 private val MarkerActiveBlue = Color(0xFF3B82F6)
@@ -1374,6 +1533,7 @@ private fun TrackMapView(
   contentPadding: PaddingValues = PaddingValues(0.dp),
   onPoiClick: (PointOfInterest) -> Unit = {},
   onMapClick: (LatLng) -> Unit = {},
+  onStopClick: (Stop) -> Unit = {},
 ) {
   val cameraPositionState = rememberCameraPositionState()
   val defaultPosition = LatLng(35.6762, 139.6503) // Tokyo Station as default
@@ -1516,6 +1676,11 @@ private fun TrackMapView(
         state = stopMarkerState,
         title = stop.place.name ?: stop.place.googleName ?: "立ち寄り",
         snippet = "${DateFormatters.SHORT_TIME_FORMAT.format(stop.arrivalTime)} ・ 滞在${stop.durationMinutes}分",
+        // タップで一覧と連動。false を返して既定（情報ウィンドウ表示・センタリング）も残す。
+        onClick = {
+          onStopClick(stop)
+          false
+        },
       ) {
         RouteBadgeMarker(bg = MarkerStopViolet) {
           Text(
