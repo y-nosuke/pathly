@@ -296,6 +296,28 @@ object DatabaseMigrations {
   }
 
   /**
+   * バージョン9から10へのマイグレーション。場所（places）に由来（source）列を追加する
+   * （docs/designs/places-and-stops.md / adr/0005）。自動回収の対象判定に使う。
+   *
+   * 既存行は安全側の 'USER'（自動では消さない）でバックフィルする。以後、自動検出が作る場所は
+   * 'DETECTED'、ユーザーが作る場所は 'USER' を明示的に入れる。DDL は Room の生成物と一致させること。
+   */
+  val MIGRATION_9_10 = object : Migration(9, 10) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+      try {
+        Logger.i(TAG, "Starting migration from version 9 to 10")
+
+        db.execSQL("ALTER TABLE `places` ADD COLUMN `source` TEXT NOT NULL DEFAULT 'USER'")
+
+        Logger.i(TAG, "Migration from version 9 to 10 completed successfully")
+      } catch (e: Exception) {
+        Logger.e(TAG, "Migration from version 9 to 10 failed", e)
+        throw e
+      }
+    }
+  }
+
+  /**
    * 現在利用可能な全てのマイグレーション
    */
   val ALL_MIGRATIONS = arrayOf(
@@ -307,6 +329,7 @@ object DatabaseMigrations {
     MIGRATION_6_7,
     MIGRATION_7_8,
     MIGRATION_8_9,
+    MIGRATION_9_10,
     // 将来のマイグレーションをここに追加
   )
 

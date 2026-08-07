@@ -472,19 +472,37 @@ class PlaceRepositoryImplTest {
   )
 
   @Test
-  fun deleteStops_orphanedPlaceIsDeleted_sharedPlaceIsKept() = runTest {
-    // stop 100 -> place 10（他に訪問なし＝孤立）, stop 200 -> place 20（他にも訪問が残る）
+  fun deleteStops_orphanedDetectedPlaceIsDeleted_sharedPlaceIsKept() = runTest {
+    // stop 100 -> place 10（検出由来・他に訪問なし＝孤立）, stop 200 -> place 20（他にも訪問が残る）
     coEvery { stopDao.getByIds(listOf(100L, 200L)) } returns listOf(stopEntity(100L, 10L), stopEntity(200L, 20L))
     coEvery { stopDao.countByPlace(10L) } returns 0
     coEvery { stopDao.countByPlace(20L) } returns 1
+    coEvery { placeDao.getById(10L) } returns
+      PlaceEntity(id = 10L, latitude = 35.0, longitude = 139.0, source = "DETECTED")
 
     val result = repository.deleteStops(listOf(100L, 200L))
 
     coVerify { stopDao.deleteByIds(listOf(100L, 200L)) }
-    coVerify { placeDao.deleteById(10L) } // 孤立した場所ごと削除
+    coVerify { placeDao.deleteById(10L) } // 検出由来で孤立した場所ごと削除
     coVerify(exactly = 0) { placeDao.deleteById(20L) } // 他訪問が残る場所は保持
     assertEquals(2, result.stopsDeleted)
     assertEquals(1, result.placesDeleted)
+    assertEquals(1, result.placesKept)
+  }
+
+  @Test
+  fun deleteStops_orphanedUserPlace_isKept() = runTest {
+    // ユーザーが明示的に登録した場所（USER）は、参照ゼロで孤立しても自動では消さない。
+    coEvery { stopDao.getByIds(listOf(100L)) } returns listOf(stopEntity(100L, 10L))
+    coEvery { stopDao.countByPlace(10L) } returns 0
+    coEvery { wishlistDao.countByPlace(10L) } returns 0
+    coEvery { placeDao.getById(10L) } returns
+      PlaceEntity(id = 10L, name = "手動の場所", latitude = 35.0, longitude = 139.0, source = "USER")
+
+    val result = repository.deleteStops(listOf(100L))
+
+    coVerify(exactly = 0) { placeDao.deleteById(10L) } // USER 由来は保持
+    assertEquals(0, result.placesDeleted)
     assertEquals(1, result.placesKept)
   }
 
@@ -515,7 +533,7 @@ class PlaceRepositoryImplTest {
   fun undoLastDeletion_restoresStopsAndOrphanedPlace() = runTest {
     // 孤立 place を回収する削除 → 取り消しで place・Google データ・解決ログ・stop を元IDのまま復元。
     val stop = stopEntity(100L, 10L)
-    val place = PlaceEntity(id = 10L, latitude = 35.0, longitude = 139.0)
+    val place = PlaceEntity(id = 10L, latitude = 35.0, longitude = 139.0, source = "DETECTED")
     val resolution = PlaceResolutionEntity(10L, Date(0L))
     val google = GooglePlaceEntity(10L, "gp-1", "カフェ", "住所")
     coEvery { stopDao.getByIds(listOf(100L)) } returns listOf(stop)

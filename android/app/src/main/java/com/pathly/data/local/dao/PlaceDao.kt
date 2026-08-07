@@ -75,6 +75,10 @@ interface PlaceDao {
   @Query("UPDATE places SET note = :note, updatedAt = :updatedAt WHERE id = :id")
   suspend fun updateNote(id: Long, note: String?, updatedAt: Date)
 
+  /** 由来を更新する（例: 検出で作った場所をユーザーが触ったら USER に昇格して自動回収から守る）。 */
+  @Query("UPDATE places SET source = :source WHERE id = :id")
+  suspend fun updateSource(id: Long, source: String)
+
   @Query("DELETE FROM places WHERE id = :id")
   suspend fun deleteById(id: Long)
 }

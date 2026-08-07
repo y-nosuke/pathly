@@ -1,6 +1,7 @@
 package com.pathly.domain.repository
 
 import com.pathly.domain.model.PlaceSearchResult
+import com.pathly.domain.model.PlaceSource
 import com.pathly.domain.model.Stop
 import com.pathly.domain.model.StopCandidate
 import com.pathly.domain.model.StopDeletionResult
@@ -84,8 +85,15 @@ interface PlaceRepository {
   /**
    * 近く（30m以内）に既存の場所があれば再利用し、無ければ新規作成して place の id を返す。
    * 立ち寄りと行きたい場所で同じ場所を共有するための同定（重複排除）。
+   *
+   * [source] は新規作成時の由来（既定は自動検出＝[PlaceSource.DETECTED]）。再利用時、既存が
+   * DETECTED でも [source] が USER なら USER に昇格する（ユーザーが触った場所を自動回収から守る）。
    */
-  suspend fun findOrCreatePlace(latitude: Double, longitude: Double): Long
+  suspend fun findOrCreatePlace(
+    latitude: Double,
+    longitude: Double,
+    source: PlaceSource = PlaceSource.DETECTED,
+  ): Long
 
   /**
    * 立ち寄り（訪問）を削除する（1件でも複数でも同じ経路）。選択した訪問はすべて消し、

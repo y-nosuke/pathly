@@ -18,6 +18,7 @@ import com.pathly.domain.model.DetectedStop
 import com.pathly.domain.model.GpsPoint
 import com.pathly.domain.model.Place
 import com.pathly.domain.model.PlaceSearchResult
+import com.pathly.domain.model.PlaceSource
 import com.pathly.domain.model.Stop
 import com.pathly.domain.model.StopCandidate
 import com.pathly.domain.model.StopDeletionResult
@@ -161,7 +162,8 @@ class PlaceRepositoryImpl @Inject constructor(
     name: String?,
     googlePlaceId: String?,
   ): Long = mutex.withLock {
-    val placeId = findOrCreatePlace(latitude, longitude)
+    // 手動追加はユーザーの明示操作なので USER 由来（自動回収から守る）。
+    val placeId = findOrCreatePlace(latitude, longitude, PlaceSource.USER)
     val stopId = stopDao.insert(
       StopEntity(
         placeId = placeId,
@@ -229,12 +231,16 @@ class PlaceRepositoryImpl @Inject constructor(
     for (placeId in affectedPlaceIds) {
       // 他の訪問が残る（他の履歴など）か、行きたい登録がある場所は保持する。
       // wishlist は place を消すと CASCADE で消えるため、ここで巻き込まないよう明示的に守る。
+      val place = placeDao.getById(placeId)
       val stillReferenced = stopDao.countByPlace(placeId) > 0 || wishlistDao.countByPlace(placeId) > 0
-      if (stillReferenced) {
+      // ユーザーが明示的に作った場所（USER）は、参照ゼロでも自動では消さない（意図的な登録を守る）。
+      // 自動回収するのは検出が作った使い捨て（DETECTED）だけ。
+      val autoDisposable = place != null && place.source == PlaceSource.DETECTED.name
+      if (stillReferenced || !autoDisposable) {
         placesKept++
       } else {
         // 回収する place と Google データ・解決ログを控えてから消す（子は CASCADE で消える）。
-        placeDao.getById(placeId)?.let { deletedPlaces.add(it) }
+        deletedPlaces.add(place)
         placeResolutionDao.getByPlace(placeId)?.let { deletedResolutions.add(it) }
         googlePlaceDao.getByPlace(placeId)?.let { deletedGooglePlaces.add(it) }
         placeDao.deleteById(placeId)
@@ -359,12 +365,18 @@ class PlaceRepositoryImpl @Inject constructor(
   }
 
   /** 近く（[DEDUPE_RADIUS_METERS] 以内）に既存の場所があれば再利用、無ければ新規作成する。 */
-  override suspend fun findOrCreatePlace(latitude: Double, longitude: Double): Long {
+  override suspend fun findOrCreatePlace(latitude: Double, longitude: Double, source: PlaceSource): Long {
     val existing = placeDao.getAll().firstOrNull {
       distanceMeters(it.latitude, it.longitude, latitude, longitude) <= DEDUPE_RADIUS_METERS
     }
-    if (existing != null) return existing.id
-    return placeDao.insert(PlaceEntity(latitude = latitude, longitude = longitude))
+    if (existing != null) {
+      // ユーザーが触った場所は自動回収から守るため、DETECTED を USER に昇格する（降格はしない）。
+      if (source == PlaceSource.USER && existing.source != PlaceSource.USER.name) {
+        placeDao.updateSource(existing.id, PlaceSource.USER.name)
+      }
+      return existing.id
+    }
+    return placeDao.insert(PlaceEntity(latitude = latitude, longitude = longitude, source = source.name))
   }
 
   private fun StopWithPlace.toStop(): Stop = Stop(

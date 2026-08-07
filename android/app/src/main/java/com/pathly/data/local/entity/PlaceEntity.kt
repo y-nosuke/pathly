@@ -19,6 +19,11 @@ data class PlaceEntity(
   val longitude: Double,
   /** 場所のメモ（「行きたい」登録と独立に持てる。null/空=メモ無し）。 */
   val note: String? = null,
+  /**
+   * 由来（[com.pathly.domain.model.PlaceSource] の名前）。"DETECTED"=自動検出 / "USER"=ユーザー登録。
+   * 自動回収は "DETECTED" のみ対象（"USER" は意図的なので自動では消さない）。既定は安全側の "USER"。
+   */
+  val source: String = "USER",
   val createdAt: Date = Date(),
   val updatedAt: Date = Date(),
 )

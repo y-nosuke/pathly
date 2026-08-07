@@ -14,6 +14,7 @@ import com.pathly.data.places.PlacesTextSearcher
 import com.pathly.domain.model.Place
 import com.pathly.domain.model.PlaceListItem
 import com.pathly.domain.model.PlaceSearchResult
+import com.pathly.domain.model.PlaceSource
 import com.pathly.domain.model.PlaceVisit
 import com.pathly.domain.model.Priority
 import com.pathly.domain.repository.PlaceRepository
@@ -61,7 +62,7 @@ class WishlistRepositoryImpl @Inject constructor(
     note: String?,
     googlePlaceId: String?,
   ): Long {
-    val placeId = placeRepository.findOrCreatePlace(latitude, longitude)
+    val placeId = placeRepository.findOrCreatePlace(latitude, longitude, PlaceSource.USER)
     // 名前が指定され、かつ場所が未命名のときだけ命名する（既存の命名は上書きしない）。
     val trimmedName = name?.trim()?.ifBlank { null }
     if (trimmedName != null && placeDao.getById(placeId)?.name == null) {
@@ -89,7 +90,7 @@ class WishlistRepositoryImpl @Inject constructor(
   }
 
   override suspend fun registerSearchedPlace(result: PlaceSearchResult): Long {
-    val placeId = placeRepository.findOrCreatePlace(result.latitude, result.longitude)
+    val placeId = placeRepository.findOrCreatePlace(result.latitude, result.longitude, PlaceSource.USER)
     // 検索結果は Google 由来なので google_places に記録（places.name はユーザー名専用）。
     // 表示は google_places.name にフォールバックするので、名前は自動で出る。
     googlePlaceDao.upsert(
