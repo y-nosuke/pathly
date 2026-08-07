@@ -227,12 +227,16 @@ class LocationTrackingService : Service() {
       override fun onLocationResult(locationResult: LocationResult) {
         super.onLocationResult(locationResult)
 
-        locationResult.lastLocation?.let { location ->
-          saveLocationToDatabase(location)
+        // バッチ許容（setMaxUpdateDelayMillis）のため、1回の結果に複数点がまとまって届くことがある。
+        // lastLocation だけ使うと中間点を取りこぼすので、locations（古い順）を全部保存する。
+        val locations = locationResult.locations
+        if (locations.isNotEmpty()) {
+          saveLocationsToDatabase(locations)
 
-          // 位置情報とカウントを更新
-          _currentLocation.value = location
-          _locationCount.value = _locationCount.value + 1
+          val latest = locations.last()
+          // 位置情報とカウントを更新（カウントは実際に受け取った点数だけ進める）
+          _currentLocation.value = latest
+          _locationCount.value = _locationCount.value + locations.size
           lastLocationTime = System.currentTimeMillis()
 
           // タイムアウト監視をリセット
@@ -243,15 +247,15 @@ class LocationTrackingService : Service() {
             "GPS位置を記録中... (${
               String.format(
                 "%.6f",
-                location.latitude,
+                latest.latitude,
               )
-            }, ${String.format("%.6f", location.longitude)})",
+            }, ${String.format("%.6f", latest.longitude)})",
           )
           val notificationManager =
             getSystemService(NOTIFICATION_SERVICE) as NotificationManager
           notificationManager.notify(NOTIFICATION_ID, notification)
-        } ?: run {
-          Log.w("LocationService", "Location result was null")
+        } else {
+          Log.w("LocationService", "Location result had no locations")
         }
       }
     }
@@ -358,29 +362,42 @@ class LocationTrackingService : Service() {
     }
   }
 
-  private fun saveLocationToDatabase(location: Location) {
-    currentTrackId?.let { trackId ->
-      serviceScope.launch {
-        val gpsPoint = GpsPointEntity(
-          trackId = trackId,
-          latitude = location.latitude,
-          longitude = location.longitude,
-          altitude = if (location.hasAltitude()) location.altitude else null,
-          accuracy = location.accuracy,
-          speed = if (location.hasSpeed()) location.speed else null,
-          bearing = if (location.hasBearing()) location.bearing else null,
-          timestamp = Date(location.time),
-        )
+  private fun saveLocationsToDatabase(locations: List<Location>) {
+    val trackId = currentTrackId ?: return
+    serviceScope.launch {
+      val points = locations.map { it.toGpsPointEntity(trackId) }
+      gpsPointDao.insertPoints(points)
 
-        gpsPointDao.insertPoint(gpsPoint)
-
-        // 新しい点までの補正を計算し、確定分だけ保存する（末尾は暫定なので保存しない）。
-        gpsTrackRepository.updateSmoothedForTrack(trackId, isFinal = false)
-        // 補正後の点列から立ち寄りを検出・保存し、「立ち寄り中」を更新する。
-        placeRepository.updateStopsForTrack(trackId, isFinal = false)
-      }
+      // 補正・立ち寄り検出はバッチ挿入後に1回だけ回す（点ごとに回す必要はない）。
+      // 新しい点までの補正を計算し、確定分だけ保存する（末尾は暫定なので保存しない）。
+      gpsTrackRepository.updateSmoothedForTrack(trackId, isFinal = false)
+      // 補正後の点列から立ち寄りを検出・保存し、「立ち寄り中」を更新する。
+      placeRepository.updateStopsForTrack(trackId, isFinal = false)
     }
   }
+
+  /**
+   * Location を保存用エンティティへ変換する。記録時にしか取れない付随情報（精度の内訳・MSL高度・
+   * provider・単調時刻・モック判定）も、提供されていれば取りこぼさず保存する（minSdk 34）。
+   */
+  private fun Location.toGpsPointEntity(trackId: Long): GpsPointEntity = GpsPointEntity(
+    trackId = trackId,
+    latitude = latitude,
+    longitude = longitude,
+    altitude = if (hasAltitude()) altitude else null,
+    accuracy = accuracy,
+    speed = if (hasSpeed()) speed else null,
+    bearing = if (hasBearing()) bearing else null,
+    provider = provider,
+    verticalAccuracyMeters = if (hasVerticalAccuracy()) verticalAccuracyMeters else null,
+    speedAccuracyMetersPerSecond = if (hasSpeedAccuracy()) speedAccuracyMetersPerSecond else null,
+    bearingAccuracyDegrees = if (hasBearingAccuracy()) bearingAccuracyDegrees else null,
+    mslAltitudeMeters = if (hasMslAltitude()) mslAltitudeMeters else null,
+    mslAltitudeAccuracyMeters = if (hasMslAltitudeAccuracy()) mslAltitudeAccuracyMeters else null,
+    elapsedRealtimeNanos = elapsedRealtimeNanos,
+    isMock = isMock,
+    timestamp = Date(time),
+  )
 
   private fun hasLocationPermission(): Boolean = PermissionUtils.hasLocationPermissions(this)
 
