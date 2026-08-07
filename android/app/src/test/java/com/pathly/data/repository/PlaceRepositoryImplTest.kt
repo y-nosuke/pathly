@@ -69,8 +69,8 @@ class PlaceRepositoryImplTest {
 
   @Test
   fun updateStops_finalizedVisit_persistsStopAndResolvesName() = runTest {
-    coEvery { smoothedPointDao.getByTrack(1L) } returns finishedVisitPoints()
-    coEvery { stopDao.countByTrack(1L) } returns 0
+    coEvery { smoothedPointDao.getByTrackAfter(1L, any()) } returns finishedVisitPoints()
+    coEvery { stopDao.getByTrack(1L) } returns emptyList()
     coEvery { placeDao.getAll() } returns emptyList()
     coEvery { placeDao.insert(any()) } returns 10L
     coEvery { stopDao.insert(any()) } returns 100L
@@ -100,8 +100,8 @@ class PlaceRepositoryImplTest {
 
   @Test
   fun updateStops_dwelling_setsCurrentStopWithoutPersistingStop() = runTest {
-    coEvery { smoothedPointDao.getByTrack(1L) } returns dwellingPoints()
-    coEvery { stopDao.countByTrack(1L) } returns 0
+    coEvery { smoothedPointDao.getByTrackAfter(1L, any()) } returns dwellingPoints()
+    coEvery { stopDao.getByTrack(1L) } returns emptyList()
     coEvery { placeDao.getAll() } returns emptyList()
     coEvery { placeDao.insert(any()) } returns 20L
     coEvery { placeDao.getById(20L) } returns
@@ -124,8 +124,8 @@ class PlaceRepositoryImplTest {
 
   @Test
   fun updateStops_finalizesDwellingWhenIsFinal() = runTest {
-    coEvery { smoothedPointDao.getByTrack(1L) } returns dwellingPoints()
-    coEvery { stopDao.countByTrack(1L) } returns 0
+    coEvery { smoothedPointDao.getByTrackAfter(1L, any()) } returns dwellingPoints()
+    coEvery { stopDao.getByTrack(1L) } returns emptyList()
     coEvery { placeDao.getAll() } returns emptyList()
     coEvery { placeDao.insert(any()) } returns 30L
     coEvery { stopDao.insert(any()) } returns 300L
@@ -136,6 +136,31 @@ class PlaceRepositoryImplTest {
     // 記録終了なら末尾の滞在も確定して保存する。
     coVerify { stopDao.insert(any()) }
     assertNull(repository.currentStop.value)
+  }
+
+  // 記録中にユーザーが立ち寄りを削除しても、次の検出で復活しないこと（退行防止）。
+  // 検出は境界（最後の確定 departure）以降の点だけを見るため、削除した立ち寄りの区間は
+  // スライスに入らず再検出されない。getByTrackAfter は境界を忠実に反映させて検証する。
+  @Test
+  fun updateStops_afterUserDeletesStopMidRecording_doesNotResurrectIt() = runTest {
+    coEvery { smoothedPointDao.getByTrackAfter(1L, any()) } answers {
+      val afterMillis = secondArg<Long>()
+      finishedVisitPoints().filter { it.timestamp.time > afterMillis }
+    }
+    coEvery { stopDao.getByTrack(1L) } returns emptyList()
+    coEvery { placeDao.getAll() } returns emptyList()
+    coEvery { placeDao.insert(any()) } returns 40L
+    coEvery { stopDao.insert(any()) } returns 400L
+    coEvery { placeDao.getUnresolvedPlacesForTrack(1L) } returns emptyList()
+
+    // パス1: 確定した立ち寄りを1件保存する（境界が末尾 departure まで進む）。
+    repository.updateStopsForTrack(1L, isFinal = false)
+    coVerify(exactly = 1) { stopDao.insert(any()) }
+
+    // ユーザーが立ち寄りを削除 → 境界は下がらないので、以降の検出スライスに立ち寄りの区間は
+    // 入らず、再挿入されないこと。
+    repository.updateStopsForTrack(1L, isFinal = false)
+    coVerify(exactly = 1) { stopDao.insert(any()) }
   }
 
   @Test

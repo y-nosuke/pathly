@@ -60,6 +60,12 @@ class PlaceRepositoryImpl @Inject constructor(
   // 画面のスナックバーは常に最新の1件しか出さないため、単一スロットで十分。
   private var lastDeletion: DeletedSnapshot? = null
 
+  // 記録中に確定・追記した立ち寄りの「最後の departure（ミリ秒）」をトラック単位で覚える。
+  // これを削除では下げずセッション中は単調増加させることで、ユーザーが記録中に削除した
+  // 立ち寄りを、検出（GPSは変わらないので同じ結果になる）が再挿入して復活させないようにする。
+  // アクセスは常に [mutex] 下（[detectAndPersist]）。プロセス終了で自然にクリアされる。
+  private val detectionHighWaterMillis = mutableMapOf<Long, Long>()
+
   override fun getStopsForTrack(trackId: Long): Flow<List<Stop>> = stopDao.getStopsWithPlaceByTrack(trackId).map { list -> list.map { it.toStop() } }
 
   override fun unresolvedCountForTrack(trackId: Long): Flow<Int> = placeDao.countPlacesWithoutGoogleIdForTrack(trackId)
@@ -240,13 +246,26 @@ class PlaceRepositoryImpl @Inject constructor(
    * 補正後の点列から立ち寄りを検出し、確定分だけを差分保存する。末尾の滞在中クラスタが
    * 3分を超えたら place を先行確定して [currentStop] に流す（案B・メモリ保持）。
    * 呼び出しは [mutex] で直列化されている前提。
+   *
+   * インクリメンタル検出: 毎回全点を検出し直さず、「境界（最後に確定した立ち寄りの
+   * departure）」より後の点だけを [StopDetector] にかける。貪欲スキャンは境界より手前の点に
+   * 依存しないため、末尾のクラスタ分割は全点で検出した場合と一致する（等価）。これにより
+   * (1) 過去の立ち寄り区間を毎ティック舐め直さず、(2) 境界を削除では下げないことで、
+   * ユーザーが記録中に削除した立ち寄りを検出が再挿入して復活させない。
    */
   private suspend fun detectAndPersist(trackId: Long, isFinal: Boolean) {
-    val smoothed = smoothedPointDao.getByTrack(trackId).map { it.toGpsPoint() }
-    val detected = StopDetector.detect(smoothed)
+    // 境界（ミリ秒）。セッション中はメモリで単調増加させ、削除では下げない。未設定なら
+    // 保存済み立ち寄りの最終 departure で種をまく（プロセス再起動後の再開に対応）。
+    val boundaryMillis = detectionHighWaterMillis[trackId]
+      ?: stopDao.getByTrack(trackId).maxOfOrNull { it.departureTime.time }
+      ?: Long.MIN_VALUE
+
+    // 境界より後の補正点だけを検出対象にする（過去の確定区間はロードしない）。
+    val tail = smoothedPointDao.getByTrackAfter(trackId, boundaryMillis).map { it.toGpsPoint() }
+    val detected = StopDetector.detect(tail)
 
     // 末尾点を含む最後のクラスタは「滞在中」＝暫定。isFinal なら末尾も確定。
-    val lastTimestamp = smoothed.lastOrNull()?.timestamp
+    val lastTimestamp = tail.lastOrNull()?.timestamp
     val provisional = if (!isFinal) {
       detected.lastOrNull()?.takeIf { it.departureTime == lastTimestamp }
     } else {
@@ -254,22 +273,26 @@ class PlaceRepositoryImpl @Inject constructor(
     }
     val finalized = if (provisional != null) detected.dropLast(1) else detected
 
-    // 確定した立ち寄りのうち、まだ保存していないぶんだけ追記する（プレフィックスは単調・安定）。
-    val persisted = stopDao.countByTrack(trackId)
-    if (finalized.size > persisted) {
-      for (d in finalized.subList(persisted, finalized.size)) {
-        val placeId = findOrCreatePlace(d.latitude, d.longitude)
-        stopDao.insert(
-          StopEntity(
-            placeId = placeId,
-            trackId = trackId,
-            arrivalTime = d.arrivalTime,
-            departureTime = d.departureTime,
-          ),
-        )
-      }
-      logger.i("Persisted ${finalized.size - persisted} stops for track $trackId")
+    // スライスは境界より後なので、確定クラスタはすべて未保存＝新規。順に追記して境界を進める。
+    var highWaterMillis = boundaryMillis
+    for (d in finalized) {
+      val placeId = findOrCreatePlace(d.latitude, d.longitude)
+      stopDao.insert(
+        StopEntity(
+          placeId = placeId,
+          trackId = trackId,
+          arrivalTime = d.arrivalTime,
+          departureTime = d.departureTime,
+        ),
+      )
+      if (d.departureTime.time > highWaterMillis) highWaterMillis = d.departureTime.time
     }
+    detectionHighWaterMillis[trackId] = highWaterMillis
+    if (finalized.isNotEmpty()) {
+      logger.i("Persisted ${finalized.size} stops for track $trackId (incremental)")
+    }
+    // 記録終了時はハイウォーターの追跡を片付ける（trackId は再利用されない）。
+    if (isFinal) detectionHighWaterMillis.remove(trackId)
 
     // 確定した立ち寄りの未解決 place をオンラインなら命名する（オフラインは行を作らずキャッチアップ）。
     for (place in placeDao.getUnresolvedPlacesForTrack(trackId)) {
