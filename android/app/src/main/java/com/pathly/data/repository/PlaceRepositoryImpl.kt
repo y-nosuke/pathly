@@ -1,6 +1,7 @@
 package com.pathly.data.repository
 
 import com.pathly.data.local.dao.GooglePlaceDao
+import com.pathly.data.local.dao.GpsPointDao
 import com.pathly.data.local.dao.PlaceDao
 import com.pathly.data.local.dao.PlaceResolutionDao
 import com.pathly.data.local.dao.SmoothedPointDao
@@ -42,6 +43,7 @@ class PlaceRepositoryImpl @Inject constructor(
   private val placeDao: PlaceDao,
   private val stopDao: StopDao,
   private val smoothedPointDao: SmoothedPointDao,
+  private val gpsPointDao: GpsPointDao,
   private val placeResolutionDao: PlaceResolutionDao,
   private val googlePlaceDao: GooglePlaceDao,
   private val wishlistDao: WishlistDao,
@@ -307,8 +309,16 @@ class PlaceRepositoryImpl @Inject constructor(
       resolvePlace(place)
     }
 
-    // 「立ち寄り中」: place を先行確定＋命名し、メモリで公開する。
-    _currentStop.value = provisional?.let { toLiveStop(trackId, it) }
+    // 「立ち寄り中」: place を先行確定＋命名し、メモリで公開する。ただし表示は、生の現在地が
+    // その立ち寄りの中心の半径内にある間だけ出す。補正の確定ラグ（末尾の未確定分）や、50m を
+    // 抜けきるまでクラスタが末尾を吸収し続ける分を待たず、離脱したら即座に消すため。
+    // これは表示（currentStop）だけの判定で、実際に保存する立ち寄りには影響しない。
+    val liveProvisional = provisional?.takeIf { d ->
+      val latest = gpsPointDao.getLatestPoint(trackId)
+      latest == null ||
+        distanceMeters(d.latitude, d.longitude, latest.latitude, latest.longitude) <= StopDetector.RADIUS_METERS
+    }
+    _currentStop.value = liveProvisional?.let { toLiveStop(trackId, it) }
   }
 
   /** 「立ち寄り中」の place を先行確定して名前解決し、表示用の [Stop] を作る（id は 0）。 */

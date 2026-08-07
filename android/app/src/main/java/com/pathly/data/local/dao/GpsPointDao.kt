@@ -16,6 +16,10 @@ interface GpsPointDao {
   @Query("SELECT * FROM gps_points WHERE trackId = :trackId ORDER BY timestamp ASC")
   suspend fun getPointsByTrackIdSync(trackId: Long): List<GpsPointEntity>
 
+  /** その経路の最新の生点（現在地の即時判定に使う。補正の確定ラグを待たない）。 */
+  @Query("SELECT * FROM gps_points WHERE trackId = :trackId ORDER BY timestamp DESC LIMIT 1")
+  suspend fun getLatestPoint(trackId: Long): GpsPointEntity?
+
   @Insert
   suspend fun insertPoint(point: GpsPointEntity): Long
 
