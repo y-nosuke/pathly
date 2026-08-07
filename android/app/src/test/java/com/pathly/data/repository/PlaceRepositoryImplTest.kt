@@ -365,7 +365,7 @@ class PlaceRepositoryImplTest {
   }
 
   @Test
-  fun addManualStop_typedName_setsNameWithoutResolution() = runTest {
+  fun addManualStop_typedName_setsNameAndMarksResolved() = runTest {
     coEvery { placeDao.getAll() } returns emptyList() // findOrCreatePlace で新規作成
     coEvery { placeDao.insert(any()) } returns 10L
     coEvery { stopDao.insert(any()) } returns 100L
@@ -376,10 +376,11 @@ class PlaceRepositoryImplTest {
 
     assertEquals(100L, id)
     coVerify { stopDao.insert(match { it.trackId == 1L && it.placeId == 10L }) }
-    // 手入力の名前はユーザー名として未命名の place に焼き込む。googlePlaceId は無いので記録を作らない。
+    // 手入力の名前はユーザー名として未命名の place に焼き込む。googlePlaceId は無いので google_places は作らない。
     coVerify { placeDao.updateName(10L, "手動カフェ", any()) }
     coVerify(exactly = 0) { googlePlaceDao.upsert(any()) }
-    coVerify(exactly = 0) { placeResolutionDao.upsert(any()) }
+    // 手動追加は「ユーザーが決めた」印として解決ログを残す（自動命名で上書きさせない）。
+    coVerify { placeResolutionDao.upsert(match { it.placeId == 10L }) }
     coVerify(exactly = 0) { resolver.resolve(any(), any()) }
   }
 
@@ -402,7 +403,7 @@ class PlaceRepositoryImplTest {
   }
 
   @Test
-  fun addManualStop_noName_leavesPlaceUnnamed() = runTest {
+  fun addManualStop_noName_leavesUnnamedButMarksResolved() = runTest {
     coEvery { placeDao.getAll() } returns emptyList()
     coEvery { placeDao.insert(any()) } returns 10L
     coEvery { stopDao.insert(any()) } returns 100L
@@ -411,11 +412,12 @@ class PlaceRepositoryImplTest {
 
     repository.addManualStop(1L, 35.0, 139.0, Date(0), Date(180_000), null, null)
 
-    // 名前無しの手動追加は place を未命名のまま残す（あとで「場所を取得」で命名可）。
+    // 名前無しの手動追加は place を未命名のまま残すが、自動命名で近くの別施設名に化けないよう
+    // 解決ログは残す（未命名のまま維持。あとで手動「場所を取得」で命名可）。
     coVerify { stopDao.insert(any()) }
     coVerify(exactly = 0) { placeDao.updateName(any(), any(), any()) }
     coVerify(exactly = 0) { googlePlaceDao.upsert(any()) }
-    coVerify(exactly = 0) { placeResolutionDao.upsert(any()) }
+    coVerify { placeResolutionDao.upsert(match { it.placeId == 10L }) }
   }
 
   @Test

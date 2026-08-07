@@ -1,5 +1,6 @@
 package com.pathly.presentation.tracking
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -7,11 +8,15 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -20,6 +25,8 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -57,11 +64,14 @@ import com.google.maps.android.compose.MapType
 import com.google.maps.android.compose.MapUiSettings
 import com.google.maps.android.compose.rememberCameraPositionState
 import com.pathly.R
+import com.pathly.domain.model.GpsPoint
 import com.pathly.domain.model.GpsTrack
+import com.pathly.domain.model.PlaceSearchResult
 import com.pathly.domain.model.Stop
 import com.pathly.presentation.common.RouteMapContent
 import com.pathly.presentation.common.stopSegmentPoints
 import com.pathly.presentation.places.RegisterPlaceFromPoiDialog
+import com.pathly.util.DateFormatters
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.util.Date
@@ -106,6 +116,8 @@ fun TrackingScreen(
   var poiTarget by remember { mutableStateOf<PointOfInterest?>(null) }
   // 停止の誤爆防止（記録中の停止だけ確認を挟む）。
   var showStopConfirm by remember { mutableStateOf(false) }
+  // 手動で立ち寄りを追加する対象地点（「今ここ」または地図タップ）。非nullで確認ダイアログを出す。
+  var manualTarget by remember { mutableStateOf<LatLng?>(null) }
 
   Box(modifier = modifier.fillMaxSize()) {
     if (mapContent != null) {
@@ -118,8 +130,43 @@ fun TrackingScreen(
         stops = uiState.stops,
         currentStop = uiState.currentStop,
         onPoiClick = { poiTarget = it },
+        // 記録中は地図の空きタップで、その地点を手動立ち寄りとして追加できる。
+        onMapClick = { latLng -> if (uiState.isTracking) manualTarget = latLng },
         modifier = Modifier.fillMaxSize(),
       )
+    }
+
+    // 「今ここ」を立ち寄りに追加（記録中・現在地あり）。地図左上に置いて下部の操作と干渉させない。
+    if (uiState.isTracking && uiState.hasLocationPermission) {
+      val loc = uiState.currentLocation
+      Surface(
+        onClick = { loc?.let { manualTarget = LatLng(it.latitude, it.longitude) } },
+        enabled = loc != null,
+        shape = RoundedCornerShape(20.dp),
+        color = MaterialTheme.colorScheme.surface,
+        shadowElevation = 4.dp,
+        modifier = Modifier
+          .align(Alignment.TopStart)
+          .padding(12.dp),
+      ) {
+        Row(
+          modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
+          verticalAlignment = Alignment.CenterVertically,
+        ) {
+          Icon(
+            painter = painterResource(R.drawable.ic_place),
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.size(18.dp),
+          )
+          Spacer(modifier = Modifier.width(6.dp))
+          Text(
+            text = "今ここを立ち寄り",
+            style = MaterialTheme.typography.labelLarge,
+            fontWeight = FontWeight.Medium,
+          )
+        }
+      }
     }
 
     // 記録中の状態ピル（上部中央）
@@ -254,6 +301,164 @@ fun TrackingScreen(
       },
     )
   }
+
+  manualTarget?.let { target ->
+    ManualStopDialog(
+      target = target,
+      points = uiState.currentTrack?.smoothedPoints.orEmpty(),
+      onFetchCandidates = viewModel::nearbyPois,
+      onConfirm = { arrival, departure, name, googlePlaceId ->
+        viewModel.addManualStop(target.latitude, target.longitude, arrival, departure, name, googlePlaceId)
+        manualTarget = null
+      },
+      onDismiss = { manualTarget = null },
+    )
+  }
+}
+
+/**
+ * 記録中に手動で立ち寄りを追加する確認ダイアログ。到着/出発は近傍の軌跡点から自動導出して表示し、
+ * 名前は「近くのPOI候補から選ぶ／自分で入力／名前なし」から決める（最寄り1件の自動命名で
+ * 隣の別施設に化けるのを避けるため、候補はユーザーが選ぶ）。
+ */
+@Composable
+private fun ManualStopDialog(
+  target: LatLng,
+  points: List<GpsPoint>,
+  onFetchCandidates: suspend (Double, Double) -> List<PlaceSearchResult>,
+  onConfirm: (arrival: Date, departure: Date, name: String?, googlePlaceId: String?) -> Unit,
+  onDismiss: () -> Unit,
+) {
+  val (arrival, departure) = remember(target, points) {
+    deriveStopWindow(points, target.latitude, target.longitude)
+  }
+  val durationMinutes = ((departure.time - arrival.time) / 1000 / 60).toInt()
+
+  var candidates by remember { mutableStateOf<List<PlaceSearchResult>?>(null) } // null=読込中
+  var selected by remember { mutableStateOf<PlaceSearchResult?>(null) }
+  var customName by remember { mutableStateOf("") }
+
+  LaunchedEffect(target) {
+    candidates = onFetchCandidates(target.latitude, target.longitude)
+  }
+
+  AlertDialog(
+    onDismissRequest = onDismiss,
+    title = { Text("立ち寄りを追加") },
+    text = {
+      Column {
+        val window = if (durationMinutes > 0) {
+          "${DateFormatters.SHORT_TIME_FORMAT.format(arrival)}–" +
+            "${DateFormatters.SHORT_TIME_FORMAT.format(departure)} ・ 滞在${durationMinutes}分"
+        } else {
+          "この地点付近（滞在時間は軌跡から推定）"
+        }
+        Text(text = window, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Spacer(modifier = Modifier.height(12.dp))
+
+        Text("名前", style = MaterialTheme.typography.labelLarge)
+        when (val list = candidates) {
+          null -> Row(
+            modifier = Modifier.padding(vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+          ) {
+            CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+            Spacer(modifier = Modifier.width(8.dp))
+            Text("近くの候補を検索中…", style = MaterialTheme.typography.bodySmall)
+          }
+
+          else -> {
+            if (list.isEmpty()) {
+              Text(
+                "近くの候補は見つかりませんでした（名前を入力するか、名前なしで追加できます）。",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(vertical = 4.dp),
+              )
+            } else {
+              Column(
+                modifier = Modifier
+                  .heightIn(max = 220.dp)
+                  .verticalScroll(rememberScrollState()),
+              ) {
+                list.forEach { poi ->
+                  Row(
+                    modifier = Modifier
+                      .fillMaxWidth()
+                      .clickable {
+                        selected = poi
+                        customName = ""
+                      }
+                      .padding(vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                  ) {
+                    RadioButton(
+                      selected = selected?.googlePlaceId == poi.googlePlaceId,
+                      onClick = {
+                        selected = poi
+                        customName = ""
+                      },
+                    )
+                    Column(modifier = Modifier.padding(start = 4.dp)) {
+                      Text(poi.name ?: "（名称不明）", style = MaterialTheme.typography.bodyMedium)
+                      poi.category?.let {
+                        Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                      }
+                    }
+                  }
+                }
+              }
+            }
+            Spacer(modifier = Modifier.height(8.dp))
+            OutlinedTextField(
+              value = customName,
+              onValueChange = {
+                customName = it
+                if (it.isNotEmpty()) selected = null
+              },
+              singleLine = true,
+              label = { Text("自分で入力（任意）") },
+              modifier = Modifier.fillMaxWidth(),
+            )
+          }
+        }
+      }
+    },
+    confirmButton = {
+      TextButton(onClick = {
+        val name = selected?.name ?: customName.trim().ifBlank { null }
+        onConfirm(arrival, departure, name, selected?.googlePlaceId)
+      }) {
+        // 名前が決まっていなければ「名前なしで追加」を明示する。
+        Text(if (selected == null && customName.isBlank()) "名前なしで追加" else "追加")
+      }
+    },
+    dismissButton = {
+      TextButton(onClick = onDismiss) { Text("キャンセル") }
+    },
+  )
+}
+
+/** 手動追加の到着/出発を、指した地点の近傍の軌跡点から推定する（両端の時刻）。近傍が無ければ最寄り点。 */
+private fun deriveStopWindow(points: List<GpsPoint>, lat: Double, lng: Double): Pair<Date, Date> {
+  if (points.isEmpty()) return Date() to Date()
+  val near = points.filter { distanceMeters(it.latitude, it.longitude, lat, lng) <= 60.0 }
+  if (near.isNotEmpty()) {
+    val times = near.map { it.timestamp }
+    return times.min() to times.max()
+  }
+  val nearest = points.minByOrNull { distanceMeters(it.latitude, it.longitude, lat, lng) }!!
+  return nearest.timestamp to nearest.timestamp
+}
+
+private fun distanceMeters(lat1: Double, lon1: Double, lat2: Double, lon2: Double): Double {
+  val earthRadius = 6371000.0
+  val dLat = Math.toRadians(lat2 - lat1)
+  val dLon = Math.toRadians(lon2 - lon1)
+  val a = kotlin.math.sin(dLat / 2) * kotlin.math.sin(dLat / 2) +
+    kotlin.math.cos(Math.toRadians(lat1)) * kotlin.math.cos(Math.toRadians(lat2)) *
+    kotlin.math.sin(dLon / 2) * kotlin.math.sin(dLon / 2)
+  return earthRadius * 2 * kotlin.math.atan2(kotlin.math.sqrt(a), kotlin.math.sqrt(1 - a))
 }
 
 @Composable
@@ -264,6 +469,7 @@ private fun TrackingMapView(
   stops: List<Stop>,
   currentStop: Stop?,
   onPoiClick: (PointOfInterest) -> Unit,
+  onMapClick: (LatLng) -> Unit,
   modifier: Modifier = Modifier,
 ) {
   val cameraPositionState = rememberCameraPositionState {
@@ -356,6 +562,8 @@ private fun TrackingMapView(
       ),
       // 施設アイコン（POI）をタップしたら場所登録ダイアログを開く
       onPOIClick = onPoiClick,
+      // 空きスペースのタップは手動立ち寄り追加に使う（呼び出し側で記録中のみ受ける）
+      onMapClick = onMapClick,
     ) {
       val displayPoints = track?.smoothedPoints.orEmpty()
       if (track != null && displayPoints.size >= 2) {

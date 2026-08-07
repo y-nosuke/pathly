@@ -17,6 +17,7 @@ import com.pathly.data.places.PlacesNameResolver
 import com.pathly.domain.model.DetectedStop
 import com.pathly.domain.model.GpsPoint
 import com.pathly.domain.model.Place
+import com.pathly.domain.model.PlaceSearchResult
 import com.pathly.domain.model.Stop
 import com.pathly.domain.model.StopCandidate
 import com.pathly.domain.model.StopDeletionResult
@@ -175,14 +176,20 @@ class PlaceRepositoryImpl @Inject constructor(
     if (trimmedName != null && placeDao.getById(placeId)?.name == null) {
       placeDao.updateName(placeId, trimmedName, Date())
     }
-    // POI 由来の googlePlaceId があれば google_places に控え、あとで Places を叩き直さないようにする。
+    // POI 由来の googlePlaceId があれば google_places に控える。
     if (googlePlaceId != null && googlePlaceDao.getByPlace(placeId) == null) {
       googlePlaceDao.upsert(GooglePlaceEntity(placeId, googlePlaceId))
+    }
+    // 手動追加は「ユーザーが名前を決めた」印として解決ログを残し、以後の自動命名（記録中のライブ検出）で
+    // 勝手に近くの別施設名に上書きされないようにする。名前なしで追加した場合も未命名のまま保つ。
+    if (placeResolutionDao.getByPlace(placeId) == null) {
       placeResolutionDao.upsert(PlaceResolutionEntity(placeId, Date()))
     }
     logger.i("Added manual stop $stopId (place $placeId) for track $trackId")
     stopId
   }
+
+  override suspend fun nearbyPois(latitude: Double, longitude: Double): List<PlaceSearchResult> = placesNameResolver.searchNearbyCandidates(latitude, longitude)
 
   override suspend fun resolveUnresolvedNames(trackId: Long) {
     try {

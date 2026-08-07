@@ -1,5 +1,6 @@
 package com.pathly.domain.repository
 
+import com.pathly.domain.model.PlaceSearchResult
 import com.pathly.domain.model.Stop
 import com.pathly.domain.model.StopCandidate
 import com.pathly.domain.model.StopDeletionResult
@@ -63,6 +64,13 @@ interface PlaceRepository {
     name: String?,
     googlePlaceId: String?,
   ): Long
+
+  /**
+   * 座標の近くの POI 候補を複数返す（距離が近い順）。手動追加の「候補から選ぶ」に使う。
+   * 最寄り1件だけの自動命名と違い、隣接する別施設の取り違えを避けてユーザーに選ばせる。
+   * オフライン・失敗時は空リスト。
+   */
+  suspend fun nearbyPois(latitude: Double, longitude: Double): List<PlaceSearchResult>
 
   /** その経路の未取得（googlePlaceId 無し）の place を Places で取り直す（手動「場所を取得」）。 */
   suspend fun resolveUnresolvedNames(trackId: Long)
