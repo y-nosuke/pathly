@@ -134,6 +134,21 @@ Google Places を「叩いたか」を place 単位で記録する。places を�
 同じ店の2回目の訪問を別々の場所にしないため、立ち寄りを保存するときは
 **既存の場所が近く（既定 30m 以内）にあれば再利用**し、無ければ新規作成する。
 
+### 場所の由来（source）と自動回収（v10）
+
+`places.source`（`DETECTED` / `USER`）で場所の由来を持つ（決定の背景は [../adr/0005-place-source-and-lifecycle.md](../adr/0005-place-source-and-lifecycle.md)）。
+
+- `DETECTED` … 記録中の自動検出が作った場所。参照（stop / wishlist）が無くなれば**自動回収**してよい（誤検知の後始末）。
+- `USER` … ユーザーが明示的に作った場所（場所登録・手動立ち寄り追加・キーワード検索）。訪問も行きたいも無くても**自動では消さない**。
+
+立ち寄り削除時の回収（`deleteStops`）は、参照ゼロ**かつ `DETECTED`** のときだけ place を消す。`USER` は保持する。
+`findOrCreatePlace(lat, lon, source)` は新規作成時に由来を刻む。既存を再利用するとき、由来が `DETECTED` でも呼び出しが
+`USER` なら `USER` に昇格する（ユーザーが触った場所を自動回収から守る。降格はしない）。
+
+> 検討中（後続）: 同定を「`googlePlaceId` があれば ID で同定（隣接店を分離）／無ければ座標フォールバック」に拡張し、
+> 記録・履歴・場所詳細の地図に「登録済みの場所」を表示して**マーカータップで紐付け**できるようにする。詳細は
+> [../adr/0005-place-source-and-lifecycle.md](../adr/0005-place-source-and-lifecycle.md) の「今後の方針」。
+
 ---
 
 ## ドメインモデル

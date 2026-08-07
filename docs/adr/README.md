@@ -18,3 +18,4 @@
 | [0002](0002-incremental-live-stop-detection.md)  | 記録中の立ち寄り検出を境界以降のインクリメンタルにする（削除の復活防止） | Accepted |
 | [0003](0003-track-name-and-favorite.md)          | 経路に名前・お気に入りを持たせ、立ち寄り件数は集計で出す（v8）           | Accepted |
 | [0004](0004-capture-all-gps-fields-and-batch.md) | GPS はバッチ全点を保存し、Location の付随情報も取りこぼさない（v9）      | Accepted |
+| [0005](0005-place-source-and-lifecycle.md)       | 場所に由来（source）を持たせ、自動回収は検出由来のみにする（v10）        | Accepted |
