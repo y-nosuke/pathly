@@ -58,6 +58,7 @@ class OfflineDataStorageTest {
       gpsTrackDao,
       gpsPointDao,
       database.smoothedPointDao(),
+      database.stopDao(),
       encryptionHelper,
     )
   }
