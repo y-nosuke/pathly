@@ -264,6 +264,38 @@ object DatabaseMigrations {
   }
 
   /**
+   * バージョン8から9へのマイグレーション。GPS 点に Location 由来の付随情報を保存する列を追加する
+   * （docs/designs/gps-capture.md / adr/0004）。記録時にしか取れない情報を取り逃さないため。
+   *
+   * すべて追加列（既存行は NULL / 0）。DDL は Room がエンティティから生成するものと一致させること。
+   */
+  val MIGRATION_8_9 = object : Migration(8, 9) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+      try {
+        Logger.i(TAG, "Starting migration from version 8 to 9")
+
+        db.execSQL("ALTER TABLE `gps_points` ADD COLUMN `provider` TEXT")
+        db.execSQL("ALTER TABLE `gps_points` ADD COLUMN `verticalAccuracyMeters` REAL")
+        db.execSQL("ALTER TABLE `gps_points` ADD COLUMN `speedAccuracyMetersPerSecond` REAL")
+        db.execSQL("ALTER TABLE `gps_points` ADD COLUMN `bearingAccuracyDegrees` REAL")
+        db.execSQL("ALTER TABLE `gps_points` ADD COLUMN `mslAltitudeMeters` REAL")
+        db.execSQL("ALTER TABLE `gps_points` ADD COLUMN `mslAltitudeAccuracyMeters` REAL")
+        db.execSQL(
+          "ALTER TABLE `gps_points` ADD COLUMN `elapsedRealtimeNanos` INTEGER NOT NULL DEFAULT 0",
+        )
+        db.execSQL("ALTER TABLE `gps_points` ADD COLUMN `isMock` INTEGER NOT NULL DEFAULT 0")
+        // extras（Bundle）を JSON 文字列化して保存する列（バイナリではなくテキスト）。
+        db.execSQL("ALTER TABLE `gps_points` ADD COLUMN `extrasJson` TEXT")
+
+        Logger.i(TAG, "Migration from version 8 to 9 completed successfully")
+      } catch (e: Exception) {
+        Logger.e(TAG, "Migration from version 8 to 9 failed", e)
+        throw e
+      }
+    }
+  }
+
+  /**
    * 現在利用可能な全てのマイグレーション
    */
   val ALL_MIGRATIONS = arrayOf(
@@ -274,6 +306,7 @@ object DatabaseMigrations {
     MIGRATION_5_6,
     MIGRATION_6_7,
     MIGRATION_7_8,
+    MIGRATION_8_9,
     // 将来のマイグレーションをここに追加
   )
 

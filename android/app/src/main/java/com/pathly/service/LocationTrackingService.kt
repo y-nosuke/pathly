@@ -10,6 +10,7 @@ import android.location.Location
 import android.location.LocationManager
 import android.os.Binder
 import android.os.Build
+import android.os.Bundle
 import android.os.IBinder
 import android.os.Looper
 import android.util.Log
@@ -41,6 +42,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import org.json.JSONObject
 import java.util.Date
 import javax.inject.Inject
 
@@ -227,12 +229,16 @@ class LocationTrackingService : Service() {
       override fun onLocationResult(locationResult: LocationResult) {
         super.onLocationResult(locationResult)
 
-        locationResult.lastLocation?.let { location ->
-          saveLocationToDatabase(location)
+        // バッチ許容（setMaxUpdateDelayMillis）のため、1回の結果に複数点がまとまって届くことがある。
+        // lastLocation だけ使うと中間点を取りこぼすので、locations（古い順）を全部保存する。
+        val locations = locationResult.locations
+        if (locations.isNotEmpty()) {
+          saveLocationsToDatabase(locations)
 
-          // 位置情報とカウントを更新
-          _currentLocation.value = location
-          _locationCount.value = _locationCount.value + 1
+          val latest = locations.last()
+          // 位置情報とカウントを更新（カウントは実際に受け取った点数だけ進める）
+          _currentLocation.value = latest
+          _locationCount.value = _locationCount.value + locations.size
           lastLocationTime = System.currentTimeMillis()
 
           // タイムアウト監視をリセット
@@ -243,15 +249,15 @@ class LocationTrackingService : Service() {
             "GPS位置を記録中... (${
               String.format(
                 "%.6f",
-                location.latitude,
+                latest.latitude,
               )
-            }, ${String.format("%.6f", location.longitude)})",
+            }, ${String.format("%.6f", latest.longitude)})",
           )
           val notificationManager =
             getSystemService(NOTIFICATION_SERVICE) as NotificationManager
           notificationManager.notify(NOTIFICATION_ID, notification)
-        } ?: run {
-          Log.w("LocationService", "Location result was null")
+        } else {
+          Log.w("LocationService", "Location result had no locations")
         }
       }
     }
@@ -358,27 +364,71 @@ class LocationTrackingService : Service() {
     }
   }
 
-  private fun saveLocationToDatabase(location: Location) {
-    currentTrackId?.let { trackId ->
-      serviceScope.launch {
-        val gpsPoint = GpsPointEntity(
-          trackId = trackId,
-          latitude = location.latitude,
-          longitude = location.longitude,
-          altitude = if (location.hasAltitude()) location.altitude else null,
-          accuracy = location.accuracy,
-          speed = if (location.hasSpeed()) location.speed else null,
-          bearing = if (location.hasBearing()) location.bearing else null,
-          timestamp = Date(location.time),
-        )
+  private fun saveLocationsToDatabase(locations: List<Location>) {
+    val trackId = currentTrackId ?: return
+    serviceScope.launch {
+      val points = locations.map { it.toGpsPointEntity(trackId) }
+      gpsPointDao.insertPoints(points)
 
-        gpsPointDao.insertPoint(gpsPoint)
+      // 補正・立ち寄り検出はバッチ挿入後に1回だけ回す（点ごとに回す必要はない）。
+      // 新しい点までの補正を計算し、確定分だけ保存する（末尾は暫定なので保存しない）。
+      gpsTrackRepository.updateSmoothedForTrack(trackId, isFinal = false)
+      // 補正後の点列から立ち寄りを検出・保存し、「立ち寄り中」を更新する。
+      placeRepository.updateStopsForTrack(trackId, isFinal = false)
+    }
+  }
 
-        // 新しい点までの補正を計算し、確定分だけ保存する（末尾は暫定なので保存しない）。
-        gpsTrackRepository.updateSmoothedForTrack(trackId, isFinal = false)
-        // 補正後の点列から立ち寄りを検出・保存し、「立ち寄り中」を更新する。
-        placeRepository.updateStopsForTrack(trackId, isFinal = false)
+  /**
+   * Location を保存用エンティティへ変換する。記録時にしか取れない付随情報（精度の内訳・MSL高度・
+   * provider・単調時刻・モック判定）も、提供されていれば取りこぼさず保存する（minSdk 34）。
+   */
+  private fun Location.toGpsPointEntity(trackId: Long): GpsPointEntity = GpsPointEntity(
+    trackId = trackId,
+    latitude = latitude,
+    longitude = longitude,
+    altitude = if (hasAltitude()) altitude else null,
+    accuracy = accuracy,
+    speed = if (hasSpeed()) speed else null,
+    bearing = if (hasBearing()) bearing else null,
+    provider = provider,
+    verticalAccuracyMeters = if (hasVerticalAccuracy()) verticalAccuracyMeters else null,
+    speedAccuracyMetersPerSecond = if (hasSpeedAccuracy()) speedAccuracyMetersPerSecond else null,
+    bearingAccuracyDegrees = if (hasBearingAccuracy()) bearingAccuracyDegrees else null,
+    mslAltitudeMeters = if (hasMslAltitude()) mslAltitudeMeters else null,
+    mslAltitudeAccuracyMeters = if (hasMslAltitudeAccuracy()) mslAltitudeAccuracyMeters else null,
+    elapsedRealtimeNanos = elapsedRealtimeNanos,
+    isMock = isMock,
+    extrasJson = serializeExtras(extras),
+    timestamp = Date(time),
+  )
+
+  /**
+   * Location.extras（Bundle）をベストエフォートで JSON 文字列に直す。中身は provider 依存で不透明だが、
+   * 記録時にしか取れないので丸ごと残す。スカラー/文字列はそのまま、それ以外は toString() で文字列化する
+   * （バイナリでは保存しない＝将来も可読）。空/無し、または直列化に失敗したら null。
+   */
+  @Suppress("DEPRECATION")
+  private fun serializeExtras(extras: Bundle?): String? {
+    if (extras == null || extras.isEmpty) return null
+    return try {
+      val json = JSONObject()
+      for (key in extras.keySet()) {
+        try {
+          when (val value = extras.get(key)) {
+            null -> json.put(key, JSONObject.NULL)
+            is String, is Boolean, is Int, is Long, is Double -> json.put(key, value)
+            is Float -> json.put(key, value.toDouble())
+            else -> json.put(key, value.toString())
+          }
+        } catch (e: Exception) {
+          // 1キーの失敗で全体を捨てない（残せるものは残す）。
+          Log.w("LocationService", "Failed to serialize extras key=$key", e)
+        }
       }
+      json.toString().takeIf { it != "{}" }
+    } catch (e: Exception) {
+      Log.w("LocationService", "Failed to serialize location extras", e)
+      null
     }
   }
 
