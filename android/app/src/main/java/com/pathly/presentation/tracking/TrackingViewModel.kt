@@ -21,13 +21,19 @@ import com.pathly.service.LocationTrackingService
 import com.pathly.util.DateFormatters
 import com.pathly.util.PermissionUtils
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
+@OptIn(ExperimentalCoroutinesApi::class)
 @HiltViewModel
 class TrackingViewModel @Inject constructor(
   private val application: Application,
@@ -89,6 +95,7 @@ class TrackingViewModel @Inject constructor(
     checkLocationPermission()
     observeActiveTrack()
     observeCurrentStop()
+    observeStops()
   }
 
   private fun observeCurrentStop() {
@@ -96,6 +103,20 @@ class TrackingViewModel @Inject constructor(
       placeRepository.currentStop.collect { stop ->
         _uiState.value = _uiState.value.copy(currentStop = stop)
       }
+    }
+  }
+
+  /** 記録中トラックが変わるたびに、その経路の確定済み立ち寄りを購読して地図マーカーに反映する。 */
+  private fun observeStops() {
+    viewModelScope.launch {
+      _uiState.map { it.currentTrackId }
+        .distinctUntilChanged()
+        .flatMapLatest { id ->
+          if (id == null) flowOf(emptyList()) else placeRepository.getStopsForTrack(id)
+        }
+        .collect { stops ->
+          _uiState.value = _uiState.value.copy(stops = stops)
+        }
     }
   }
 

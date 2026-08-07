@@ -13,6 +13,8 @@ data class TrackingState(
   val currentTrack: GpsTrack? = null,
   // 記録中の「立ち寄り中」（3分超で place 先行確定・メモリ保持）。離れたら null。
   val currentStop: Stop? = null,
+  // 記録中トラックの確定済み立ち寄り（地図にマーカー表示するため。詳細画面と同じ見た目）。
+  val stops: List<Stop> = emptyList(),
   // アプリ更新やクラッシュで中断され、再開/完了の確認待ちになっているトラック
   val interruptedTrack: GpsTrack? = null,
   // 電池の最適化を無効化済みか（バックグラウンド記録の安定性に影響）。既定はtrueで案内を出さない

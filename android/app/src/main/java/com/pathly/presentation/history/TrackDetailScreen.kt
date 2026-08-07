@@ -4,7 +4,6 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.animation.core.Animatable
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
@@ -87,7 +86,6 @@ import com.google.maps.android.compose.MapType
 import com.google.maps.android.compose.MapUiSettings
 import com.google.maps.android.compose.MapsComposeExperimentalApi
 import com.google.maps.android.compose.Marker
-import com.google.maps.android.compose.MarkerComposable
 import com.google.maps.android.compose.MarkerState
 import com.google.maps.android.compose.Polyline
 import com.google.maps.android.compose.rememberCameraPositionState
@@ -101,8 +99,10 @@ import com.pathly.domain.model.SmoothingParams
 import com.pathly.domain.model.Stop
 import com.pathly.domain.model.StopCandidate
 import com.pathly.domain.model.TrackSmoother
+import com.pathly.presentation.common.MarkerStopViolet
+import com.pathly.presentation.common.RouteMapContent
+import com.pathly.presentation.common.stopSegmentPoints
 import com.pathly.presentation.places.RegisterPlaceFromPoiDialog
-import com.pathly.ui.theme.TrackLineOrange
 import com.pathly.util.DateFormatters
 import kotlinx.coroutines.launch
 import java.util.Date
@@ -117,13 +117,6 @@ private enum class SheetDetent { HIDDEN, PEEK, FULL }
 
 // 手動追加のハイライト（選択した滞在区間）。軌跡（オレンジ）・立ち寄り（紫）と見分ける青。
 private val manualHighlightColor = Color(0xFF1E88E5)
-
-// 既存の立ち寄りの滞在区間ハイライト（常時表示）。オレンジ/赤の軌跡に負けないよう、濃い青の太い帯を
-// 下に敷く（軌跡は上に細く残る）。薄い青だと軌跡に埋もれて見えないため不透明寄りの濃色にする。
-private val stopSegmentColor = Color(0xF00D47A1)
-
-/** 立ち寄りの到着〜出発に対応する軌跡点（滞在区間）。時刻で範囲を切り出す（両端含む）。 */
-private fun stopSegmentPoints(points: List<GpsPoint>, stop: Stop): List<GpsPoint> = points.filter { !it.timestamp.before(stop.arrivalTime) && !it.timestamp.after(stop.departureTime) }
 
 // 手動追加で最初に仮置きする滞在時間（最寄り点からこの範囲を既定で選ぶ。あとで調整可）。
 private const val DEFAULT_MANUAL_STAY_MILLIS = 3 * 60 * 1000L
@@ -305,7 +298,9 @@ fun TrackDetailScreen(
     if (tuningMode || candidateMode || manualMode) {
       emptyList()
     } else {
-      stops.mapNotNull { stop -> stopSegmentPoints(track.smoothedPoints, stop).takeIf { it.size >= 2 } }
+      stops.mapNotNull { stop ->
+        stopSegmentPoints(track.smoothedPoints, stop.arrivalTime, stop.departureTime).takeIf { it.size >= 2 }
+      }
     }
   }
   // シートが隠れているか（復帰ボタン表示・地図の下パディング判定に使う）。
@@ -1610,25 +1605,6 @@ private fun ActionChip(
   }
 }
 
-private val MarkerStartGreen = Color(0xFF2E9E5B)
-private val MarkerEndRed = Color(0xFFD24B45)
-private val MarkerActiveBlue = Color(0xFF3B82F6)
-private val MarkerStopViolet = Color(0xFF6A4BBC)
-
-/** 地図の丸バッジ型マーカー（白フチ＋中央にグリフ/番号）。出発・到着・立ち寄りで共用。 */
-@Composable
-private fun RouteBadgeMarker(bg: Color, content: @Composable () -> Unit) {
-  Box(
-    modifier = Modifier
-      .size(34.dp)
-      .background(bg, CircleShape)
-      .border(2.dp, Color.White, CircleShape),
-    contentAlignment = Alignment.Center,
-  ) {
-    content()
-  }
-}
-
 @OptIn(MapsComposeExperimentalApi::class)
 @Composable
 private fun TrackMapView(
@@ -1702,109 +1678,14 @@ private fun TrackMapView(
       )
     }
 
-    // 立ち寄りの滞在区間を軌跡の「下」に半透明の帯で常時表示する（経路のどこで滞在したかが見える）。
-    // 軌跡ポリラインより先に描くことで、オレンジの軌跡が帯の上に残って潰れない。
-    stopSegments.forEach { segment ->
-      if (segment.size >= 2) {
-        Polyline(
-          points = segment.map { LatLng(it.latitude, it.longitude) },
-          color = stopSegmentColor,
-          width = 26f,
-        )
-      }
-    }
-
-    if (displayPoints.size >= 2) {
-      Polyline(
-        points = displayPoints.map { LatLng(it.latitude, it.longitude) },
-        color = TrackLineOrange,
-        width = 6f,
-      )
-
-      val startPoint = displayPoints.first()
-      val startMarkerState = remember(startPoint) {
-        MarkerState(position = LatLng(startPoint.latitude, startPoint.longitude))
-      }
-      // 出発は緑の ▶ グリフ（色だけでなく形でも「開始」と分かる）。
-      MarkerComposable(
-        "start",
-        startPoint.latitude,
-        startPoint.longitude,
-        state = startMarkerState,
-        title = "開始",
-        snippet = "記録開始地点 - ${DateFormatters.TIME_FORMAT.format(track.startTime)}",
-      ) {
-        RouteBadgeMarker(bg = MarkerStartGreen) {
-          Icon(
-            painter = painterResource(R.drawable.ic_play_arrow),
-            contentDescription = null,
-            tint = Color.White,
-            modifier = Modifier.size(20.dp),
-          )
-        }
-      }
-
-      val endPoint = displayPoints.last()
-      val endMarkerState = remember(endPoint) {
-        MarkerState(position = LatLng(endPoint.latitude, endPoint.longitude))
-      }
-      // 到着は赤の ■。記録中は青＋白丸（現在地）。
-      MarkerComposable(
-        "end",
-        endPoint.latitude,
-        endPoint.longitude,
-        track.isActive,
-        state = endMarkerState,
-        title = if (track.isActive) "現在地" else "終了",
-        snippet = track.endTime?.let {
-          "記録終了地点 - ${DateFormatters.TIME_FORMAT.format(it)}"
-        } ?: "記録中の最新地点",
-      ) {
-        if (track.isActive) {
-          RouteBadgeMarker(bg = MarkerActiveBlue) {
-            Box(modifier = Modifier.size(12.dp).background(Color.White, CircleShape))
-          }
-        } else {
-          RouteBadgeMarker(bg = MarkerEndRed) {
-            Icon(
-              painter = painterResource(R.drawable.ic_stop),
-              contentDescription = null,
-              tint = Color.White,
-              modifier = Modifier.size(18.dp),
-            )
-          }
-        }
-      }
-    }
-
-    // 立ち寄り場所（訪問順の番号つき紫バッジ）。番号でルートの順序が読める。
-    stops.forEachIndexed { index, stop ->
-      val stopMarkerState = remember(stop.id, stop.place.latitude, stop.place.longitude) {
-        MarkerState(position = LatLng(stop.place.latitude, stop.place.longitude))
-      }
-      MarkerComposable(
-        "stop",
-        stop.id,
-        index,
-        state = stopMarkerState,
-        title = stop.place.name ?: stop.place.googleName ?: "立ち寄り",
-        snippet = "${DateFormatters.SHORT_TIME_FORMAT.format(stop.arrivalTime)} ・ 滞在${stop.durationMinutes}分",
-        // タップで一覧と連動。false を返して既定（情報ウィンドウ表示・センタリング）も残す。
-        onClick = {
-          onStopClick(stop)
-          false
-        },
-      ) {
-        RouteBadgeMarker(bg = MarkerStopViolet) {
-          Text(
-            text = "${index + 1}",
-            color = Color.White,
-            fontWeight = FontWeight.Bold,
-            fontSize = 14.sp,
-          )
-        }
-      }
-    }
+    // 軌跡・帯・開始/終了/立ち寄りマーカーは記録画面と共通の描画にまとめる（見た目統一）。
+    RouteMapContent(
+      track = track,
+      displayPoints = displayPoints,
+      stops = stops,
+      stopSegments = stopSegments,
+      onStopClick = onStopClick,
+    )
 
     // 再解析の候補（オレンジのピン）。既存（紫）と見分けられるようにする。
     candidates.forEachIndexed { index, candidate ->
