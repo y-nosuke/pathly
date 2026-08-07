@@ -7,6 +7,7 @@ import androidx.room.Transaction
 import com.pathly.data.local.entity.PlaceVisitRow
 import com.pathly.data.local.entity.StopEntity
 import com.pathly.data.local.entity.StopWithPlace
+import com.pathly.data.local.entity.TrackStopCount
 import kotlinx.coroutines.flow.Flow
 
 @Dao
@@ -17,6 +18,10 @@ interface StopDao {
 
   @Query("SELECT COUNT(*) FROM stops WHERE trackId = :trackId")
   suspend fun countByTrack(trackId: Long): Int
+
+  /** 経路ごとの立ち寄り件数（一覧の件数表示・並べ替え用）。立ち寄り0件の経路は行が出ない。 */
+  @Query("SELECT trackId, COUNT(*) AS count FROM stops GROUP BY trackId")
+  fun observeStopCountsByTrack(): Flow<List<TrackStopCount>>
 
   @Query("DELETE FROM stops WHERE trackId = :trackId")
   suspend fun deleteByTrack(trackId: Long)

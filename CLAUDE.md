@@ -233,7 +233,7 @@ app/src/main/java/com/pathly/
 
 - **位置権限：** ACCESS_FINE_LOCATION + ACCESS_COARSE_LOCATION必須
 - **バックグラウンド実行：** LocationTrackingService使用
-- **データベースバージョン：** Room v7（v2: places/stops、v3: smoothed_points、v4: place_resolutions、v5: wishlist、v6: stops.note＝立ち寄りメモ、v7: 場所データをGoogle由来[google_places]とユーザー入力[places]に分離・メモをplaces.noteへ一本化）。破壊的フォールバックは無効。スキーマ変更時は `DatabaseMigrations` に正式なマイグレーションを追加すること
+- **データベースバージョン：** Room v8（v2: places/stops、v3: smoothed_points、v4: place_resolutions、v5: wishlist、v6: stops.note＝立ち寄りメモ、v7: 場所データをGoogle由来[google_places]とユーザー入力[places]に分離・メモをplaces.noteへ一本化、v8: gps_tracksにname/isFavorite＝経路の名前・お気に入り）。破壊的フォールバックは無効。スキーマ変更時は `DatabaseMigrations` に正式なマイグレーションを追加すること
 - **最小SDK：** API 34（Android 14）以上 / compileSdk 37・targetSdk 37（Android 17）
 - **ビルド環境：** AGP 9.2 / Gradle 9.6 / Kotlin 2.3（AGP内蔵Kotlin）。KotlinはAGPバンドル版に連動するため独立に最新化しないこと
 - **アノテーション処理：** KSP使用（Room/Hilt）。kaptは廃止

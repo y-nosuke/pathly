@@ -239,6 +239,31 @@ object DatabaseMigrations {
   }
 
   /**
+   * バージョン7から8へのマイグレーション。経路（お出掛け）に名前とお気に入りを持たせる
+   * （docs/designs/track-list.md / adr/0003）。
+   *
+   * - gps_tracks.name を追加（null=未命名。一覧の見出しは名前が無ければ日付）
+   * - gps_tracks.isFavorite を追加（0=非お気に入り）
+   *
+   * DDL は Room がエンティティから生成するものと一致させること（起動時のスキーマ検証を通すため）。
+   */
+  val MIGRATION_7_8 = object : Migration(7, 8) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+      try {
+        Logger.i(TAG, "Starting migration from version 7 to 8")
+
+        db.execSQL("ALTER TABLE `gps_tracks` ADD COLUMN `name` TEXT")
+        db.execSQL("ALTER TABLE `gps_tracks` ADD COLUMN `isFavorite` INTEGER NOT NULL DEFAULT 0")
+
+        Logger.i(TAG, "Migration from version 7 to 8 completed successfully")
+      } catch (e: Exception) {
+        Logger.e(TAG, "Migration from version 7 to 8 failed", e)
+        throw e
+      }
+    }
+  }
+
+  /**
    * 現在利用可能な全てのマイグレーション
    */
   val ALL_MIGRATIONS = arrayOf(
@@ -248,6 +273,7 @@ object DatabaseMigrations {
     MIGRATION_4_5,
     MIGRATION_5_6,
     MIGRATION_6_7,
+    MIGRATION_7_8,
     // 将来のマイグレーションをここに追加
   )
 

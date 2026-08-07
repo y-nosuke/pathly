@@ -1,5 +1,6 @@
 package com.pathly.presentation.history
 
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -11,18 +12,28 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.painterResource
@@ -44,6 +55,9 @@ fun HistoryScreen(
 ) {
   val uiState by viewModel.uiState.collectAsStateWithLifecycle()
 
+  // 名前を編集中の経路（null=ダイアログ非表示）。
+  var renameTarget by remember { mutableStateOf<GpsTrack?>(null) }
+
   Column(
     modifier = modifier
       .fillMaxSize()
@@ -53,8 +67,22 @@ fun HistoryScreen(
       text = "外出履歴",
       style = MaterialTheme.typography.headlineMedium,
       fontWeight = FontWeight.Bold,
-      modifier = Modifier.padding(bottom = 16.dp),
+      modifier = Modifier.padding(bottom = 12.dp),
     )
+
+    // 記録が1件でもあれば絞り込み・並べ替えバーを出す（空・記録中のみのときは邪魔なので隠す）。
+    if (uiState.tracks.isNotEmpty()) {
+      FilterSortBar(
+        state = uiState,
+        onClearFilters = viewModel::clearFilters,
+        onFavoriteFilterChange = viewModel::setFavoriteFilter,
+        onNamedFilterChange = viewModel::setNamedFilter,
+        onStopFilterChange = viewModel::setStopFilter,
+        onSortChange = viewModel::setSort,
+        onToggleSortDirection = viewModel::toggleSortDirection,
+      )
+      Spacer(modifier = Modifier.height(8.dp))
+    }
 
     when {
       uiState.isLoading -> {
@@ -81,6 +109,7 @@ fun HistoryScreen(
       }
 
       else -> {
+        val visibleTracks = uiState.visibleTracks
         LazyColumn(
           verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
@@ -100,10 +129,26 @@ fun HistoryScreen(
             }
           }
 
-          items(uiState.tracks) { track ->
+          if (visibleTracks.isEmpty()) {
+            item {
+              Text(
+                text = "条件に合う記録がありません",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier
+                  .fillMaxWidth()
+                  .padding(vertical = 24.dp),
+                textAlign = TextAlign.Center,
+              )
+            }
+          }
+
+          items(visibleTracks) { track ->
             TrackItem(
               track = track,
               onTrackClick = { onTrackClick(track) },
+              onToggleFavorite = { viewModel.toggleFavorite(track) },
+              onRenameClick = { renameTarget = track },
               onDeleteClick = { viewModel.deleteTrack(track) },
             )
           }
@@ -117,6 +162,125 @@ fun HistoryScreen(
       }
     }
   }
+
+  renameTarget?.let { target ->
+    RenameTrackDialog(
+      initialName = target.name.orEmpty(),
+      onDismiss = { renameTarget = null },
+      onConfirm = { newName ->
+        viewModel.renameTrack(target.id, newName)
+        renameTarget = null
+      },
+    )
+  }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun FilterSortBar(
+  state: HistoryState,
+  onClearFilters: () -> Unit,
+  onFavoriteFilterChange: (TrackFavoriteFilter) -> Unit,
+  onNamedFilterChange: (TrackNamedFilter) -> Unit,
+  onStopFilterChange: (TrackStopFilter) -> Unit,
+  onSortChange: (TrackSort) -> Unit,
+  onToggleSortDirection: () -> Unit,
+  modifier: Modifier = Modifier,
+) {
+  Column(modifier = modifier) {
+    // 絞り込みは3軸独立（お気に入り / 命名 / 立ち寄り）。横に収まらない端末向けに横スクロール可。
+    Row(
+      modifier = Modifier
+        .fillMaxWidth()
+        .horizontalScroll(rememberScrollState()),
+      horizontalArrangement = Arrangement.spacedBy(8.dp),
+      verticalAlignment = Alignment.CenterVertically,
+    ) {
+      // すべて: 絞り込みを全解除。何も絞っていないときは選択状態にして現在地を示す。
+      FilterChip(
+        selected = state.noFilter,
+        onClick = onClearFilters,
+        label = { Text("すべて") },
+      )
+      // 各軸は1つのトグル。タップで 指定なし→…→… と循環する。
+      FilterChip(
+        selected = state.favoriteFilter != TrackFavoriteFilter.ANY,
+        onClick = {
+          val entries = TrackFavoriteFilter.entries
+          onFavoriteFilterChange(entries[(state.favoriteFilter.ordinal + 1) % entries.size])
+        },
+        label = { Text(state.favoriteFilter.chipLabel) },
+      )
+      FilterChip(
+        selected = state.namedFilter != TrackNamedFilter.ANY,
+        onClick = {
+          val entries = TrackNamedFilter.entries
+          onNamedFilterChange(entries[(state.namedFilter.ordinal + 1) % entries.size])
+        },
+        label = { Text(state.namedFilter.chipLabel) },
+      )
+      FilterChip(
+        selected = state.stopFilter != TrackStopFilter.ANY,
+        onClick = {
+          val entries = TrackStopFilter.entries
+          onStopFilterChange(entries[(state.stopFilter.ordinal + 1) % entries.size])
+        },
+        label = { Text(state.stopFilter.chipLabel) },
+      )
+    }
+
+    // 並べ替え（軸メニュー ＋ 昇順/降順トグル）。
+    Row(verticalAlignment = Alignment.CenterVertically) {
+      Box {
+        var sortOpen by remember { mutableStateOf(false) }
+        TextButton(onClick = { sortOpen = true }) {
+          Text(text = "並べ替え: ${state.sort.label} ▾")
+        }
+        DropdownMenu(expanded = sortOpen, onDismissRequest = { sortOpen = false }) {
+          TrackSort.entries.forEach { sort ->
+            DropdownMenuItem(
+              text = { Text(sort.label) },
+              onClick = {
+                sortOpen = false
+                onSortChange(sort)
+              },
+            )
+          }
+        }
+      }
+      TextButton(onClick = onToggleSortDirection) {
+        Text(text = if (state.sortDescending) "降順 ↓" else "昇順 ↑")
+      }
+    }
+  }
+}
+
+@Composable
+private fun RenameTrackDialog(
+  initialName: String,
+  onDismiss: () -> Unit,
+  onConfirm: (String) -> Unit,
+) {
+  var text by remember { mutableStateOf(initialName) }
+  AlertDialog(
+    onDismissRequest = onDismiss,
+    title = { Text("経路の名前") },
+    text = {
+      OutlinedTextField(
+        value = text,
+        onValueChange = { text = it },
+        singleLine = true,
+        placeholder = { Text("例: 鎌倉さんぽ") },
+        supportingText = { Text("空にすると未命名に戻ります") },
+      )
+    },
+    confirmButton = {
+      TextButton(onClick = { onConfirm(text) }) { Text("保存") }
+    },
+    dismissButton = {
+      TextButton(onClick = onDismiss) { Text("キャンセル") }
+    },
+  )
 }
 
 @Composable
@@ -278,6 +442,8 @@ private fun ActiveTrackItem(
 private fun TrackItem(
   track: GpsTrack,
   onTrackClick: () -> Unit,
+  onToggleFavorite: () -> Unit,
+  onRenameClick: () -> Unit,
   onDeleteClick: () -> Unit,
   modifier: Modifier = Modifier,
 ) {
@@ -292,18 +458,32 @@ private fun TrackItem(
     Row(
       modifier = Modifier
         .fillMaxWidth()
-        .padding(16.dp),
+        .padding(start = 16.dp, top = 12.dp, bottom = 12.dp, end = 4.dp),
       horizontalArrangement = Arrangement.SpaceBetween,
       verticalAlignment = Alignment.CenterVertically,
     ) {
       Column(
         modifier = Modifier.weight(1f),
       ) {
-        Text(
-          text = DateFormatters.SHORT_DATE_FORMAT.format(track.startTime),
-          style = MaterialTheme.typography.titleMedium,
-          fontWeight = FontWeight.Bold,
-        )
+        // 見出しは名前があれば名前、無ければ日付。名前ありのときは日付を副題に添える。
+        if (track.hasName) {
+          Text(
+            text = track.name.orEmpty(),
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.Bold,
+          )
+          Text(
+            text = DateFormatters.SHORT_DATE_FORMAT.format(track.startTime),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+          )
+        } else {
+          Text(
+            text = DateFormatters.SHORT_DATE_FORMAT.format(track.startTime),
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.Bold,
+          )
+        }
 
         Spacer(modifier = Modifier.height(4.dp))
 
@@ -327,28 +507,68 @@ private fun TrackItem(
 
         Spacer(modifier = Modifier.height(4.dp))
 
-        // デバッグ用：距離と座標点数を表示
         val distanceKm = (track.totalDistanceMeters / 1000.0 * 100).roundToInt() / 100.0
-        Text(
-          text = "移動距離: ${distanceKm}km (${track.points.size}点)",
-          style = MaterialTheme.typography.bodyMedium,
-          color = if (track.totalDistanceMeters > 0) {
+        Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+          Text(
+            text = "移動距離: ${distanceKm}km",
+            style = MaterialTheme.typography.bodyMedium,
+            color = if (track.totalDistanceMeters > 0) {
+              MaterialTheme.colorScheme.primary
+            } else {
+              MaterialTheme.colorScheme.onSurfaceVariant
+            },
+            fontWeight = FontWeight.Medium,
+          )
+          Text(
+            text = "立ち寄り: ${track.stopCount}件",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            fontWeight = FontWeight.Medium,
+          )
+        }
+      }
+
+      // お気に入りトグル。
+      IconButton(onClick = onToggleFavorite) {
+        Icon(
+          painter = painterResource(
+            if (track.isFavorite) R.drawable.ic_favorite_filled else R.drawable.ic_favorite,
+          ),
+          contentDescription = if (track.isFavorite) "お気に入り解除" else "お気に入り",
+          tint = if (track.isFavorite) {
             MaterialTheme.colorScheme.primary
           } else {
             MaterialTheme.colorScheme.onSurfaceVariant
           },
-          fontWeight = FontWeight.Medium,
         )
       }
 
-      IconButton(
-        onClick = onDeleteClick,
-      ) {
-        Icon(
-          painter = painterResource(R.drawable.ic_delete),
-          contentDescription = "削除",
-          tint = MaterialTheme.colorScheme.error,
-        )
+      // 名前編集・削除はまとめてメニューに（カードの横幅を圧迫しないため）。
+      Box {
+        var menuOpen by remember { mutableStateOf(false) }
+        IconButton(onClick = { menuOpen = true }) {
+          Icon(
+            painter = painterResource(R.drawable.ic_more_vert),
+            contentDescription = "その他",
+            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+          )
+        }
+        DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+          DropdownMenuItem(
+            text = { Text(if (track.hasName) "名前を編集" else "名前を付ける") },
+            onClick = {
+              menuOpen = false
+              onRenameClick()
+            },
+          )
+          DropdownMenuItem(
+            text = { Text("削除") },
+            onClick = {
+              menuOpen = false
+              onDeleteClick()
+            },
+          )
+        }
       }
     }
   }

@@ -11,6 +11,10 @@ data class GpsTrackEntity(
   val startTime: Date,
   val endTime: Date? = null,
   val isActive: Boolean = true,
+  /** ユーザーが付けた経路名。null/空なら未命名（一覧では日付を見出しに使う）。 */
+  val name: String? = null,
+  /** お気に入り登録フラグ。 */
+  val isFavorite: Boolean = false,
   val createdAt: Date = Date(),
   val updatedAt: Date = Date(),
 )

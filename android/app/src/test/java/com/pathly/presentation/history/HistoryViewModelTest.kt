@@ -100,6 +100,78 @@ class HistoryViewModelTest {
   }
 
   @Test
+  fun `お気に入り絞り込み_お気に入りのみが残る`() = runTest {
+    // Given
+    val fav = createTrack(id = 1, isActive = false, endTime = Date(), isFavorite = true)
+    val notFav = createTrack(id = 2, isActive = false, endTime = Date(), isFavorite = false)
+    coEvery { mockRepository.getAllTracks() } returns flowOf(listOf(fav, notFav))
+    coEvery { mockRepository.getActiveTrackRealtime() } returns flowOf(null)
+    viewModel = HistoryViewModel(mockRepository)
+    testDispatcher.scheduler.advanceUntilIdle()
+
+    // When
+    viewModel.setFavoriteFilter(TrackFavoriteFilter.FAVORITE)
+
+    // Then
+    val visible = viewModel.uiState.value.visibleTracks
+    assertEquals("お気に入りのみ", 1, visible.size)
+    assertEquals("残るのはお気に入り", 1L, visible[0].id)
+  }
+
+  @Test
+  fun `立ち寄り件数順の降順_件数の多い経路が先頭`() = runTest {
+    // Given
+    val few = createTrack(id = 1, isActive = false, endTime = Date(), stopCount = 1)
+    val many = createTrack(id = 2, isActive = false, endTime = Date(), stopCount = 5)
+    coEvery { mockRepository.getAllTracks() } returns flowOf(listOf(few, many))
+    coEvery { mockRepository.getActiveTrackRealtime() } returns flowOf(null)
+    viewModel = HistoryViewModel(mockRepository)
+    testDispatcher.scheduler.advanceUntilIdle()
+
+    // When
+    viewModel.setSort(TrackSort.STOP_COUNT)
+
+    // Then
+    val visible = viewModel.uiState.value.visibleTracks
+    assertEquals("件数の多い方が先頭", 2L, visible[0].id)
+  }
+
+  @Test
+  fun `toggleFavorite_反転した値でrepositoryを呼ぶ`() = runTest {
+    // Given
+    val track = createTrack(id = 1, isActive = false, endTime = Date(), isFavorite = false)
+    coEvery { mockRepository.getAllTracks() } returns flowOf(listOf(track))
+    coEvery { mockRepository.getActiveTrackRealtime() } returns flowOf(null)
+    coEvery { mockRepository.setFavorite(1L, true) } returns Unit
+    viewModel = HistoryViewModel(mockRepository)
+    testDispatcher.scheduler.advanceUntilIdle()
+
+    // When
+    viewModel.toggleFavorite(track)
+    testDispatcher.scheduler.advanceUntilIdle()
+
+    // Then
+    coVerify { mockRepository.setFavorite(1L, true) }
+  }
+
+  @Test
+  fun `renameTrack_repositoryのrenameが呼ばれる`() = runTest {
+    // Given
+    coEvery { mockRepository.getAllTracks() } returns flowOf(emptyList())
+    coEvery { mockRepository.getActiveTrackRealtime() } returns flowOf(null)
+    coEvery { mockRepository.renameTrack(1L, "鎌倉さんぽ") } returns Unit
+    viewModel = HistoryViewModel(mockRepository)
+    testDispatcher.scheduler.advanceUntilIdle()
+
+    // When
+    viewModel.renameTrack(1L, "鎌倉さんぽ")
+    testDispatcher.scheduler.advanceUntilIdle()
+
+    // Then
+    coVerify { mockRepository.renameTrack(1L, "鎌倉さんぽ") }
+  }
+
+  @Test
   fun `updateLocationPermission_権限状態が更新される`() = runTest {
     // Given
     coEvery { mockRepository.getAllTracks() } returns flowOf(emptyList())
@@ -120,11 +192,17 @@ class HistoryViewModelTest {
     startTime: Date = Date(),
     endTime: Date? = null,
     isActive: Boolean = false,
+    name: String? = null,
+    isFavorite: Boolean = false,
+    stopCount: Int = 0,
   ): GpsTrack = GpsTrack(
     id = id,
     startTime = startTime,
     endTime = endTime,
     isActive = isActive,
+    name = name,
+    isFavorite = isFavorite,
+    stopCount = stopCount,
     points = emptyList(),
     createdAt = Date(),
     updatedAt = Date(),

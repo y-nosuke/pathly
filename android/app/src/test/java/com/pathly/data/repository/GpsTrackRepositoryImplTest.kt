@@ -4,14 +4,17 @@ import androidx.arch.core.executor.testing.InstantTaskExecutorRule
 import com.pathly.data.local.dao.GpsPointDao
 import com.pathly.data.local.dao.GpsTrackDao
 import com.pathly.data.local.dao.SmoothedPointDao
+import com.pathly.data.local.dao.StopDao
 import com.pathly.data.local.entity.GpsPointEntity
 import com.pathly.data.local.entity.GpsTrackEntity
 import com.pathly.data.local.entity.GpsTrackWithPoints
+import com.pathly.data.local.entity.TrackStopCount
 import com.pathly.domain.model.GpsPoint
 import com.pathly.domain.model.GpsTrack
 import com.pathly.util.EncryptionHelper
 import io.mockk.coEvery
 import io.mockk.coVerify
+import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -41,6 +44,7 @@ class GpsTrackRepositoryImplTest {
   private val mockGpsTrackDao = mockk<GpsTrackDao>(relaxed = true)
   private val mockGpsPointDao = mockk<GpsPointDao>(relaxed = true)
   private val mockSmoothedPointDao = mockk<SmoothedPointDao>(relaxed = true)
+  private val mockStopDao = mockk<StopDao>(relaxed = true)
   private val mockEncryptionHelper = mockk<EncryptionHelper>(relaxed = true)
 
   private lateinit var repository: GpsTrackRepositoryImpl
@@ -48,10 +52,14 @@ class GpsTrackRepositoryImplTest {
   @Before
   fun setup() {
     Dispatchers.setMain(testDispatcher)
+    // getAllTracks は tracks と立ち寄り件数を combine する。件数側が emit しないと combine が
+    // 一度も流れないため、既定は空件数を返しておく（件数テストでは上書きする）。
+    every { mockStopDao.observeStopCountsByTrack() } returns flowOf(emptyList())
     repository = GpsTrackRepositoryImpl(
       mockGpsTrackDao,
       mockGpsPointDao,
       mockSmoothedPointDao,
+      mockStopDao,
       mockEncryptionHelper,
     )
   }
@@ -217,6 +225,56 @@ class GpsTrackRepositoryImplTest {
         },
       )
     }
+  }
+
+  @Test
+  fun `getAllTracks_立ち寄り件数がstopCountに反映される`() = runTest {
+    // Given
+    val trackEntity1 = createGpsTrackEntity(id = 1L, isActive = false)
+    val trackEntity2 = createGpsTrackEntity(id = 2L, isActive = false)
+    val tracksWithPoints = listOf(
+      GpsTrackWithPoints(trackEntity1, emptyList()),
+      GpsTrackWithPoints(trackEntity2, emptyList()),
+    )
+    coEvery { mockGpsTrackDao.getAllTracksWithPoints() } returns flowOf(tracksWithPoints)
+    // track1 は 3件、track2 は集計に出てこない（=0件）。
+    every { mockStopDao.observeStopCountsByTrack() } returns flowOf(
+      listOf(TrackStopCount(trackId = 1L, count = 3)),
+    )
+
+    // When
+    val result = repository.getAllTracks().first()
+
+    // Then
+    assertEquals("track1の立ち寄り件数", 3, result.first { it.id == 1L }.stopCount)
+    assertEquals("track2は集計に無いので0件", 0, result.first { it.id == 2L }.stopCount)
+  }
+
+  @Test
+  fun `renameTrack_空白のみ_未命名(null)に正規化してDaoを呼ぶ`() = runTest {
+    // When
+    repository.renameTrack(1L, "   ")
+
+    // Then（updatedAt は既定引数なので any で受ける）
+    coVerify { mockGpsTrackDao.updateName(1L, null, any()) }
+  }
+
+  @Test
+  fun `renameTrack_名前あり_前後空白を除いてDaoを呼ぶ`() = runTest {
+    // When
+    repository.renameTrack(1L, "  鎌倉さんぽ  ")
+
+    // Then（updatedAt は既定引数なので any で受ける）
+    coVerify { mockGpsTrackDao.updateName(1L, "鎌倉さんぽ", any()) }
+  }
+
+  @Test
+  fun `setFavorite_フラグをそのままDaoへ渡す`() = runTest {
+    // When
+    repository.setFavorite(1L, true)
+
+    // Then（updatedAt は既定引数なので any で受ける）
+    coVerify { mockGpsTrackDao.updateFavorite(1L, true, any()) }
   }
 
   @Test
