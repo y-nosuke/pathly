@@ -18,6 +18,13 @@ interface SmoothedPointDao {
   @Query("SELECT * FROM smoothed_points WHERE trackId = :trackId ORDER BY seq ASC")
   suspend fun getByTrack(trackId: Long): List<SmoothedPointEntity>
 
+  /**
+   * 記録中のインクリメンタル検出用。境界（最後に確定した立ち寄りの departure ミリ秒）より
+   * 後の補正点だけを返す。timestamp は epoch millis で保存されている（DateConverter）。
+   */
+  @Query("SELECT * FROM smoothed_points WHERE trackId = :trackId AND timestamp > :afterMillis ORDER BY seq ASC")
+  suspend fun getByTrackAfter(trackId: Long, afterMillis: Long): List<SmoothedPointEntity>
+
   @Query("SELECT * FROM smoothed_points WHERE trackId = :trackId ORDER BY seq ASC")
   fun getByTrackFlow(trackId: Long): Flow<List<SmoothedPointEntity>>
 

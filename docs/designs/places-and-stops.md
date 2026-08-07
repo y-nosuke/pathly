@@ -159,6 +159,19 @@ Google Places を「叩いたか」を place 単位で記録する。places を�
 `LocationTrackingService` が新しい点を保存・補正する流れに続けて、立ち寄りも増分で処理する。
 補正（[gps-smoothing.md](./gps-smoothing.md)）と同じ「確定プレフィックス」の考え方を使う。
 
+**インクリメンタル検出（境界以降だけ見る）。** 毎ティック全点を検出し直すのではなく、
+**「最後に確定した立ち寄りの `departureTime`（＝境界）」より後の補正点だけ**を `StopDetector` にかける
+（`SmoothedPointDao.getByTrackAfter`）。`StopDetector` の貪欲スキャンは境界より手前の点に依存しない
+（クラスタを確定したら次へ飛ぶだけ）ので、末尾のクラスタ分割は全点で検出した場合と**一致する**。
+これで過去の立ち寄り区間を毎ティック舐め直さずに済み、検出コストは「直近の確定立ち寄り以降の点数」に比例する。
+
+**境界は削除で下げない（誤復活の防止）。** 境界はトラック単位で**メモリに保持**し、記録セッション中は
+**単調増加**させる（削除では下げない）。未設定のとき（プロセス再起動後の再開など）だけ、保存済み立ち寄りの
+**最終 `departureTime`** で種をまき直す。こうすると、ユーザーが記録中に削除した立ち寄りの区間は境界より手前に
+なって検出スライスに入らず、**GPS が同じでも再検出・再挿入されない**（＝削除が復活しない。理由は後述の [ADR-0002](../adr/0002-incremental-live-stop-detection.md)）。
+既知の端: 記録中にプロセスが kill され、かつ**末尾の立ち寄りを削除した直後にクラッシュ**した場合のみ、
+DB の最終 departure で種をまき直すため、その1件が再検出されうる（中間削除は影響なし）。
+
 滞在は次のライフサイクルで扱う（**stop は離脱で確定＝案A**、**place は滞在中に先に確定**してライブ表示・命名に使う）:
 
 1. **滞在候補**（3分未満）: 何もしない（滞在時間を数えるだけ）。
@@ -173,16 +186,18 @@ Google Places を「叩いたか」を place 単位で記録する。places を�
 ```
 新しい点が保存・補正される
   └─ updateStopsForTrack(trackId, isFinal)
-       - StopDetector.detect(保存済みの補正点列) で DetectedStop 群を得る
+       - 境界 = メモリの高水位 ?: 保存済み立ち寄りの最終 departure ?: なし（＝全点）
+       - StopDetector.detect(境界より後の補正点だけ) で DetectedStop 群を得る
        - 末尾の「滞在中」クラスタ（末尾点を含む）:
            3分超なら findOrCreatePlace → (online) resolve、"立ち寄り中" を StateFlow で公開
            離れて確定 or isFinal なら stops に保存し、公開を解除
-       - 過去の確定クラスタ:
-           未保存ぶんだけ findOrCreatePlace → stops に保存
+       - それ以外の確定クラスタ（すべて境界より後＝新規）:
+           findOrCreatePlace → stops に保存、境界を確定分の最終 departure まで進める
            オンラインなら未解決 place を resolve（オフラインは行を作らず後でキャッチアップ）
 ```
 
 - **place は滞在中（3分超）に先に保存**される。stop は離脱で確定（案A）。3分超の滞在は必ず後で stop になるため、宙に浮いた place は基本残らない（記録クラッシュ時のみ・無害で再利用可）。
+- **境界（高水位）は削除で下げない**ので、記録中に手で消した立ち寄りは以降のスライスに入らず復活しない（[ADR-0002](../adr/0002-incremental-live-stop-detection.md)）。境界はメモリ保持で、記録終了（`isFinal`）時に破棄する。
 - API回数は **place 1件1回**のまま。クラスタは50m以内なので重心のブレは小さく、place 確定後は `place_resolutions` があるので自動では叩き直さない。
 - 記録終了時に `isFinal=true` で末尾を確定。オンラインなら未解決の place を一括命名。
 
@@ -335,21 +350,21 @@ places が track から独立し、解決状態も `place_resolutions` に分離
 
 ## 実装マップ
 
-| 要素               | ファイル                                                                               |
-| ------------------ | -------------------------------------------------------------------------------------- |
-| 検出（既存）       | `domain/model/StopDetector.kt`（返り値は `DetectedStop`）                              |
-| ドメイン           | `domain/model/Place.kt`, `Stop.kt`, `DetectedStop.kt`                                  |
-| Entity             | `data/local/entity/PlaceEntity.kt`, `StopEntity.kt`（`note` 含む）, `StopWithPlace.kt` |
-| Entity             | `data/local/entity/PlaceResolutionEntity.kt`                                           |
-| DAO                | `data/local/dao/PlaceDao.kt`, `StopDao.kt`, `PlaceResolutionDao.kt`                    |
-| マイグレーション   | `DatabaseMigrations.kt`（1→6 を保持。v4: place_resolutions / v6: stops.note）          |
-| Places 呼び出し    | `data/places/PlacesNameResolver.kt`（+ オンライン判定）                                |
-| 記録中の検出・保存 | `service/LocationTrackingService.kt` → `PlaceRepository.updateStopsForTrack`           |
-| ライブ立ち寄り中   | 記録中サービスの `StateFlow`（非永続）→ `presentation/tracking/TrackingScreen.kt`      |
-| 再解析（追加提案） | `detectMissingStops` / `addStops`（非破壊）＋ 詳細画面の選択ダイアログ                 |
-| 完全手動追加       | `addManualStop`（非破壊）＋ 詳細画面の追加モード（地図タップ＋区間レンジ調整）         |
-| リポジトリ         | `domain/repository/PlaceRepository.kt` / `data/repository/PlaceRepositoryImpl.kt`      |
-| 画面               | `presentation/history/TrackDetailScreen.kt`（+ 詳細用 ViewModel）                      |
+| 要素               | ファイル                                                                                                                             |
+| ------------------ | ------------------------------------------------------------------------------------------------------------------------------------ |
+| 検出（既存）       | `domain/model/StopDetector.kt`（返り値は `DetectedStop`）                                                                            |
+| ドメイン           | `domain/model/Place.kt`, `Stop.kt`, `DetectedStop.kt`                                                                                |
+| Entity             | `data/local/entity/PlaceEntity.kt`, `StopEntity.kt`（`note` 含む）, `StopWithPlace.kt`                                               |
+| Entity             | `data/local/entity/PlaceResolutionEntity.kt`                                                                                         |
+| DAO                | `data/local/dao/PlaceDao.kt`, `StopDao.kt`, `PlaceResolutionDao.kt`                                                                  |
+| マイグレーション   | `DatabaseMigrations.kt`（1→6 を保持。v4: place_resolutions / v6: stops.note）                                                        |
+| Places 呼び出し    | `data/places/PlacesNameResolver.kt`（+ オンライン判定）                                                                              |
+| 記録中の検出・保存 | `service/LocationTrackingService.kt` → `PlaceRepository.updateStopsForTrack`（境界以降のみ検出＝`SmoothedPointDao.getByTrackAfter`） |
+| ライブ立ち寄り中   | 記録中サービスの `StateFlow`（非永続）→ `presentation/tracking/TrackingScreen.kt`                                                    |
+| 再解析（追加提案） | `detectMissingStops` / `addStops`（非破壊）＋ 詳細画面の選択ダイアログ                                                               |
+| 完全手動追加       | `addManualStop`（非破壊）＋ 詳細画面の追加モード（地図タップ＋区間レンジ調整）                                                       |
+| リポジトリ         | `domain/repository/PlaceRepository.kt` / `data/repository/PlaceRepositoryImpl.kt`                                                    |
+| 画面               | `presentation/history/TrackDetailScreen.kt`（+ 詳細用 ViewModel）                                                                    |
 
 ---
 
