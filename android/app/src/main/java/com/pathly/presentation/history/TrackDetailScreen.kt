@@ -42,9 +42,7 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.RangeSlider
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHost
@@ -98,19 +96,22 @@ import com.pathly.domain.model.GpsPoint
 import com.pathly.domain.model.GpsTrack
 import com.pathly.domain.model.PlaceSearchResult
 import com.pathly.domain.model.Priority
+import com.pathly.domain.model.RegisteredPlace
 import com.pathly.domain.model.SmoothingParams
 import com.pathly.domain.model.Stop
 import com.pathly.domain.model.StopCandidate
 import com.pathly.domain.model.TrackSmoother
 import com.pathly.presentation.common.MarkerStopViolet
 import com.pathly.presentation.common.RouteMapContent
+import com.pathly.presentation.common.StopRangeEditor
 import com.pathly.presentation.common.StopReassignDialog
+import com.pathly.presentation.common.defaultDepartureIndex
+import com.pathly.presentation.common.nearestPointIndex
 import com.pathly.presentation.common.stopSegmentPoints
 import com.pathly.presentation.places.RegisterPlaceFromPoiDialog
 import com.pathly.util.DateFormatters
 import kotlinx.coroutines.launch
 import java.util.Date
-import kotlin.math.cos
 import kotlin.math.roundToInt
 
 private val tuningSheetPeekHeight = 360.dp
@@ -121,37 +122,6 @@ private enum class SheetDetent { HIDDEN, PEEK, FULL }
 
 // 手動追加のハイライト（選択した滞在区間）。軌跡（オレンジ）・立ち寄り（紫）と見分ける青。
 private val manualHighlightColor = Color(0xFF1E88E5)
-
-// 手動追加で最初に仮置きする滞在時間（最寄り点からこの範囲を既定で選ぶ。あとで調整可）。
-private const val DEFAULT_MANUAL_STAY_MILLIS = 3 * 60 * 1000L
-
-/** 指した地点に最も近い軌跡点の添字（緯度補正した平面近似で十分）。 */
-private fun nearestPointIndex(points: List<GpsPoint>, lat: Double, lng: Double): Int {
-  if (points.isEmpty()) return 0
-  var best = 0
-  var bestD = Double.MAX_VALUE
-  points.forEachIndexed { i, p ->
-    val dLat = p.latitude - lat
-    val dLng = (p.longitude - lng) * cos(Math.toRadians(lat))
-    val d = dLat * dLat + dLng * dLng
-    if (d < bestD) {
-      bestD = d
-      best = i
-    }
-  }
-  return best
-}
-
-/** 到着点から既定の滞在時間ぶん先まで進めた出発点の添字（末尾で頭打ち）。 */
-private fun defaultDepartureIndex(points: List<GpsPoint>, arrivalIdx: Int): Int {
-  if (points.isEmpty()) return arrivalIdx
-  val arrivalMillis = points[arrivalIdx].timestamp.time
-  var idx = arrivalIdx
-  while (idx + 1 < points.size && points[idx + 1].timestamp.time - arrivalMillis < DEFAULT_MANUAL_STAY_MILLIS) {
-    idx++
-  }
-  return idx
-}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -180,6 +150,12 @@ fun TrackDetailScreen(
   // 誤検知の選び直し用: 座標の近くの POI 候補を取得／この訪問だけ付け替える。
   onFetchNearbyPois: suspend (lat: Double, lng: Double) -> List<PlaceSearchResult> = { _, _ -> emptyList() },
   onReassignStop: (stopId: Long, chosen: PlaceSearchResult?, customName: String?) -> Unit = { _, _, _ -> },
+  // 登録済みの場所の地図表示（画面別トグル）。
+  registeredPlaces: List<RegisteredPlace> = emptyList(),
+  showRegisteredPlaces: Boolean = false,
+  onToggleRegisteredPlaces: () -> Unit = {},
+  // 手動追加モードで登録済みマーカーをタップ → その既存 place にこの訪問を紐付ける（②）。
+  onAddManualStopForPlace: (placeId: Long, arrival: Date, departure: Date) -> Unit = { _, _, _ -> },
   // 地図スロット。null（既定）は実マップ（GoogleMap）を描画する。
   // テストは空スロット（{}）を渡し、GMS 依存の地図描画を避けてシート・オーバーレイだけを検証する。
   mapContent: (@Composable () -> Unit)? = null,
@@ -336,6 +312,7 @@ fun TrackDetailScreen(
           manualPickTarget = if (manualMode) manualPick?.latLng else null,
           highlightPoints = manualHighlight,
           stopSegments = stopSegments,
+          registeredPlaces = if (showRegisteredPlaces) registeredPlaces else emptyList(),
           focusTarget = focusTarget,
           focusNonce = focusNonce,
           // フォーカスがピンをシート/オーバーレイの裏に隠さないよう、下端を空ける。
@@ -374,6 +351,20 @@ fun TrackDetailScreen(
             focusNonce++
             if (detent == SheetDetent.HIDDEN) settleTo(SheetDetent.PEEK)
           },
+          // 手動追加モード中に登録済みマーカーをタップ → 既存の手動追加オーバーレイ（滞在調整あり）を
+          // その既存 place に紐付ける形で開く（②）。専用の簡易ダイアログは使わない。
+          onRegisteredPlaceClick = { place ->
+            if (manualMode) {
+              manualPick = ManualPick(
+                LatLng(place.latitude, place.longitude),
+                place.displayName,
+                null,
+                existingPlaceId = place.placeId,
+              )
+              focusTarget = LatLng(place.latitude, place.longitude)
+              focusNonce++
+            }
+          },
           modifier = Modifier.fillMaxSize(),
         )
       }
@@ -406,6 +397,21 @@ fun TrackDetailScreen(
         Icon(
           painter = painterResource(R.drawable.ic_arrow_back),
           contentDescription = "戻る",
+          modifier = Modifier.padding(8.dp),
+        )
+      }
+
+      // 登録済みの場所を地図に出すトグル（ONで既存placeをアンバーのピンで表示）。
+      Surface(
+        onClick = onToggleRegisteredPlaces,
+        shape = CircleShape,
+        color = if (showRegisteredPlaces) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surface,
+        shadowElevation = 4.dp,
+      ) {
+        Icon(
+          painter = painterResource(R.drawable.ic_place),
+          contentDescription = if (showRegisteredPlaces) "登録済みの場所を隠す" else "登録済みの場所を表示",
+          tint = if (showRegisteredPlaces) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface,
           modifier = Modifier.padding(8.dp),
         )
       }
@@ -611,6 +617,8 @@ fun TrackDetailScreen(
         ManualAddOverlay(
           name = manualName,
           onNameChange = { manualName = it },
+          // 登録済みマーカーから開いたときは、その場所へ紐付ける（名前欄の代わりに場所名を出す）。
+          linkedPlaceName = pick.existingPlaceId?.let { pick.name ?: "登録済みの場所" },
           arrivalTime = arrival,
           departureTime = departure,
           arrivalIdx = manualArrivalIdx,
@@ -625,10 +633,16 @@ fun TrackDetailScreen(
             manualDepartureIdx = end
           },
           onConfirm = {
-            val finalName = manualName.trim().ifBlank { null }
-            // 名前を POI 名から変えたら googlePlaceId は使わない（別名で解決記録を焼き込まない）。
-            val googleId = pick.googlePlaceId?.takeIf { finalName == pick.name }
-            onAddManualStop(pick.latLng.latitude, pick.latLng.longitude, arrival, departure, finalName, googleId)
+            val existingPlaceId = pick.existingPlaceId
+            if (existingPlaceId != null) {
+              // 登録済みの場所に紐付ける（新規place作らず、調整した滞在区間で）。
+              onAddManualStopForPlace(existingPlaceId, arrival, departure)
+            } else {
+              val finalName = manualName.trim().ifBlank { null }
+              // 名前を POI 名から変えたら googlePlaceId は使わない（別名で解決記録を焼き込まない）。
+              val googleId = pick.googlePlaceId?.takeIf { finalName == pick.name }
+              onAddManualStop(pick.latLng.latitude, pick.latLng.longitude, arrival, departure, finalName, googleId)
+            }
             exitManual()
             scope.launch { snackbarHostState.showSnackbar("立ち寄りを追加しました") }
           },
@@ -969,6 +983,8 @@ private data class ManualPick(
   val latLng: LatLng,
   val name: String?,
   val googlePlaceId: String?,
+  // 登録済みマーカーから選んだ場合の既存 placeId。非nullなら新規placeを作らずここへ紐付ける（②）。
+  val existingPlaceId: Long? = null,
 )
 
 /** 手動追加モードで地点を指す前に出す案内バー（下部・細め）。 */
@@ -1022,8 +1038,9 @@ private fun ManualAddOverlay(
   onConfirm: () -> Unit,
   onCancel: () -> Unit,
   modifier: Modifier = Modifier,
+  // 非nullなら登録済みの場所へ紐付けるモード（名前欄の代わりに場所名を表示・新規placeは作らない）。
+  linkedPlaceName: String? = null,
 ) {
-  val durationMinutes = ((departureTime.time - arrivalTime.time) / 1000 / 60).toInt()
   Surface(
     modifier = modifier
       .fillMaxWidth()
@@ -1044,52 +1061,37 @@ private fun ManualAddOverlay(
         verticalArrangement = Arrangement.spacedBy(12.dp),
       ) {
         Text(
-          text = "手動で立ち寄りを追加",
+          text = if (linkedPlaceName != null) "この場所に立ち寄りを追加" else "手動で立ち寄りを追加",
           style = MaterialTheme.typography.titleMedium,
           fontWeight = FontWeight.Bold,
         )
-        OutlinedTextField(
-          value = name,
-          onValueChange = onNameChange,
-          label = { Text("名前（任意）") },
-          singleLine = true,
-          modifier = Modifier.fillMaxWidth(),
-        )
-        Text(
-          text = "滞在${durationMinutes}分（青いハイライトが滞在区間）",
-          style = MaterialTheme.typography.bodyMedium,
-          color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        Text(
-          text = "スライダーで大まかに、＋/− で1点ずつ微調整できます。",
-          style = MaterialTheme.typography.bodySmall,
-          color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        RangeSlider(
-          value = arrivalIdx.toFloat()..departureIdx.toFloat(),
-          onValueChange = { range ->
-            val start = range.start.roundToInt().coerceIn(0, lastIdx)
-            val end = range.endInclusive.roundToInt().coerceIn(start, lastIdx)
-            onRangeChange(start, end)
-          },
-          valueRange = 0f..lastIdx.toFloat(),
-        )
-        // 微調整（1点ずつ）。到着は出発を超えられず、出発は到着を下回れない。
-        StepperRow(
-          label = "到着",
-          time = arrivalTime,
-          minusEnabled = arrivalIdx > 0,
-          plusEnabled = arrivalIdx < departureIdx,
-          onMinus = { onRangeChange((arrivalIdx - 1).coerceAtLeast(0), departureIdx) },
-          onPlus = { onRangeChange((arrivalIdx + 1).coerceAtMost(departureIdx), departureIdx) },
-        )
-        StepperRow(
-          label = "出発",
-          time = departureTime,
-          minusEnabled = departureIdx > arrivalIdx,
-          plusEnabled = departureIdx < lastIdx,
-          onMinus = { onRangeChange(arrivalIdx, (departureIdx - 1).coerceAtLeast(arrivalIdx)) },
-          onPlus = { onRangeChange(arrivalIdx, (departureIdx + 1).coerceAtMost(lastIdx)) },
+        if (linkedPlaceName != null) {
+          // 登録済みの場所へ紐付けるので名前は編集しない（既存placeを使う）。
+          Text(
+            text = linkedPlaceName,
+            style = MaterialTheme.typography.bodyLarge,
+          )
+          Text(
+            text = "登録済みの場所に紐付けます（新しい場所は作りません）。",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+          )
+        } else {
+          OutlinedTextField(
+            value = name,
+            onValueChange = onNameChange,
+            label = { Text("名前（任意）") },
+            singleLine = true,
+            modifier = Modifier.fillMaxWidth(),
+          )
+        }
+        StopRangeEditor(
+          arrivalTime = arrivalTime,
+          departureTime = departureTime,
+          arrivalIdx = arrivalIdx,
+          departureIdx = departureIdx,
+          lastIdx = lastIdx,
+          onRangeChange = onRangeChange,
         )
       }
       Row(
@@ -1103,50 +1105,6 @@ private fun ManualAddOverlay(
         Button(onClick = onConfirm, modifier = Modifier.weight(1f)) { Text("追加") }
       }
     }
-  }
-}
-
-/** 到着／出発を1点ずつ微調整する行（時刻表示＋ −/＋）。 */
-@Composable
-private fun StepperRow(
-  label: String,
-  time: Date,
-  minusEnabled: Boolean,
-  plusEnabled: Boolean,
-  onMinus: () -> Unit,
-  onPlus: () -> Unit,
-) {
-  Row(
-    modifier = Modifier.fillMaxWidth(),
-    verticalAlignment = Alignment.CenterVertically,
-  ) {
-    Text(
-      text = label,
-      style = MaterialTheme.typography.bodyMedium,
-      color = MaterialTheme.colorScheme.onSurfaceVariant,
-    )
-    Text(
-      text = DateFormatters.TIME_FORMAT.format(time),
-      style = MaterialTheme.typography.titleMedium,
-      fontWeight = FontWeight.Medium,
-      modifier = Modifier.padding(start = 12.dp),
-    )
-    Spacer(modifier = Modifier.weight(1f))
-    OutlinedButton(
-      onClick = onMinus,
-      enabled = minusEnabled,
-      shape = CircleShape,
-      contentPadding = PaddingValues(0.dp),
-      modifier = Modifier.size(40.dp),
-    ) { Text("−", style = MaterialTheme.typography.titleLarge) }
-    Spacer(modifier = Modifier.width(8.dp))
-    OutlinedButton(
-      onClick = onPlus,
-      enabled = plusEnabled,
-      shape = CircleShape,
-      contentPadding = PaddingValues(0.dp),
-      modifier = Modifier.size(40.dp),
-    ) { Text("＋", style = MaterialTheme.typography.titleLarge) }
   }
 }
 
@@ -1678,12 +1636,14 @@ private fun TrackMapView(
   manualPickTarget: LatLng? = null,
   highlightPoints: List<GpsPoint> = emptyList(),
   stopSegments: List<List<GpsPoint>> = emptyList(),
+  registeredPlaces: List<RegisteredPlace> = emptyList(),
   focusTarget: LatLng? = null,
   focusNonce: Int = 0,
   contentPadding: PaddingValues = PaddingValues(0.dp),
   onPoiClick: (PointOfInterest) -> Unit = {},
   onMapClick: (LatLng) -> Unit = {},
   onStopClick: (Stop) -> Unit = {},
+  onRegisteredPlaceClick: (RegisteredPlace) -> Unit = {},
 ) {
   val cameraPositionState = rememberCameraPositionState()
   val defaultPosition = LatLng(35.6762, 139.6503) // Tokyo Station as default
@@ -1745,7 +1705,9 @@ private fun TrackMapView(
       displayPoints = displayPoints,
       stops = stops,
       stopSegments = stopSegments,
+      registeredPlaces = registeredPlaces,
       onStopClick = onStopClick,
+      onRegisteredPlaceClick = onRegisteredPlaceClick,
     )
 
     // 再解析の候補（オレンジのピン）。既存（紫）と見分けられるようにする。

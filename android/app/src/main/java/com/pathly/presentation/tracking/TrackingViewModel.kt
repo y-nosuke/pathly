@@ -12,6 +12,8 @@ import android.provider.Settings
 import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.pathly.data.settings.MapSurface
+import com.pathly.data.settings.SettingsRepository
 import com.pathly.domain.model.PlaceSearchResult
 import com.pathly.domain.model.Priority
 import com.pathly.domain.repository.GpsTrackRepository
@@ -40,6 +42,7 @@ class TrackingViewModel @Inject constructor(
   private val gpsTrackRepository: GpsTrackRepository,
   private val placeRepository: PlaceRepository,
   private val wishlistRepository: WishlistRepository,
+  private val settingsRepository: SettingsRepository,
 ) : AndroidViewModel(application) {
 
   private val _uiState = MutableStateFlow(TrackingState())
@@ -96,6 +99,25 @@ class TrackingViewModel @Inject constructor(
     observeActiveTrack()
     observeCurrentStop()
     observeStops()
+    observeRegisteredPlaces()
+  }
+
+  /** 「登録済みの場所」トグルと全place を購読して地図に反映する（記録画面の画面別トグル）。 */
+  private fun observeRegisteredPlaces() {
+    viewModelScope.launch {
+      settingsRepository.showRegisteredPlaces(MapSurface.RECORDING).collect { show ->
+        _uiState.value = _uiState.value.copy(showRegisteredPlaces = show)
+      }
+    }
+    viewModelScope.launch {
+      placeRepository.observeRegisteredPlaces().collect { places ->
+        _uiState.value = _uiState.value.copy(registeredPlaces = places)
+      }
+    }
+  }
+
+  fun toggleShowRegisteredPlaces() {
+    settingsRepository.setShowRegisteredPlaces(MapSurface.RECORDING, !_uiState.value.showRegisteredPlaces)
   }
 
   private fun observeCurrentStop() {
@@ -325,6 +347,19 @@ class TrackingViewModel @Inject constructor(
         _uiState.value = _uiState.value.copy(
           placeRegisteredMessage = "立ち寄りを追加しました",
         )
+      } catch (e: Exception) {
+        _uiState.value = _uiState.value.copy(errorMessage = "立ち寄りの追加に失敗しました: ${e.message}")
+      }
+    }
+  }
+
+  /** 地図の登録済みマーカーを選んで、既存 place にこの訪問を紐付ける（新規 place を作らない）。 */
+  fun addManualStopForPlace(placeId: Long, arrivalTime: java.util.Date, departureTime: java.util.Date) {
+    val trackId = _uiState.value.currentTrackId ?: return
+    viewModelScope.launch {
+      try {
+        placeRepository.addManualStopForPlace(trackId, placeId, arrivalTime, departureTime)
+        _uiState.value = _uiState.value.copy(placeRegisteredMessage = "立ち寄りを追加しました")
       } catch (e: Exception) {
         _uiState.value = _uiState.value.copy(errorMessage = "立ち寄りの追加に失敗しました: ${e.message}")
       }

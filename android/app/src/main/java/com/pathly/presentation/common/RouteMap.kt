@@ -27,6 +27,7 @@ import com.google.maps.android.compose.Polyline
 import com.pathly.R
 import com.pathly.domain.model.GpsPoint
 import com.pathly.domain.model.GpsTrack
+import com.pathly.domain.model.RegisteredPlace
 import com.pathly.domain.model.Stop
 import com.pathly.ui.theme.TrackLineOrange
 import com.pathly.util.DateFormatters
@@ -42,6 +43,11 @@ internal val MarkerActiveBlue = Color(0xFF3B82F6)
 internal val MarkerStopViolet = Color(0xFF6A4BBC)
 internal val MarkerCurrentStopTeal = Color(0xFF00BFA5)
 
+// 「登録済みの場所」マーカー（トグルON時）。色で訪問状態（訪問済み=グリーン／未訪問=グレー）を示し、
+// グリフで行きたい（旗）/それ以外（ピン）を示す。立ち寄り（紫）とは色・グリフで見分ける。
+internal val MarkerVisitedGreen = Color(0xFF2E7D32)
+internal val MarkerUnvisitedGray = Color(0xFF6B6B6B)
+
 // 確定した立ち寄りの滞在区間ハイライト（濃い青の帯）。軌跡（オレンジ）の下に太く敷く。
 internal val StopSegmentColor = Color(0xF00D47A1)
 
@@ -50,6 +56,49 @@ internal val CurrentStopSegmentColor = Color(0xF000BFA5)
 
 /** 立ち寄りの到着〜出発に対応する軌跡点（滞在区間）。時刻で範囲を切り出す（両端含む）。 */
 internal fun stopSegmentPoints(points: List<GpsPoint>, arrival: Date, departure: Date): List<GpsPoint> = points.filter { !it.timestamp.before(arrival) && !it.timestamp.after(departure) }
+
+/**
+ * 「登録済みの場所」マーカー群（アンバーのピン）。トラックの有無に依らず単独で描画できるよう
+ * 切り出し、記録画面（トラック未確定でも表示）・場所詳細でも使い回す。GoogleMap の content 内で呼ぶ。
+ */
+@Composable
+@GoogleMapComposable
+@OptIn(MapsComposeExperimentalApi::class)
+internal fun RegisteredPlaceMarkers(
+  registeredPlaces: List<RegisteredPlace>,
+  onRegisteredPlaceClick: (RegisteredPlace) -> Unit = {},
+) {
+  registeredPlaces.forEach { place ->
+    val placeMarkerState = androidx.compose.runtime.remember(place.placeId, place.latitude, place.longitude) {
+      MarkerState(position = LatLng(place.latitude, place.longitude))
+    }
+    // 色＝訪問状態、グリフ＝行きたい（旗）/それ以外（ピン）。状態が変わったら描き直す。
+    val badgeColor = if (place.isVisited) MarkerVisitedGreen else MarkerUnvisitedGray
+    val glyph = if (place.isWishlisted) R.drawable.ic_flag_filled else R.drawable.ic_place
+    MarkerComposable(
+      "registered",
+      place.placeId,
+      place.isWishlisted,
+      place.isVisited,
+      state = placeMarkerState,
+      title = place.displayName,
+      snippet = place.statusLabel,
+      onClick = {
+        onRegisteredPlaceClick(place)
+        false
+      },
+    ) {
+      RouteBadgeMarker(bg = badgeColor) {
+        Icon(
+          painter = painterResource(glyph),
+          contentDescription = null,
+          tint = Color.White,
+          modifier = Modifier.size(18.dp),
+        )
+      }
+    }
+  }
+}
 
 /** 地図の丸バッジ型マーカー（白フチ＋中央にグリフ/番号）。出発・到着・立ち寄りで共用。 */
 @Composable
@@ -85,6 +134,9 @@ internal fun RouteMapContent(
   currentStopSegment: List<GpsPoint> = emptyList(),
   showEndMarker: Boolean = true,
   onStopClick: (Stop) -> Unit = {},
+  // 「登録済みの場所」マーカー（トグルON時）。タップは②の紐付け用（既定は無反応）。
+  registeredPlaces: List<RegisteredPlace> = emptyList(),
+  onRegisteredPlaceClick: (RegisteredPlace) -> Unit = {},
 ) {
   // 確定した立ち寄りの滞在区間（軌跡の下に濃い青の帯）。
   stopSegments.forEach { segment ->
@@ -170,6 +222,9 @@ internal fun RouteMapContent(
       }
     }
   }
+
+  // 登録済みの場所（トグルON時）。立ち寄りマーカーの下に敷き、重なりでは立ち寄りを前面にする。
+  RegisteredPlaceMarkers(registeredPlaces, onRegisteredPlaceClick)
 
   // 立ち寄り場所（訪問順の番号つき紫バッジ）。番号でルートの順序が読める。
   stops.forEachIndexed { index, stop ->

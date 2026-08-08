@@ -339,6 +339,31 @@ Android アプリ制限付きの API キー（地図と共用）を**そのま�
 - **手動追加した立ち寄りは自動命名しない**: `addManualStop` は常に `place_resolutions` 行を残すので、記録中の
   ライブ検出（未解決 place を自動命名）が手動追加の名前（またはユーザーが選んだ「名前なし」）を上書きしない。
 
+### 登録済みの場所の地図表示（トグル）
+
+記録・履歴詳細・場所詳細の地図に、**登録済みの場所（全 place ＝ USER も DETECTED も）**を
+**アンバーのピン**で重ねて表示できる。立ち寄り（紫の番号バッジ）とは色で区別し、重なりでは立ち寄りを前面にする。
+描画は共通の `RegisteredPlaceMarkers`（`presentation/common/RouteMap.kt`）に切り出し、**トラックが無くても**
+（記録開始前など）単独で描けるようにしている。手動追加で近くに既存の場所があると気づけるようにするのが狙い。
+**状態が分かるよう色・グリフで描き分ける**（色: 訪問済み=グリーン／未訪問=グレー、グリフ: 行きたい=旗／それ以外=ピン。
+判定は「場所」タブの `PlaceListItem` と揃える）。タップでスニペットに状態文言（例「行きたい・訪問済み」）も出す。
+
+**マーカータップで既存 place に紐付け（手動追加時）**: 手動で立ち寄りを足すとき（記録中／履歴詳細の手動追加モード）、
+登録済みマーカーをタップすると、その**既存 place にこの訪問を紐付ける**（`addManualStopForPlace`）。新規 place を作らず
+重複を防ぐ。UI は**各画面の既存の手動追加ダイアログを流用**する（名前欄の代わりに場所名を出し、確定を紐付けに差し替える）。
+**滞在時間の調整**（スライダー＋到着/出発の ＋/− 微調整）は共通の `StopRangeEditor` に切り出し、
+記録中・履歴詳細の**両方の手動追加で使える**（軌跡点が2点未満のときだけ推定にフォールバック）。
+
+- **取得**: `PlaceRepository.observeRegisteredPlaces()`（`PlaceDao.observeRegisteredPlaces`）。全 place を
+  最小情報（id・座標・表示名）でリアクティブに返す。表示名は `places.name → google_places.name → 住所` の
+  フォールバック（`COALESCE`）。場所詳細ではその場所自身は主マーカーと重なるので呼び出し側で除外する。
+- **ON/OFF の保存先は Room ではなく `SharedPreferences`**（`SettingsRepository` / prefs 名 `pathly_settings`）。
+  トグルは**UI の表示設定**であって場所データではないため、DB（SQLite）には持たせない。GPS 記録間隔と同じ扱い。
+  - **画面ごとに独立**して保持する。キーは `show_registered_places_{recording|history|place_detail}`（`Boolean`・既定 `false`）。
+    画面を表す `MapSurface`(`RECORDING`/`HISTORY`/`PLACE_DETAIL`) で出し分ける。
+  - 各画面の ViewModel が `settingsRepository.showRegisteredPlaces(surface)` を購読し、地図上のトグルボタンで
+    `setShowRegisteredPlaces(surface, …)` を書く。プロセスをまたいで保持される。
+
 ### 詳細画面
 
 - 地図: 立ち寄りピン（紫）。タイトルに場所名（未命名は「立ち寄り」）、スニペットに時刻・滞在分

@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -33,6 +34,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -67,12 +69,16 @@ import com.pathly.R
 import com.pathly.domain.model.GpsPoint
 import com.pathly.domain.model.GpsTrack
 import com.pathly.domain.model.PlaceSearchResult
+import com.pathly.domain.model.RegisteredPlace
 import com.pathly.domain.model.Stop
+import com.pathly.presentation.common.RegisteredPlaceMarkers
 import com.pathly.presentation.common.RouteMapContent
+import com.pathly.presentation.common.StopRangeEditor
 import com.pathly.presentation.common.StopReassignDialog
+import com.pathly.presentation.common.defaultDepartureIndex
+import com.pathly.presentation.common.nearestPointIndex
 import com.pathly.presentation.common.stopSegmentPoints
 import com.pathly.presentation.places.RegisterPlaceFromPoiDialog
-import com.pathly.util.DateFormatters
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.util.Date
@@ -121,6 +127,8 @@ fun TrackingScreen(
   var manualTarget by remember { mutableStateOf<LatLng?>(null) }
   // 立ち寄りマーカーをタップして「場所を選び直す」対象（誤検知の訂正）。
   var reassignTarget by remember { mutableStateOf<Stop?>(null) }
+  // 記録中に登録済みマーカーをタップ → その既存 place にこの訪問を紐付ける対象（②）。手動追加ダイアログを流用する。
+  var linkPlace by remember { mutableStateOf<RegisteredPlace?>(null) }
 
   Box(modifier = modifier.fillMaxSize()) {
     if (mapContent != null) {
@@ -138,6 +146,34 @@ fun TrackingScreen(
         // 立ち寄りマーカーのタップで「場所を選び直す」（誤検知の訂正）。
         onStopClick = { reassignTarget = it },
         modifier = Modifier.fillMaxSize(),
+        registeredPlaces = if (uiState.showRegisteredPlaces) uiState.registeredPlaces else emptyList(),
+        // 記録中に登録済みマーカーをタップ → その既存 place に紐付ける（新規place作らない）。
+        // 位置はその場所に固定して手動追加ダイアログ（同じUI）を開く。
+        onRegisteredPlaceClick = {
+          if (uiState.isTracking) {
+            linkPlace = it
+            manualTarget = LatLng(it.latitude, it.longitude)
+          }
+        },
+      )
+    }
+
+    // 登録済みの場所を地図に出すトグル（記録画面・画面別）。上部右に置く。
+    Surface(
+      onClick = { viewModel.toggleShowRegisteredPlaces() },
+      shape = CircleShape,
+      color = if (uiState.showRegisteredPlaces) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surface,
+      shadowElevation = 4.dp,
+      modifier = Modifier
+        .align(Alignment.TopEnd)
+        .statusBarsPadding()
+        .padding(12.dp),
+    ) {
+      Icon(
+        painter = painterResource(R.drawable.ic_place),
+        contentDescription = if (uiState.showRegisteredPlaces) "登録済みの場所を隠す" else "登録済みの場所を表示",
+        tint = if (uiState.showRegisteredPlaces) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface,
+        modifier = Modifier.padding(8.dp),
       )
     }
 
@@ -312,11 +348,21 @@ fun TrackingScreen(
       target = target,
       points = uiState.currentTrack?.smoothedPoints.orEmpty(),
       onFetchCandidates = viewModel::nearbyPois,
+      linkedPlace = linkPlace,
       onConfirm = { lat, lng, arrival, departure, name, googlePlaceId ->
-        viewModel.addManualStop(lat, lng, arrival, departure, name, googlePlaceId)
+        val linked = linkPlace
+        if (linked != null) {
+          viewModel.addManualStopForPlace(linked.placeId, arrival, departure)
+        } else {
+          viewModel.addManualStop(lat, lng, arrival, departure, name, googlePlaceId)
+        }
         manualTarget = null
+        linkPlace = null
       },
-      onDismiss = { manualTarget = null },
+      onDismiss = {
+        manualTarget = null
+        linkPlace = null
+      },
     )
   }
 
@@ -345,32 +391,73 @@ private fun ManualStopDialog(
   onFetchCandidates: suspend (Double, Double) -> List<PlaceSearchResult>,
   onConfirm: (lat: Double, lng: Double, arrival: Date, departure: Date, name: String?, googlePlaceId: String?) -> Unit,
   onDismiss: () -> Unit,
+  // 非nullなら登録済みの場所へ紐付けるモード（候補選びは出さず、その場所へ足す）。
+  linkedPlace: RegisteredPlace? = null,
 ) {
-  val (arrival, departure) = remember(target, points) {
-    deriveStopWindow(points, target.latitude, target.longitude)
+  // 滞在区間は軌跡点のインデックスで調整（履歴詳細と同じ StopRangeEditor）。点が少なければ推定にフォールバック。
+  val hasRange = points.size >= 2
+  val lastIdx = (points.size - 1).coerceAtLeast(0)
+  var arrivalIdx by remember(target, points) {
+    mutableIntStateOf(if (hasRange) nearestPointIndex(points, target.latitude, target.longitude) else 0)
   }
-  val durationMinutes = ((departure.time - arrival.time) / 1000 / 60).toInt()
+  var departureIdx by remember(target, points) {
+    mutableIntStateOf(if (hasRange) defaultDepartureIndex(points, arrivalIdx) else 0)
+  }
+  val fallback = remember(target, points) { deriveStopWindow(points, target.latitude, target.longitude) }
+  val arrival = if (hasRange) points[arrivalIdx].timestamp else fallback.first
+  val departure = if (hasRange) points[departureIdx].timestamp else fallback.second
 
   var candidates by remember { mutableStateOf<List<PlaceSearchResult>?>(null) } // null=読込中
   var selected by remember { mutableStateOf<PlaceSearchResult?>(null) }
   var customName by remember { mutableStateOf("") }
 
   LaunchedEffect(target) {
-    candidates = onFetchCandidates(target.latitude, target.longitude)
+    // 紐付けモードは既存placeを使うので候補は引かない。
+    if (linkedPlace == null) candidates = onFetchCandidates(target.latitude, target.longitude)
   }
 
   AlertDialog(
     onDismissRequest = onDismiss,
-    title = { Text("立ち寄りを追加") },
+    title = { Text(if (linkedPlace != null) "この場所に立ち寄りを追加" else "立ち寄りを追加") },
     text = {
       Column {
-        val window = if (durationMinutes > 0) {
-          "${DateFormatters.SHORT_TIME_FORMAT.format(arrival)}–" +
-            "${DateFormatters.SHORT_TIME_FORMAT.format(departure)} ・ 滞在${durationMinutes}分"
-        } else {
-          "この地点付近（滞在時間は軌跡から推定）"
+        val onRange: (Int, Int) -> Unit = { s, e ->
+          arrivalIdx = s
+          departureIdx = e
         }
-        Text(text = window, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        if (linkedPlace != null) {
+          Text(linkedPlace.displayName, style = MaterialTheme.typography.bodyLarge)
+          Text(
+            linkedPlace.statusLabel,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+          )
+          Spacer(modifier = Modifier.height(8.dp))
+          if (hasRange) {
+            StopRangeEditor(arrival, departure, arrivalIdx, departureIdx, lastIdx, onRange)
+          } else {
+            Text(
+              "この地点付近（滞在時間は軌跡から推定）",
+              style = MaterialTheme.typography.bodySmall,
+              color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+          }
+          Text(
+            "登録済みの場所に紐付けます（新しい場所は作りません）。",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+          )
+          return@Column
+        }
+        if (hasRange) {
+          StopRangeEditor(arrival, departure, arrivalIdx, departureIdx, lastIdx, onRange)
+        } else {
+          Text(
+            "この地点付近（滞在時間は軌跡から推定）",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+          )
+        }
         Spacer(modifier = Modifier.height(12.dp))
 
         Text("名前", style = MaterialTheme.typography.labelLarge)
@@ -442,16 +529,23 @@ private fun ManualStopDialog(
       }
     },
     confirmButton = {
-      TextButton(onClick = {
-        val picked = selected
-        val name = picked?.name ?: customName.trim().ifBlank { null }
-        // 候補を選んだときは place を候補の Google 座標で保存（他経路と統一）。無ければタップ地点。
-        val lat = picked?.latitude ?: target.latitude
-        val lng = picked?.longitude ?: target.longitude
-        onConfirm(lat, lng, arrival, departure, name, picked?.googlePlaceId)
-      }) {
-        // 名前が決まっていなければ「名前なしで追加」を明示する。
-        Text(if (selected == null && customName.isBlank()) "名前なしで追加" else "追加")
+      if (linkedPlace != null) {
+        // 既存placeへ紐付け。座標はその場所、名前・googleは使わない（呼び出し側が紐付けに分岐）。
+        TextButton(onClick = { onConfirm(target.latitude, target.longitude, arrival, departure, null, null) }) {
+          Text("この場所に追加")
+        }
+      } else {
+        TextButton(onClick = {
+          val picked = selected
+          val name = picked?.name ?: customName.trim().ifBlank { null }
+          // 候補を選んだときは place を候補の Google 座標で保存（他経路と統一）。無ければタップ地点。
+          val lat = picked?.latitude ?: target.latitude
+          val lng = picked?.longitude ?: target.longitude
+          onConfirm(lat, lng, arrival, departure, name, picked?.googlePlaceId)
+        }) {
+          // 名前が決まっていなければ「名前なしで追加」を明示する。
+          Text(if (selected == null && customName.isBlank()) "名前なしで追加" else "追加")
+        }
       }
     },
     dismissButton = {
@@ -493,6 +587,8 @@ private fun TrackingMapView(
   onMapClick: (LatLng) -> Unit,
   onStopClick: (Stop) -> Unit,
   modifier: Modifier = Modifier,
+  registeredPlaces: List<RegisteredPlace> = emptyList(),
+  onRegisteredPlaceClick: (RegisteredPlace) -> Unit = {},
 ) {
   val cameraPositionState = rememberCameraPositionState {
     position = CameraPosition.fromLatLngZoom(LatLng(35.6762, 139.6503), 15f)
@@ -611,6 +707,8 @@ private fun TrackingMapView(
           onStopClick = onStopClick,
         )
       }
+      // 登録済みの場所（トグルON）。トラック未確定でも出せるよう、経路描画とは独立して描く。
+      RegisteredPlaceMarkers(registeredPlaces, onRegisteredPlaceClick)
     }
 
     // 現在地ボタン：追従中は活性（色付き）、固定中は非活性（グレー）。タップで追従再開＆リセンター。

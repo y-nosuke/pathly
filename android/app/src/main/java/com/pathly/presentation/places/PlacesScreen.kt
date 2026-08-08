@@ -46,6 +46,7 @@ import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.SnackbarResult
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -83,7 +84,9 @@ import com.pathly.domain.model.PlacePrediction
 import com.pathly.domain.model.PlaceSearchResult
 import com.pathly.domain.model.PlaceVisit
 import com.pathly.domain.model.Priority
+import com.pathly.domain.model.RegisteredPlace
 import com.pathly.presentation.common.NearbyCandidatePickerDialog
+import com.pathly.presentation.common.RegisteredPlaceMarkers
 import com.pathly.util.DateFormatters
 
 // 「場所」タブは Navigation-Compose の目的地に分割されている（一覧／地図で追加／検索で追加／詳細）。
@@ -228,6 +231,21 @@ fun PlaceDetailRoute(
     // 座標がずれて周辺に出ないときの名前検索フォールバック。
     onSearchPredictions = viewModel::predictPlaces,
     onFetchPrediction = viewModel::fetchPlaceResult,
+    // 登録済みの場所の地図表示（この場所自身は主マーカーと重なるので除外）。
+    registeredPlaces = uiState.items
+      .filter { it.place.id != placeId }
+      .map {
+        RegisteredPlace(
+          placeId = it.place.id,
+          name = it.displayName,
+          latitude = it.place.latitude,
+          longitude = it.place.longitude,
+          isWishlisted = it.isWishlisted,
+          isVisited = it.isVisited,
+        )
+      },
+    showRegisteredPlaces = uiState.showRegisteredPlaces,
+    onToggleRegisteredPlaces = { viewModel.toggleShowRegisteredPlaces() },
     // 確認ダイアログは出さず即時削除。items から消えると item == null になり一覧へ戻り、
     // 取り消しスナックバーは一覧側で出る。
     onDeleteRequest = { viewModel.deletePlace(item.place.id) },
@@ -719,6 +737,10 @@ private fun PlaceDetailContent(
   // 座標がずれて周辺に出ない施設用: 名前で検索するフォールバック。
   onSearchPredictions: suspend (query: String) -> List<PlacePrediction>,
   onFetchPrediction: suspend (placeId: String) -> PlaceSearchResult?,
+  // 登録済みの場所の地図表示（画面別トグル）。この場所自身は主マーカーと重なるので呼び出し側で除外して渡す。
+  registeredPlaces: List<RegisteredPlace> = emptyList(),
+  showRegisteredPlaces: Boolean = false,
+  onToggleRegisteredPlaces: () -> Unit = {},
   modifier: Modifier = Modifier,
 ) {
   var poiTarget by remember { mutableStateOf<PointOfInterest?>(null) }
@@ -767,6 +789,28 @@ private fun PlaceDetailContent(
     ) {
       val markerState = remember(position) { MarkerState(position = position) }
       Marker(state = markerState, title = item.displayName)
+      // 登録済みの場所（トグルON）。この場所自身は主マーカーと重なるので除外済みのリストを描く。
+      if (showRegisteredPlaces) {
+        RegisteredPlaceMarkers(registeredPlaces)
+      }
+    }
+
+    // 登録済みの場所を出すトグル（場所詳細・画面別）。戻るボタンの下に置く。
+    Surface(
+      onClick = onToggleRegisteredPlaces,
+      shape = CircleShape,
+      color = if (showRegisteredPlaces) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surface,
+      shadowElevation = 4.dp,
+      modifier = Modifier
+        .align(Alignment.TopEnd)
+        .padding(12.dp),
+    ) {
+      Icon(
+        painter = painterResource(R.drawable.ic_place),
+        contentDescription = if (showRegisteredPlaces) "登録済みの場所を隠す" else "登録済みの場所を表示",
+        tint = if (showRegisteredPlaces) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface,
+        modifier = Modifier.padding(8.dp),
+      )
     }
 
     FilledTonalIconButton(

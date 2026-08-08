@@ -224,6 +224,8 @@ private fun TrackDetailRoute(
   val unresolvedCount by viewModel.unresolvedCount.collectAsStateWithLifecycle()
   val message by viewModel.message.collectAsStateWithLifecycle()
   val reanalyzeCandidates by viewModel.reanalyzeCandidates.collectAsStateWithLifecycle()
+  val registeredPlaces by viewModel.registeredPlaces.collectAsStateWithLifecycle()
+  val showRegisteredPlaces by viewModel.showRegisteredPlaces.collectAsStateWithLifecycle()
 
   TrackDetailScreen(
     track = track,
@@ -250,5 +252,11 @@ private fun TrackDetailRoute(
     onFetchPoiDetails = viewModel::fetchPoiDetails,
     onFetchNearbyPois = viewModel::nearbyPois,
     onReassignStop = { stopId, chosen, customName -> viewModel.reassignStop(stopId, chosen, customName) },
+    registeredPlaces = registeredPlaces,
+    showRegisteredPlaces = showRegisteredPlaces,
+    onToggleRegisteredPlaces = { viewModel.toggleShowRegisteredPlaces() },
+    onAddManualStopForPlace = { placeId, arrival, departure ->
+      viewModel.addManualStopForPlace(placeId, arrival, departure)
+    },
   )
 }

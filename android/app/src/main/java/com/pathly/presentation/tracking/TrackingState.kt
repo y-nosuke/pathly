@@ -1,6 +1,7 @@
 package com.pathly.presentation.tracking
 
 import com.pathly.domain.model.GpsTrack
+import com.pathly.domain.model.RegisteredPlace
 import com.pathly.domain.model.Stop
 
 data class TrackingState(
@@ -15,6 +16,9 @@ data class TrackingState(
   val currentStop: Stop? = null,
   // 記録中トラックの確定済み立ち寄り（地図にマーカー表示するため。詳細画面と同じ見た目）。
   val stops: List<Stop> = emptyList(),
+  // 「登録済みの場所」を地図に出すか（記録画面の画面別トグル）と、その全place。
+  val showRegisteredPlaces: Boolean = false,
+  val registeredPlaces: List<RegisteredPlace> = emptyList(),
   // アプリ更新やクラッシュで中断され、再開/完了の確認待ちになっているトラック
   val interruptedTrack: GpsTrack? = null,
   // 電池の最適化を無効化済みか（バックグラウンド記録の安定性に影響）。既定はtrueで案内を出さない

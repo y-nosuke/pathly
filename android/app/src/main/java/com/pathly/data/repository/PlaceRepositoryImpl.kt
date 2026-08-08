@@ -19,6 +19,7 @@ import com.pathly.domain.model.GpsPoint
 import com.pathly.domain.model.Place
 import com.pathly.domain.model.PlaceSearchResult
 import com.pathly.domain.model.PlaceSource
+import com.pathly.domain.model.RegisteredPlace
 import com.pathly.domain.model.Stop
 import com.pathly.domain.model.StopCandidate
 import com.pathly.domain.model.StopDeletionResult
@@ -71,6 +72,20 @@ class PlaceRepositoryImpl @Inject constructor(
   private val detectionHighWaterMillis = mutableMapOf<Long, Long>()
 
   override fun getStopsForTrack(trackId: Long): Flow<List<Stop>> = stopDao.getStopsWithPlaceByTrack(trackId).map { list -> list.map { it.toStop() } }
+
+  override fun observeRegisteredPlaces(): Flow<List<RegisteredPlace>> = placeDao.observeRegisteredPlaces().map { rows ->
+    rows.map {
+      RegisteredPlace(
+        placeId = it.placeId,
+        name = it.name,
+        latitude = it.latitude,
+        longitude = it.longitude,
+        isWishlisted = it.wishlistCount > 0,
+        // 「場所」タブと同じ判定: 立ち寄り記録があるか、手動で訪問済みにしたら訪問済み。
+        isVisited = it.visitCount > 0 || it.visitedAt != null,
+      )
+    }
+  }
 
   override fun unresolvedCountForTrack(trackId: Long): Flow<Int> = placeDao.countPlacesWithoutGoogleIdForTrack(trackId)
 
@@ -194,6 +209,25 @@ class PlaceRepositoryImpl @Inject constructor(
       placeResolutionDao.upsert(PlaceResolutionEntity(placeId, Date()))
     }
     logger.i("Added manual stop $stopId (place $placeId) for track $trackId")
+    stopId
+  }
+
+  override suspend fun addManualStopForPlace(
+    trackId: Long,
+    placeId: Long,
+    arrivalTime: Date,
+    departureTime: Date,
+  ): Long = mutex.withLock {
+    // 地図の登録済みマーカーを選んで、既存 place にこの訪問を紐付ける（新規 place を作らない）。
+    val stopId = stopDao.insert(
+      StopEntity(
+        placeId = placeId,
+        trackId = trackId,
+        arrivalTime = arrivalTime,
+        departureTime = departureTime,
+      ),
+    )
+    logger.i("Added manual stop $stopId linked to existing place $placeId for track $trackId")
     stopId
   }
 
