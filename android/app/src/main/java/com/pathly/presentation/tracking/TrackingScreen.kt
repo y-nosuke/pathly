@@ -79,6 +79,7 @@ import com.pathly.presentation.common.StopReassignDialog
 import com.pathly.presentation.common.defaultDepartureIndex
 import com.pathly.presentation.common.nearestPointIndex
 import com.pathly.presentation.common.stopSegmentPoints
+import com.pathly.presentation.places.RegisterPlaceAtPointDialog
 import com.pathly.presentation.places.RegisterPlaceFromPoiDialog
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -141,6 +142,8 @@ fun TrackingScreen(
   var linkPlace by remember { mutableStateOf<RegisteredPlace?>(null) }
   // 近接確認（③）: ID無し手動追加で近くに既存があったときの確認（既存place＋保留中の追加内容）。
   var proximityPrompt by remember { mutableStateOf<Pair<RegisteredPlace, PendingManualAdd>?>(null) }
+  // 記録していないとき、何もない地点をタップして「場所として登録」する対象（立ち寄りは作らない）。
+  var registerPointTarget by remember { mutableStateOf<LatLng?>(null) }
   val scope = rememberCoroutineScope()
 
   Box(modifier = modifier.fillMaxSize()) {
@@ -154,8 +157,10 @@ fun TrackingScreen(
         stops = uiState.stops,
         currentStop = uiState.currentStop,
         onPoiClick = { poiTarget = it },
-        // 記録中は地図の空きタップで、その地点を手動立ち寄りとして追加できる。
-        onMapClick = { latLng -> if (uiState.isTracking) manualTarget = latLng },
+        // 記録中は地図の空きタップで手動立ち寄りを追加。記録していないときは「その地点を場所として登録」。
+        onMapClick = { latLng ->
+          if (uiState.isTracking) manualTarget = latLng else registerPointTarget = latLng
+        },
         // 立ち寄りマーカーのタップで「場所を選び直す」（誤検知の訂正）。
         onStopClick = { reassignTarget = it },
         modifier = Modifier.fillMaxSize(),
@@ -352,6 +357,17 @@ fun TrackingScreen(
           poi.placeId,
         )
         poiTarget = null
+      },
+    )
+  }
+
+  // 記録していないときの空きタップ → その地点を場所として登録（立ち寄りは作らない）。
+  registerPointTarget?.let { latLng ->
+    RegisterPlaceAtPointDialog(
+      onDismiss = { registerPointTarget = null },
+      onRegister = { name, wishlist, priority, memo ->
+        viewModel.registerPlace(latLng.latitude, latLng.longitude, name, wishlist, priority, memo, null)
+        registerPointTarget = null
       },
     )
   }

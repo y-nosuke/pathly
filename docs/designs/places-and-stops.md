@@ -338,6 +338,10 @@ Android アプリ制限付きの API キー（地図と共用）を**そのま�
   （`PlacesNameResolver.searchNearbyCandidates` / `PlaceRepository.nearbyPois`）。
 - **手動追加した立ち寄りは自動命名しない**: `addManualStop` は常に `place_resolutions` 行を残すので、記録中の
   ライブ検出（未解決 place を自動命名）が手動追加の名前（またはユーザーが選んだ「名前なし」）を上書きしない。
+- **地図タップの役割**（記録画面）: **施設(POI)タップ**＝場所登録（`RegisterPlaceFromPoiDialog`、記録有無に依らず）。
+  **何もない地点タップ**＝**記録中は立ち寄り追加**、**記録していないときはその地点を場所として登録**
+  （`RegisterPlaceAtPointDialog`・立ち寄りは作らない・POI無しなので `googlePlaceId` なし）。空きスポットの純粋な
+  場所登録は場所タブの「地図で追加」にもある（そちらの地図には**現在地ボタン**を用意）。
 
 ### 登録済みの場所の地図表示（トグル）
 
