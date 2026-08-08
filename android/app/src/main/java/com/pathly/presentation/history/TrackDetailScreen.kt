@@ -35,9 +35,12 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Checkbox
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -1516,12 +1519,47 @@ private fun StopRow(
       }
     }
     if (!selectionMode) {
-      TextButton(onClick = onEditNote) { Text(if (note != null) "メモ" else "＋メモ") }
-      TextButton(onClick = onEdit) { Text("編集") }
-      // 誤検知の訂正: この訪問だけ正しい場所へ付け替える。
-      TextButton(onClick = onReassign) { Text("選び直す") }
-      TextButton(onClick = onDelete) {
-        Text("削除", color = MaterialTheme.colorScheme.error)
+      // 操作はまとめてオーバーフローメニューに（行の横幅を圧迫して場所名が潰れるのを防ぐ）。
+      Box {
+        var menuOpen by remember { mutableStateOf(false) }
+        IconButton(onClick = { menuOpen = true }) {
+          Icon(
+            painter = painterResource(R.drawable.ic_more_vert),
+            contentDescription = "操作",
+            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+          )
+        }
+        DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+          DropdownMenuItem(
+            text = { Text(if (note != null) "メモを編集" else "メモを追加") },
+            onClick = {
+              menuOpen = false
+              onEditNote()
+            },
+          )
+          DropdownMenuItem(
+            text = { Text("名前を編集") },
+            onClick = {
+              menuOpen = false
+              onEdit()
+            },
+          )
+          // 誤検知の訂正: この訪問だけ正しい場所へ付け替える。
+          DropdownMenuItem(
+            text = { Text("場所を選び直す") },
+            onClick = {
+              menuOpen = false
+              onReassign()
+            },
+          )
+          DropdownMenuItem(
+            text = { Text("削除", color = MaterialTheme.colorScheme.error) },
+            onClick = {
+              menuOpen = false
+              onDelete()
+            },
+          )
+        }
       }
     }
   }

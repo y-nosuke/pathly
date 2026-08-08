@@ -312,8 +312,9 @@ class TrackDetailScreenTest {
       }
     }
 
-    // 行タップは地図フォーカス。名前編集は「編集」ボタンから。
-    composeTestRule.onNodeWithText("編集").performClick()
+    // 行タップは地図フォーカス。名前編集は「操作」メニュー→「名前を編集」から。
+    composeTestRule.onNodeWithContentDescription("操作").performClick()
+    composeTestRule.onNodeWithText("名前を編集").performClick()
     composeTestRule.onNodeWithText("場所の名前").assertIsDisplayed()
     composeTestRule.onNodeWithText("保存").performClick()
 
@@ -338,7 +339,8 @@ class TrackDetailScreenTest {
       }
     }
 
-    // 確認ダイアログは出さず、行の「削除」で即座に削除（取り消しはスナックバーから）。
+    // 確認ダイアログは出さず、「操作」メニュー→「削除」で即座に削除（取り消しはスナックバーから）。
+    composeTestRule.onNodeWithContentDescription("操作").performClick()
     composeTestRule.onNodeWithText("削除").performClick()
 
     verify { onDeleteStops(listOf(1L)) }
