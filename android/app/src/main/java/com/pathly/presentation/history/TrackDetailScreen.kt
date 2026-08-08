@@ -349,12 +349,13 @@ fun TrackDetailScreen(
               focusNonce++
             }
           },
-          // 地図の立ち寄りピンをタップ → 一覧の該当行を強調＆スクロール。畳んでいたらシートを開く。
+          // 地図の立ち寄りピンをタップ → 一覧の該当行を強調＆スクロール＋「選び直し」を出す（記録画面と統一）。
           onStopClick = { stop ->
             highlightedStopId = stop.id
             focusTarget = LatLng(stop.place.latitude, stop.place.longitude)
             focusNonce++
             if (detent == SheetDetent.HIDDEN) settleTo(SheetDetent.PEEK)
+            reassignTarget = stop
           },
           // 手動追加モード中に登録済みマーカーをタップ → 既存の手動追加オーバーレイ（滞在調整あり）を
           // その既存 place に紐付ける形で開く（②）。専用の簡易ダイアログは使わない。
@@ -1392,11 +1393,11 @@ private fun TrackSummaryHeader(
           onClick = onReanalyze,
         )
       }
-      // 手動で追加: 検出に頼らず、地図で指した地点を立ち寄りとして足す（完全手動）。到着/出発を
-      // 軌跡から仮置きするため、経路が伸び続ける記録中は避けて終了済みのみで表示する。
-      if (track.points.size >= 2 && !track.isActive) {
+      // 立ち寄りを追加: 検出に頼らず、地図で指した地点を立ち寄りとして足す（完全手動）。到着/出発は
+      // その時点の軌跡から仮置きする。記録中も使える（末尾が伸びる分は確定時の軌跡で推定）。
+      if (track.points.size >= 2) {
         ActionChip(
-          text = "手動で追加",
+          text = "立ち寄りを追加",
           container = MaterialTheme.colorScheme.tertiaryContainer,
           content = MaterialTheme.colorScheme.onTertiaryContainer,
           onClick = onManualAdd,

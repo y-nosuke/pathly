@@ -90,6 +90,7 @@ import com.pathly.domain.model.PlaceVisit
 import com.pathly.domain.model.Priority
 import com.pathly.domain.model.RegisteredPlace
 import com.pathly.presentation.common.NearbyCandidatePickerDialog
+import com.pathly.presentation.common.NearbyPlaceConfirmDialog
 import com.pathly.presentation.common.RegisteredPlaceMarkers
 import com.pathly.util.DateFormatters
 import kotlinx.coroutines.launch
@@ -161,8 +162,14 @@ fun AddPlaceRoute(
   AddPlaceContent(
     modifier = modifier,
     onCancel = onDone,
-    onSave = { lat, lng, name, wishlist, priority, memo, googlePlaceId ->
-      viewModel.registerPlace(lat, lng, name, wishlist, priority, memo, googlePlaceId)
+    onRegister = { lat, lng, name, wishlist, priority, memo, googlePlaceId, forceNewPlace ->
+      viewModel.registerPlace(lat, lng, name, wishlist, priority, memo, googlePlaceId, forceNewPlace)
+      onDone()
+    },
+    // トグル無し＝OFF相当。ID無し登録時に近くの既存を確認する。
+    onFindNearbyPlace = viewModel::nearbyPlace,
+    onLinkRegister = { placeId, wishlist, priority, memo ->
+      viewModel.linkRegisterToPlace(placeId, wishlist, priority, memo)
       onDone()
     },
     onFetchDetails = viewModel::fetchPoiDetails,
@@ -567,10 +574,14 @@ private fun WishlistFlagButton(
 @Composable
 private fun AddPlaceContent(
   onCancel: () -> Unit,
-  onSave: (lat: Double, lng: Double, name: String?, wishlist: Boolean, priority: Priority, memo: String?, googlePlaceId: String?) -> Unit,
+  onRegister: (lat: Double, lng: Double, name: String?, wishlist: Boolean, priority: Priority, memo: String?, googlePlaceId: String?, forceNewPlace: Boolean) -> Unit,
+  onFindNearbyPlace: suspend (lat: Double, lng: Double) -> RegisteredPlace?,
+  onLinkRegister: (placeId: Long, wishlist: Boolean, priority: Priority, memo: String?) -> Unit,
   onFetchDetails: suspend (googlePlaceId: String) -> PlaceSearchResult?,
   modifier: Modifier = Modifier,
 ) {
+  // 近接確認: ID無しで登録するとき近くに既存があれば紐付け/新規を選ぶ（トグル無し＝OFF相当）。
+  var proximityNear by remember { mutableStateOf<RegisteredPlace?>(null) }
   var picked by remember { mutableStateOf<LatLng?>(null) }
   var pickedPlaceId by remember { mutableStateOf<String?>(null) }
   var name by remember { mutableStateOf("") }
@@ -741,16 +752,22 @@ private fun AddPlaceContent(
             }
             Button(
               onClick = {
-                picked?.let { p ->
-                  onSave(
-                    p.latitude,
-                    p.longitude,
-                    name.ifBlank { null },
-                    wishlist,
-                    priority,
-                    memo.ifBlank { null },
-                    pickedPlaceId,
-                  )
+                val p = picked ?: return@Button
+                val n = name.ifBlank { null }
+                val m = memo.ifBlank { null }
+                if (pickedPlaceId != null) {
+                  // POI（施設同定）はそのまま登録。
+                  onRegister(p.latitude, p.longitude, n, wishlist, priority, m, pickedPlaceId, false)
+                } else {
+                  // ID無しは近くの既存を確認（無ければ新規）。
+                  scope.launch {
+                    val near = onFindNearbyPlace(p.latitude, p.longitude)
+                    if (near != null) {
+                      proximityNear = near
+                    } else {
+                      onRegister(p.latitude, p.longitude, n, wishlist, priority, m, null, true)
+                    }
+                  }
                 }
               },
               modifier = Modifier.weight(1f),
@@ -760,6 +777,24 @@ private fun AddPlaceContent(
           }
         }
       }
+    }
+
+    // 近接確認: 近くの既存に紐付け／新規で登録。
+    proximityNear?.let { near ->
+      NearbyPlaceConfirmDialog(
+        place = near,
+        onLink = {
+          onLinkRegister(near.placeId, wishlist, priority, memo.ifBlank { null })
+          proximityNear = null
+        },
+        onCreateNew = {
+          picked?.let { p ->
+            onRegister(p.latitude, p.longitude, name.ifBlank { null }, wishlist, priority, memo.ifBlank { null }, null, true)
+          }
+          proximityNear = null
+        },
+        onDismiss = { proximityNear = null },
+      )
     }
   }
 }

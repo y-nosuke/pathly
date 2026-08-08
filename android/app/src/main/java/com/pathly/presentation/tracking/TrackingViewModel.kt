@@ -292,10 +292,11 @@ class TrackingViewModel @Inject constructor(
     priority: Priority,
     memo: String?,
     googlePlaceId: String? = null,
+    forceNewPlace: Boolean = false,
   ) {
     viewModelScope.launch {
       try {
-        val reg = wishlistRepository.registerPlace(latitude, longitude, name, memo, googlePlaceId)
+        val reg = wishlistRepository.registerPlace(latitude, longitude, name, memo, googlePlaceId, forceNewPlace)
         if (wishlist) {
           wishlistRepository.addToWishlist(reg.placeId, priority)
         }
@@ -308,6 +309,19 @@ class TrackingViewModel @Inject constructor(
         )
       } catch (e: Exception) {
         _uiState.value = _uiState.value.copy(errorMessage = "場所の登録に失敗しました: ${e.message}")
+      }
+    }
+  }
+
+  /** 近接確認で「この場所に紐付け」を選んだとき: 既存 place に行きたい/メモを反映する（新規は作らない）。 */
+  fun linkRegisterToPlace(placeId: Long, wishlist: Boolean, priority: Priority, memo: String?) {
+    viewModelScope.launch {
+      try {
+        if (!memo.isNullOrBlank()) wishlistRepository.updatePlaceNote(placeId, memo)
+        if (wishlist) wishlistRepository.addToWishlist(placeId, priority)
+        _uiState.value = _uiState.value.copy(placeRegisteredMessage = "この場所に紐付けました")
+      } catch (e: Exception) {
+        _uiState.value = _uiState.value.copy(errorMessage = "紐付けに失敗しました: ${e.message}")
       }
     }
   }
