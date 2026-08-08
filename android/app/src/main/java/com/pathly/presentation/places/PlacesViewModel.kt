@@ -10,6 +10,7 @@ import com.pathly.domain.model.PlacePrediction
 import com.pathly.domain.model.PlaceSearchResult
 import com.pathly.domain.model.PlaceVisit
 import com.pathly.domain.model.Priority
+import com.pathly.domain.model.RegisteredPlace
 import com.pathly.domain.repository.WishlistRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Job
@@ -103,6 +104,22 @@ class PlacesViewModel @Inject constructor(
   /** POI 登録ダイアログのプレビュー用: placeId から施設情報（カテゴリ等）を取得する。 */
   suspend fun fetchPoiDetails(googlePlaceId: String): PlaceSearchResult? = wishlistRepository.fetchPlaceDetails(googlePlaceId)
 
+  /** 手動追加の近接確認用: 近く（検出半径）に既存の場所があれば最寄り1件を返す。 */
+  suspend fun nearbyPlace(latitude: Double, longitude: Double): RegisteredPlace? = wishlistRepository.findNearbyPlace(latitude, longitude)
+
+  /** 近接確認で「この場所に紐付け」を選んだとき: 既存 place に行きたい/メモを反映する（新規は作らない）。 */
+  fun linkRegisterToPlace(placeId: Long, wishlist: Boolean, priority: Priority, memo: String?) {
+    viewModelScope.launch {
+      try {
+        if (!memo.isNullOrBlank()) wishlistRepository.updatePlaceNote(placeId, memo)
+        if (wishlist) wishlistRepository.addToWishlist(placeId, priority)
+        notify("この場所に紐付けました")
+      } catch (e: Exception) {
+        _uiState.value = _uiState.value.copy(errorMessage = "紐付けに失敗しました: ${e.message}")
+      }
+    }
+  }
+
   /** 地図タップからの登録。行きたいONのときだけ wishlist にも入れる。 */
   fun registerPlace(
     latitude: Double,
@@ -112,10 +129,11 @@ class PlacesViewModel @Inject constructor(
     priority: Priority,
     memo: String?,
     googlePlaceId: String? = null,
+    forceNewPlace: Boolean = false,
   ) {
     viewModelScope.launch {
       try {
-        val reg = wishlistRepository.registerPlace(latitude, longitude, name, memo, googlePlaceId)
+        val reg = wishlistRepository.registerPlace(latitude, longitude, name, memo, googlePlaceId, forceNewPlace)
         if (wishlist) {
           wishlistRepository.addToWishlist(reg.placeId, priority)
         }

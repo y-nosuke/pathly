@@ -95,6 +95,16 @@ private data class PendingManualAdd(
   val name: String?,
 )
 
+/** 近接確認で保留する場所登録の内容（表示OFFで近くに既存があったときに使う）。 */
+private data class PendingRegister(
+  val lat: Double,
+  val lng: Double,
+  val name: String,
+  val wishlist: Boolean,
+  val priority: com.pathly.domain.model.Priority,
+  val memo: String?,
+)
+
 @Composable
 fun TrackingScreen(
   modifier: Modifier = Modifier,
@@ -144,6 +154,8 @@ fun TrackingScreen(
   var proximityPrompt by remember { mutableStateOf<Pair<RegisteredPlace, PendingManualAdd>?>(null) }
   // 記録していないとき、何もない地点をタップして「場所として登録」する対象（立ち寄りは作らない）。
   var registerPointTarget by remember { mutableStateOf<LatLng?>(null) }
+  // 表示OFFで場所登録時、近くに既存があったときの確認（既存place＋保留中の登録内容）。
+  var registerProximity by remember { mutableStateOf<Pair<RegisteredPlace, PendingRegister>?>(null) }
   val scope = rememberCoroutineScope()
 
   Box(modifier = modifier.fillMaxSize()) {
@@ -362,13 +374,43 @@ fun TrackingScreen(
   }
 
   // 記録していないときの空きタップ → その地点を場所として登録（立ち寄りは作らない）。
+  // 表示ON＝そのまま新規／表示OFF＝近接確認（近くに既存があれば紐付け/新規）。
   registerPointTarget?.let { latLng ->
     RegisterPlaceAtPointDialog(
       onDismiss = { registerPointTarget = null },
       onRegister = { name, wishlist, priority, memo ->
-        viewModel.registerPlace(latLng.latitude, latLng.longitude, name, wishlist, priority, memo, null)
+        val lat = latLng.latitude
+        val lng = latLng.longitude
         registerPointTarget = null
+        if (uiState.showRegisteredPlaces) {
+          viewModel.registerPlace(lat, lng, name, wishlist, priority, memo, null, forceNewPlace = true)
+        } else {
+          scope.launch {
+            val near = viewModel.nearbyPlace(lat, lng)
+            if (near != null) {
+              registerProximity = near to PendingRegister(lat, lng, name, wishlist, priority, memo)
+            } else {
+              viewModel.registerPlace(lat, lng, name, wishlist, priority, memo, null, forceNewPlace = true)
+            }
+          }
+        }
       },
+    )
+  }
+
+  // 場所登録の近接確認: 近くの既存に紐付け／新規で登録。
+  registerProximity?.let { (near, pending) ->
+    NearbyPlaceConfirmDialog(
+      place = near,
+      onLink = {
+        viewModel.linkRegisterToPlace(near.placeId, pending.wishlist, pending.priority, pending.memo)
+        registerProximity = null
+      },
+      onCreateNew = {
+        viewModel.registerPlace(pending.lat, pending.lng, pending.name, pending.wishlist, pending.priority, pending.memo, null, forceNewPlace = true)
+        registerProximity = null
+      },
+      onDismiss = { registerProximity = null },
     )
   }
 
