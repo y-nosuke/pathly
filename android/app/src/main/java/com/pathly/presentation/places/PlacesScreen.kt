@@ -867,7 +867,11 @@ private fun PlaceDetailContent(
 
         Spacer(modifier = Modifier.height(4.dp))
         Button(
-          onClick = { onSave(name, note, wishlist, priority, visited, pendingLink) },
+          onClick = {
+            onSave(name, note, wishlist, priority, visited, pendingLink)
+            // 保存したら紐付け予定は消化済み。残すとボタンが活性のまま・予定表示が残るため確実にクリアする。
+            pendingLink = null
+          },
           enabled = hasChanges,
           modifier = Modifier.fillMaxWidth(),
         ) {
