@@ -106,7 +106,7 @@ class PlaceRepositoryImplTest {
       PlaceEntity(id = 10L, latitude = 35.0, longitude = 139.0),
     )
     coEvery { resolver.resolve(any(), any()) } returns
-      PlacesNameResolver.Outcome.Found("カフェ", "住所", "カフェ・喫茶", "gp-1")
+      PlacesNameResolver.Outcome.Found("カフェ", "住所", "カフェ・喫茶", "gp-1", 35.5, 139.5)
 
     repository.updateStopsForTrack(1L, isFinal = false)
 
@@ -137,7 +137,7 @@ class PlaceRepositoryImplTest {
     coEvery { placeDao.getUnresolvedPlacesForTrack(1L) } returns emptyList()
     coEvery { placeResolutionDao.getByPlace(20L) } returns null
     coEvery { resolver.resolve(any(), any()) } returns
-      PlacesNameResolver.Outcome.Found("カフェ", "住所", "カフェ・喫茶", "gp-2")
+      PlacesNameResolver.Outcome.Found("カフェ", "住所", "カフェ・喫茶", "gp-2", 35.5, 139.5)
     // 生の現在地はまだ立ち寄りの中心にある＝滞在中。
     coEvery { gpsPointDao.getLatestPoint(1L) } returns gp(35.0, 139.0)
 
@@ -271,7 +271,7 @@ class PlaceRepositoryImplTest {
     coEvery { stopDao.getByTrack(1L) } returns emptyList()
     coEvery { placeDao.getAll() } returns emptyList()
     coEvery { resolver.resolve(any(), any()) } returns
-      PlacesNameResolver.Outcome.Found("カフェ", "住所", "カフェ・喫茶", "gp-1")
+      PlacesNameResolver.Outcome.Found("カフェ", "住所", "カフェ・喫茶", "gp-1", 35.5, 139.5)
 
     val result = repository.detectMissingStops(1L)
 

@@ -286,11 +286,30 @@ class PlacesViewModel @Inject constructor(
     }
   }
 
+  /**
+   * 場所詳細で「Googleで情報を取得」→ 検索で選んだ施設を、この場所に紐付ける。
+   * google_places・place_resolutions を上書きし、座標も施設の正確な座標へ置き換える。
+   */
+  fun linkGoogle(placeId: Long, result: PlaceSearchResult) {
+    viewModelScope.launch {
+      try {
+        wishlistRepository.linkPlaceToGoogle(placeId, result)
+        _uiState.value = _uiState.value.copy(search = SearchState())
+        notify("施設情報を紐付けました")
+      } catch (e: Exception) {
+        _uiState.value = _uiState.value.copy(errorMessage = "紐付けに失敗しました: ${e.message}")
+      }
+    }
+  }
+
   /** 登録結果を一覧側スナックバーに伝えるワンショット通知（削除と同じ下部表示に統一）。 */
-  private fun notifyRegistered(alreadyExisted: Boolean) {
+  private fun notifyRegistered(alreadyExisted: Boolean) = notify(if (alreadyExisted) "この場所は登録済みです" else "登録しました")
+
+  /** 一覧側スナックバーに出すワンショット通知。 */
+  private fun notify(message: String) {
     _uiState.value = _uiState.value.copy(
       registerToken = _uiState.value.registerToken + 1,
-      registerMessage = if (alreadyExisted) "この場所は登録済みです" else "登録しました",
+      registerMessage = message,
     )
   }
 

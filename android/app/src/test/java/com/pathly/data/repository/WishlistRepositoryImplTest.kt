@@ -10,6 +10,7 @@ import com.pathly.data.local.entity.PlaceEntity
 import com.pathly.data.local.entity.PlaceResolutionEntity
 import com.pathly.data.local.entity.WishlistEntity
 import com.pathly.data.places.PlacesTextSearcher
+import com.pathly.domain.model.PlaceSearchResult
 import com.pathly.domain.repository.PlaceRepository
 import io.mockk.coEvery
 import io.mockk.coVerify
@@ -93,5 +94,33 @@ class WishlistRepositoryImplTest {
   @Test
   fun undoLastPlaceDeletion_withoutPriorDeletion_returnsFalse() = runTest {
     assertFalse(repository.undoLastPlaceDeletion())
+  }
+
+  @Test
+  fun linkPlaceToGoogle_writesGoogleDataResolutionAndAdoptsCoordinates() = runTest {
+    val result = PlaceSearchResult(
+      googlePlaceId = "gp-42",
+      name = "清瀧神社",
+      address = "千葉県浦安市…",
+      category = "神社",
+      latitude = 35.65,
+      longitude = 139.9,
+    )
+
+    repository.linkPlaceToGoogle(7L, result)
+
+    // 施設情報を google_places に上書き保存する。
+    coVerify {
+      googlePlaceDao.upsert(
+        match {
+          it.placeId == 7L && it.googlePlaceId == "gp-42" &&
+            it.name == "清瀧神社" && it.address == "千葉県浦安市…" && it.category == "神社"
+        },
+      )
+    }
+    // 解決記録を残す（以後 Nearby を叩かない）。
+    coVerify { placeResolutionDao.upsert(match { it.placeId == 7L }) }
+    // 暫定座標を施設の正確な座標へ置き換える。
+    coVerify { placeDao.updateCoordinates(7L, 35.65, 139.9, any()) }
   }
 }

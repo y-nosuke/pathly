@@ -412,6 +412,10 @@ class PlaceRepositoryImpl @Inject constructor(
           GooglePlaceEntity(place.id, outcome.googlePlaceId, outcome.name, outcome.address, outcome.category),
         )
         placeResolutionDao.upsert(PlaceResolutionEntity(place.id, Date()))
+        // 暫定の GPS 座標を、解決した施設の正確な座標へ置き換える（取れたときだけ）。
+        if (outcome.latitude != null && outcome.longitude != null) {
+          placeDao.updateCoordinates(place.id, outcome.latitude, outcome.longitude, Date())
+        }
       }
 
       PlacesNameResolver.Outcome.NoMatch ->

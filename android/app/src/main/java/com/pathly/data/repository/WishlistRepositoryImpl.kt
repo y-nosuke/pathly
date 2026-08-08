@@ -96,6 +96,18 @@ class WishlistRepositoryImpl @Inject constructor(
     return PlaceRegistration(placeId, alreadyExisted)
   }
 
+  override suspend fun linkPlaceToGoogle(placeId: Long, result: PlaceSearchResult) {
+    // 施設情報を上書き保存（名前・住所・カテゴリ・place ID）。places.name は触らない。
+    googlePlaceDao.upsert(
+      GooglePlaceEntity(placeId, result.googlePlaceId, result.name, result.address, result.category),
+    )
+    // 解決記録を残す（以後は自動命名で Nearby を叩かない）。
+    placeResolutionDao.upsert(PlaceResolutionEntity(placeId, Date()))
+    // 暫定の座標を施設の正確な座標へ置き換える。
+    placeDao.updateCoordinates(placeId, result.latitude, result.longitude, Date())
+    logger.i("Linked place $placeId to google=${result.googlePlaceId}")
+  }
+
   override suspend fun registerSearchedPlace(result: PlaceSearchResult): PlaceRegistration {
     // 検索結果は施設の同一性で同定（同じ POI の再登録は同じ place にまとめる）。
     val (placeId, alreadyExisted) = placeRepository.findOrCreateByGooglePlaceId(

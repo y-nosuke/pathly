@@ -79,6 +79,13 @@ interface PlaceDao {
   @Query("UPDATE places SET source = :source WHERE id = :id")
   suspend fun updateSource(id: Long, source: String)
 
+  /**
+   * 座標を更新する（Google で解決／紐付けたとき、暫定の GPS 座標を施設の正確な座標に置き換える）。
+   * 表示・地図ピン・30m 重複判定の精度が上がる。
+   */
+  @Query("UPDATE places SET latitude = :latitude, longitude = :longitude, updatedAt = :updatedAt WHERE id = :id")
+  suspend fun updateCoordinates(id: Long, latitude: Double, longitude: Double, updatedAt: Date)
+
   @Query("DELETE FROM places WHERE id = :id")
   suspend fun deleteById(id: Long)
 }
