@@ -106,7 +106,7 @@ class PlaceRepositoryImplTest {
       PlaceEntity(id = 10L, latitude = 35.0, longitude = 139.0),
     )
     coEvery { resolver.resolve(any(), any()) } returns
-      PlacesNameResolver.Outcome.Found("カフェ", "住所", "カフェ・喫茶", "gp-1")
+      PlacesNameResolver.Outcome.Found("カフェ", "住所", "カフェ・喫茶", "gp-1", 35.5, 139.5)
 
     repository.updateStopsForTrack(1L, isFinal = false)
 
@@ -137,7 +137,7 @@ class PlaceRepositoryImplTest {
     coEvery { placeDao.getUnresolvedPlacesForTrack(1L) } returns emptyList()
     coEvery { placeResolutionDao.getByPlace(20L) } returns null
     coEvery { resolver.resolve(any(), any()) } returns
-      PlacesNameResolver.Outcome.Found("カフェ", "住所", "カフェ・喫茶", "gp-2")
+      PlacesNameResolver.Outcome.Found("カフェ", "住所", "カフェ・喫茶", "gp-2", 35.5, 139.5)
     // 生の現在地はまだ立ち寄りの中心にある＝滞在中。
     coEvery { gpsPointDao.getLatestPoint(1L) } returns gp(35.0, 139.0)
 
@@ -271,7 +271,7 @@ class PlaceRepositoryImplTest {
     coEvery { stopDao.getByTrack(1L) } returns emptyList()
     coEvery { placeDao.getAll() } returns emptyList()
     coEvery { resolver.resolve(any(), any()) } returns
-      PlacesNameResolver.Outcome.Found("カフェ", "住所", "カフェ・喫茶", "gp-1")
+      PlacesNameResolver.Outcome.Found("カフェ", "住所", "カフェ・喫茶", "gp-1", 35.5, 139.5)
 
     val result = repository.detectMissingStops(1L)
 
@@ -636,5 +636,23 @@ class PlaceRepositoryImplTest {
   fun updateStopNote_blankBecomesNull() = runTest {
     repository.updateStopNote(100L, "   ")
     coVerify { stopDao.updateNote(100L, null) }
+  }
+
+  @Test
+  fun resolveAllUnresolvedNames_resolvesEachUnresolvedPlaceAndAdoptsCoordinates() = runTest {
+    coEvery { placeDao.getUnresolvedPlaces() } returns listOf(
+      PlaceEntity(id = 30L, latitude = 35.0, longitude = 139.0),
+    )
+    coEvery { resolver.resolve(35.0, 139.0) } returns
+      PlacesNameResolver.Outcome.Found("神社", "住所", "神社", "gp-30", 35.7, 139.7)
+
+    repository.resolveAllUnresolvedNames()
+
+    coVerify {
+      googlePlaceDao.upsert(match { it.placeId == 30L && it.googlePlaceId == "gp-30" && it.name == "神社" })
+    }
+    coVerify { placeResolutionDao.upsert(match { it.placeId == 30L }) }
+    // 解決した施設の正確な座標を採用する。
+    coVerify { placeDao.updateCoordinates(30L, 35.7, 139.7, any()) }
   }
 }

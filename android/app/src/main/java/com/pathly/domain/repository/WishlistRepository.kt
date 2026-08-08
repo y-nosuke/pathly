@@ -46,7 +46,18 @@ interface WishlistRepository {
    * Google 由来の名前・住所・place ID を google_places に記録する（以後 Nearby を叩かない）。
    * 返り値は place の id。行きたい登録はしない（呼び出し側で任意に [addToWishlist]）。
    */
-  suspend fun registerSearchedPlace(result: PlaceSearchResult): Long
+  suspend fun registerSearchedPlace(result: PlaceSearchResult): PlaceRegistration
+
+  /**
+   * 既存の場所を、検索で選んだ Google 施設に紐付ける（`googlePlaceId` を持たない場所の情報補完）。
+   * `google_places`（名前・住所・カテゴリ・place ID）を上書き保存し、`place_resolutions` に解決記録を残し、
+   * 暫定の座標を施設の正確な座標へ置き換える。places.name（ユーザー名）は触らない。
+   * オフライン記録の未解決・手動登録で ID の無い場所を、確実に Google と結びつける手段。
+   */
+  suspend fun linkPlaceToGoogle(placeId: Long, result: PlaceSearchResult)
+
+  /** 座標の近くの POI 候補を返す（場所詳細で「Googleで情報を取得」時の候補提示に使う）。 */
+  suspend fun nearbyPois(latitude: Double, longitude: Double): List<PlaceSearchResult>
 
   /** 場所の名前（ユーザー名）を手動で設定・変更する（空文字なら未命名に戻す）。 */
   suspend fun renamePlace(placeId: Long, name: String)

@@ -50,6 +50,17 @@ interface PlaceDao {
   suspend fun getUnresolvedPlacesForTrack(trackId: Long): List<PlaceEntity>
 
   /**
+   * 全経路で、まだ一度も Google に問い合わせていない立ち寄り場所（オンライン復帰後の一括キャッチアップ用）。
+   * オフライン記録などで未解決のまま残った place を、アプリ起動時にまとめて名前解決する。
+   * 「叩いたか」は `place_resolutions` の行の有無で判定する（NoMatch 済みは対象外＝再課金しない）。
+   */
+  @Query(
+    "SELECT DISTINCT p.* FROM places p INNER JOIN stops s ON s.placeId = p.id " +
+      "WHERE NOT EXISTS (SELECT 1 FROM place_resolutions r WHERE r.placeId = p.id)",
+  )
+  suspend fun getUnresolvedPlaces(): List<PlaceEntity>
+
+  /**
    * ある経路の場所のうち、Google の place ID が付いていないもの（手動「場所を取得」の対象）。
    * POI 無し・過去失敗・未実施を、ユーザー操作で取り直すため。
    * 「取得済み」は google_places の行の有無で判定する（行がある＝googlePlaceId あり）。
@@ -78,6 +89,13 @@ interface PlaceDao {
   /** 由来を更新する（例: 検出で作った場所をユーザーが触ったら USER に昇格して自動回収から守る）。 */
   @Query("UPDATE places SET source = :source WHERE id = :id")
   suspend fun updateSource(id: Long, source: String)
+
+  /**
+   * 座標を更新する（Google で解決／紐付けたとき、暫定の GPS 座標を施設の正確な座標に置き換える）。
+   * 表示・地図ピン・30m 重複判定の精度が上がる。
+   */
+  @Query("UPDATE places SET latitude = :latitude, longitude = :longitude, updatedAt = :updatedAt WHERE id = :id")
+  suspend fun updateCoordinates(id: Long, latitude: Double, longitude: Double, updatedAt: Date)
 
   @Query("DELETE FROM places WHERE id = :id")
   suspend fun deleteById(id: Long)

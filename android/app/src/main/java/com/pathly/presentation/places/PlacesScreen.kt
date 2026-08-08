@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -82,6 +83,7 @@ import com.pathly.domain.model.PlacePrediction
 import com.pathly.domain.model.PlaceSearchResult
 import com.pathly.domain.model.PlaceVisit
 import com.pathly.domain.model.Priority
+import com.pathly.presentation.common.NearbyCandidatePickerDialog
 import com.pathly.util.DateFormatters
 
 // 「場所」タブは Navigation-Compose の目的地に分割されている（一覧／地図で追加／検索で追加／詳細）。
@@ -112,6 +114,14 @@ fun PlacesListRoute(
       duration = SnackbarDuration.Short,
     )
     if (result == SnackbarResult.ActionPerformed) viewModel.undoDelete()
+  }
+
+  // 登録（「登録しました」/「この場所は登録済みです」）を検知して、削除と同じ下部スナックバーで知らせる。
+  LaunchedEffect(uiState.registerToken) {
+    if (uiState.registerToken == 0) return@LaunchedEffect
+    uiState.registerMessage?.let { message ->
+      snackbarHostState.showSnackbar(message, duration = SnackbarDuration.Short)
+    }
   }
 
   Box(modifier = modifier.fillMaxSize()) {
@@ -206,13 +216,18 @@ fun PlaceDetailRoute(
     visits = visits,
     onOpenTrack = onOpenTrack,
     onBack = onBack,
-    onSave = { name, note, wishlist, priority, visited ->
-      viewModel.savePlaceEdits(item, name, note, wishlist, priority, visited)
+    onSave = { name, note, wishlist, priority, visited, link ->
+      viewModel.savePlaceEdits(item, name, note, wishlist, priority, visited, link)
     },
     onRegisterPoi = { lat, lng, name, wishlist, priority, memo, googlePlaceId ->
       viewModel.registerPlace(lat, lng, name, wishlist, priority, memo, googlePlaceId)
     },
     onFetchPoiDetails = viewModel::fetchPoiDetails,
+    // 「Googleで情報を取得」: 登録座標の近くの候補から選ぶ（保存で確定・選び直しと同じ仕組み）。
+    onFetchNearbyPois = viewModel::nearbyPois,
+    // 座標がずれて周辺に出ないときの名前検索フォールバック。
+    onSearchPredictions = viewModel::predictPlaces,
+    onFetchPrediction = viewModel::fetchPlaceResult,
     // 確認ダイアログは出さず即時削除。items から消えると item == null になり一覧へ戻り、
     // 取り消しスナックバーは一覧側で出る。
     onDeleteRequest = { viewModel.deletePlace(item.place.id) },
@@ -694,14 +709,21 @@ private fun PlaceDetailContent(
   item: PlaceListItem,
   visits: List<PlaceVisit>,
   onBack: () -> Unit,
-  onSave: (name: String, note: String, wishlist: Boolean, priority: Priority, visited: Boolean) -> Unit,
+  onSave: (name: String, note: String, wishlist: Boolean, priority: Priority, visited: Boolean, link: PlaceSearchResult?) -> Unit,
   onRegisterPoi: (lat: Double, lng: Double, name: String, wishlist: Boolean, priority: Priority, memo: String?, googlePlaceId: String?) -> Unit,
   onFetchPoiDetails: suspend (googlePlaceId: String) -> PlaceSearchResult?,
   onOpenTrack: (trackId: Long) -> Unit,
   onDeleteRequest: () -> Unit,
+  // 「Googleで情報を取得」用: 登録座標の近くの POI 候補を取得し、選んだ施設を紐付ける。
+  onFetchNearbyPois: suspend (lat: Double, lng: Double) -> List<PlaceSearchResult>,
+  // 座標がずれて周辺に出ない施設用: 名前で検索するフォールバック。
+  onSearchPredictions: suspend (query: String) -> List<PlacePrediction>,
+  onFetchPrediction: suspend (placeId: String) -> PlaceSearchResult?,
   modifier: Modifier = Modifier,
 ) {
   var poiTarget by remember { mutableStateOf<PointOfInterest?>(null) }
+  // 「Googleで情報を取得」ダイアログの開閉。
+  var linkDialogOpen by remember { mutableStateOf(false) }
   val context = LocalContext.current
   val savedName = item.place.name ?: ""
   val savedPriority = item.priority ?: Priority.MEDIUM
@@ -712,11 +734,14 @@ private fun PlaceDetailContent(
   var wishlist by remember(item.wishlistId) { mutableStateOf(item.isWishlisted) }
   var priority by remember(item.wishlistId) { mutableStateOf(savedPriority) }
   var visited by remember(item.wishlistId) { mutableStateOf(item.isManuallyVisited) }
+  // 「Googleで情報を取得」で選んだ施設は即保存せず、ここに溜めて「保存」で確定する。
+  var pendingLink by remember(item.place.id) { mutableStateOf<PlaceSearchResult?>(null) }
   val hasChanges = name.trim() != savedName.trim() ||
     note.trim() != savedNote.trim() ||
     wishlist != item.isWishlisted ||
     (wishlist && priority != savedPriority) ||
-    (wishlist && item.visitCount == 0 && visited != item.isManuallyVisited)
+    (wishlist && item.visitCount == 0 && visited != item.isManuallyVisited) ||
+    pendingLink != null
 
   // 下部カードの高さを測り、その分マップ下部に余白を入れてピンがカードに隠れないようにする。
   var sheetHeightPx by remember { mutableIntStateOf(0) }
@@ -805,9 +830,48 @@ private fun PlaceDetailContent(
           },
         )
 
-        Spacer(modifier = Modifier.height(12.dp))
+        // Google 施設情報の取得・紐付け。ID の無い場所（オフライン記録・手動登録）に住所・カテゴリ・正確な座標を補える。
+        Spacer(modifier = Modifier.height(8.dp))
+        TextButton(
+          onClick = { linkDialogOpen = true },
+          modifier = Modifier.align(Alignment.End),
+        ) {
+          Icon(
+            painter = painterResource(R.drawable.ic_place),
+            contentDescription = null,
+            modifier = Modifier.size(18.dp),
+          )
+          Text(
+            text = if (item.place.googlePlaceId == null) " Googleで情報を取得" else " Google施設を選び直す",
+          )
+        }
+
+        // 選んだ施設は保存で確定する（即保存しない）。未保存の紐付け予定をここに見せる。
+        pendingLink?.let { link ->
+          Row(
+            modifier = Modifier
+              .fillMaxWidth()
+              .padding(vertical = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween,
+          ) {
+            Text(
+              text = "紐付け予定: ${link.name ?: "（名称不明）"}（保存で確定）",
+              style = MaterialTheme.typography.bodySmall,
+              color = MaterialTheme.colorScheme.primary,
+              modifier = Modifier.weight(1f),
+            )
+            TextButton(onClick = { pendingLink = null }) { Text("取消") }
+          }
+        }
+
+        Spacer(modifier = Modifier.height(4.dp))
         Button(
-          onClick = { onSave(name, note, wishlist, priority, visited) },
+          onClick = {
+            onSave(name, note, wishlist, priority, visited, pendingLink)
+            // 保存したら紐付け予定は消化済み。残すとボタンが活性のまま・予定表示が残るため確実にクリアする。
+            pendingLink = null
+          },
           enabled = hasChanges,
           modifier = Modifier.fillMaxWidth(),
         ) {
@@ -867,6 +931,28 @@ private fun PlaceDetailContent(
         onRegisterPoi(poi.latLng.latitude, poi.latLng.longitude, name, wishlist, priority, memo, poi.placeId)
         poiTarget = null
       },
+    )
+  }
+
+  if (linkDialogOpen) {
+    NearbyCandidatePickerDialog(
+      latitude = item.place.latitude,
+      longitude = item.place.longitude,
+      reloadKey = item.place.id,
+      title = "Googleで情報を取得",
+      currentLabel = "現在: ${item.displayName}",
+      description = "登録された座標の近くの施設から選んで、この場所に施設情報（住所・カテゴリ・座標）を紐付けます。あなたが付けた名前は変わりません。",
+      confirmLabel = "この施設を選ぶ",
+      allowCustomName = false,
+      onFetchCandidates = onFetchNearbyPois,
+      onConfirm = { chosen, _ ->
+        // 即保存せず、詳細の「保存」で確定するため溜めるだけ。
+        pendingLink = chosen
+        linkDialogOpen = false
+      },
+      onDismiss = { linkDialogOpen = false },
+      onSearchPredictions = onSearchPredictions,
+      onFetchPrediction = onFetchPrediction,
     )
   }
 }

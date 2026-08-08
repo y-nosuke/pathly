@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.pathly.data.places.PlacesTextSearcher
 import com.pathly.domain.model.PlaceListItem
+import com.pathly.domain.model.PlacePrediction
 import com.pathly.domain.model.PlaceSearchResult
 import com.pathly.domain.model.PlaceVisit
 import com.pathly.domain.model.Priority
@@ -101,6 +102,7 @@ class PlacesViewModel @Inject constructor(
         if (wishlist) {
           wishlistRepository.addToWishlist(reg.placeId, priority)
         }
+        notifyRegistered(reg.alreadyExisted)
       } catch (e: Exception) {
         _uiState.value = _uiState.value.copy(errorMessage = "登録に失敗しました: ${e.message}")
       }
@@ -178,9 +180,14 @@ class PlacesViewModel @Inject constructor(
     wishlist: Boolean,
     priority: Priority,
     visited: Boolean,
+    link: PlaceSearchResult? = null,
   ) {
     viewModelScope.launch {
       try {
+        // 「Googleで情報を取得」で選んだ施設があれば、保存時に紐付ける（google_places・座標を更新）。
+        if (link != null) {
+          wishlistRepository.linkPlaceToGoogle(item.place.id, link)
+        }
         if (name.trim() != (item.place.name ?: "").trim()) {
           wishlistRepository.renamePlace(item.place.id, name.trim())
         }
@@ -265,7 +272,8 @@ class PlacesViewModel @Inject constructor(
   ) {
     viewModelScope.launch {
       try {
-        val placeId = wishlistRepository.registerSearchedPlace(result)
+        val reg = wishlistRepository.registerSearchedPlace(result)
+        val placeId = reg.placeId
         val trimmed = name?.trim().orEmpty()
         if (trimmed.isNotEmpty() && trimmed != result.name?.trim()) {
           wishlistRepository.renamePlace(placeId, trimmed)
@@ -277,10 +285,31 @@ class PlacesViewModel @Inject constructor(
           wishlistRepository.addToWishlist(placeId, priority)
         }
         _uiState.value = _uiState.value.copy(search = SearchState())
+        notifyRegistered(reg.alreadyExisted)
       } catch (e: Exception) {
         _uiState.value = _uiState.value.copy(errorMessage = "登録に失敗しました: ${e.message}")
       }
     }
+  }
+
+  /** 場所詳細の「Googleで情報を取得」で、登録座標の近くの POI 候補を取得する（選び直しと同じ仕組み）。 */
+  suspend fun nearbyPois(latitude: Double, longitude: Double): List<PlaceSearchResult> = wishlistRepository.nearbyPois(latitude, longitude)
+
+  /** 「Googleで情報を取得」の名前検索フォールバック: キーワード候補を返す（座標がずれて周辺に出ない施設用）。 */
+  suspend fun predictPlaces(query: String): List<PlacePrediction> = placesTextSearcher.predict(query)
+
+  /** 名前検索で選んだ候補を、座標つきの施設情報に確定する。 */
+  suspend fun fetchPlaceResult(placeId: String): PlaceSearchResult? = placesTextSearcher.fetch(placeId)
+
+  /** 登録結果を一覧側スナックバーに伝えるワンショット通知（削除と同じ下部表示に統一）。 */
+  private fun notifyRegistered(alreadyExisted: Boolean) = notify(if (alreadyExisted) "この場所は登録済みです" else "登録しました")
+
+  /** 一覧側スナックバーに出すワンショット通知。 */
+  private fun notify(message: String) {
+    _uiState.value = _uiState.value.copy(
+      registerToken = _uiState.value.registerToken + 1,
+      registerMessage = message,
+    )
   }
 
   /** 確定フォームから戻る（候補選び直し）。 */

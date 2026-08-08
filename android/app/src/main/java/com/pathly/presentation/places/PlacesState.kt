@@ -53,6 +53,10 @@ data class PlacesState(
   val undoDeleteToken: Int = 0,
   // 直近に削除した場所の表示名（スナックバー文言用）。
   val undoDeleteName: String? = null,
+  // 登録のたびに増やすワンショット通知。一覧側がこれを監視して登録スナックバーを出す（削除と統一）。
+  val registerToken: Int = 0,
+  // 直近の登録結果の文言（「登録しました」/「この場所は登録済みです」）。
+  val registerMessage: String? = null,
 ) {
   /** 絞り込みを一切かけていないか（「すべて」チップの選択表示に使う）。 */
   val noFilter: Boolean

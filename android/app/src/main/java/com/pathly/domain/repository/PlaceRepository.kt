@@ -84,6 +84,12 @@ interface PlaceRepository {
   /** その経路の未取得（googlePlaceId 無し）の place を Places で取り直す（手動「場所を取得」）。 */
   suspend fun resolveUnresolvedNames(trackId: Long)
 
+  /**
+   * 全経路で、まだ一度も解決していない立ち寄り場所をまとめて名前解決する（オンライン復帰後のキャッチアップ）。
+   * オフライン記録などで未解決のまま残った place をアプリ起動時に拾う。オフライン時は各 place で no-op（課金なし）。
+   */
+  suspend fun resolveAllUnresolvedNames()
+
   /** 場所の表示名を手動で更新する（命名。空文字なら未命名に戻す）。 */
   suspend fun updatePlaceName(placeId: Long, name: String)
 

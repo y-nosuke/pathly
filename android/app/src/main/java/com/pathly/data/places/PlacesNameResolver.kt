@@ -39,6 +39,9 @@ class PlacesNameResolver @Inject constructor(
       val address: String?,
       val category: String?,
       val googlePlaceId: String,
+      // 施設の正確な座標（LOCATION）。暫定 GPS 座標を置き換えるために使う。取れなければ null。
+      val latitude: Double?,
+      val longitude: Double?,
     ) : Outcome
 
     data object NoMatch : Outcome
@@ -65,6 +68,7 @@ class PlacesNameResolver @Inject constructor(
         Place.Field.DISPLAY_NAME,
         Place.Field.FORMATTED_ADDRESS,
         Place.Field.PRIMARY_TYPE_DISPLAY_NAME,
+        Place.Field.LOCATION,
       )
       val request = SearchNearbyRequest.builder(circle, fields)
         .setMaxResultCount(1)
@@ -77,7 +81,8 @@ class PlacesNameResolver @Inject constructor(
       val name = place.displayName?.takeIf { it.isNotBlank() }
       val address = place.formattedAddress?.takeIf { it.isNotBlank() }
       val category = place.primaryTypeDisplayName?.takeIf { it.isNotBlank() }
-      Outcome.Found(name, address, category, googlePlaceId)
+      val loc = place.location
+      Outcome.Found(name, address, category, googlePlaceId, loc?.latitude, loc?.longitude)
     } catch (e: Exception) {
       logger.w("searchNearby failed for ($latitude, $longitude)", e)
       Outcome.NotAttempted

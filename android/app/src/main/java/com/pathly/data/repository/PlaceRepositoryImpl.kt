@@ -263,6 +263,21 @@ class PlaceRepositoryImpl @Inject constructor(
     }
   }
 
+  override suspend fun resolveAllUnresolvedNames() {
+    try {
+      // 未解決（place_resolutions 行が無い）立ち寄り場所を全経路から拾い、オンライン時のみ解決する。
+      // resolvePlace はオフラインで NotAttempted（行を残さない）＝再訪時にまた拾えるので安全。
+      val unresolved = mutex.withLock { placeDao.getUnresolvedPlaces() }
+      if (unresolved.isEmpty()) return
+      logger.i("Catching up ${unresolved.size} unresolved places")
+      for (place in unresolved) {
+        mutex.withLock { resolvePlace(place) }
+      }
+    } catch (e: Exception) {
+      logger.e("resolveAllUnresolvedNames failed", e)
+    }
+  }
+
   override suspend fun updatePlaceName(placeId: Long, name: String) {
     placeDao.updateName(placeId, name.trim().ifBlank { null }, Date())
   }
@@ -412,6 +427,10 @@ class PlaceRepositoryImpl @Inject constructor(
           GooglePlaceEntity(place.id, outcome.googlePlaceId, outcome.name, outcome.address, outcome.category),
         )
         placeResolutionDao.upsert(PlaceResolutionEntity(place.id, Date()))
+        // 暫定の GPS 座標を、解決した施設の正確な座標へ置き換える（取れたときだけ）。
+        if (outcome.latitude != null && outcome.longitude != null) {
+          placeDao.updateCoordinates(place.id, outcome.latitude, outcome.longitude, Date())
+        }
       }
 
       PlacesNameResolver.Outcome.NoMatch ->
