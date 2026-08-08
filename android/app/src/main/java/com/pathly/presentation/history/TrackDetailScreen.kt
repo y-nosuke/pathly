@@ -691,12 +691,11 @@ fun TrackDetailScreen(
     )
   }
 
-  message?.let { text ->
-    AlertDialog(
-      onDismissRequest = onMessageShown,
-      confirmButton = { TextButton(onClick = onMessageShown) { Text("OK") } },
-      text = { Text(text) },
-    )
+  // 「登録しました／登録済みです」などの一時メッセージは、削除の取り消しと同じ下部スナックバーで統一する。
+  LaunchedEffect(message) {
+    val text = message ?: return@LaunchedEffect
+    snackbarHostState.showSnackbar(text, duration = SnackbarDuration.Short)
+    onMessageShown()
   }
 
   poiTarget?.let { poi ->
