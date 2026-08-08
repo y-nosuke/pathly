@@ -637,4 +637,22 @@ class PlaceRepositoryImplTest {
     repository.updateStopNote(100L, "   ")
     coVerify { stopDao.updateNote(100L, null) }
   }
+
+  @Test
+  fun resolveAllUnresolvedNames_resolvesEachUnresolvedPlaceAndAdoptsCoordinates() = runTest {
+    coEvery { placeDao.getUnresolvedPlaces() } returns listOf(
+      PlaceEntity(id = 30L, latitude = 35.0, longitude = 139.0),
+    )
+    coEvery { resolver.resolve(35.0, 139.0) } returns
+      PlacesNameResolver.Outcome.Found("神社", "住所", "神社", "gp-30", 35.7, 139.7)
+
+    repository.resolveAllUnresolvedNames()
+
+    coVerify {
+      googlePlaceDao.upsert(match { it.placeId == 30L && it.googlePlaceId == "gp-30" && it.name == "神社" })
+    }
+    coVerify { placeResolutionDao.upsert(match { it.placeId == 30L }) }
+    // 解決した施設の正確な座標を採用する。
+    coVerify { placeDao.updateCoordinates(30L, 35.7, 139.7, any()) }
+  }
 }
