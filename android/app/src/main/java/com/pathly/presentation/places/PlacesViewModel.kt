@@ -101,6 +101,7 @@ class PlacesViewModel @Inject constructor(
         if (wishlist) {
           wishlistRepository.addToWishlist(reg.placeId, priority)
         }
+        notifyRegistered(reg.alreadyExisted)
       } catch (e: Exception) {
         _uiState.value = _uiState.value.copy(errorMessage = "登録に失敗しました: ${e.message}")
       }
@@ -265,7 +266,8 @@ class PlacesViewModel @Inject constructor(
   ) {
     viewModelScope.launch {
       try {
-        val placeId = wishlistRepository.registerSearchedPlace(result)
+        val reg = wishlistRepository.registerSearchedPlace(result)
+        val placeId = reg.placeId
         val trimmed = name?.trim().orEmpty()
         if (trimmed.isNotEmpty() && trimmed != result.name?.trim()) {
           wishlistRepository.renamePlace(placeId, trimmed)
@@ -277,10 +279,19 @@ class PlacesViewModel @Inject constructor(
           wishlistRepository.addToWishlist(placeId, priority)
         }
         _uiState.value = _uiState.value.copy(search = SearchState())
+        notifyRegistered(reg.alreadyExisted)
       } catch (e: Exception) {
         _uiState.value = _uiState.value.copy(errorMessage = "登録に失敗しました: ${e.message}")
       }
     }
+  }
+
+  /** 登録結果を一覧側スナックバーに伝えるワンショット通知（削除と同じ下部表示に統一）。 */
+  private fun notifyRegistered(alreadyExisted: Boolean) {
+    _uiState.value = _uiState.value.copy(
+      registerToken = _uiState.value.registerToken + 1,
+      registerMessage = if (alreadyExisted) "この場所は登録済みです" else "登録しました",
+    )
   }
 
   /** 確定フォームから戻る（候補選び直し）。 */

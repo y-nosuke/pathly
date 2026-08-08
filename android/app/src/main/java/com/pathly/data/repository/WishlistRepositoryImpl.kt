@@ -96,14 +96,14 @@ class WishlistRepositoryImpl @Inject constructor(
     return PlaceRegistration(placeId, alreadyExisted)
   }
 
-  override suspend fun registerSearchedPlace(result: PlaceSearchResult): Long {
+  override suspend fun registerSearchedPlace(result: PlaceSearchResult): PlaceRegistration {
     // 検索結果は施設の同一性で同定（同じ POI の再登録は同じ place にまとめる）。
-    val placeId = placeRepository.findOrCreateByGooglePlaceId(
+    val (placeId, alreadyExisted) = placeRepository.findOrCreateByGooglePlaceId(
       result.googlePlaceId,
       result.latitude,
       result.longitude,
       PlaceSource.USER,
-    ).first
+    )
     // 検索結果は Google 由来なので google_places に記録（places.name はユーザー名専用）。
     // 表示は google_places.name にフォールバックするので、名前は自動で出る。
     googlePlaceDao.upsert(
@@ -111,8 +111,8 @@ class WishlistRepositoryImpl @Inject constructor(
     )
     // 問い合わせlog に記録 → 以後は自動命名で Nearby を叩かない。
     placeResolutionDao.upsert(PlaceResolutionEntity(placeId, Date()))
-    logger.i("Registered searched place $placeId (google=${result.googlePlaceId})")
-    return placeId
+    logger.i("Registered searched place $placeId (google=${result.googlePlaceId}, existed=$alreadyExisted)")
+    return PlaceRegistration(placeId, alreadyExisted)
   }
 
   override suspend fun renamePlace(placeId: Long, name: String) {

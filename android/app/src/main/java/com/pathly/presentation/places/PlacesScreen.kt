@@ -114,6 +114,14 @@ fun PlacesListRoute(
     if (result == SnackbarResult.ActionPerformed) viewModel.undoDelete()
   }
 
+  // 登録（「登録しました」/「この場所は登録済みです」）を検知して、削除と同じ下部スナックバーで知らせる。
+  LaunchedEffect(uiState.registerToken) {
+    if (uiState.registerToken == 0) return@LaunchedEffect
+    uiState.registerMessage?.let { message ->
+      snackbarHostState.showSnackbar(message, duration = SnackbarDuration.Short)
+    }
+  }
+
   Box(modifier = modifier.fillMaxSize()) {
     PlacesListContent(
       state = uiState,
