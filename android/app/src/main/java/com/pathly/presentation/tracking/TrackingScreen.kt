@@ -109,6 +109,7 @@ private data class PendingRegister(
 fun TrackingScreen(
   modifier: Modifier = Modifier,
   onRequestPermission: () -> Unit,
+  onOpenPlaceDetail: (placeId: Long) -> Unit = {},
   viewModel: TrackingViewModel = hiltViewModel(),
   // 地図スロット。null（既定）は実マップ（GoogleMap）を描画する。
   // テストは空スロット（{}）を渡し、GMS 依存の地図描画を避けてオーバーレイだけを検証する。
@@ -156,6 +157,10 @@ fun TrackingScreen(
   var registerPointTarget by remember { mutableStateOf<LatLng?>(null) }
   // 表示OFFで場所登録時、近くに既存があったときの確認（既存place＋保留中の登録内容）。
   var registerProximity by remember { mutableStateOf<Pair<RegisteredPlace, PendingRegister>?>(null) }
+  // 「立ち寄りを追加」モード（記録中のみ）。ONの間は地図タップ＝立ち寄り追加、OFF＝場所登録。
+  var manualMode by remember { mutableStateOf(false) }
+  // 記録が止まったら手動追加モードは自動で抜ける（立ち寄りを足すトラックが無い）。
+  LaunchedEffect(uiState.isTracking) { if (!uiState.isTracking) manualMode = false }
   val scope = rememberCoroutineScope()
 
   Box(modifier = modifier.fillMaxSize()) {
@@ -168,21 +173,25 @@ fun TrackingScreen(
         currentLocation = uiState.currentLocation,
         stops = uiState.stops,
         currentStop = uiState.currentStop,
-        onPoiClick = { poiTarget = it },
-        // 記録中は地図の空きタップで手動立ち寄りを追加。記録していないときは「その地点を場所として登録」。
+        // 手動追加モード（記録中のみ）: POIタップも立ち寄り追加に。通常は場所登録ダイアログ。
+        onPoiClick = { poi ->
+          if (uiState.isTracking && manualMode) manualTarget = poi.latLng else poiTarget = poi
+        },
+        // 手動追加モード＝立ち寄り追加、それ以外（通常/平常時）＝その地点を場所として登録。
         onMapClick = { latLng ->
-          if (uiState.isTracking) manualTarget = latLng else registerPointTarget = latLng
+          if (uiState.isTracking && manualMode) manualTarget = latLng else registerPointTarget = latLng
         },
         // 立ち寄りマーカーのタップで「場所を選び直す」（誤検知の訂正）。
         onStopClick = { reassignTarget = it },
         modifier = Modifier.fillMaxSize(),
         registeredPlaces = if (uiState.showRegisteredPlaces) uiState.registeredPlaces else emptyList(),
-        // 記録中に登録済みマーカーをタップ → その既存 place に紐付ける（新規place作らない）。
-        // 位置はその場所に固定して手動追加ダイアログ（同じUI）を開く。
-        onRegisteredPlaceClick = {
-          if (uiState.isTracking) {
-            linkPlace = it
-            manualTarget = LatLng(it.latitude, it.longitude)
+        // 登録済みマーカーのタップ: 手動追加モード＝既存placeへ紐付け／通常＝その場所の詳細を開く。
+        onRegisteredPlaceClick = { place ->
+          if (uiState.isTracking && manualMode) {
+            linkPlace = place
+            manualTarget = LatLng(place.latitude, place.longitude)
+          } else {
+            onOpenPlaceDetail(place.placeId)
           }
         },
       )
@@ -207,35 +216,70 @@ fun TrackingScreen(
       )
     }
 
-    // 「今ここ」を立ち寄りに追加（記録中・現在地あり）。地図左上に置いて下部の操作と干渉させない。
-    if (uiState.isTracking && uiState.hasLocationPermission) {
-      val loc = uiState.currentLocation
-      Surface(
-        onClick = { loc?.let { manualTarget = LatLng(it.latitude, it.longitude) } },
-        enabled = loc != null,
-        shape = RoundedCornerShape(20.dp),
-        color = MaterialTheme.colorScheme.surface,
-        shadowElevation = 4.dp,
+    // 記録中の左上操作（縦積み）: 「立ち寄りを追加」モード切替 と 「今ここ」ショートカット。
+    if (uiState.isTracking) {
+      Column(
         modifier = Modifier
           .align(Alignment.TopStart)
+          .statusBarsPadding()
           .padding(12.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
       ) {
-        Row(
-          modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
-          verticalAlignment = Alignment.CenterVertically,
+        // 「立ち寄りを追加」モード（ON=地図タップが立ち寄り追加／OFF=場所登録）。
+        Surface(
+          onClick = { manualMode = !manualMode },
+          shape = RoundedCornerShape(20.dp),
+          color = if (manualMode) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surface,
+          shadowElevation = 4.dp,
         ) {
-          Icon(
-            painter = painterResource(R.drawable.ic_place),
-            contentDescription = null,
-            tint = MaterialTheme.colorScheme.primary,
-            modifier = Modifier.size(18.dp),
-          )
-          Spacer(modifier = Modifier.width(6.dp))
-          Text(
-            text = "今ここを立ち寄り",
-            style = MaterialTheme.typography.labelLarge,
-            fontWeight = FontWeight.Medium,
-          )
+          Row(
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+          ) {
+            Icon(
+              painter = painterResource(R.drawable.ic_place),
+              contentDescription = null,
+              tint = if (manualMode) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.primary,
+              modifier = Modifier.size(18.dp),
+            )
+            Spacer(modifier = Modifier.width(6.dp))
+            Text(
+              text = if (manualMode) "立ち寄り追加中（地図をタップ）" else "立ち寄りを追加",
+              style = MaterialTheme.typography.labelLarge,
+              fontWeight = FontWeight.Medium,
+              color = if (manualMode) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface,
+            )
+          }
+        }
+
+        // 「今ここ」を立ち寄りに追加（現在地あり）。
+        if (uiState.hasLocationPermission) {
+          val loc = uiState.currentLocation
+          Surface(
+            onClick = { loc?.let { manualTarget = LatLng(it.latitude, it.longitude) } },
+            enabled = loc != null,
+            shape = RoundedCornerShape(20.dp),
+            color = MaterialTheme.colorScheme.surface,
+            shadowElevation = 4.dp,
+          ) {
+            Row(
+              modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
+              verticalAlignment = Alignment.CenterVertically,
+            ) {
+              Icon(
+                painter = painterResource(R.drawable.ic_place),
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(18.dp),
+              )
+              Spacer(modifier = Modifier.width(6.dp))
+              Text(
+                text = "今ここを立ち寄り",
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = FontWeight.Medium,
+              )
+            }
+          }
         }
       }
     }

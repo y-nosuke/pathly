@@ -146,6 +146,8 @@ fun TrackDetailScreen(
     { _, _, _, _, _, _, _ -> },
   // 近接確認（③）用: 近く（検出半径）の既存の場所を探す。
   onFindNearbyPlace: suspend (lat: Double, lng: Double) -> RegisteredPlace? = { _, _ -> null },
+  // 登録済みマーカー（通常モード）タップでその場所の詳細を開く。
+  onOpenPlaceDetail: (placeId: Long) -> Unit = {},
   onMessageShown: () -> Unit = {},
   onRegisterPlace: (lat: Double, lng: Double, name: String, wishlist: Boolean, priority: Priority, memo: String?, googlePlaceId: String?) -> Unit =
     { _, _, _, _, _, _, _ -> },
@@ -357,8 +359,8 @@ fun TrackDetailScreen(
             if (detent == SheetDetent.HIDDEN) settleTo(SheetDetent.PEEK)
             reassignTarget = stop
           },
-          // 手動追加モード中に登録済みマーカーをタップ → 既存の手動追加オーバーレイ（滞在調整あり）を
-          // その既存 place に紐付ける形で開く（②）。専用の簡易ダイアログは使わない。
+          // 登録済みマーカーのタップ: 手動追加モード＝既存placeへ紐付け（滞在調整ありのオーバーレイ）／
+          // 通常モード＝その場所の詳細を開く。
           onRegisteredPlaceClick = { place ->
             if (manualMode) {
               manualPick = ManualPick(
@@ -369,6 +371,8 @@ fun TrackDetailScreen(
               )
               focusTarget = LatLng(place.latitude, place.longitude)
               focusNonce++
+            } else {
+              onOpenPlaceDetail(place.placeId)
             }
           },
           modifier = Modifier.fillMaxSize(),

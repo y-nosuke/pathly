@@ -209,6 +209,7 @@ fun PlaceDetailRoute(
   placeId: Long,
   onBack: () -> Unit,
   onOpenTrack: (trackId: Long) -> Unit,
+  onOpenPlaceDetail: (placeId: Long) -> Unit = {},
   modifier: Modifier = Modifier,
 ) {
   val uiState by viewModel.uiState.collectAsStateWithLifecycle()
@@ -258,6 +259,13 @@ fun PlaceDetailRoute(
       },
     showRegisteredPlaces = uiState.showRegisteredPlaces,
     onToggleRegisteredPlaces = { viewModel.toggleShowRegisteredPlaces() },
+    // 何もない地点タップで場所登録（表示ON=新規／OFF=近接確認）。
+    onRegisterPlaceAtPoint = { lat, lng, name, wishlist, priority, memo, forceNewPlace ->
+      viewModel.registerPlace(lat, lng, name, wishlist, priority, memo, null, forceNewPlace)
+    },
+    onFindNearbyPlace = viewModel::nearbyPlace,
+    onLinkRegister = { pid, wishlist, priority, memo -> viewModel.linkRegisterToPlace(pid, wishlist, priority, memo) },
+    onOpenPlaceDetail = onOpenPlaceDetail,
     // 確認ダイアログは出さず即時削除。items から消えると item == null になり一覧へ戻り、
     // 取り消しスナックバーは一覧側で出る。
     onDeleteRequest = { viewModel.deletePlace(item.place.id) },
@@ -822,11 +830,23 @@ private fun PlaceDetailContent(
   registeredPlaces: List<RegisteredPlace> = emptyList(),
   showRegisteredPlaces: Boolean = false,
   onToggleRegisteredPlaces: () -> Unit = {},
+  // 何もない地点タップで場所登録（表示ON=そのまま新規／OFF=近接確認）。
+  onRegisterPlaceAtPoint: (lat: Double, lng: Double, name: String?, wishlist: Boolean, priority: Priority, memo: String?, forceNewPlace: Boolean) -> Unit =
+    { _, _, _, _, _, _, _ -> },
+  onFindNearbyPlace: suspend (lat: Double, lng: Double) -> RegisteredPlace? = { _, _ -> null },
+  onLinkRegister: (placeId: Long, wishlist: Boolean, priority: Priority, memo: String?) -> Unit = { _, _, _, _ -> },
+  // 登録済みマーカー（自身以外）タップでその場所の詳細を開く。
+  onOpenPlaceDetail: (placeId: Long) -> Unit = {},
   modifier: Modifier = Modifier,
 ) {
   var poiTarget by remember { mutableStateOf<PointOfInterest?>(null) }
   // 「Googleで情報を取得」ダイアログの開閉。
   var linkDialogOpen by remember { mutableStateOf(false) }
+  // 何もない地点をタップして場所登録する対象／近接確認。
+  var registerPointTarget by remember { mutableStateOf<LatLng?>(null) }
+  var registerProximity by remember { mutableStateOf<RegisteredPlace?>(null) }
+  var pendingRegister by remember { mutableStateOf<PendingPointRegister?>(null) }
+  val detailScope = rememberCoroutineScope()
   val context = LocalContext.current
   val savedName = item.place.name ?: ""
   val savedPriority = item.priority ?: Priority.MEDIUM
@@ -867,12 +887,15 @@ private fun PlaceDetailContent(
       ),
       // 詳細のマップで別の施設(POI)を見かけたらタップで登録できる。
       onPOIClick = { poiTarget = it },
+      // 何もない地点をタップ → その地点を場所として登録（POI と同じく登録できる）。
+      onMapClick = { registerPointTarget = it },
     ) {
       val markerState = remember(position) { MarkerState(position = position) }
       Marker(state = markerState, title = item.displayName)
       // 登録済みの場所（トグルON）。この場所自身は主マーカーと重なるので除外済みのリストを描く。
+      // タップでその場所の詳細を開く。
       if (showRegisteredPlaces) {
-        RegisteredPlaceMarkers(registeredPlaces)
+        RegisteredPlaceMarkers(registeredPlaces) { onOpenPlaceDetail(it.placeId) }
       }
     }
 
@@ -1080,7 +1103,63 @@ private fun PlaceDetailContent(
       onFetchPrediction = onFetchPrediction,
     )
   }
+
+  // 何もない地点タップ → その地点を場所として登録（表示ON=そのまま新規／OFF=近接確認）。
+  registerPointTarget?.let { latLng ->
+    RegisterPlaceAtPointDialog(
+      onDismiss = { registerPointTarget = null },
+      onRegister = { rName, rWishlist, rPriority, rMemo ->
+        val lat = latLng.latitude
+        val lng = latLng.longitude
+        registerPointTarget = null
+        if (showRegisteredPlaces) {
+          onRegisterPlaceAtPoint(lat, lng, rName, rWishlist, rPriority, rMemo, true)
+        } else {
+          detailScope.launch {
+            val near = onFindNearbyPlace(lat, lng)
+            if (near != null) {
+              registerProximity = near
+              pendingRegister = PendingPointRegister(lat, lng, rName, rWishlist, rPriority, rMemo)
+            } else {
+              onRegisterPlaceAtPoint(lat, lng, rName, rWishlist, rPriority, rMemo, true)
+            }
+          }
+        }
+      },
+    )
+  }
+
+  registerProximity?.let { near ->
+    val pending = pendingRegister
+    NearbyPlaceConfirmDialog(
+      place = near,
+      onLink = {
+        pending?.let { onLinkRegister(near.placeId, it.wishlist, it.priority, it.memo) }
+        registerProximity = null
+        pendingRegister = null
+      },
+      onCreateNew = {
+        pending?.let { onRegisterPlaceAtPoint(it.lat, it.lng, it.name, it.wishlist, it.priority, it.memo, true) }
+        registerProximity = null
+        pendingRegister = null
+      },
+      onDismiss = {
+        registerProximity = null
+        pendingRegister = null
+      },
+    )
+  }
 }
+
+/** 場所詳細の空きタップ登録で、近接確認のときに保留する登録内容。 */
+private data class PendingPointRegister(
+  val lat: Double,
+  val lng: Double,
+  val name: String?,
+  val wishlist: Boolean,
+  val priority: Priority,
+  val memo: String?,
+)
 
 // ---------------------------------------------------------------------------
 // 追加（キーワード検索）
