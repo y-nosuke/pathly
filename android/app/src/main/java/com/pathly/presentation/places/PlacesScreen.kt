@@ -27,7 +27,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -84,6 +83,7 @@ import com.pathly.domain.model.PlacePrediction
 import com.pathly.domain.model.PlaceSearchResult
 import com.pathly.domain.model.PlaceVisit
 import com.pathly.domain.model.Priority
+import com.pathly.presentation.common.NearbyCandidatePickerDialog
 import com.pathly.util.DateFormatters
 
 // 「場所」タブは Navigation-Compose の目的地に分割されている（一覧／地図で追加／検索で追加／詳細）。
@@ -223,12 +223,8 @@ fun PlaceDetailRoute(
       viewModel.registerPlace(lat, lng, name, wishlist, priority, memo, googlePlaceId)
     },
     onFetchPoiDetails = viewModel::fetchPoiDetails,
-    // 「Googleで情報を取得」: 検索して選んだ施設をこの場所に紐付ける（既存の検索状態を流用）。
-    searchState = uiState.search,
-    onStartLinkSearch = viewModel::startSearch,
-    onLinkQueryChange = viewModel::onSearchQueryChange,
-    onLinkSelectPrediction = viewModel::selectPrediction,
-    onLinkClearResult = viewModel::clearSearchResult,
+    // 「Googleで情報を取得」: 登録座標の近くの候補から選んで紐付ける（選び直しと同じ仕組み）。
+    onFetchNearbyPois = viewModel::nearbyPois,
     onLinkConfirm = { result -> viewModel.linkGoogle(item.place.id, result) },
     // 確認ダイアログは出さず即時削除。items から消えると item == null になり一覧へ戻り、
     // 取り消しスナックバーは一覧側で出る。
@@ -716,12 +712,8 @@ private fun PlaceDetailContent(
   onFetchPoiDetails: suspend (googlePlaceId: String) -> PlaceSearchResult?,
   onOpenTrack: (trackId: Long) -> Unit,
   onDeleteRequest: () -> Unit,
-  // 「Googleで情報を取得」用（既存の検索状態を流用）。
-  searchState: SearchState,
-  onStartLinkSearch: () -> Unit,
-  onLinkQueryChange: (String) -> Unit,
-  onLinkSelectPrediction: (String) -> Unit,
-  onLinkClearResult: () -> Unit,
+  // 「Googleで情報を取得」用: 登録座標の近くの POI 候補を取得し、選んだ施設を紐付ける。
+  onFetchNearbyPois: suspend (lat: Double, lng: Double) -> List<PlaceSearchResult>,
   onLinkConfirm: (PlaceSearchResult) -> Unit,
   modifier: Modifier = Modifier,
 ) {
@@ -834,10 +826,7 @@ private fun PlaceDetailContent(
         // Google 施設情報の取得・紐付け。ID の無い場所（オフライン記録・手動登録）に住所・カテゴリ・正確な座標を補える。
         Spacer(modifier = Modifier.height(8.dp))
         TextButton(
-          onClick = {
-            onStartLinkSearch()
-            linkDialogOpen = true
-          },
+          onClick = { linkDialogOpen = true },
           modifier = Modifier.align(Alignment.End),
         ) {
           Icon(
@@ -916,124 +905,23 @@ private fun PlaceDetailContent(
   }
 
   if (linkDialogOpen) {
-    LinkGooglePlaceDialog(
-      search = searchState,
-      onQueryChange = onLinkQueryChange,
-      onSelectPrediction = onLinkSelectPrediction,
-      onBackToPredictions = onLinkClearResult,
-      onConfirm = { result ->
-        onLinkConfirm(result)
+    NearbyCandidatePickerDialog(
+      latitude = item.place.latitude,
+      longitude = item.place.longitude,
+      reloadKey = item.place.id,
+      title = "Googleで情報を取得",
+      currentLabel = "現在: ${item.displayName}",
+      description = "登録された座標の近くの施設から選んで、この場所に施設情報（住所・カテゴリ・座標）を紐付けます。あなたが付けた名前は変わりません。",
+      confirmLabel = "この施設で紐付け",
+      allowCustomName = false,
+      onFetchCandidates = onFetchNearbyPois,
+      onConfirm = { chosen, _ ->
+        chosen?.let { onLinkConfirm(it) }
         linkDialogOpen = false
       },
-      onDismiss = {
-        onLinkClearResult()
-        linkDialogOpen = false
-      },
+      onDismiss = { linkDialogOpen = false },
     )
   }
-}
-
-/**
- * 場所の詳細から「Googleで情報を取得（施設を検索して紐付け）」ダイアログ。
- * キーワードで候補を出し、選んだ施設をこの場所に紐付ける（既存の検索状態を流用）。
- * ID・座標に依存せず確実に Google と結びつけられるので、オフライン記録の未解決や手動登録の穴埋めに使う。
- */
-@Composable
-private fun LinkGooglePlaceDialog(
-  search: SearchState,
-  onQueryChange: (String) -> Unit,
-  onSelectPrediction: (String) -> Unit,
-  onBackToPredictions: () -> Unit,
-  onConfirm: (PlaceSearchResult) -> Unit,
-  onDismiss: () -> Unit,
-) {
-  val result = search.result
-  AlertDialog(
-    onDismissRequest = onDismiss,
-    title = { Text(if (result == null) "Googleで情報を取得" else "この施設で紐付け") },
-    text = {
-      if (result == null) {
-        Column(
-          modifier = Modifier
-            .fillMaxWidth()
-            .heightIn(min = 240.dp, max = 360.dp),
-        ) {
-          OutlinedTextField(
-            value = search.query,
-            onValueChange = onQueryChange,
-            label = { Text("店名・場所名で検索") },
-            singleLine = true,
-            modifier = Modifier.fillMaxWidth(),
-          )
-          Spacer(modifier = Modifier.height(8.dp))
-          when {
-            search.isSearching ->
-              Box(
-                modifier = Modifier
-                  .fillMaxWidth()
-                  .weight(1f),
-                contentAlignment = Alignment.Center,
-              ) { CircularProgressIndicator() }
-
-            search.query.isNotBlank() && search.predictions.isEmpty() ->
-              Box(
-                modifier = Modifier
-                  .fillMaxWidth()
-                  .weight(1f),
-                contentAlignment = Alignment.Center,
-              ) {
-                Text(
-                  text = "候補がありません\n（オンライン・キーワードを確認）",
-                  style = MaterialTheme.typography.bodyMedium,
-                  textAlign = TextAlign.Center,
-                  color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-              }
-
-            else ->
-              LazyColumn(modifier = Modifier.weight(1f)) {
-                items(search.predictions, key = { it.placeId }) { prediction ->
-                  PredictionRow(prediction = prediction, onClick = { onSelectPrediction(prediction.placeId) })
-                  HorizontalDivider()
-                }
-              }
-          }
-        }
-      } else {
-        Column(modifier = Modifier.fillMaxWidth()) {
-          Text(
-            text = result.name ?: "（名称なし）",
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.Bold,
-          )
-          result.category?.let {
-            Text(text = it, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.secondary)
-          }
-          result.address?.let {
-            Text(text = it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-          }
-          Spacer(modifier = Modifier.height(8.dp))
-          Text(
-            text = "この施設の情報（住所・カテゴリ・座標）をこの場所に紐付けます。あなたが付けた名前は変わりません。",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-          )
-        }
-      }
-    },
-    confirmButton = {
-      if (result != null) {
-        TextButton(onClick = { onConfirm(result) }) { Text("この施設で紐付け") }
-      }
-    },
-    dismissButton = {
-      if (result != null) {
-        TextButton(onClick = onBackToPredictions) { Text("選び直す") }
-      } else {
-        TextButton(onClick = onDismiss) { Text("閉じる") }
-      }
-    },
-  )
 }
 
 // ---------------------------------------------------------------------------

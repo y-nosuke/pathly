@@ -286,8 +286,11 @@ class PlacesViewModel @Inject constructor(
     }
   }
 
+  /** 場所詳細の「Googleで情報を取得」で、登録座標の近くの POI 候補を取得する（選び直しと同じ仕組み）。 */
+  suspend fun nearbyPois(latitude: Double, longitude: Double): List<PlaceSearchResult> = wishlistRepository.nearbyPois(latitude, longitude)
+
   /**
-   * 場所詳細で「Googleで情報を取得」→ 検索で選んだ施設を、この場所に紐付ける。
+   * 場所詳細で「Googleで情報を取得」→ 近くの候補から選んだ施設を、この場所に紐付ける。
    * google_places・place_resolutions を上書きし、座標も施設の正確な座標へ置き換える。
    */
   fun linkGoogle(placeId: Long, result: PlaceSearchResult) {

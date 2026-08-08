@@ -56,6 +56,9 @@ interface WishlistRepository {
    */
   suspend fun linkPlaceToGoogle(placeId: Long, result: PlaceSearchResult)
 
+  /** 座標の近くの POI 候補を返す（場所詳細で「Googleで情報を取得」時の候補提示に使う）。 */
+  suspend fun nearbyPois(latitude: Double, longitude: Double): List<PlaceSearchResult>
+
   /** 場所の名前（ユーザー名）を手動で設定・変更する（空文字なら未命名に戻す）。 */
   suspend fun renamePlace(placeId: Long, name: String)
 

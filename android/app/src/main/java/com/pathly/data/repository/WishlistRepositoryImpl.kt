@@ -108,6 +108,8 @@ class WishlistRepositoryImpl @Inject constructor(
     logger.i("Linked place $placeId to google=${result.googlePlaceId}")
   }
 
+  override suspend fun nearbyPois(latitude: Double, longitude: Double): List<PlaceSearchResult> = placeRepository.nearbyPois(latitude, longitude)
+
   override suspend fun registerSearchedPlace(result: PlaceSearchResult): PlaceRegistration {
     // 検索結果は施設の同一性で同定（同じ POI の再登録は同じ place にまとめる）。
     val (placeId, alreadyExisted) = placeRepository.findOrCreateByGooglePlaceId(
