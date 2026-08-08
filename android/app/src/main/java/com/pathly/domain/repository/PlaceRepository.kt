@@ -68,7 +68,15 @@ interface PlaceRepository {
     departureTime: Date,
     name: String?,
     googlePlaceId: String?,
+    // true のとき座標30m同定をせず必ず新しい place を作る（近接確認で「新規」を選んだとき）。
+    forceNewPlace: Boolean = false,
   ): Long
+
+  /**
+   * 手動追加の近接確認用: 座標の近く（検出半径 [com.pathly.domain.model.StopDetector.RADIUS_METERS]）に
+   * 既存の場所があれば、最寄りの1件を返す（無ければ null）。トグルOFF時に「近くに既存あり→紐付け/新規」を出す。
+   */
+  suspend fun findNearbyPlace(latitude: Double, longitude: Double): RegisteredPlace?
 
   /**
    * 地図の「登録済みの場所」マーカーを選んで、**既存の [placeId]** にこの訪問を紐付ける（新規 place を作らない）。

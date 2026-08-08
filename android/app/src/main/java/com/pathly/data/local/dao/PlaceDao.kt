@@ -54,6 +54,17 @@ interface PlaceDao {
   )
   fun observeRegisteredPlaces(): Flow<List<RegisteredPlaceRow>>
 
+  /** [observeRegisteredPlaces] の一回取得版（手動追加の近接チェック用）。 */
+  @Query(
+    "SELECT p.id AS placeId, COALESCE(p.name, g.name, g.address) AS name, " +
+      "p.latitude AS latitude, p.longitude AS longitude, " +
+      "(SELECT COUNT(*) FROM wishlist w WHERE w.placeId = p.id) AS wishlistCount, " +
+      "(SELECT COUNT(*) FROM stops s WHERE s.placeId = p.id) AS visitCount, " +
+      "(SELECT w.visitedAt FROM wishlist w WHERE w.placeId = p.id LIMIT 1) AS visitedAt " +
+      "FROM places p LEFT JOIN google_places g ON g.placeId = p.id",
+  )
+  suspend fun getRegisteredPlacesOnce(): List<RegisteredPlaceRow>
+
   /**
    * ある経路の場所のうち、まだ一度も Google に問い合わせていないもの（自動命名の対象）。
    * 「叩いたか」は `place_resolutions` の行の有無で判定する（name の有無では判定しない）。

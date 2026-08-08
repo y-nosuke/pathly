@@ -338,6 +338,10 @@ Android アプリ制限付きの API キー（地図と共用）を**そのま�
   （`PlacesNameResolver.searchNearbyCandidates` / `PlaceRepository.nearbyPois`）。
 - **手動追加した立ち寄りは自動命名しない**: `addManualStop` は常に `place_resolutions` 行を残すので、記録中の
   ライブ検出（未解決 place を自動命名）が手動追加の名前（またはユーザーが選んだ「名前なし」）を上書きしない。
+- **地図タップの役割**（記録画面）: **施設(POI)タップ**＝場所登録（`RegisterPlaceFromPoiDialog`、記録有無に依らず）。
+  **何もない地点タップ**＝**記録中は立ち寄り追加**、**記録していないときはその地点を場所として登録**
+  （`RegisterPlaceAtPointDialog`・立ち寄りは作らない・POI無しなので `googlePlaceId` なし）。空きスポットの純粋な
+  場所登録は場所タブの「地図で追加」にもある（そちらの地図には**現在地ボタン**を用意）。
 
 ### 登録済みの場所の地図表示（トグル）
 
@@ -353,6 +357,13 @@ Android アプリ制限付きの API キー（地図と共用）を**そのま�
 重複を防ぐ。UI は**各画面の既存の手動追加ダイアログを流用**する（名前欄の代わりに場所名を出し、確定を紐付けに差し替える）。
 **滞在時間の調整**（スライダー＋到着/出発の ＋/− 微調整）は共通の `StopRangeEditor` に切り出し、
 記録中・履歴詳細の**両方の手動追加で使える**（軌跡点が2点未満のときだけ推定にフォールバック）。
+
+**近接確認（トグルOFF時のフォールバック）**: マーカーを出していない（トグルOFF）ときは②のマーカータップができないので、
+**ID 無しの手動追加**（POI 未選択＝`googlePlaceId` 無し。空タップ／手入力／名前なし）を確定した時点で、
+**検出半径（`StopDetector.RADIUS_METERS`＝50m）以内**の既存 place を探し（`findNearbyPlace`）、あれば
+`NearbyPlaceConfirmDialog` で「**この場所に紐付け**／**新規で追加**」を確認する。「紐付け」は `addManualStopForPlace`、
+「新規」は `addManualStop(forceNewPlace=true)` で**座標30m同定をバイパスして必ず新規 place を作る**（気づかない誤マージを防ぐ）。
+近くに無ければ従来どおり追加する。トグルON時はマーカー＋②に任せ、この確認は出さない。
 
 - **取得**: `PlaceRepository.observeRegisteredPlaces()`（`PlaceDao.observeRegisteredPlaces`）。全 place を
   最小情報（id・座標・表示名）でリアクティブに返す。表示名は `places.name → google_places.name → 住所` の

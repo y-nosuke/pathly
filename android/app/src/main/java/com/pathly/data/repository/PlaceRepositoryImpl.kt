@@ -10,6 +10,7 @@ import com.pathly.data.local.dao.WishlistDao
 import com.pathly.data.local.entity.GooglePlaceEntity
 import com.pathly.data.local.entity.PlaceEntity
 import com.pathly.data.local.entity.PlaceResolutionEntity
+import com.pathly.data.local.entity.RegisteredPlaceRow
 import com.pathly.data.local.entity.SmoothedPointEntity
 import com.pathly.data.local.entity.StopEntity
 import com.pathly.data.local.entity.StopWithPlace
@@ -74,18 +75,24 @@ class PlaceRepositoryImpl @Inject constructor(
   override fun getStopsForTrack(trackId: Long): Flow<List<Stop>> = stopDao.getStopsWithPlaceByTrack(trackId).map { list -> list.map { it.toStop() } }
 
   override fun observeRegisteredPlaces(): Flow<List<RegisteredPlace>> = placeDao.observeRegisteredPlaces().map { rows ->
-    rows.map {
-      RegisteredPlace(
-        placeId = it.placeId,
-        name = it.name,
-        latitude = it.latitude,
-        longitude = it.longitude,
-        isWishlisted = it.wishlistCount > 0,
-        // 「場所」タブと同じ判定: 立ち寄り記録があるか、手動で訪問済みにしたら訪問済み。
-        isVisited = it.visitCount > 0 || it.visitedAt != null,
-      )
-    }
+    rows.map { it.toRegisteredPlace() }
   }
+
+  override suspend fun findNearbyPlace(latitude: Double, longitude: Double): RegisteredPlace? = placeDao.getRegisteredPlacesOnce()
+    .map { it.toRegisteredPlace() to distanceMeters(it.latitude, it.longitude, latitude, longitude) }
+    .filter { it.second <= StopDetector.RADIUS_METERS }
+    .minByOrNull { it.second }
+    ?.first
+
+  private fun RegisteredPlaceRow.toRegisteredPlace(): RegisteredPlace = RegisteredPlace(
+    placeId = placeId,
+    name = name,
+    latitude = latitude,
+    longitude = longitude,
+    isWishlisted = wishlistCount > 0,
+    // 「場所」タブと同じ判定: 立ち寄り記録があるか、手動で訪問済みにしたら訪問済み。
+    isVisited = visitCount > 0 || visitedAt != null,
+  )
 
   override fun unresolvedCountForTrack(trackId: Long): Flow<Int> = placeDao.countPlacesWithoutGoogleIdForTrack(trackId)
 
@@ -176,14 +183,15 @@ class PlaceRepositoryImpl @Inject constructor(
     departureTime: Date,
     name: String?,
     googlePlaceId: String?,
+    forceNewPlace: Boolean,
   ): Long = mutex.withLock {
     // 手動追加はユーザーの明示操作なので USER 由来（自動回収から守る）。
     // POI 候補を選んだ（googlePlaceId あり）ときは施設の同一性で同定（隣接店を分離）。座標は Google 座標。
-    // 無いときは座標同定にフォールバック。
-    val placeId = if (googlePlaceId != null) {
-      findOrCreateByGooglePlaceId(googlePlaceId, latitude, longitude, PlaceSource.USER).first
-    } else {
-      findOrCreatePlace(latitude, longitude, PlaceSource.USER)
+    // forceNewPlace（近接確認で「新規」を選択）なら座標同定せず必ず新規。無いときは座標同定にフォールバック。
+    val placeId = when {
+      googlePlaceId != null -> findOrCreateByGooglePlaceId(googlePlaceId, latitude, longitude, PlaceSource.USER).first
+      forceNewPlace -> placeDao.insert(PlaceEntity(latitude = latitude, longitude = longitude, source = PlaceSource.USER.name))
+      else -> findOrCreatePlace(latitude, longitude, PlaceSource.USER)
     }
     val stopId = stopDao.insert(
       StopEntity(

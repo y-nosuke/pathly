@@ -102,6 +102,7 @@ import com.pathly.domain.model.Stop
 import com.pathly.domain.model.StopCandidate
 import com.pathly.domain.model.TrackSmoother
 import com.pathly.presentation.common.MarkerStopViolet
+import com.pathly.presentation.common.NearbyPlaceConfirmDialog
 import com.pathly.presentation.common.RouteMapContent
 import com.pathly.presentation.common.StopRangeEditor
 import com.pathly.presentation.common.StopReassignDialog
@@ -141,8 +142,10 @@ fun TrackDetailScreen(
   onDismissReanalyze: () -> Unit = {},
   onDeleteStops: (stopIds: List<Long>) -> Unit = {},
   onUndoDeletion: () -> Unit = {},
-  onAddManualStop: (lat: Double, lng: Double, arrival: Date, departure: Date, name: String?, googlePlaceId: String?) -> Unit =
-    { _, _, _, _, _, _ -> },
+  onAddManualStop: (lat: Double, lng: Double, arrival: Date, departure: Date, name: String?, googlePlaceId: String?, forceNewPlace: Boolean) -> Unit =
+    { _, _, _, _, _, _, _ -> },
+  // 近接確認（③）用: 近く（検出半径）の既存の場所を探す。
+  onFindNearbyPlace: suspend (lat: Double, lng: Double) -> RegisteredPlace? = { _, _ -> null },
   onMessageShown: () -> Unit = {},
   onRegisterPlace: (lat: Double, lng: Double, name: String, wishlist: Boolean, priority: Priority, memo: String?, googlePlaceId: String?) -> Unit =
     { _, _, _, _, _, _, _ -> },
@@ -173,6 +176,8 @@ fun TrackDetailScreen(
   var editingNoteStop by remember { mutableStateOf<Stop?>(null) }
   // 「場所を選び直す」対象の立ち寄り（誤検知の訂正・この訪問だけ付け替え）。
   var reassignTarget by remember { mutableStateOf<Stop?>(null) }
+  // 近接確認（③）: ID無し手動追加で近くに既存があったときの確認（既存place＋保留中の追加内容）。
+  var proximityPrompt by remember { mutableStateOf<ProximityPrompt?>(null) }
   // 地図↔一覧の連動用: 選択中の立ち寄り。地図のピン/一覧の行どちらから選んでも相互に強調・スクロールする。
   var highlightedStopId by remember { mutableStateOf<Long?>(null) }
 
@@ -634,17 +639,37 @@ fun TrackDetailScreen(
           },
           onConfirm = {
             val existingPlaceId = pick.existingPlaceId
-            if (existingPlaceId != null) {
-              // 登録済みの場所に紐付ける（新規place作らず、調整した滞在区間で）。
-              onAddManualStopForPlace(existingPlaceId, arrival, departure)
-            } else {
-              val finalName = manualName.trim().ifBlank { null }
-              // 名前を POI 名から変えたら googlePlaceId は使わない（別名で解決記録を焼き込まない）。
-              val googleId = pick.googlePlaceId?.takeIf { finalName == pick.name }
-              onAddManualStop(pick.latLng.latitude, pick.latLng.longitude, arrival, departure, finalName, googleId)
+            val finalName = manualName.trim().ifBlank { null }
+            // 名前を POI 名から変えたら googlePlaceId は使わない（別名で解決記録を焼き込まない）。
+            val googleId = pick.googlePlaceId?.takeIf { finalName == pick.name }
+            val lat = pick.latLng.latitude
+            val lng = pick.latLng.longitude
+            when {
+              existingPlaceId != null -> {
+                // 登録済みの場所に紐付ける（新規place作らず、調整した滞在区間で）。
+                onAddManualStopForPlace(existingPlaceId, arrival, departure)
+                exitManual()
+                scope.launch { snackbarHostState.showSnackbar("立ち寄りを追加しました") }
+              }
+              // ID無し追加 かつ 登録済み非表示(OFF)のとき、近くの既存を確認する（③）。追加は選択後。
+              googleId == null && !showRegisteredPlaces -> {
+                scope.launch {
+                  val near = onFindNearbyPlace(lat, lng)
+                  if (near != null) {
+                    proximityPrompt = ProximityPrompt(near, lat, lng, arrival, departure, finalName)
+                  } else {
+                    onAddManualStop(lat, lng, arrival, departure, finalName, null, false)
+                    snackbarHostState.showSnackbar("立ち寄りを追加しました")
+                  }
+                }
+                exitManual()
+              }
+              else -> {
+                onAddManualStop(lat, lng, arrival, departure, finalName, googleId, false)
+                exitManual()
+                scope.launch { snackbarHostState.showSnackbar("立ち寄りを追加しました") }
+              }
             }
-            exitManual()
-            scope.launch { snackbarHostState.showSnackbar("立ち寄りを追加しました") }
           },
           // 編集からのキャンセルは追加モードを抜けず、地点選択（マップ）に戻すだけ。
           onCancel = { manualPick = null },
@@ -692,6 +717,24 @@ fun TrackDetailScreen(
         reassignTarget = null
       },
       onDismiss = { reassignTarget = null },
+    )
+  }
+
+  // 近接確認（③）: 近くに既存があれば紐付け／新規を選ぶ。
+  proximityPrompt?.let { p ->
+    NearbyPlaceConfirmDialog(
+      place = p.place,
+      onLink = {
+        onAddManualStopForPlace(p.place.placeId, p.arrival, p.departure)
+        scope.launch { snackbarHostState.showSnackbar("立ち寄りを追加しました") }
+        proximityPrompt = null
+      },
+      onCreateNew = {
+        onAddManualStop(p.lat, p.lng, p.arrival, p.departure, p.name, null, true)
+        scope.launch { snackbarHostState.showSnackbar("立ち寄りを追加しました") }
+        proximityPrompt = null
+      },
+      onDismiss = { proximityPrompt = null },
     )
   }
 
@@ -985,6 +1028,16 @@ private data class ManualPick(
   val googlePlaceId: String?,
   // 登録済みマーカーから選んだ場合の既存 placeId。非nullなら新規placeを作らずここへ紐付ける（②）。
   val existingPlaceId: Long? = null,
+)
+
+/** 近接確認（③）で保留する手動追加の内容（近くの既存place＋「新規で追加」を選んだときに使う入力）。 */
+private data class ProximityPrompt(
+  val place: RegisteredPlace,
+  val lat: Double,
+  val lng: Double,
+  val arrival: Date,
+  val departure: Date,
+  val name: String?,
 )
 
 /** 手動追加モードで地点を指す前に出す案内バー（下部・細め）。 */

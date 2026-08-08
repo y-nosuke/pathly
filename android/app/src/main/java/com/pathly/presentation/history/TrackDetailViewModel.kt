@@ -205,12 +205,16 @@ class TrackDetailViewModel @Inject constructor(
     departureTime: Date,
     name: String?,
     googlePlaceId: String?,
+    forceNewPlace: Boolean = false,
   ) {
     val trackId = loadedTrackId.value ?: return
     viewModelScope.launch {
-      placeRepository.addManualStop(trackId, latitude, longitude, arrivalTime, departureTime, name, googlePlaceId)
+      placeRepository.addManualStop(trackId, latitude, longitude, arrivalTime, departureTime, name, googlePlaceId, forceNewPlace)
     }
   }
+
+  /** 手動追加の近接確認用: 近く（検出半径）に既存の場所があれば最寄り1件を返す。 */
+  suspend fun nearbyPlace(latitude: Double, longitude: Double): RegisteredPlace? = placeRepository.findNearbyPlace(latitude, longitude)
 
   /** 地図の登録済みマーカーを選んで、既存 place にこの訪問を紐付ける（新規 place を作らない）。 */
   fun addManualStopForPlace(placeId: Long, arrivalTime: Date, departureTime: Date) {

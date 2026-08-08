@@ -11,6 +11,7 @@ import com.pathly.data.local.entity.GooglePlaceEntity
 import com.pathly.data.local.entity.GpsPointEntity
 import com.pathly.data.local.entity.PlaceEntity
 import com.pathly.data.local.entity.PlaceResolutionEntity
+import com.pathly.data.local.entity.RegisteredPlaceRow
 import com.pathly.data.local.entity.SmoothedPointEntity
 import com.pathly.data.local.entity.StopEntity
 import com.pathly.data.places.PlacesNameResolver
@@ -654,5 +655,39 @@ class PlaceRepositoryImplTest {
     coVerify { placeResolutionDao.upsert(match { it.placeId == 30L }) }
     // 解決した施設の正確な座標を採用する。
     coVerify { placeDao.updateCoordinates(30L, 35.7, 139.7, any()) }
+  }
+
+  @Test
+  fun findNearbyPlace_returnsNearestWithinDetectionRadius() = runTest {
+    coEvery { placeDao.getRegisteredPlacesOnce() } returns listOf(
+      RegisteredPlaceRow(1L, "同じ地点", 35.0, 139.0, 0, 0, null),
+      RegisteredPlaceRow(2L, "約1km先", 35.01, 139.0, 0, 0, null),
+    )
+
+    val near = repository.findNearbyPlace(35.0, 139.0)
+
+    assertEquals(1L, near?.placeId)
+  }
+
+  @Test
+  fun findNearbyPlace_noneWithinRadius_returnsNull() = runTest {
+    coEvery { placeDao.getRegisteredPlacesOnce() } returns listOf(
+      RegisteredPlaceRow(2L, "約1km先", 35.01, 139.0, 0, 0, null),
+    )
+
+    assertNull(repository.findNearbyPlace(35.0, 139.0))
+  }
+
+  @Test
+  fun addManualStop_forceNewPlace_insertsNewPlaceWithoutCoordinateDedup() = runTest {
+    coEvery { placeDao.insert(any()) } returns 42L
+    coEvery { stopDao.insert(any()) } returns 100L
+
+    repository.addManualStop(1L, 35.0, 139.0, Date(), Date(), null, null, forceNewPlace = true)
+
+    // 座標同定（getAll による30m再利用）を通らず、新しい place を挿入する。
+    coVerify { placeDao.insert(match { it.latitude == 35.0 && it.longitude == 139.0 }) }
+    coVerify(exactly = 0) { placeDao.getAll() }
+    coVerify { stopDao.insert(match { it.placeId == 42L }) }
   }
 }
