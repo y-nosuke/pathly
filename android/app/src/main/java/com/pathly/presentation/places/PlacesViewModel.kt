@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.pathly.data.places.PlacesTextSearcher
 import com.pathly.domain.model.PlaceListItem
+import com.pathly.domain.model.PlacePrediction
 import com.pathly.domain.model.PlaceSearchResult
 import com.pathly.domain.model.PlaceVisit
 import com.pathly.domain.model.Priority
@@ -179,9 +180,14 @@ class PlacesViewModel @Inject constructor(
     wishlist: Boolean,
     priority: Priority,
     visited: Boolean,
+    link: PlaceSearchResult? = null,
   ) {
     viewModelScope.launch {
       try {
+        // 「Googleで情報を取得」で選んだ施設があれば、保存時に紐付ける（google_places・座標を更新）。
+        if (link != null) {
+          wishlistRepository.linkPlaceToGoogle(item.place.id, link)
+        }
         if (name.trim() != (item.place.name ?: "").trim()) {
           wishlistRepository.renamePlace(item.place.id, name.trim())
         }
@@ -289,21 +295,11 @@ class PlacesViewModel @Inject constructor(
   /** 場所詳細の「Googleで情報を取得」で、登録座標の近くの POI 候補を取得する（選び直しと同じ仕組み）。 */
   suspend fun nearbyPois(latitude: Double, longitude: Double): List<PlaceSearchResult> = wishlistRepository.nearbyPois(latitude, longitude)
 
-  /**
-   * 場所詳細で「Googleで情報を取得」→ 近くの候補から選んだ施設を、この場所に紐付ける。
-   * google_places・place_resolutions を上書きし、座標も施設の正確な座標へ置き換える。
-   */
-  fun linkGoogle(placeId: Long, result: PlaceSearchResult) {
-    viewModelScope.launch {
-      try {
-        wishlistRepository.linkPlaceToGoogle(placeId, result)
-        _uiState.value = _uiState.value.copy(search = SearchState())
-        notify("施設情報を紐付けました")
-      } catch (e: Exception) {
-        _uiState.value = _uiState.value.copy(errorMessage = "紐付けに失敗しました: ${e.message}")
-      }
-    }
-  }
+  /** 「Googleで情報を取得」の名前検索フォールバック: キーワード候補を返す（座標がずれて周辺に出ない施設用）。 */
+  suspend fun predictPlaces(query: String): List<PlacePrediction> = placesTextSearcher.predict(query)
+
+  /** 名前検索で選んだ候補を、座標つきの施設情報に確定する。 */
+  suspend fun fetchPlaceResult(placeId: String): PlaceSearchResult? = placesTextSearcher.fetch(placeId)
 
   /** 登録結果を一覧側スナックバーに伝えるワンショット通知（削除と同じ下部表示に統一）。 */
   private fun notifyRegistered(alreadyExisted: Boolean) = notify(if (alreadyExisted) "この場所は登録済みです" else "登録しました")

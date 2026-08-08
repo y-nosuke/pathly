@@ -216,16 +216,18 @@ fun PlaceDetailRoute(
     visits = visits,
     onOpenTrack = onOpenTrack,
     onBack = onBack,
-    onSave = { name, note, wishlist, priority, visited ->
-      viewModel.savePlaceEdits(item, name, note, wishlist, priority, visited)
+    onSave = { name, note, wishlist, priority, visited, link ->
+      viewModel.savePlaceEdits(item, name, note, wishlist, priority, visited, link)
     },
     onRegisterPoi = { lat, lng, name, wishlist, priority, memo, googlePlaceId ->
       viewModel.registerPlace(lat, lng, name, wishlist, priority, memo, googlePlaceId)
     },
     onFetchPoiDetails = viewModel::fetchPoiDetails,
-    // 「Googleで情報を取得」: 登録座標の近くの候補から選んで紐付ける（選び直しと同じ仕組み）。
+    // 「Googleで情報を取得」: 登録座標の近くの候補から選ぶ（保存で確定・選び直しと同じ仕組み）。
     onFetchNearbyPois = viewModel::nearbyPois,
-    onLinkConfirm = { result -> viewModel.linkGoogle(item.place.id, result) },
+    // 座標がずれて周辺に出ないときの名前検索フォールバック。
+    onSearchPredictions = viewModel::predictPlaces,
+    onFetchPrediction = viewModel::fetchPlaceResult,
     // 確認ダイアログは出さず即時削除。items から消えると item == null になり一覧へ戻り、
     // 取り消しスナックバーは一覧側で出る。
     onDeleteRequest = { viewModel.deletePlace(item.place.id) },
@@ -707,14 +709,16 @@ private fun PlaceDetailContent(
   item: PlaceListItem,
   visits: List<PlaceVisit>,
   onBack: () -> Unit,
-  onSave: (name: String, note: String, wishlist: Boolean, priority: Priority, visited: Boolean) -> Unit,
+  onSave: (name: String, note: String, wishlist: Boolean, priority: Priority, visited: Boolean, link: PlaceSearchResult?) -> Unit,
   onRegisterPoi: (lat: Double, lng: Double, name: String, wishlist: Boolean, priority: Priority, memo: String?, googlePlaceId: String?) -> Unit,
   onFetchPoiDetails: suspend (googlePlaceId: String) -> PlaceSearchResult?,
   onOpenTrack: (trackId: Long) -> Unit,
   onDeleteRequest: () -> Unit,
   // 「Googleで情報を取得」用: 登録座標の近くの POI 候補を取得し、選んだ施設を紐付ける。
   onFetchNearbyPois: suspend (lat: Double, lng: Double) -> List<PlaceSearchResult>,
-  onLinkConfirm: (PlaceSearchResult) -> Unit,
+  // 座標がずれて周辺に出ない施設用: 名前で検索するフォールバック。
+  onSearchPredictions: suspend (query: String) -> List<PlacePrediction>,
+  onFetchPrediction: suspend (placeId: String) -> PlaceSearchResult?,
   modifier: Modifier = Modifier,
 ) {
   var poiTarget by remember { mutableStateOf<PointOfInterest?>(null) }
@@ -730,11 +734,14 @@ private fun PlaceDetailContent(
   var wishlist by remember(item.wishlistId) { mutableStateOf(item.isWishlisted) }
   var priority by remember(item.wishlistId) { mutableStateOf(savedPriority) }
   var visited by remember(item.wishlistId) { mutableStateOf(item.isManuallyVisited) }
+  // 「Googleで情報を取得」で選んだ施設は即保存せず、ここに溜めて「保存」で確定する。
+  var pendingLink by remember(item.place.id) { mutableStateOf<PlaceSearchResult?>(null) }
   val hasChanges = name.trim() != savedName.trim() ||
     note.trim() != savedNote.trim() ||
     wishlist != item.isWishlisted ||
     (wishlist && priority != savedPriority) ||
-    (wishlist && item.visitCount == 0 && visited != item.isManuallyVisited)
+    (wishlist && item.visitCount == 0 && visited != item.isManuallyVisited) ||
+    pendingLink != null
 
   // 下部カードの高さを測り、その分マップ下部に余白を入れてピンがカードに隠れないようにする。
   var sheetHeightPx by remember { mutableIntStateOf(0) }
@@ -839,9 +846,28 @@ private fun PlaceDetailContent(
           )
         }
 
+        // 選んだ施設は保存で確定する（即保存しない）。未保存の紐付け予定をここに見せる。
+        pendingLink?.let { link ->
+          Row(
+            modifier = Modifier
+              .fillMaxWidth()
+              .padding(vertical = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween,
+          ) {
+            Text(
+              text = "紐付け予定: ${link.name ?: "（名称不明）"}（保存で確定）",
+              style = MaterialTheme.typography.bodySmall,
+              color = MaterialTheme.colorScheme.primary,
+              modifier = Modifier.weight(1f),
+            )
+            TextButton(onClick = { pendingLink = null }) { Text("取消") }
+          }
+        }
+
         Spacer(modifier = Modifier.height(4.dp))
         Button(
-          onClick = { onSave(name, note, wishlist, priority, visited) },
+          onClick = { onSave(name, note, wishlist, priority, visited, pendingLink) },
           enabled = hasChanges,
           modifier = Modifier.fillMaxWidth(),
         ) {
@@ -912,14 +938,17 @@ private fun PlaceDetailContent(
       title = "Googleで情報を取得",
       currentLabel = "現在: ${item.displayName}",
       description = "登録された座標の近くの施設から選んで、この場所に施設情報（住所・カテゴリ・座標）を紐付けます。あなたが付けた名前は変わりません。",
-      confirmLabel = "この施設で紐付け",
+      confirmLabel = "この施設を選ぶ",
       allowCustomName = false,
       onFetchCandidates = onFetchNearbyPois,
       onConfirm = { chosen, _ ->
-        chosen?.let { onLinkConfirm(it) }
+        // 即保存せず、詳細の「保存」で確定するため溜めるだけ。
+        pendingLink = chosen
         linkDialogOpen = false
       },
       onDismiss = { linkDialogOpen = false },
+      onSearchPredictions = onSearchPredictions,
+      onFetchPrediction = onFetchPrediction,
     )
   }
 }
