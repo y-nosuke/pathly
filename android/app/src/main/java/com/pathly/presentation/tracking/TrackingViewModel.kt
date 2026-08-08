@@ -353,6 +353,19 @@ class TrackingViewModel @Inject constructor(
     }
   }
 
+  /** 地図の登録済みマーカーを選んで、既存 place にこの訪問を紐付ける（新規 place を作らない）。 */
+  fun addManualStopForPlace(placeId: Long, arrivalTime: java.util.Date, departureTime: java.util.Date) {
+    val trackId = _uiState.value.currentTrackId ?: return
+    viewModelScope.launch {
+      try {
+        placeRepository.addManualStopForPlace(trackId, placeId, arrivalTime, departureTime)
+        _uiState.value = _uiState.value.copy(placeRegisteredMessage = "立ち寄りを追加しました")
+      } catch (e: Exception) {
+        _uiState.value = _uiState.value.copy(errorMessage = "立ち寄りの追加に失敗しました: ${e.message}")
+      }
+    }
+  }
+
   fun clearPlaceRegisteredMessage() {
     _uiState.value = _uiState.value.copy(placeRegisteredMessage = null)
   }

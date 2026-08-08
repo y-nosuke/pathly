@@ -255,5 +255,8 @@ private fun TrackDetailRoute(
     registeredPlaces = registeredPlaces,
     showRegisteredPlaces = showRegisteredPlaces,
     onToggleRegisteredPlaces = { viewModel.toggleShowRegisteredPlaces() },
+    onAddManualStopForPlace = { placeId, arrival, departure ->
+      viewModel.addManualStopForPlace(placeId, arrival, departure)
+    },
   )
 }

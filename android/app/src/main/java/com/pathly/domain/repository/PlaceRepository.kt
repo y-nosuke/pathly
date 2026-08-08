@@ -71,6 +71,17 @@ interface PlaceRepository {
   ): Long
 
   /**
+   * 地図の「登録済みの場所」マーカーを選んで、**既存の [placeId]** にこの訪問を紐付ける（新規 place を作らない）。
+   * 手動追加で近くの既存の場所に確定したいとき用（重複 place を増やさない）。作成した stop の id を返す。
+   */
+  suspend fun addManualStopForPlace(
+    trackId: Long,
+    placeId: Long,
+    arrivalTime: Date,
+    departureTime: Date,
+  ): Long
+
+  /**
    * 座標の近くの POI 候補を複数返す（距離が近い順）。手動追加の「候補から選ぶ」に使う。
    * 最寄り1件だけの自動命名と違い、隣接する別施設の取り違えを避けてユーザーに選ばせる。
    * オフライン・失敗時は空リスト。

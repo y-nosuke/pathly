@@ -70,6 +70,7 @@ import com.pathly.domain.model.GpsTrack
 import com.pathly.domain.model.PlaceSearchResult
 import com.pathly.domain.model.RegisteredPlace
 import com.pathly.domain.model.Stop
+import com.pathly.presentation.common.LinkStopToPlaceDialog
 import com.pathly.presentation.common.RegisteredPlaceMarkers
 import com.pathly.presentation.common.RouteMapContent
 import com.pathly.presentation.common.StopReassignDialog
@@ -124,6 +125,8 @@ fun TrackingScreen(
   var manualTarget by remember { mutableStateOf<LatLng?>(null) }
   // 立ち寄りマーカーをタップして「場所を選び直す」対象（誤検知の訂正）。
   var reassignTarget by remember { mutableStateOf<Stop?>(null) }
+  // 記録中に登録済みマーカーをタップ → その既存 place にこの訪問を紐付ける対象（②）。
+  var linkTarget by remember { mutableStateOf<RegisteredPlace?>(null) }
 
   Box(modifier = modifier.fillMaxSize()) {
     if (mapContent != null) {
@@ -142,6 +145,8 @@ fun TrackingScreen(
         onStopClick = { reassignTarget = it },
         modifier = Modifier.fillMaxSize(),
         registeredPlaces = if (uiState.showRegisteredPlaces) uiState.registeredPlaces else emptyList(),
+        // 記録中に登録済みマーカーをタップ → その既存 place に紐付ける（新規place作らない）。
+        onRegisteredPlaceClick = { if (uiState.isTracking) linkTarget = it },
       )
     }
 
@@ -354,6 +359,19 @@ fun TrackingScreen(
       onDismiss = { reassignTarget = null },
     )
   }
+
+  // 登録済みマーカーをタップしたときの紐付け確認（②）。既存 place にこの訪問を足す。
+  linkTarget?.let { place ->
+    LinkStopToPlaceDialog(
+      place = place,
+      points = uiState.currentTrack?.smoothedPoints.orEmpty(),
+      onConfirm = { arrival, departure ->
+        viewModel.addManualStopForPlace(place.placeId, arrival, departure)
+        linkTarget = null
+      },
+      onDismiss = { linkTarget = null },
+    )
+  }
 }
 
 /**
@@ -517,6 +535,7 @@ private fun TrackingMapView(
   onStopClick: (Stop) -> Unit,
   modifier: Modifier = Modifier,
   registeredPlaces: List<RegisteredPlace> = emptyList(),
+  onRegisteredPlaceClick: (RegisteredPlace) -> Unit = {},
 ) {
   val cameraPositionState = rememberCameraPositionState {
     position = CameraPosition.fromLatLngZoom(LatLng(35.6762, 139.6503), 15f)
@@ -636,7 +655,7 @@ private fun TrackingMapView(
         )
       }
       // 登録済みの場所（トグルON）。トラック未確定でも出せるよう、経路描画とは独立して描く。
-      RegisteredPlaceMarkers(registeredPlaces)
+      RegisteredPlaceMarkers(registeredPlaces, onRegisteredPlaceClick)
     }
 
     // 現在地ボタン：追従中は活性（色付き）、固定中は非活性（グレー）。タップで追従再開＆リセンター。

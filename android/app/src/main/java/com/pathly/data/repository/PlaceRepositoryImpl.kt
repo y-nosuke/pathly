@@ -212,6 +212,25 @@ class PlaceRepositoryImpl @Inject constructor(
     stopId
   }
 
+  override suspend fun addManualStopForPlace(
+    trackId: Long,
+    placeId: Long,
+    arrivalTime: Date,
+    departureTime: Date,
+  ): Long = mutex.withLock {
+    // 地図の登録済みマーカーを選んで、既存 place にこの訪問を紐付ける（新規 place を作らない）。
+    val stopId = stopDao.insert(
+      StopEntity(
+        placeId = placeId,
+        trackId = trackId,
+        arrivalTime = arrivalTime,
+        departureTime = departureTime,
+      ),
+    )
+    logger.i("Added manual stop $stopId linked to existing place $placeId for track $trackId")
+    stopId
+  }
+
   override suspend fun nearbyPois(latitude: Double, longitude: Double): List<PlaceSearchResult> = placesNameResolver.searchNearbyCandidates(latitude, longitude)
 
   override suspend fun reassignStopPlace(stopId: Long, chosen: PlaceSearchResult?, customName: String?) = mutex.withLock {

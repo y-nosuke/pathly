@@ -103,6 +103,7 @@ import com.pathly.domain.model.SmoothingParams
 import com.pathly.domain.model.Stop
 import com.pathly.domain.model.StopCandidate
 import com.pathly.domain.model.TrackSmoother
+import com.pathly.presentation.common.LinkStopToPlaceDialog
 import com.pathly.presentation.common.MarkerStopViolet
 import com.pathly.presentation.common.RouteMapContent
 import com.pathly.presentation.common.StopReassignDialog
@@ -185,6 +186,8 @@ fun TrackDetailScreen(
   registeredPlaces: List<RegisteredPlace> = emptyList(),
   showRegisteredPlaces: Boolean = false,
   onToggleRegisteredPlaces: () -> Unit = {},
+  // 手動追加モードで登録済みマーカーをタップ → その既存 place にこの訪問を紐付ける（②）。
+  onAddManualStopForPlace: (placeId: Long, arrival: Date, departure: Date) -> Unit = { _, _, _ -> },
   // 地図スロット。null（既定）は実マップ（GoogleMap）を描画する。
   // テストは空スロット（{}）を渡し、GMS 依存の地図描画を避けてシート・オーバーレイだけを検証する。
   mapContent: (@Composable () -> Unit)? = null,
@@ -202,6 +205,8 @@ fun TrackDetailScreen(
   var editingNoteStop by remember { mutableStateOf<Stop?>(null) }
   // 「場所を選び直す」対象の立ち寄り（誤検知の訂正・この訪問だけ付け替え）。
   var reassignTarget by remember { mutableStateOf<Stop?>(null) }
+  // 手動追加モードで登録済みマーカーをタップ → その既存 place に紐付ける対象（②）。
+  var linkTarget by remember { mutableStateOf<RegisteredPlace?>(null) }
   // 地図↔一覧の連動用: 選択中の立ち寄り。地図のピン/一覧の行どちらから選んでも相互に強調・スクロールする。
   var highlightedStopId by remember { mutableStateOf<Long?>(null) }
 
@@ -380,6 +385,8 @@ fun TrackDetailScreen(
             focusNonce++
             if (detent == SheetDetent.HIDDEN) settleTo(SheetDetent.PEEK)
           },
+          // 手動追加モード中に登録済みマーカーをタップ → その既存 place に紐付ける（②）。
+          onRegisteredPlaceClick = { if (manualMode) linkTarget = it },
           modifier = Modifier.fillMaxSize(),
         )
       }
@@ -699,6 +706,20 @@ fun TrackDetailScreen(
         reassignTarget = null
       },
       onDismiss = { reassignTarget = null },
+    )
+  }
+
+  // 登録済みマーカーをタップしたときの紐付け確認（②）。既存 place にこの訪問を足す。
+  linkTarget?.let { place ->
+    LinkStopToPlaceDialog(
+      place = place,
+      points = manualPoints,
+      onConfirm = { arrival, departure ->
+        onAddManualStopForPlace(place.placeId, arrival, departure)
+        exitManual()
+        linkTarget = null
+      },
+      onDismiss = { linkTarget = null },
     )
   }
 
@@ -1706,6 +1727,7 @@ private fun TrackMapView(
   onPoiClick: (PointOfInterest) -> Unit = {},
   onMapClick: (LatLng) -> Unit = {},
   onStopClick: (Stop) -> Unit = {},
+  onRegisteredPlaceClick: (RegisteredPlace) -> Unit = {},
 ) {
   val cameraPositionState = rememberCameraPositionState()
   val defaultPosition = LatLng(35.6762, 139.6503) // Tokyo Station as default
@@ -1769,6 +1791,7 @@ private fun TrackMapView(
       stopSegments = stopSegments,
       registeredPlaces = registeredPlaces,
       onStopClick = onStopClick,
+      onRegisteredPlaceClick = onRegisteredPlaceClick,
     )
 
     // 再解析の候補（オレンジのピン）。既存（紫）と見分けられるようにする。

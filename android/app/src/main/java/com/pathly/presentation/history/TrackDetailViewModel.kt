@@ -211,4 +211,12 @@ class TrackDetailViewModel @Inject constructor(
       placeRepository.addManualStop(trackId, latitude, longitude, arrivalTime, departureTime, name, googlePlaceId)
     }
   }
+
+  /** 地図の登録済みマーカーを選んで、既存 place にこの訪問を紐付ける（新規 place を作らない）。 */
+  fun addManualStopForPlace(placeId: Long, arrivalTime: Date, departureTime: Date) {
+    val trackId = loadedTrackId.value ?: return
+    viewModelScope.launch {
+      placeRepository.addManualStopForPlace(trackId, placeId, arrivalTime, departureTime)
+    }
+  }
 }
