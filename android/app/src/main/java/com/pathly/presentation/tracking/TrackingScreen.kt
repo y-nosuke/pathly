@@ -34,6 +34,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -72,10 +73,12 @@ import com.pathly.domain.model.RegisteredPlace
 import com.pathly.domain.model.Stop
 import com.pathly.presentation.common.RegisteredPlaceMarkers
 import com.pathly.presentation.common.RouteMapContent
+import com.pathly.presentation.common.StopRangeEditor
 import com.pathly.presentation.common.StopReassignDialog
+import com.pathly.presentation.common.defaultDepartureIndex
+import com.pathly.presentation.common.nearestPointIndex
 import com.pathly.presentation.common.stopSegmentPoints
 import com.pathly.presentation.places.RegisterPlaceFromPoiDialog
-import com.pathly.util.DateFormatters
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.util.Date
@@ -391,10 +394,18 @@ private fun ManualStopDialog(
   // 非nullなら登録済みの場所へ紐付けるモード（候補選びは出さず、その場所へ足す）。
   linkedPlace: RegisteredPlace? = null,
 ) {
-  val (arrival, departure) = remember(target, points) {
-    deriveStopWindow(points, target.latitude, target.longitude)
+  // 滞在区間は軌跡点のインデックスで調整（履歴詳細と同じ StopRangeEditor）。点が少なければ推定にフォールバック。
+  val hasRange = points.size >= 2
+  val lastIdx = (points.size - 1).coerceAtLeast(0)
+  var arrivalIdx by remember(target, points) {
+    mutableIntStateOf(if (hasRange) nearestPointIndex(points, target.latitude, target.longitude) else 0)
   }
-  val durationMinutes = ((departure.time - arrival.time) / 1000 / 60).toInt()
+  var departureIdx by remember(target, points) {
+    mutableIntStateOf(if (hasRange) defaultDepartureIndex(points, arrivalIdx) else 0)
+  }
+  val fallback = remember(target, points) { deriveStopWindow(points, target.latitude, target.longitude) }
+  val arrival = if (hasRange) points[arrivalIdx].timestamp else fallback.first
+  val departure = if (hasRange) points[departureIdx].timestamp else fallback.second
 
   var candidates by remember { mutableStateOf<List<PlaceSearchResult>?>(null) } // null=読込中
   var selected by remember { mutableStateOf<PlaceSearchResult?>(null) }
@@ -410,11 +421,9 @@ private fun ManualStopDialog(
     title = { Text(if (linkedPlace != null) "この場所に立ち寄りを追加" else "立ち寄りを追加") },
     text = {
       Column {
-        val window = if (durationMinutes > 0) {
-          "${DateFormatters.SHORT_TIME_FORMAT.format(arrival)}–" +
-            "${DateFormatters.SHORT_TIME_FORMAT.format(departure)} ・ 滞在${durationMinutes}分"
-        } else {
-          "この地点付近（滞在時間は軌跡から推定）"
+        val onRange: (Int, Int) -> Unit = { s, e ->
+          arrivalIdx = s
+          departureIdx = e
         }
         if (linkedPlace != null) {
           Text(linkedPlace.displayName, style = MaterialTheme.typography.bodyLarge)
@@ -423,7 +432,16 @@ private fun ManualStopDialog(
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
           )
-          Text(text = window, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+          Spacer(modifier = Modifier.height(8.dp))
+          if (hasRange) {
+            StopRangeEditor(arrival, departure, arrivalIdx, departureIdx, lastIdx, onRange)
+          } else {
+            Text(
+              "この地点付近（滞在時間は軌跡から推定）",
+              style = MaterialTheme.typography.bodySmall,
+              color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+          }
           Text(
             "登録済みの場所に紐付けます（新しい場所は作りません）。",
             style = MaterialTheme.typography.bodySmall,
@@ -431,7 +449,15 @@ private fun ManualStopDialog(
           )
           return@Column
         }
-        Text(text = window, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        if (hasRange) {
+          StopRangeEditor(arrival, departure, arrivalIdx, departureIdx, lastIdx, onRange)
+        } else {
+          Text(
+            "この地点付近（滞在時間は軌跡から推定）",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+          )
+        }
         Spacer(modifier = Modifier.height(12.dp))
 
         Text("名前", style = MaterialTheme.typography.labelLarge)

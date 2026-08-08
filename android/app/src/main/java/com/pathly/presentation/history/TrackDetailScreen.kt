@@ -42,9 +42,7 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.RangeSlider
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHost
@@ -105,13 +103,15 @@ import com.pathly.domain.model.StopCandidate
 import com.pathly.domain.model.TrackSmoother
 import com.pathly.presentation.common.MarkerStopViolet
 import com.pathly.presentation.common.RouteMapContent
+import com.pathly.presentation.common.StopRangeEditor
 import com.pathly.presentation.common.StopReassignDialog
+import com.pathly.presentation.common.defaultDepartureIndex
+import com.pathly.presentation.common.nearestPointIndex
 import com.pathly.presentation.common.stopSegmentPoints
 import com.pathly.presentation.places.RegisterPlaceFromPoiDialog
 import com.pathly.util.DateFormatters
 import kotlinx.coroutines.launch
 import java.util.Date
-import kotlin.math.cos
 import kotlin.math.roundToInt
 
 private val tuningSheetPeekHeight = 360.dp
@@ -122,37 +122,6 @@ private enum class SheetDetent { HIDDEN, PEEK, FULL }
 
 // 手動追加のハイライト（選択した滞在区間）。軌跡（オレンジ）・立ち寄り（紫）と見分ける青。
 private val manualHighlightColor = Color(0xFF1E88E5)
-
-// 手動追加で最初に仮置きする滞在時間（最寄り点からこの範囲を既定で選ぶ。あとで調整可）。
-private const val DEFAULT_MANUAL_STAY_MILLIS = 3 * 60 * 1000L
-
-/** 指した地点に最も近い軌跡点の添字（緯度補正した平面近似で十分）。 */
-private fun nearestPointIndex(points: List<GpsPoint>, lat: Double, lng: Double): Int {
-  if (points.isEmpty()) return 0
-  var best = 0
-  var bestD = Double.MAX_VALUE
-  points.forEachIndexed { i, p ->
-    val dLat = p.latitude - lat
-    val dLng = (p.longitude - lng) * cos(Math.toRadians(lat))
-    val d = dLat * dLat + dLng * dLng
-    if (d < bestD) {
-      bestD = d
-      best = i
-    }
-  }
-  return best
-}
-
-/** 到着点から既定の滞在時間ぶん先まで進めた出発点の添字（末尾で頭打ち）。 */
-private fun defaultDepartureIndex(points: List<GpsPoint>, arrivalIdx: Int): Int {
-  if (points.isEmpty()) return arrivalIdx
-  val arrivalMillis = points[arrivalIdx].timestamp.time
-  var idx = arrivalIdx
-  while (idx + 1 < points.size && points[idx + 1].timestamp.time - arrivalMillis < DEFAULT_MANUAL_STAY_MILLIS) {
-    idx++
-  }
-  return idx
-}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -1072,7 +1041,6 @@ private fun ManualAddOverlay(
   // 非nullなら登録済みの場所へ紐付けるモード（名前欄の代わりに場所名を表示・新規placeは作らない）。
   linkedPlaceName: String? = null,
 ) {
-  val durationMinutes = ((departureTime.time - arrivalTime.time) / 1000 / 60).toInt()
   Surface(
     modifier = modifier
       .fillMaxWidth()
@@ -1117,41 +1085,13 @@ private fun ManualAddOverlay(
             modifier = Modifier.fillMaxWidth(),
           )
         }
-        Text(
-          text = "滞在${durationMinutes}分（青いハイライトが滞在区間）",
-          style = MaterialTheme.typography.bodyMedium,
-          color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        Text(
-          text = "スライダーで大まかに、＋/− で1点ずつ微調整できます。",
-          style = MaterialTheme.typography.bodySmall,
-          color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        RangeSlider(
-          value = arrivalIdx.toFloat()..departureIdx.toFloat(),
-          onValueChange = { range ->
-            val start = range.start.roundToInt().coerceIn(0, lastIdx)
-            val end = range.endInclusive.roundToInt().coerceIn(start, lastIdx)
-            onRangeChange(start, end)
-          },
-          valueRange = 0f..lastIdx.toFloat(),
-        )
-        // 微調整（1点ずつ）。到着は出発を超えられず、出発は到着を下回れない。
-        StepperRow(
-          label = "到着",
-          time = arrivalTime,
-          minusEnabled = arrivalIdx > 0,
-          plusEnabled = arrivalIdx < departureIdx,
-          onMinus = { onRangeChange((arrivalIdx - 1).coerceAtLeast(0), departureIdx) },
-          onPlus = { onRangeChange((arrivalIdx + 1).coerceAtMost(departureIdx), departureIdx) },
-        )
-        StepperRow(
-          label = "出発",
-          time = departureTime,
-          minusEnabled = departureIdx > arrivalIdx,
-          plusEnabled = departureIdx < lastIdx,
-          onMinus = { onRangeChange(arrivalIdx, (departureIdx - 1).coerceAtLeast(arrivalIdx)) },
-          onPlus = { onRangeChange(arrivalIdx, (departureIdx + 1).coerceAtMost(lastIdx)) },
+        StopRangeEditor(
+          arrivalTime = arrivalTime,
+          departureTime = departureTime,
+          arrivalIdx = arrivalIdx,
+          departureIdx = departureIdx,
+          lastIdx = lastIdx,
+          onRangeChange = onRangeChange,
         )
       }
       Row(
@@ -1165,50 +1105,6 @@ private fun ManualAddOverlay(
         Button(onClick = onConfirm, modifier = Modifier.weight(1f)) { Text("追加") }
       }
     }
-  }
-}
-
-/** 到着／出発を1点ずつ微調整する行（時刻表示＋ −/＋）。 */
-@Composable
-private fun StepperRow(
-  label: String,
-  time: Date,
-  minusEnabled: Boolean,
-  plusEnabled: Boolean,
-  onMinus: () -> Unit,
-  onPlus: () -> Unit,
-) {
-  Row(
-    modifier = Modifier.fillMaxWidth(),
-    verticalAlignment = Alignment.CenterVertically,
-  ) {
-    Text(
-      text = label,
-      style = MaterialTheme.typography.bodyMedium,
-      color = MaterialTheme.colorScheme.onSurfaceVariant,
-    )
-    Text(
-      text = DateFormatters.TIME_FORMAT.format(time),
-      style = MaterialTheme.typography.titleMedium,
-      fontWeight = FontWeight.Medium,
-      modifier = Modifier.padding(start = 12.dp),
-    )
-    Spacer(modifier = Modifier.weight(1f))
-    OutlinedButton(
-      onClick = onMinus,
-      enabled = minusEnabled,
-      shape = CircleShape,
-      contentPadding = PaddingValues(0.dp),
-      modifier = Modifier.size(40.dp),
-    ) { Text("−", style = MaterialTheme.typography.titleLarge) }
-    Spacer(modifier = Modifier.width(8.dp))
-    OutlinedButton(
-      onClick = onPlus,
-      enabled = plusEnabled,
-      shape = CircleShape,
-      contentPadding = PaddingValues(0.dp),
-      modifier = Modifier.size(40.dp),
-    ) { Text("＋", style = MaterialTheme.typography.titleLarge) }
   }
 }
 
