@@ -113,8 +113,11 @@ class WishlistRepositoryImplTest {
     coVerify {
       googlePlaceDao.upsert(
         match {
-          it.placeId == 7L && it.googlePlaceId == "gp-42" &&
-            it.name == "清瀧神社" && it.address == "千葉県浦安市…" && it.category == "神社"
+          it.placeId == 7L &&
+            it.googlePlaceId == "gp-42" &&
+            it.name == "清瀧神社" &&
+            it.address == "千葉県浦安市…" &&
+            it.category == "神社"
         },
       )
     }
