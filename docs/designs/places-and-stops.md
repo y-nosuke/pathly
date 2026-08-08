@@ -339,6 +339,24 @@ Android アプリ制限付きの API キー（地図と共用）を**そのま�
 - **手動追加した立ち寄りは自動命名しない**: `addManualStop` は常に `place_resolutions` 行を残すので、記録中の
   ライブ検出（未解決 place を自動命名）が手動追加の名前（またはユーザーが選んだ「名前なし」）を上書きしない。
 
+### 登録済みの場所の地図表示（トグル）
+
+記録・履歴詳細・場所詳細の地図に、**登録済みの場所（全 place ＝ USER も DETECTED も）**を
+**アンバーのピン**で重ねて表示できる。立ち寄り（紫の番号バッジ）とは色で区別し、重なりでは立ち寄りを前面にする。
+描画は共通の `RegisteredPlaceMarkers`（`presentation/common/RouteMap.kt`）に切り出し、**トラックが無くても**
+（記録開始前など）単独で描けるようにしている。手動追加で近くに既存の場所があると気づけるようにするのが狙いで、
+将来は**マーカーのタップで既存 place に紐付け**（手動追加時）へ拡張する。
+
+- **取得**: `PlaceRepository.observeRegisteredPlaces()`（`PlaceDao.observeRegisteredPlaces`）。全 place を
+  最小情報（id・座標・表示名）でリアクティブに返す。表示名は `places.name → google_places.name → 住所` の
+  フォールバック（`COALESCE`）。場所詳細ではその場所自身は主マーカーと重なるので呼び出し側で除外する。
+- **ON/OFF の保存先は Room ではなく `SharedPreferences`**（`SettingsRepository` / prefs 名 `pathly_settings`）。
+  トグルは**UI の表示設定**であって場所データではないため、DB（SQLite）には持たせない。GPS 記録間隔と同じ扱い。
+  - **画面ごとに独立**して保持する。キーは `show_registered_places_{recording|history|place_detail}`（`Boolean`・既定 `false`）。
+    画面を表す `MapSurface`(`RECORDING`/`HISTORY`/`PLACE_DETAIL`) で出し分ける。
+  - 各画面の ViewModel が `settingsRepository.showRegisteredPlaces(surface)` を購読し、地図上のトグルボタンで
+    `setShowRegisteredPlaces(surface, …)` を書く。プロセスをまたいで保持される。
+
 ### 詳細画面
 
 - 地図: 立ち寄りピン（紫）。タイトルに場所名（未命名は「立ち寄り」）、スニペットに時刻・滞在分
