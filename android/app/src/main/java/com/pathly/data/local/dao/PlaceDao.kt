@@ -42,10 +42,14 @@ interface PlaceDao {
   /**
    * 地図に出す「登録済みの場所」全件（USER・DETECTED どちらも）。名前は
    * places.name → google_places.name → google_places.address の順にフォールバック。
+   * 状態（行きたい／訪問済み）を描き分けるため、wishlist 件数・立ち寄り件数・手動訪問日時も返す。
    */
   @Query(
     "SELECT p.id AS placeId, COALESCE(p.name, g.name, g.address) AS name, " +
-      "p.latitude AS latitude, p.longitude AS longitude " +
+      "p.latitude AS latitude, p.longitude AS longitude, " +
+      "(SELECT COUNT(*) FROM wishlist w WHERE w.placeId = p.id) AS wishlistCount, " +
+      "(SELECT COUNT(*) FROM stops s WHERE s.placeId = p.id) AS visitCount, " +
+      "(SELECT w.visitedAt FROM wishlist w WHERE w.placeId = p.id LIMIT 1) AS visitedAt " +
       "FROM places p LEFT JOIN google_places g ON g.placeId = p.id",
   )
   fun observeRegisteredPlaces(): Flow<List<RegisteredPlaceRow>>

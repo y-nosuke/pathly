@@ -43,8 +43,10 @@ internal val MarkerActiveBlue = Color(0xFF3B82F6)
 internal val MarkerStopViolet = Color(0xFF6A4BBC)
 internal val MarkerCurrentStopTeal = Color(0xFF00BFA5)
 
-// 「登録済みの場所」マーカー（トグルON時）。立ち寄り（紫）と見分けるアンバー。
-internal val MarkerRegisteredAmber = Color(0xFFC77700)
+// 「登録済みの場所」マーカー（トグルON時）。色で訪問状態（訪問済み=グリーン／未訪問=グレー）を示し、
+// グリフで行きたい（旗）/それ以外（ピン）を示す。立ち寄り（紫）とは色・グリフで見分ける。
+internal val MarkerVisitedGreen = Color(0xFF2E7D32)
+internal val MarkerUnvisitedGray = Color(0xFF6B6B6B)
 
 // 確定した立ち寄りの滞在区間ハイライト（濃い青の帯）。軌跡（オレンジ）の下に太く敷く。
 internal val StopSegmentColor = Color(0xF00D47A1)
@@ -70,20 +72,25 @@ internal fun RegisteredPlaceMarkers(
     val placeMarkerState = androidx.compose.runtime.remember(place.placeId, place.latitude, place.longitude) {
       MarkerState(position = LatLng(place.latitude, place.longitude))
     }
+    // 色＝訪問状態、グリフ＝行きたい（旗）/それ以外（ピン）。状態が変わったら描き直す。
+    val badgeColor = if (place.isVisited) MarkerVisitedGreen else MarkerUnvisitedGray
+    val glyph = if (place.isWishlisted) R.drawable.ic_flag_filled else R.drawable.ic_place
     MarkerComposable(
       "registered",
       place.placeId,
+      place.isWishlisted,
+      place.isVisited,
       state = placeMarkerState,
       title = place.displayName,
-      snippet = "登録済みの場所",
+      snippet = place.statusLabel,
       onClick = {
         onRegisteredPlaceClick(place)
         false
       },
     ) {
-      RouteBadgeMarker(bg = MarkerRegisteredAmber) {
+      RouteBadgeMarker(bg = badgeColor) {
         Icon(
-          painter = painterResource(R.drawable.ic_place),
+          painter = painterResource(glyph),
           contentDescription = null,
           tint = Color.White,
           modifier = Modifier.size(18.dp),

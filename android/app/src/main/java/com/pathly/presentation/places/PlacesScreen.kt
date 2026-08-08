@@ -234,7 +234,16 @@ fun PlaceDetailRoute(
     // 登録済みの場所の地図表示（この場所自身は主マーカーと重なるので除外）。
     registeredPlaces = uiState.items
       .filter { it.place.id != placeId }
-      .map { RegisteredPlace(it.place.id, it.displayName, it.place.latitude, it.place.longitude) },
+      .map {
+        RegisteredPlace(
+          placeId = it.place.id,
+          name = it.displayName,
+          latitude = it.place.latitude,
+          longitude = it.place.longitude,
+          isWishlisted = it.isWishlisted,
+          isVisited = it.isVisited,
+        )
+      },
     showRegisteredPlaces = uiState.showRegisteredPlaces,
     onToggleRegisteredPlaces = { viewModel.toggleShowRegisteredPlaces() },
     // 確認ダイアログは出さず即時削除。items から消えると item == null になり一覧へ戻り、

@@ -74,7 +74,17 @@ class PlaceRepositoryImpl @Inject constructor(
   override fun getStopsForTrack(trackId: Long): Flow<List<Stop>> = stopDao.getStopsWithPlaceByTrack(trackId).map { list -> list.map { it.toStop() } }
 
   override fun observeRegisteredPlaces(): Flow<List<RegisteredPlace>> = placeDao.observeRegisteredPlaces().map { rows ->
-    rows.map { RegisteredPlace(it.placeId, it.name, it.latitude, it.longitude) }
+    rows.map {
+      RegisteredPlace(
+        placeId = it.placeId,
+        name = it.name,
+        latitude = it.latitude,
+        longitude = it.longitude,
+        isWishlisted = it.wishlistCount > 0,
+        // 「場所」タブと同じ判定: 立ち寄り記録があるか、手動で訪問済みにしたら訪問済み。
+        isVisited = it.visitCount > 0 || it.visitedAt != null,
+      )
+    }
   }
 
   override fun unresolvedCountForTrack(trackId: Long): Flow<Int> = placeDao.countPlacesWithoutGoogleIdForTrack(trackId)
