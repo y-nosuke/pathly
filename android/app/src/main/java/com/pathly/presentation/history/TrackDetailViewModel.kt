@@ -2,9 +2,12 @@ package com.pathly.presentation.history
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.pathly.data.settings.MapSurface
+import com.pathly.data.settings.SettingsRepository
 import com.pathly.domain.model.GpsTrack
 import com.pathly.domain.model.PlaceSearchResult
 import com.pathly.domain.model.Priority
+import com.pathly.domain.model.RegisteredPlace
 import com.pathly.domain.model.Stop
 import com.pathly.domain.model.StopCandidate
 import com.pathly.domain.repository.GpsTrackRepository
@@ -34,10 +37,23 @@ class TrackDetailViewModel @Inject constructor(
   private val placeRepository: PlaceRepository,
   private val gpsTrackRepository: GpsTrackRepository,
   private val wishlistRepository: WishlistRepository,
+  private val settingsRepository: SettingsRepository,
 ) : ViewModel() {
 
   private val _stops = MutableStateFlow<List<Stop>>(emptyList())
   val stops: StateFlow<List<Stop>> = _stops.asStateFlow()
+
+  /** 「登録済みの場所」を地図に出すか（履歴詳細の画面別トグル）。 */
+  val showRegisteredPlaces: StateFlow<Boolean> =
+    settingsRepository.showRegisteredPlaces(MapSurface.HISTORY)
+
+  /** 地図に出す登録済みの場所（全 place）。トグルON時に描画する。 */
+  val registeredPlaces: StateFlow<List<RegisteredPlace>> = placeRepository.observeRegisteredPlaces()
+    .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+  fun toggleShowRegisteredPlaces() {
+    settingsRepository.setShowRegisteredPlaces(MapSurface.HISTORY, !showRegisteredPlaces.value)
+  }
 
   // 保存済みの補正後点列を反映したトラック。読み込み時に一度だけ設定する。
   private val _displayTrack = MutableStateFlow<GpsTrack?>(null)

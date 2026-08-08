@@ -98,6 +98,7 @@ import com.pathly.domain.model.GpsPoint
 import com.pathly.domain.model.GpsTrack
 import com.pathly.domain.model.PlaceSearchResult
 import com.pathly.domain.model.Priority
+import com.pathly.domain.model.RegisteredPlace
 import com.pathly.domain.model.SmoothingParams
 import com.pathly.domain.model.Stop
 import com.pathly.domain.model.StopCandidate
@@ -180,6 +181,10 @@ fun TrackDetailScreen(
   // 誤検知の選び直し用: 座標の近くの POI 候補を取得／この訪問だけ付け替える。
   onFetchNearbyPois: suspend (lat: Double, lng: Double) -> List<PlaceSearchResult> = { _, _ -> emptyList() },
   onReassignStop: (stopId: Long, chosen: PlaceSearchResult?, customName: String?) -> Unit = { _, _, _ -> },
+  // 登録済みの場所の地図表示（画面別トグル）。
+  registeredPlaces: List<RegisteredPlace> = emptyList(),
+  showRegisteredPlaces: Boolean = false,
+  onToggleRegisteredPlaces: () -> Unit = {},
   // 地図スロット。null（既定）は実マップ（GoogleMap）を描画する。
   // テストは空スロット（{}）を渡し、GMS 依存の地図描画を避けてシート・オーバーレイだけを検証する。
   mapContent: (@Composable () -> Unit)? = null,
@@ -336,6 +341,7 @@ fun TrackDetailScreen(
           manualPickTarget = if (manualMode) manualPick?.latLng else null,
           highlightPoints = manualHighlight,
           stopSegments = stopSegments,
+          registeredPlaces = if (showRegisteredPlaces) registeredPlaces else emptyList(),
           focusTarget = focusTarget,
           focusNonce = focusNonce,
           // フォーカスがピンをシート/オーバーレイの裏に隠さないよう、下端を空ける。
@@ -406,6 +412,21 @@ fun TrackDetailScreen(
         Icon(
           painter = painterResource(R.drawable.ic_arrow_back),
           contentDescription = "戻る",
+          modifier = Modifier.padding(8.dp),
+        )
+      }
+
+      // 登録済みの場所を地図に出すトグル（ONで既存placeをアンバーのピンで表示）。
+      Surface(
+        onClick = onToggleRegisteredPlaces,
+        shape = CircleShape,
+        color = if (showRegisteredPlaces) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surface,
+        shadowElevation = 4.dp,
+      ) {
+        Icon(
+          painter = painterResource(R.drawable.ic_place),
+          contentDescription = if (showRegisteredPlaces) "登録済みの場所を隠す" else "登録済みの場所を表示",
+          tint = if (showRegisteredPlaces) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface,
           modifier = Modifier.padding(8.dp),
         )
       }
@@ -1678,6 +1699,7 @@ private fun TrackMapView(
   manualPickTarget: LatLng? = null,
   highlightPoints: List<GpsPoint> = emptyList(),
   stopSegments: List<List<GpsPoint>> = emptyList(),
+  registeredPlaces: List<RegisteredPlace> = emptyList(),
   focusTarget: LatLng? = null,
   focusNonce: Int = 0,
   contentPadding: PaddingValues = PaddingValues(0.dp),
@@ -1745,6 +1767,7 @@ private fun TrackMapView(
       displayPoints = displayPoints,
       stops = stops,
       stopSegments = stopSegments,
+      registeredPlaces = registeredPlaces,
       onStopClick = onStopClick,
     )
 

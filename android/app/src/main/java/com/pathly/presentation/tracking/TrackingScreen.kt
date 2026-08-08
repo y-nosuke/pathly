@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -67,7 +68,9 @@ import com.pathly.R
 import com.pathly.domain.model.GpsPoint
 import com.pathly.domain.model.GpsTrack
 import com.pathly.domain.model.PlaceSearchResult
+import com.pathly.domain.model.RegisteredPlace
 import com.pathly.domain.model.Stop
+import com.pathly.presentation.common.RegisteredPlaceMarkers
 import com.pathly.presentation.common.RouteMapContent
 import com.pathly.presentation.common.StopReassignDialog
 import com.pathly.presentation.common.stopSegmentPoints
@@ -138,6 +141,26 @@ fun TrackingScreen(
         // 立ち寄りマーカーのタップで「場所を選び直す」（誤検知の訂正）。
         onStopClick = { reassignTarget = it },
         modifier = Modifier.fillMaxSize(),
+        registeredPlaces = if (uiState.showRegisteredPlaces) uiState.registeredPlaces else emptyList(),
+      )
+    }
+
+    // 登録済みの場所を地図に出すトグル（記録画面・画面別）。上部右に置く。
+    Surface(
+      onClick = { viewModel.toggleShowRegisteredPlaces() },
+      shape = CircleShape,
+      color = if (uiState.showRegisteredPlaces) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surface,
+      shadowElevation = 4.dp,
+      modifier = Modifier
+        .align(Alignment.TopEnd)
+        .statusBarsPadding()
+        .padding(12.dp),
+    ) {
+      Icon(
+        painter = painterResource(R.drawable.ic_place),
+        contentDescription = if (uiState.showRegisteredPlaces) "登録済みの場所を隠す" else "登録済みの場所を表示",
+        tint = if (uiState.showRegisteredPlaces) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface,
+        modifier = Modifier.padding(8.dp),
       )
     }
 
@@ -493,6 +516,7 @@ private fun TrackingMapView(
   onMapClick: (LatLng) -> Unit,
   onStopClick: (Stop) -> Unit,
   modifier: Modifier = Modifier,
+  registeredPlaces: List<RegisteredPlace> = emptyList(),
 ) {
   val cameraPositionState = rememberCameraPositionState {
     position = CameraPosition.fromLatLngZoom(LatLng(35.6762, 139.6503), 15f)
@@ -611,6 +635,8 @@ private fun TrackingMapView(
           onStopClick = onStopClick,
         )
       }
+      // 登録済みの場所（トグルON）。トラック未確定でも出せるよう、経路描画とは独立して描く。
+      RegisteredPlaceMarkers(registeredPlaces)
     }
 
     // 現在地ボタン：追従中は活性（色付き）、固定中は非活性（グレー）。タップで追従再開＆リセンター。

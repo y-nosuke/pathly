@@ -2,6 +2,7 @@ package com.pathly.domain.repository
 
 import com.pathly.domain.model.PlaceSearchResult
 import com.pathly.domain.model.PlaceSource
+import com.pathly.domain.model.RegisteredPlace
 import com.pathly.domain.model.Stop
 import com.pathly.domain.model.StopCandidate
 import com.pathly.domain.model.StopDeletionResult
@@ -18,6 +19,9 @@ interface PlaceRepository {
 
   /** 経路の立ち寄り一覧（場所つき）をリアクティブに取得する。 */
   fun getStopsForTrack(trackId: Long): Flow<List<Stop>>
+
+  /** 地図の「登録済みの場所」表示用に、全 place（USER・DETECTED）を最小情報でリアクティブに取得する。 */
+  fun observeRegisteredPlaces(): Flow<List<RegisteredPlace>>
 
   /** 記録中の「立ち寄り中」（メモリ保持・非永続）。3分超で place を先行確定して表示する。 */
   val currentStop: StateFlow<Stop?>

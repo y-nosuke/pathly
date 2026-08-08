@@ -3,6 +3,8 @@ package com.pathly.presentation.places
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.pathly.data.places.PlacesTextSearcher
+import com.pathly.data.settings.MapSurface
+import com.pathly.data.settings.SettingsRepository
 import com.pathly.domain.model.PlaceListItem
 import com.pathly.domain.model.PlacePrediction
 import com.pathly.domain.model.PlaceSearchResult
@@ -23,6 +25,7 @@ import javax.inject.Inject
 class PlacesViewModel @Inject constructor(
   private val wishlistRepository: WishlistRepository,
   private val placesTextSearcher: PlacesTextSearcher,
+  private val settingsRepository: SettingsRepository,
 ) : ViewModel() {
 
   private val _uiState = MutableStateFlow(PlacesState())
@@ -30,6 +33,20 @@ class PlacesViewModel @Inject constructor(
 
   init {
     observePlaces()
+    observeShowRegisteredPlaces()
+  }
+
+  /** 場所詳細の地図に「登録済みの場所」を出すトグル（画面別・永続化）。 */
+  private fun observeShowRegisteredPlaces() {
+    viewModelScope.launch {
+      settingsRepository.showRegisteredPlaces(MapSurface.PLACE_DETAIL).collect { show ->
+        _uiState.value = _uiState.value.copy(showRegisteredPlaces = show)
+      }
+    }
+  }
+
+  fun toggleShowRegisteredPlaces() {
+    settingsRepository.setShowRegisteredPlaces(MapSurface.PLACE_DETAIL, !_uiState.value.showRegisteredPlaces)
   }
 
   private fun observePlaces() {

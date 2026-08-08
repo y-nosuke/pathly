@@ -57,6 +57,8 @@ data class PlacesState(
   val registerToken: Int = 0,
   // 直近の登録結果の文言（「登録しました」/「この場所は登録済みです」）。
   val registerMessage: String? = null,
+  // 場所詳細の地図に「登録済みの場所」を出すか（画面別トグル）。
+  val showRegisteredPlaces: Boolean = false,
 ) {
   /** 絞り込みを一切かけていないか（「すべて」チップの選択表示に使う）。 */
   val noFilter: Boolean

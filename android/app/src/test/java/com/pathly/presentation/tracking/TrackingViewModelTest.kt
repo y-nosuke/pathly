@@ -4,6 +4,7 @@ import android.app.Application
 import android.content.Context
 import android.content.pm.PackageManager
 import androidx.arch.core.executor.testing.InstantTaskExecutorRule
+import com.pathly.data.settings.SettingsRepository
 import com.pathly.domain.repository.GpsTrackRepository
 import com.pathly.domain.repository.PlaceRepository
 import com.pathly.domain.repository.WishlistRepository
@@ -38,8 +39,12 @@ class TrackingViewModelTest {
   private val mockRepository = mockk<GpsTrackRepository>(relaxed = true)
   private val mockPlaceRepository = mockk<PlaceRepository>(relaxed = true).also {
     every { it.currentStop } returns MutableStateFlow(null)
+    every { it.observeRegisteredPlaces() } returns MutableStateFlow(emptyList())
   }
   private val mockWishlistRepository = mockk<WishlistRepository>(relaxed = true)
+  private val mockSettingsRepository = mockk<SettingsRepository>(relaxed = true).also {
+    every { it.showRegisteredPlaces(any()) } returns MutableStateFlow(false)
+  }
 
   @Before
   fun setup() {
@@ -71,7 +76,7 @@ class TrackingViewModelTest {
     // Given
     coEvery { mockRepository.getActiveTrack() } returns null
     coEvery { mockRepository.getActiveTrackRealtime() } returns flowOf(null)
-    val viewModel = TrackingViewModel(mockApplication, mockRepository, mockPlaceRepository, mockWishlistRepository)
+    val viewModel = TrackingViewModel(mockApplication, mockRepository, mockPlaceRepository, mockWishlistRepository, mockSettingsRepository)
     testDispatcher.scheduler.advanceUntilIdle()
 
     // When
@@ -87,7 +92,7 @@ class TrackingViewModelTest {
     // Given
     coEvery { mockRepository.getActiveTrack() } returns null
     coEvery { mockRepository.getActiveTrackRealtime() } returns flowOf(null)
-    val viewModel = TrackingViewModel(mockApplication, mockRepository, mockPlaceRepository, mockWishlistRepository)
+    val viewModel = TrackingViewModel(mockApplication, mockRepository, mockPlaceRepository, mockWishlistRepository, mockSettingsRepository)
     testDispatcher.scheduler.advanceUntilIdle()
 
     // When
@@ -103,7 +108,7 @@ class TrackingViewModelTest {
     // Given
     coEvery { mockRepository.getActiveTrack() } returns null
     coEvery { mockRepository.getActiveTrackRealtime() } returns flowOf(null)
-    val viewModel = TrackingViewModel(mockApplication, mockRepository, mockPlaceRepository, mockWishlistRepository)
+    val viewModel = TrackingViewModel(mockApplication, mockRepository, mockPlaceRepository, mockWishlistRepository, mockSettingsRepository)
     testDispatcher.scheduler.advanceUntilIdle()
 
     // When

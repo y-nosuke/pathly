@@ -19,6 +19,7 @@ import com.pathly.domain.model.GpsPoint
 import com.pathly.domain.model.Place
 import com.pathly.domain.model.PlaceSearchResult
 import com.pathly.domain.model.PlaceSource
+import com.pathly.domain.model.RegisteredPlace
 import com.pathly.domain.model.Stop
 import com.pathly.domain.model.StopCandidate
 import com.pathly.domain.model.StopDeletionResult
@@ -71,6 +72,10 @@ class PlaceRepositoryImpl @Inject constructor(
   private val detectionHighWaterMillis = mutableMapOf<Long, Long>()
 
   override fun getStopsForTrack(trackId: Long): Flow<List<Stop>> = stopDao.getStopsWithPlaceByTrack(trackId).map { list -> list.map { it.toStop() } }
+
+  override fun observeRegisteredPlaces(): Flow<List<RegisteredPlace>> = placeDao.observeRegisteredPlaces().map { rows ->
+    rows.map { RegisteredPlace(it.placeId, it.name, it.latitude, it.longitude) }
+  }
 
   override fun unresolvedCountForTrack(trackId: Long): Flow<Int> = placeDao.countPlacesWithoutGoogleIdForTrack(trackId)
 

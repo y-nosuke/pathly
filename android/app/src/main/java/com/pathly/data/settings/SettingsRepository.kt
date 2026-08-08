@@ -32,6 +32,20 @@ class SettingsRepository @Inject constructor(
     _gpsIntervalSeconds.value = seconds
   }
 
+  // 「登録済みの場所」を地図に出すトグル。画面（記録／履歴詳細／場所詳細）ごとに独立して保持する。
+  private val showRegisteredPlacesFlows: Map<MapSurface, MutableStateFlow<Boolean>> =
+    MapSurface.entries.associateWith { surface ->
+      MutableStateFlow(prefs.getBoolean(keyShowPlaces(surface), false))
+    }
+
+  /** その画面で「登録済みの場所」を表示するか。UI が購読する。既定は OFF。 */
+  fun showRegisteredPlaces(surface: MapSurface): StateFlow<Boolean> = showRegisteredPlacesFlows.getValue(surface).asStateFlow()
+
+  fun setShowRegisteredPlaces(surface: MapSurface, show: Boolean) {
+    prefs.edit { putBoolean(keyShowPlaces(surface), show) }
+    showRegisteredPlacesFlows.getValue(surface).value = show
+  }
+
   companion object {
     const val DEFAULT_GPS_INTERVAL_SECONDS = 10
 
@@ -40,5 +54,14 @@ class SettingsRepository @Inject constructor(
 
     private const val PREFS_NAME = "pathly_settings"
     private const val KEY_GPS_INTERVAL = "gps_interval_seconds"
+
+    private fun keyShowPlaces(surface: MapSurface): String = "show_registered_places_${surface.key}"
   }
+}
+
+/** 「登録済みの場所」トグルを保持する画面（それぞれ独立して ON/OFF を記憶する）。 */
+enum class MapSurface(val key: String) {
+  RECORDING("recording"),
+  HISTORY("history"),
+  PLACE_DETAIL("place_detail"),
 }
