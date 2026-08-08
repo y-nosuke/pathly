@@ -70,7 +70,6 @@ import com.pathly.domain.model.GpsTrack
 import com.pathly.domain.model.PlaceSearchResult
 import com.pathly.domain.model.RegisteredPlace
 import com.pathly.domain.model.Stop
-import com.pathly.presentation.common.LinkStopToPlaceDialog
 import com.pathly.presentation.common.RegisteredPlaceMarkers
 import com.pathly.presentation.common.RouteMapContent
 import com.pathly.presentation.common.StopReassignDialog
@@ -125,8 +124,8 @@ fun TrackingScreen(
   var manualTarget by remember { mutableStateOf<LatLng?>(null) }
   // 立ち寄りマーカーをタップして「場所を選び直す」対象（誤検知の訂正）。
   var reassignTarget by remember { mutableStateOf<Stop?>(null) }
-  // 記録中に登録済みマーカーをタップ → その既存 place にこの訪問を紐付ける対象（②）。
-  var linkTarget by remember { mutableStateOf<RegisteredPlace?>(null) }
+  // 記録中に登録済みマーカーをタップ → その既存 place にこの訪問を紐付ける対象（②）。手動追加ダイアログを流用する。
+  var linkPlace by remember { mutableStateOf<RegisteredPlace?>(null) }
 
   Box(modifier = modifier.fillMaxSize()) {
     if (mapContent != null) {
@@ -146,7 +145,13 @@ fun TrackingScreen(
         modifier = Modifier.fillMaxSize(),
         registeredPlaces = if (uiState.showRegisteredPlaces) uiState.registeredPlaces else emptyList(),
         // 記録中に登録済みマーカーをタップ → その既存 place に紐付ける（新規place作らない）。
-        onRegisteredPlaceClick = { if (uiState.isTracking) linkTarget = it },
+        // 位置はその場所に固定して手動追加ダイアログ（同じUI）を開く。
+        onRegisteredPlaceClick = {
+          if (uiState.isTracking) {
+            linkPlace = it
+            manualTarget = LatLng(it.latitude, it.longitude)
+          }
+        },
       )
     }
 
@@ -340,11 +345,21 @@ fun TrackingScreen(
       target = target,
       points = uiState.currentTrack?.smoothedPoints.orEmpty(),
       onFetchCandidates = viewModel::nearbyPois,
+      linkedPlace = linkPlace,
       onConfirm = { lat, lng, arrival, departure, name, googlePlaceId ->
-        viewModel.addManualStop(lat, lng, arrival, departure, name, googlePlaceId)
+        val linked = linkPlace
+        if (linked != null) {
+          viewModel.addManualStopForPlace(linked.placeId, arrival, departure)
+        } else {
+          viewModel.addManualStop(lat, lng, arrival, departure, name, googlePlaceId)
+        }
         manualTarget = null
+        linkPlace = null
       },
-      onDismiss = { manualTarget = null },
+      onDismiss = {
+        manualTarget = null
+        linkPlace = null
+      },
     )
   }
 
@@ -357,19 +372,6 @@ fun TrackingScreen(
         reassignTarget = null
       },
       onDismiss = { reassignTarget = null },
-    )
-  }
-
-  // 登録済みマーカーをタップしたときの紐付け確認（②）。既存 place にこの訪問を足す。
-  linkTarget?.let { place ->
-    LinkStopToPlaceDialog(
-      place = place,
-      points = uiState.currentTrack?.smoothedPoints.orEmpty(),
-      onConfirm = { arrival, departure ->
-        viewModel.addManualStopForPlace(place.placeId, arrival, departure)
-        linkTarget = null
-      },
-      onDismiss = { linkTarget = null },
     )
   }
 }
@@ -386,6 +388,8 @@ private fun ManualStopDialog(
   onFetchCandidates: suspend (Double, Double) -> List<PlaceSearchResult>,
   onConfirm: (lat: Double, lng: Double, arrival: Date, departure: Date, name: String?, googlePlaceId: String?) -> Unit,
   onDismiss: () -> Unit,
+  // 非nullなら登録済みの場所へ紐付けるモード（候補選びは出さず、その場所へ足す）。
+  linkedPlace: RegisteredPlace? = null,
 ) {
   val (arrival, departure) = remember(target, points) {
     deriveStopWindow(points, target.latitude, target.longitude)
@@ -397,12 +401,13 @@ private fun ManualStopDialog(
   var customName by remember { mutableStateOf("") }
 
   LaunchedEffect(target) {
-    candidates = onFetchCandidates(target.latitude, target.longitude)
+    // 紐付けモードは既存placeを使うので候補は引かない。
+    if (linkedPlace == null) candidates = onFetchCandidates(target.latitude, target.longitude)
   }
 
   AlertDialog(
     onDismissRequest = onDismiss,
-    title = { Text("立ち寄りを追加") },
+    title = { Text(if (linkedPlace != null) "この場所に立ち寄りを追加" else "立ち寄りを追加") },
     text = {
       Column {
         val window = if (durationMinutes > 0) {
@@ -410,6 +415,21 @@ private fun ManualStopDialog(
             "${DateFormatters.SHORT_TIME_FORMAT.format(departure)} ・ 滞在${durationMinutes}分"
         } else {
           "この地点付近（滞在時間は軌跡から推定）"
+        }
+        if (linkedPlace != null) {
+          Text(linkedPlace.displayName, style = MaterialTheme.typography.bodyLarge)
+          Text(
+            linkedPlace.statusLabel,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+          )
+          Text(text = window, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+          Text(
+            "登録済みの場所に紐付けます（新しい場所は作りません）。",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+          )
+          return@Column
         }
         Text(text = window, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         Spacer(modifier = Modifier.height(12.dp))
@@ -483,16 +503,23 @@ private fun ManualStopDialog(
       }
     },
     confirmButton = {
-      TextButton(onClick = {
-        val picked = selected
-        val name = picked?.name ?: customName.trim().ifBlank { null }
-        // 候補を選んだときは place を候補の Google 座標で保存（他経路と統一）。無ければタップ地点。
-        val lat = picked?.latitude ?: target.latitude
-        val lng = picked?.longitude ?: target.longitude
-        onConfirm(lat, lng, arrival, departure, name, picked?.googlePlaceId)
-      }) {
-        // 名前が決まっていなければ「名前なしで追加」を明示する。
-        Text(if (selected == null && customName.isBlank()) "名前なしで追加" else "追加")
+      if (linkedPlace != null) {
+        // 既存placeへ紐付け。座標はその場所、名前・googleは使わない（呼び出し側が紐付けに分岐）。
+        TextButton(onClick = { onConfirm(target.latitude, target.longitude, arrival, departure, null, null) }) {
+          Text("この場所に追加")
+        }
+      } else {
+        TextButton(onClick = {
+          val picked = selected
+          val name = picked?.name ?: customName.trim().ifBlank { null }
+          // 候補を選んだときは place を候補の Google 座標で保存（他経路と統一）。無ければタップ地点。
+          val lat = picked?.latitude ?: target.latitude
+          val lng = picked?.longitude ?: target.longitude
+          onConfirm(lat, lng, arrival, departure, name, picked?.googlePlaceId)
+        }) {
+          // 名前が決まっていなければ「名前なしで追加」を明示する。
+          Text(if (selected == null && customName.isBlank()) "名前なしで追加" else "追加")
+        }
       }
     },
     dismissButton = {

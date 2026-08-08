@@ -350,7 +350,8 @@ Android アプリ制限付きの API キー（地図と共用）を**そのま�
 
 **マーカータップで既存 place に紐付け（手動追加時）**: 手動で立ち寄りを足すとき（記録中／履歴詳細の手動追加モード）、
 登録済みマーカーをタップすると、その**既存 place にこの訪問を紐付ける**（`addManualStopForPlace`）。新規 place を作らず
-重複を防ぐ。滞在区間は選んだ地点付近の軌跡点から推定して確認ダイアログ（`LinkStopToPlaceDialog`）で見せる。
+重複を防ぐ。UI は**各画面の既存の手動追加ダイアログを流用**する（名前欄の代わりに場所名を出し、確定を紐付けに差し替える）。
+履歴詳細はスライダーで**滞在時間の微調整**もそのまま使える。記録中は同じ確認ダイアログ（滞在時間は軌跡から推定）。
 
 - **取得**: `PlaceRepository.observeRegisteredPlaces()`（`PlaceDao.observeRegisteredPlaces`）。全 place を
   最小情報（id・座標・表示名）でリアクティブに返す。表示名は `places.name → google_places.name → 住所` の

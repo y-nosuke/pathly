@@ -103,7 +103,6 @@ import com.pathly.domain.model.SmoothingParams
 import com.pathly.domain.model.Stop
 import com.pathly.domain.model.StopCandidate
 import com.pathly.domain.model.TrackSmoother
-import com.pathly.presentation.common.LinkStopToPlaceDialog
 import com.pathly.presentation.common.MarkerStopViolet
 import com.pathly.presentation.common.RouteMapContent
 import com.pathly.presentation.common.StopReassignDialog
@@ -205,8 +204,6 @@ fun TrackDetailScreen(
   var editingNoteStop by remember { mutableStateOf<Stop?>(null) }
   // 「場所を選び直す」対象の立ち寄り（誤検知の訂正・この訪問だけ付け替え）。
   var reassignTarget by remember { mutableStateOf<Stop?>(null) }
-  // 手動追加モードで登録済みマーカーをタップ → その既存 place に紐付ける対象（②）。
-  var linkTarget by remember { mutableStateOf<RegisteredPlace?>(null) }
   // 地図↔一覧の連動用: 選択中の立ち寄り。地図のピン/一覧の行どちらから選んでも相互に強調・スクロールする。
   var highlightedStopId by remember { mutableStateOf<Long?>(null) }
 
@@ -385,8 +382,20 @@ fun TrackDetailScreen(
             focusNonce++
             if (detent == SheetDetent.HIDDEN) settleTo(SheetDetent.PEEK)
           },
-          // 手動追加モード中に登録済みマーカーをタップ → その既存 place に紐付ける（②）。
-          onRegisteredPlaceClick = { if (manualMode) linkTarget = it },
+          // 手動追加モード中に登録済みマーカーをタップ → 既存の手動追加オーバーレイ（滞在調整あり）を
+          // その既存 place に紐付ける形で開く（②）。専用の簡易ダイアログは使わない。
+          onRegisteredPlaceClick = { place ->
+            if (manualMode) {
+              manualPick = ManualPick(
+                LatLng(place.latitude, place.longitude),
+                place.displayName,
+                null,
+                existingPlaceId = place.placeId,
+              )
+              focusTarget = LatLng(place.latitude, place.longitude)
+              focusNonce++
+            }
+          },
           modifier = Modifier.fillMaxSize(),
         )
       }
@@ -639,6 +648,8 @@ fun TrackDetailScreen(
         ManualAddOverlay(
           name = manualName,
           onNameChange = { manualName = it },
+          // 登録済みマーカーから開いたときは、その場所へ紐付ける（名前欄の代わりに場所名を出す）。
+          linkedPlaceName = pick.existingPlaceId?.let { pick.name ?: "登録済みの場所" },
           arrivalTime = arrival,
           departureTime = departure,
           arrivalIdx = manualArrivalIdx,
@@ -653,10 +664,16 @@ fun TrackDetailScreen(
             manualDepartureIdx = end
           },
           onConfirm = {
-            val finalName = manualName.trim().ifBlank { null }
-            // 名前を POI 名から変えたら googlePlaceId は使わない（別名で解決記録を焼き込まない）。
-            val googleId = pick.googlePlaceId?.takeIf { finalName == pick.name }
-            onAddManualStop(pick.latLng.latitude, pick.latLng.longitude, arrival, departure, finalName, googleId)
+            val existingPlaceId = pick.existingPlaceId
+            if (existingPlaceId != null) {
+              // 登録済みの場所に紐付ける（新規place作らず、調整した滞在区間で）。
+              onAddManualStopForPlace(existingPlaceId, arrival, departure)
+            } else {
+              val finalName = manualName.trim().ifBlank { null }
+              // 名前を POI 名から変えたら googlePlaceId は使わない（別名で解決記録を焼き込まない）。
+              val googleId = pick.googlePlaceId?.takeIf { finalName == pick.name }
+              onAddManualStop(pick.latLng.latitude, pick.latLng.longitude, arrival, departure, finalName, googleId)
+            }
             exitManual()
             scope.launch { snackbarHostState.showSnackbar("立ち寄りを追加しました") }
           },
@@ -706,20 +723,6 @@ fun TrackDetailScreen(
         reassignTarget = null
       },
       onDismiss = { reassignTarget = null },
-    )
-  }
-
-  // 登録済みマーカーをタップしたときの紐付け確認（②）。既存 place にこの訪問を足す。
-  linkTarget?.let { place ->
-    LinkStopToPlaceDialog(
-      place = place,
-      points = manualPoints,
-      onConfirm = { arrival, departure ->
-        onAddManualStopForPlace(place.placeId, arrival, departure)
-        exitManual()
-        linkTarget = null
-      },
-      onDismiss = { linkTarget = null },
     )
   }
 
@@ -1011,6 +1014,8 @@ private data class ManualPick(
   val latLng: LatLng,
   val name: String?,
   val googlePlaceId: String?,
+  // 登録済みマーカーから選んだ場合の既存 placeId。非nullなら新規placeを作らずここへ紐付ける（②）。
+  val existingPlaceId: Long? = null,
 )
 
 /** 手動追加モードで地点を指す前に出す案内バー（下部・細め）。 */
@@ -1064,6 +1069,8 @@ private fun ManualAddOverlay(
   onConfirm: () -> Unit,
   onCancel: () -> Unit,
   modifier: Modifier = Modifier,
+  // 非nullなら登録済みの場所へ紐付けるモード（名前欄の代わりに場所名を表示・新規placeは作らない）。
+  linkedPlaceName: String? = null,
 ) {
   val durationMinutes = ((departureTime.time - arrivalTime.time) / 1000 / 60).toInt()
   Surface(
@@ -1086,17 +1093,30 @@ private fun ManualAddOverlay(
         verticalArrangement = Arrangement.spacedBy(12.dp),
       ) {
         Text(
-          text = "手動で立ち寄りを追加",
+          text = if (linkedPlaceName != null) "この場所に立ち寄りを追加" else "手動で立ち寄りを追加",
           style = MaterialTheme.typography.titleMedium,
           fontWeight = FontWeight.Bold,
         )
-        OutlinedTextField(
-          value = name,
-          onValueChange = onNameChange,
-          label = { Text("名前（任意）") },
-          singleLine = true,
-          modifier = Modifier.fillMaxWidth(),
-        )
+        if (linkedPlaceName != null) {
+          // 登録済みの場所へ紐付けるので名前は編集しない（既存placeを使う）。
+          Text(
+            text = linkedPlaceName,
+            style = MaterialTheme.typography.bodyLarge,
+          )
+          Text(
+            text = "登録済みの場所に紐付けます（新しい場所は作りません）。",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+          )
+        } else {
+          OutlinedTextField(
+            value = name,
+            onValueChange = onNameChange,
+            label = { Text("名前（任意）") },
+            singleLine = true,
+            modifier = Modifier.fillMaxWidth(),
+          )
+        }
         Text(
           text = "滞在${durationMinutes}分（青いハイライトが滞在区間）",
           style = MaterialTheme.typography.bodyMedium,
