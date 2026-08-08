@@ -354,6 +354,13 @@ Android アプリ制限付きの API キー（地図と共用）を**そのま�
 **滞在時間の調整**（スライダー＋到着/出発の ＋/− 微調整）は共通の `StopRangeEditor` に切り出し、
 記録中・履歴詳細の**両方の手動追加で使える**（軌跡点が2点未満のときだけ推定にフォールバック）。
 
+**近接確認（トグルOFF時のフォールバック）**: マーカーを出していない（トグルOFF）ときは②のマーカータップができないので、
+**ID 無しの手動追加**（POI 未選択＝`googlePlaceId` 無し。空タップ／手入力／名前なし）を確定した時点で、
+**検出半径（`StopDetector.RADIUS_METERS`＝50m）以内**の既存 place を探し（`findNearbyPlace`）、あれば
+`NearbyPlaceConfirmDialog` で「**この場所に紐付け**／**新規で追加**」を確認する。「紐付け」は `addManualStopForPlace`、
+「新規」は `addManualStop(forceNewPlace=true)` で**座標30m同定をバイパスして必ず新規 place を作る**（気づかない誤マージを防ぐ）。
+近くに無ければ従来どおり追加する。トグルON時はマーカー＋②に任せ、この確認は出さない。
+
 - **取得**: `PlaceRepository.observeRegisteredPlaces()`（`PlaceDao.observeRegisteredPlaces`）。全 place を
   最小情報（id・座標・表示名）でリアクティブに返す。表示名は `places.name → google_places.name → 住所` の
   フォールバック（`COALESCE`）。場所詳細ではその場所自身は主マーカーと重なるので呼び出し側で除外する。

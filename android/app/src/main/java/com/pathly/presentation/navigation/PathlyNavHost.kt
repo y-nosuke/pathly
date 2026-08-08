@@ -242,9 +242,10 @@ private fun TrackDetailRoute(
     onDismissReanalyze = { viewModel.dismissReanalyze() },
     onDeleteStops = { stopIds -> viewModel.deleteStops(stopIds) },
     onUndoDeletion = { viewModel.undoDeletion() },
-    onAddManualStop = { lat, lng, arrival, departure, name, googlePlaceId ->
-      viewModel.addManualStop(lat, lng, arrival, departure, name, googlePlaceId)
+    onAddManualStop = { lat, lng, arrival, departure, name, googlePlaceId, forceNewPlace ->
+      viewModel.addManualStop(lat, lng, arrival, departure, name, googlePlaceId, forceNewPlace)
     },
+    onFindNearbyPlace = viewModel::nearbyPlace,
     onMessageShown = { viewModel.clearMessage() },
     onRegisterPlace = { lat, lng, name, wishlist, priority, memo, googlePlaceId ->
       viewModel.registerPlace(lat, lng, name, wishlist, priority, memo, googlePlaceId)

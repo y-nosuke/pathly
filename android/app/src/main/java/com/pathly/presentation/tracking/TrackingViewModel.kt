@@ -16,6 +16,7 @@ import com.pathly.data.settings.MapSurface
 import com.pathly.data.settings.SettingsRepository
 import com.pathly.domain.model.PlaceSearchResult
 import com.pathly.domain.model.Priority
+import com.pathly.domain.model.RegisteredPlace
 import com.pathly.domain.repository.GpsTrackRepository
 import com.pathly.domain.repository.PlaceRepository
 import com.pathly.domain.repository.WishlistRepository
@@ -317,6 +318,9 @@ class TrackingViewModel @Inject constructor(
   /** 手動追加の確認ダイアログ用: 座標の近くの POI 候補を複数取得する（取り違え回避）。 */
   suspend fun nearbyPois(latitude: Double, longitude: Double): List<PlaceSearchResult> = placeRepository.nearbyPois(latitude, longitude)
 
+  /** 手動追加の近接確認用: 近く（検出半径）に既存の場所があれば最寄り1件を返す。 */
+  suspend fun nearbyPlace(latitude: Double, longitude: Double): RegisteredPlace? = placeRepository.findNearbyPlace(latitude, longitude)
+
   /** 誤検知の訂正: この訪問だけを、選んだ候補／手入力名の場所へ付け替える。 */
   fun reassignStop(stopId: Long, chosen: PlaceSearchResult?, customName: String?) {
     viewModelScope.launch {
@@ -339,11 +343,12 @@ class TrackingViewModel @Inject constructor(
     departureTime: java.util.Date,
     name: String?,
     googlePlaceId: String?,
+    forceNewPlace: Boolean = false,
   ) {
     val trackId = _uiState.value.currentTrackId ?: return
     viewModelScope.launch {
       try {
-        placeRepository.addManualStop(trackId, latitude, longitude, arrivalTime, departureTime, name, googlePlaceId)
+        placeRepository.addManualStop(trackId, latitude, longitude, arrivalTime, departureTime, name, googlePlaceId, forceNewPlace)
         _uiState.value = _uiState.value.copy(
           placeRegisteredMessage = "立ち寄りを追加しました",
         )
