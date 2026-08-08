@@ -64,9 +64,12 @@ gps_tracks 1 ──< stops >── 1 places
 - 取得できたら place の `name`・`address` に保存し、`place_resolutions` に解決記録（`resolvedAt`・`googlePlaceId`）を残す。
 - **place 1件につき自動で叩くのは1回だけ**。「叩いたか」は `place_resolutions` の**行の有無**で判定する（`name IS NULL` では判定しない＝POIの無い場所を毎回叩かないため）。
 - POIが見つからないときも `resolvedAt` の行を残す（`googlePlaceId` は null）＝自動では二度と叩かない。**オフライン／通信エラーのときは行を作らず**、オンライン復帰後に自動でキャッチアップする。
+- **起動時キャッチアップ**: アプリ起動時（`PathlyApplication.onCreate`）に、全経路で `place_resolutions` を持たない立ち寄り場所（＝オフライン記録などで未解決）を `resolveAllUnresolvedNames()` でまとめて解決する。オフライン時は各 place で no-op（行を残さず次回起動で再度拾う）＝無駄な課金なし。
+- **座標の採用**: 解決できたら place の座標を**施設の正確な座標（Places の LOCATION）へ置き換える**（暫定の GPS 座標より正確。地図ピン・30m 重複判定の精度が上がる）。
 - **課金**: Nearby Search は有料。**オンラインのときだけ・place 1件1回**に限定して最小化する。
   - places に「試行済み」等の動的状態は持たせない（places は静的に保つ）。解決状態は `place_resolutions` に**分離**する。
 - **手動再取得**: `googlePlaceId` が無い place（未取得・過去失敗・POI無し）を、詳細画面のボタンでユーザー操作でだけ取り直せる。二度と命名できない状態にはしない導線。
+- **手動で Google 施設に紐付け（②）**: 場所の詳細から「Googleで情報を取得（施設を検索して紐付け）」で、キーワード検索して選んだ施設を**この場所に**紐付けられる（`linkPlaceToGoogle`）。`google_places`・`place_resolutions` を上書きし座標も採用する。座標・DB 状態に依存せず確実に補完でき、手動登録・オフライン未解決の穴埋めや、`googlePlaceId` を持たない場所が重複登録された際の是正に使う（`places.name`＝ユーザー名は変えない）。
 
 > Geocoder（無料・住所のみ）ではなく Places（有料・施設名）を選んだ理由:
 > 「スターバックス」「◯◯公園」のような**人が分かる名前**が欲しいため。住所だけでは振り返りに使いにくい。
