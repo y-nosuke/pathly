@@ -5,6 +5,7 @@ import com.pathly.domain.model.PlaceRegistration
 import com.pathly.domain.model.PlaceSearchResult
 import com.pathly.domain.model.PlaceVisit
 import com.pathly.domain.model.Priority
+import com.pathly.domain.model.RegisteredPlace
 import kotlinx.coroutines.flow.Flow
 
 /**
@@ -15,6 +16,9 @@ interface WishlistRepository {
 
   /** 全ての場所を、行きたい登録（あれば）付きでリアクティブに取得する。 */
   fun getPlaces(): Flow<List<PlaceListItem>>
+
+  /** 単一の場所を、行きたい登録付きで一回取得する（記録画面で既存 place をその場で編集するため）。無ければ null。 */
+  suspend fun getPlace(placeId: Long): PlaceListItem?
 
   /** その場所を含むお出掛け（経路）の一覧。新しい順。訪問が無ければ空。 */
   fun getVisits(placeId: Long): Flow<List<PlaceVisit>>
@@ -39,7 +43,12 @@ interface WishlistRepository {
     name: String?,
     note: String? = null,
     googlePlaceId: String? = null,
+    // true のとき座標30m同定をせず必ず新しい place を作る（近接確認で「新規」/ 表示ONでそのまま登録）。
+    forceNewPlace: Boolean = false,
   ): PlaceRegistration
+
+  /** 手動登録の近接確認用: 近く（検出半径 50m）に既存の場所があれば最寄り1件を返す（無ければ null）。 */
+  suspend fun findNearbyPlace(latitude: Double, longitude: Double): RegisteredPlace?
 
   /**
    * キーワード検索の結果から場所を登録する。find-or-create（30m）で場所を同定し、

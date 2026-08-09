@@ -316,6 +316,9 @@ Android アプリ制限付きの API キー（地図と共用）を**そのま�
 
 ## UI
 
+> 地図タップの意味（画面 × モード × 登録済み表示 ON/OFF × タップ対象）の一覧は [map-tap-behavior.md](./map-tap-behavior.md)、
+> その決定背景は [ADR-0009](../adr/0009-map-tap-behavior.md)。
+
 ### 地図描画の共通化（記録画面・詳細画面）
 
 記録画面（`TrackingScreen`）と詳細画面（`TrackDetailScreen`）は**別画面**（記録＝ライブ・片手／詳細＝事後の見直し・編集）

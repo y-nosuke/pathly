@@ -94,6 +94,7 @@ import com.pathly.BuildConfig
 import com.pathly.R
 import com.pathly.domain.model.GpsPoint
 import com.pathly.domain.model.GpsTrack
+import com.pathly.domain.model.PlaceListItem
 import com.pathly.domain.model.PlaceSearchResult
 import com.pathly.domain.model.Priority
 import com.pathly.domain.model.RegisteredPlace
@@ -109,7 +110,8 @@ import com.pathly.presentation.common.StopReassignDialog
 import com.pathly.presentation.common.defaultDepartureIndex
 import com.pathly.presentation.common.nearestPointIndex
 import com.pathly.presentation.common.stopSegmentPoints
-import com.pathly.presentation.places.RegisterPlaceFromPoiDialog
+import com.pathly.presentation.places.PlaceActionSheet
+import com.pathly.presentation.places.PlaceSheetTarget
 import com.pathly.util.DateFormatters
 import kotlinx.coroutines.launch
 import java.util.Date
@@ -146,9 +148,16 @@ fun TrackDetailScreen(
     { _, _, _, _, _, _, _ -> },
   // 近接確認（③）用: 近く（検出半径）の既存の場所を探す。
   onFindNearbyPlace: suspend (lat: Double, lng: Double) -> RegisteredPlace? = { _, _ -> null },
+  // 登録済みマーカー（通常モード）タップ後、シートの「詳細を開く」でその場所の詳細を開く。
+  onOpenPlaceDetail: (placeId: Long) -> Unit = {},
   onMessageShown: () -> Unit = {},
-  onRegisterPlace: (lat: Double, lng: Double, name: String, wishlist: Boolean, priority: Priority, memo: String?, googlePlaceId: String?) -> Unit =
-    { _, _, _, _, _, _, _ -> },
+  onRegisterPlace: (lat: Double, lng: Double, name: String?, wishlist: Boolean, priority: Priority, memo: String?, googlePlaceId: String?, forceNewPlace: Boolean) -> Unit =
+    { _, _, _, _, _, _, _, _ -> },
+  // 近接確認で「紐付け」を選んだとき: 既存 place に行きたい/メモを反映する。
+  onLinkRegister: (placeId: Long, wishlist: Boolean, priority: Priority, memo: String?) -> Unit = { _, _, _, _ -> },
+  // 統一シートで登録済みマーカーをその場で編集するため、単一 place を取得・保存する。
+  onLoadPlace: suspend (placeId: Long) -> PlaceListItem? = { null },
+  onSavePlaceEdits: (item: PlaceListItem, name: String, note: String, wishlist: Boolean, priority: Priority, visited: Boolean) -> Unit = { _, _, _, _, _, _ -> },
   onFetchPoiDetails: suspend (googlePlaceId: String) -> PlaceSearchResult? = { null },
   // 誤検知の選び直し用: 座標の近くの POI 候補を取得／この訪問だけ付け替える。
   onFetchNearbyPois: suspend (lat: Double, lng: Double) -> List<PlaceSearchResult> = { _, _ -> emptyList() },
@@ -163,7 +172,11 @@ fun TrackDetailScreen(
   // テストは空スロット（{}）を渡し、GMS 依存の地図描画を避けてシート・オーバーレイだけを検証する。
   mapContent: (@Composable () -> Unit)? = null,
 ) {
-  var poiTarget by remember { mutableStateOf<PointOfInterest?>(null) }
+  // 通常モードの地図タップで開く統一の「場所シート」（未登録の空き地点/POI＝登録、登録済み＝その場で編集）。
+  var placeSheetTarget by remember { mutableStateOf<PlaceSheetTarget?>(null) }
+  // 空き地点の登録で、表示OFFかつ近くに既存があったときの近接確認。
+  var registerProximity by remember { mutableStateOf<RegisteredPlace?>(null) }
+  var pendingRegister by remember { mutableStateOf<PendingRegister?>(null) }
   val scope = rememberCoroutineScope()
   val density = LocalDensity.current
   val screenHeightDp = LocalConfiguration.current.screenHeightDp.dp
@@ -339,7 +352,7 @@ fun TrackDetailScreen(
               focusTarget = poi.latLng
               focusNonce++
             } else {
-              poiTarget = poi
+              placeSheetTarget = PlaceSheetTarget.NewPoi(poi)
             }
           },
           onMapClick = { latLng ->
@@ -347,17 +360,20 @@ fun TrackDetailScreen(
               manualPick = ManualPick(latLng, null, null)
               focusTarget = latLng
               focusNonce++
+            } else {
+              placeSheetTarget = PlaceSheetTarget.NewPoint(latLng)
             }
           },
-          // 地図の立ち寄りピンをタップ → 一覧の該当行を強調＆スクロール。畳んでいたらシートを開く。
+          // 地図の立ち寄りピンをタップ → 一覧の該当行を強調＆スクロール＋「選び直し」を出す（記録画面と統一）。
           onStopClick = { stop ->
             highlightedStopId = stop.id
             focusTarget = LatLng(stop.place.latitude, stop.place.longitude)
             focusNonce++
             if (detent == SheetDetent.HIDDEN) settleTo(SheetDetent.PEEK)
+            reassignTarget = stop
           },
-          // 手動追加モード中に登録済みマーカーをタップ → 既存の手動追加オーバーレイ（滞在調整あり）を
-          // その既存 place に紐付ける形で開く（②）。専用の簡易ダイアログは使わない。
+          // 登録済みマーカーのタップ: 手動追加モード＝既存placeへ紐付け（滞在調整ありのオーバーレイ）／
+          // 通常モード＝場所シートでその場編集（詳細も開ける）。
           onRegisteredPlaceClick = { place ->
             if (manualMode) {
               manualPick = ManualPick(
@@ -368,6 +384,8 @@ fun TrackDetailScreen(
               )
               focusTarget = LatLng(place.latitude, place.longitude)
               focusNonce++
+            } else {
+              placeSheetTarget = PlaceSheetTarget.Existing(place.placeId)
             }
           },
           modifier = Modifier.fillMaxSize(),
@@ -755,14 +773,51 @@ fun TrackDetailScreen(
     onMessageShown()
   }
 
-  poiTarget?.let { poi ->
-    RegisterPlaceFromPoiDialog(
-      poi = poi,
-      onDismiss = { poiTarget = null },
-      onFetchDetails = onFetchPoiDetails,
-      onRegister = { name, wishlist, priority, memo ->
-        onRegisterPlace(poi.latLng.latitude, poi.latLng.longitude, name, wishlist, priority, memo, poi.placeId)
-        poiTarget = null
+  // 通常モードの地図タップで開く統一の「場所シート」。立ち寄り追加は手動追加モード（到着/出発の調整あり）に任せるため出さない。
+  placeSheetTarget?.let { target ->
+    PlaceActionSheet(
+      target = target,
+      onDismiss = { placeSheetTarget = null },
+      onFetchPoiDetails = onFetchPoiDetails,
+      onLoadPlace = onLoadPlace,
+      onRegisterNew = { lat, lng, name, wishlist, priority, memo, googlePlaceId ->
+        when {
+          googlePlaceId != null -> onRegisterPlace(lat, lng, name, wishlist, priority, memo, googlePlaceId, false)
+          showRegisteredPlaces -> onRegisterPlace(lat, lng, name, wishlist, priority, memo, null, true)
+          else -> scope.launch {
+            val near = onFindNearbyPlace(lat, lng)
+            if (near != null) {
+              registerProximity = near
+              pendingRegister = PendingRegister(lat, lng, name, wishlist, priority, memo)
+            } else {
+              onRegisterPlace(lat, lng, name, wishlist, priority, memo, null, true)
+            }
+          }
+        }
+      },
+      onSaveExisting = onSavePlaceEdits,
+      onOpenDetail = onOpenPlaceDetail,
+    )
+  }
+
+  // 空き地点登録の近接確認（表示OFF）: 近くの既存に紐付け／新規で登録。
+  registerProximity?.let { near ->
+    val pending = pendingRegister
+    NearbyPlaceConfirmDialog(
+      place = near,
+      onLink = {
+        pending?.let { onLinkRegister(near.placeId, it.wishlist, it.priority, it.memo) }
+        registerProximity = null
+        pendingRegister = null
+      },
+      onCreateNew = {
+        pending?.let { onRegisterPlace(it.lat, it.lng, it.name, it.wishlist, it.priority, it.memo, null, true) }
+        registerProximity = null
+        pendingRegister = null
+      },
+      onDismiss = {
+        registerProximity = null
+        pendingRegister = null
       },
     )
   }
@@ -1028,6 +1083,16 @@ private data class ManualPick(
   val googlePlaceId: String?,
   // 登録済みマーカーから選んだ場合の既存 placeId。非nullなら新規placeを作らずここへ紐付ける（②）。
   val existingPlaceId: Long? = null,
+)
+
+/** 通常モードの空き地点登録で、表示OFFの近接確認のときに保留する登録内容。 */
+private data class PendingRegister(
+  val lat: Double,
+  val lng: Double,
+  val name: String?,
+  val wishlist: Boolean,
+  val priority: Priority,
+  val memo: String?,
 )
 
 /** 近接確認（③）で保留する手動追加の内容（近くの既存place＋「新規で追加」を選んだときに使う入力）。 */
@@ -1392,11 +1457,11 @@ private fun TrackSummaryHeader(
           onClick = onReanalyze,
         )
       }
-      // 手動で追加: 検出に頼らず、地図で指した地点を立ち寄りとして足す（完全手動）。到着/出発を
-      // 軌跡から仮置きするため、経路が伸び続ける記録中は避けて終了済みのみで表示する。
-      if (track.points.size >= 2 && !track.isActive) {
+      // 立ち寄りを追加: 検出に頼らず、地図で指した地点を立ち寄りとして足す（完全手動）。到着/出発は
+      // その時点の軌跡から仮置きする。記録中も使える（末尾が伸びる分は確定時の軌跡で推定）。
+      if (track.points.size >= 2) {
         ActionChip(
-          text = "手動で追加",
+          text = "立ち寄りを追加",
           container = MaterialTheme.colorScheme.tertiaryContainer,
           content = MaterialTheme.colorScheme.onTertiaryContainer,
           onClick = onManualAdd,

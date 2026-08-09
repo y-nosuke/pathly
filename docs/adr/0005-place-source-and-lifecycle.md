@@ -54,3 +54,7 @@
 3. **誤検知の選び直し（Model B）**: 確定済みの立ち寄りを、近くの POI 候補から選び直して**この訪問だけ**正しい place に
    付け替える。余った `DETECTED` の孤立 place は本 ADR の回収で安全に片付く。検出（自動）は座標同定のままで、
    間違いはこの訂正で直す。
+
+> 上記 1〜3 はその後それぞれ決定・実装した: 1 → [ADR-0006](0006-place-identity-by-googleplaceid.md)、
+> 3 → [ADR-0007](0007-reassign-stop-this-visit-only.md)、2 → [ADR-0008](0008-registered-places-on-map.md)。
+> 地図タップ全体の統一は [ADR-0009](0009-map-tap-behavior.md)。

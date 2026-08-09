@@ -127,6 +127,7 @@ fun PathlyNavHost(
       composable(Routes.TRACKING) {
         TrackingScreen(
           onRequestPermission = onRequestPermission,
+          onOpenPlaceDetail = { placeId -> navController.navigate(Routes.placeDetail(placeId)) },
           viewModel = trackingViewModel,
         )
       }
@@ -148,7 +149,11 @@ fun PathlyNavHost(
         arguments = listOf(navArgument("trackId") { type = NavType.LongType }),
       ) { entry ->
         val trackId = entry.arguments?.getLong("trackId") ?: return@composable
-        TrackDetailRoute(trackId = trackId, onBack = { navController.popBackStack() })
+        TrackDetailRoute(
+          trackId = trackId,
+          onBack = { navController.popBackStack() },
+          onOpenPlaceDetail = { placeId -> navController.navigate(Routes.placeDetail(placeId)) },
+        )
       }
     }
   }
@@ -190,6 +195,7 @@ private fun NavGraphBuilder.placesGraph(navController: NavController) {
         placeId = placeId,
         onBack = { navController.popBackStack() },
         onOpenTrack = { trackId -> navController.navigate(Routes.trackDetail(trackId)) },
+        onOpenPlaceDetail = { pid -> navController.navigate(Routes.placeDetail(pid)) },
       )
     }
   }
@@ -207,6 +213,7 @@ private fun NavBackStackEntry.sharedPlacesViewModel(navController: NavController
 private fun TrackDetailRoute(
   trackId: Long,
   onBack: () -> Unit,
+  onOpenPlaceDetail: (placeId: Long) -> Unit = {},
 ) {
   val viewModel: TrackDetailViewModel = hiltViewModel()
   LaunchedEffect(trackId) { viewModel.load(trackId) }
@@ -247,8 +254,15 @@ private fun TrackDetailRoute(
     },
     onFindNearbyPlace = viewModel::nearbyPlace,
     onMessageShown = { viewModel.clearMessage() },
-    onRegisterPlace = { lat, lng, name, wishlist, priority, memo, googlePlaceId ->
-      viewModel.registerPlace(lat, lng, name, wishlist, priority, memo, googlePlaceId)
+    onRegisterPlace = { lat, lng, name, wishlist, priority, memo, googlePlaceId, forceNewPlace ->
+      viewModel.registerPlace(lat, lng, name, wishlist, priority, memo, googlePlaceId, forceNewPlace)
+    },
+    onLinkRegister = { placeId, wishlist, priority, memo ->
+      viewModel.linkRegisterToPlace(placeId, wishlist, priority, memo)
+    },
+    onLoadPlace = viewModel::loadPlace,
+    onSavePlaceEdits = { editItem, name, note, wishlist, priority, visited ->
+      viewModel.savePlaceEdits(editItem, name, note, wishlist, priority, visited)
     },
     onFetchPoiDetails = viewModel::fetchPoiDetails,
     onFetchNearbyPois = viewModel::nearbyPois,
@@ -259,5 +273,6 @@ private fun TrackDetailRoute(
     onAddManualStopForPlace = { placeId, arrival, departure ->
       viewModel.addManualStopForPlace(placeId, arrival, departure)
     },
+    onOpenPlaceDetail = onOpenPlaceDetail,
   )
 }
