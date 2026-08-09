@@ -1,19 +1,17 @@
 package com.pathly.presentation.tracking
 
-import android.app.Application
-import android.content.Context
-import android.content.pm.PackageManager
-import androidx.arch.core.executor.testing.InstantTaskExecutorRule
 import com.pathly.data.settings.SettingsRepository
+import com.pathly.data.tracking.TrackingController
 import com.pathly.domain.repository.GpsTrackRepository
 import com.pathly.domain.repository.PlaceRepository
 import com.pathly.domain.repository.WishlistRepository
 import io.mockk.coEvery
 import io.mockk.every
 import io.mockk.mockk
-import io.mockk.mockkStatic
+import io.mockk.verify
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.StandardTestDispatcher
@@ -25,17 +23,17 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
-import org.junit.Rule
 import org.junit.Test
 
+/**
+ * TrackingViewModel は TrackingController 越しにしか Android framework を触らないので、
+ * Service・Context・権限チェックをモックせずに素の JVM テストで検証できる。
+ */
 @OptIn(ExperimentalCoroutinesApi::class)
 class TrackingViewModelTest {
 
-  @get:Rule
-  val instantTaskExecutorRule = InstantTaskExecutorRule()
-
   private val testDispatcher = StandardTestDispatcher()
-  private val mockApplication = mockk<Application>(relaxed = true)
+
   private val mockRepository = mockk<GpsTrackRepository>(relaxed = true)
   private val mockPlaceRepository = mockk<PlaceRepository>(relaxed = true).also {
     every { it.currentStop } returns MutableStateFlow(null)
@@ -45,25 +43,18 @@ class TrackingViewModelTest {
   private val mockSettingsRepository = mockk<SettingsRepository>(relaxed = true).also {
     every { it.showRegisteredPlaces(any()) } returns MutableStateFlow(false)
   }
+  private val mockController = mockk<TrackingController>(relaxed = true).also {
+    every { it.currentLocation } returns MutableStateFlow(null)
+    every { it.locationCount } returns MutableStateFlow(0)
+    every { it.isTracking } returns MutableStateFlow(false)
+    every { it.unexpectedDisconnect } returns MutableSharedFlow()
+  }
 
   @Before
   fun setup() {
     Dispatchers.setMain(testDispatcher)
-
-    // Android Framework のモック設定
-    mockkStatic("androidx.core.content.ContextCompat")
-
-    // Application context の設定
-    every { mockApplication.applicationContext } returns mockApplication
-    every { mockApplication.packageName } returns "com.pathly"
-
-    // 権限チェックをモック
-    every {
-      androidx.core.content.ContextCompat.checkSelfPermission(
-        any<Context>(),
-        any<String>(),
-      )
-    } returns PackageManager.PERMISSION_GRANTED
+    coEvery { mockRepository.getActiveTrack() } returns null
+    every { mockRepository.getActiveTrackRealtime() } returns flowOf(null)
   }
 
   @After
@@ -71,51 +62,64 @@ class TrackingViewModelTest {
     Dispatchers.resetMain()
   }
 
+  private fun createViewModel(): TrackingViewModel = TrackingViewModel(
+    mockController,
+    mockRepository,
+    mockPlaceRepository,
+    mockWishlistRepository,
+    mockSettingsRepository,
+  ).also { testDispatcher.scheduler.advanceUntilIdle() }
+
   @Test
   fun `updateLocationPermission_権限false設定`() = runTest {
-    // Given
-    coEvery { mockRepository.getActiveTrack() } returns null
-    coEvery { mockRepository.getActiveTrackRealtime() } returns flowOf(null)
-    val viewModel = TrackingViewModel(mockApplication, mockRepository, mockPlaceRepository, mockWishlistRepository, mockSettingsRepository)
-    testDispatcher.scheduler.advanceUntilIdle()
+    val viewModel = createViewModel()
 
-    // When
     viewModel.updateLocationPermission(false)
 
-    // Then
-    val state = viewModel.uiState.value
-    assertFalse("権限状態がfalse", state.hasLocationPermission)
+    assertFalse("権限状態がfalse", viewModel.uiState.value.hasLocationPermission)
   }
 
   @Test
   fun `updateLocationPermission_権限true設定`() = runTest {
-    // Given
-    coEvery { mockRepository.getActiveTrack() } returns null
-    coEvery { mockRepository.getActiveTrackRealtime() } returns flowOf(null)
-    val viewModel = TrackingViewModel(mockApplication, mockRepository, mockPlaceRepository, mockWishlistRepository, mockSettingsRepository)
-    testDispatcher.scheduler.advanceUntilIdle()
+    val viewModel = createViewModel()
 
-    // When
     viewModel.updateLocationPermission(true)
 
-    // Then
-    val state = viewModel.uiState.value
-    assertTrue("権限状態がtrue", state.hasLocationPermission)
+    assertTrue("権限状態がtrue", viewModel.uiState.value.hasLocationPermission)
   }
 
   @Test
   fun `clearError_エラーメッセージクリア`() = runTest {
-    // Given
-    coEvery { mockRepository.getActiveTrack() } returns null
-    coEvery { mockRepository.getActiveTrackRealtime() } returns flowOf(null)
-    val viewModel = TrackingViewModel(mockApplication, mockRepository, mockPlaceRepository, mockWishlistRepository, mockSettingsRepository)
-    testDispatcher.scheduler.advanceUntilIdle()
+    val viewModel = createViewModel()
 
-    // When
     viewModel.clearError()
 
-    // Then
+    assertNull("エラーメッセージがクリア", viewModel.uiState.value.errorMessage)
+  }
+
+  @Test
+  fun `startTracking_開始できれば記録中になる`() = runTest {
+    val viewModel = createViewModel()
+    viewModel.updateLocationPermission(true)
+
+    viewModel.startTracking()
+
     val state = viewModel.uiState.value
-    assertNull("エラーメッセージがクリア", state.errorMessage)
+    assertTrue("記録中になる", state.isTracking)
+    assertNull("エラーは出ない", state.errorMessage)
+  }
+
+  @Test
+  fun `stopTracking_コントローラへ停止を伝え状態を戻す`() = runTest {
+    val viewModel = createViewModel()
+    viewModel.updateLocationPermission(true)
+    viewModel.startTracking()
+
+    viewModel.stopTracking()
+
+    verify { mockController.stop() }
+    val state = viewModel.uiState.value
+    assertFalse("記録中でなくなる", state.isTracking)
+    assertNull("現在地は消える", state.currentLocation)
   }
 }

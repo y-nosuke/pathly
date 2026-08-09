@@ -1,18 +1,10 @@
 package com.pathly.presentation.tracking
 
-import android.app.Application
-import android.content.ComponentName
-import android.content.Context
-import android.content.Intent
-import android.content.ServiceConnection
-import android.net.Uri
-import android.os.IBinder
-import android.os.PowerManager
-import android.provider.Settings
-import androidx.lifecycle.AndroidViewModel
+import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.pathly.data.settings.MapSurface
 import com.pathly.data.settings.SettingsRepository
+import com.pathly.data.tracking.TrackingController
 import com.pathly.domain.model.PlaceListItem
 import com.pathly.domain.model.PlaceSearchResult
 import com.pathly.domain.model.Priority
@@ -20,10 +12,8 @@ import com.pathly.domain.model.RegisteredPlace
 import com.pathly.domain.repository.GpsTrackRepository
 import com.pathly.domain.repository.PlaceRepository
 import com.pathly.domain.repository.WishlistRepository
-import com.pathly.service.LocationTrackingService
 import com.pathly.util.DateFormatters
 import com.pathly.util.Logger
-import com.pathly.util.PermissionUtils
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -41,66 +31,17 @@ import javax.inject.Inject
 @OptIn(ExperimentalCoroutinesApi::class)
 @HiltViewModel
 class TrackingViewModel @Inject constructor(
-  private val application: Application,
+  private val trackingController: TrackingController,
   private val gpsTrackRepository: GpsTrackRepository,
   private val placeRepository: PlaceRepository,
   private val wishlistRepository: WishlistRepository,
   private val settingsRepository: SettingsRepository,
-) : AndroidViewModel(application) {
+) : ViewModel() {
 
   private val logger = Logger("TrackingViewModel")
 
   private val _uiState = MutableStateFlow(TrackingState())
   val uiState: StateFlow<TrackingState> = _uiState.asStateFlow()
-
-  private var locationService: LocationTrackingService? = null
-  private var isServiceBound = false
-
-  private val serviceConnection = object : ServiceConnection {
-    override fun onServiceConnected(name: ComponentName?, service: IBinder?) {
-      logger.d("Service connected")
-      val binder = service as LocationTrackingService.LocationTrackingBinder
-      locationService = binder.getService()
-      isServiceBound = true
-
-      // サービスに接続できた場合、追跡状態を確認・更新
-      viewModelScope.launch {
-        val activeTrack = gpsTrackRepository.getActiveTrack()
-        if (activeTrack != null) {
-          _uiState.update {
-            it.copy(
-              isTracking = true,
-              currentTrackId = activeTrack.id,
-            )
-          }
-        }
-      }
-
-      // サービスに接続したら、位置情報を監視開始
-      observeLocationUpdates()
-    }
-
-    override fun onServiceDisconnected(name: ComponentName?) {
-      logger.d("Service disconnected")
-      locationService = null
-      isServiceBound = false
-
-      // サービスが予期せず切断された場合、追跡状態をリセット
-      viewModelScope.launch {
-        val activeTrack = gpsTrackRepository.getActiveTrack()
-        if (activeTrack != null) {
-          logger.d("Service disconnected unexpectedly, finishing track")
-          gpsTrackRepository.finishTrack(activeTrack.id, java.util.Date())
-        }
-        _uiState.update {
-          it.copy(
-            isTracking = false,
-            currentTrackId = null,
-          )
-        }
-      }
-    }
-  }
 
   init {
     checkActiveTracking()
@@ -109,6 +50,22 @@ class TrackingViewModel @Inject constructor(
     observeCurrentStop()
     observeStops()
     observeRegisteredPlaces()
+    observeLocationUpdates()
+    observeUnexpectedDisconnect()
+  }
+
+  /** サービスが予期せず切れたら（プロセスのクラッシュ等）、記録中のトラックを閉じて状態を戻す。 */
+  private fun observeUnexpectedDisconnect() {
+    viewModelScope.launch {
+      trackingController.unexpectedDisconnect.collect {
+        val activeTrack = gpsTrackRepository.getActiveTrack()
+        if (activeTrack != null) {
+          logger.d("Service disconnected unexpectedly, finishing track")
+          gpsTrackRepository.finishTrack(activeTrack.id, java.util.Date())
+        }
+        _uiState.update { it.copy(isTracking = false, currentTrackId = null) }
+      }
+    }
   }
 
   /** 「登録済みの場所」トグルと全place を購読して地図に反映する（記録画面の画面別トグル）。 */
@@ -166,7 +123,7 @@ class TrackingViewModel @Inject constructor(
           }
         }
 
-        LocationTrackingService.isTracking -> {
+        trackingController.isTracking.value -> {
           // 記録中プロセスが生存している → サービスに再接続して継続
           _uiState.update {
             it.copy(
@@ -174,7 +131,7 @@ class TrackingViewModel @Inject constructor(
               currentTrackId = activeTrack.id,
             )
           }
-          bindToService()
+          trackingController.reattach()
         }
 
         else -> {
@@ -197,37 +154,16 @@ class TrackingViewModel @Inject constructor(
 
     if (!_uiState.value.hasLocationPermission) {
       logger.e("Location permission not granted")
-      _uiState.update {
-        it.copy(
-          errorMessage = "位置情報の権限が必要です",
-        )
-      }
+      _uiState.update { it.copy(errorMessage = "位置情報の権限が必要です") }
       return
     }
 
-    val intent = Intent(application, LocationTrackingService::class.java).apply {
-      action = LocationTrackingService.ACTION_START_TRACKING
-    }
-
-    application.startForegroundService(intent)
-    bindToService()
-
-    _uiState.update {
-      it.copy(
-        isTracking = true,
-        errorMessage = null,
-      )
-    }
+    trackingController.start()
+    _uiState.update { it.copy(isTracking = true, errorMessage = null) }
   }
 
   fun stopTracking() {
-    val intent = Intent(application, LocationTrackingService::class.java).apply {
-      action = LocationTrackingService.ACTION_STOP_TRACKING
-    }
-
-    application.startService(intent)
-    unbindFromService()
-
+    trackingController.stop()
     _uiState.update {
       it.copy(
         isTracking = false,
@@ -243,14 +179,7 @@ class TrackingViewModel @Inject constructor(
   /** 中断されたトラックに続けて記録を再開する */
   fun resumeTracking() {
     val interrupted = _uiState.value.interruptedTrack ?: return
-
-    val intent = Intent(application, LocationTrackingService::class.java).apply {
-      action = LocationTrackingService.ACTION_RESUME_TRACKING
-      putExtra(LocationTrackingService.EXTRA_TRACK_ID, interrupted.id)
-    }
-    application.startForegroundService(intent)
-    bindToService()
-
+    trackingController.resume(interrupted.id)
     _uiState.update {
       it.copy(
         isTracking = true,
@@ -286,24 +215,17 @@ class TrackingViewModel @Inject constructor(
   }
 
   fun checkLocationPermission() {
-    val hasPermission = PermissionUtils.hasAllRequiredPermissions(application)
-    updateLocationPermission(hasPermission)
+    updateLocationPermission(trackingController.hasRequiredPermissions())
   }
 
   /** 電池の最適化が無効化されているか（=バックグラウンドで制限されないか）を確認する */
   fun checkBatteryOptimization() {
-    val powerManager = application.getSystemService(Context.POWER_SERVICE) as PowerManager
-    val ignoring = powerManager.isIgnoringBatteryOptimizations(application.packageName)
-    _uiState.update { it.copy(isIgnoringBatteryOptimizations = ignoring) }
+    _uiState.update { it.copy(isIgnoringBatteryOptimizations = trackingController.isIgnoringBatteryOptimizations()) }
   }
 
   /** 電池の最適化の無効化を要求するシステムダイアログを開く */
   fun requestDisableBatteryOptimization() {
-    val intent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
-      data = Uri.parse("package:${application.packageName}")
-      addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-    }
-    application.startActivity(intent)
+    trackingController.requestDisableBatteryOptimization()
   }
 
   /**
@@ -470,44 +392,32 @@ class TrackingViewModel @Inject constructor(
     _uiState.update { it.copy(errorMessage = null) }
   }
 
-  private fun bindToService() {
-    val intent = Intent(application, LocationTrackingService::class.java)
-    application.bindService(intent, serviceConnection, Context.BIND_AUTO_CREATE)
-  }
-
-  private fun unbindFromService() {
-    if (isServiceBound) {
-      application.unbindService(serviceConnection)
-      isServiceBound = false
-    }
-  }
-
+  /**
+   * 現在地と受信点数を購読して表示用に整える。以前はサービスへ接続できたときだけ購読を
+   * 張っていたが、[TrackingController] が接続をまたいで値を保持するので、生成時に一度
+   * 張れば足りる（接続前は null / 0 が流れるだけ）。
+   */
   private fun observeLocationUpdates() {
-    locationService?.let { service ->
-      viewModelScope.launch {
-        combine(
-          service.currentLocation,
-          service.locationCount,
-        ) { location, count ->
-          location?.let { loc ->
-            val locationInfo = LocationInfo(
-              latitude = loc.latitude,
-              longitude = loc.longitude,
-              accuracy = loc.accuracy,
-              timestamp = DateFormatters.TIME_FORMAT.format(java.util.Date(loc.time)),
+    viewModelScope.launch {
+      combine(
+        trackingController.currentLocation,
+        trackingController.locationCount,
+      ) { location, count -> location to count }
+        .collect { (location, count) ->
+          _uiState.update {
+            it.copy(
+              currentLocation = location?.let { loc ->
+                LocationInfo(
+                  latitude = loc.latitude,
+                  longitude = loc.longitude,
+                  accuracy = loc.accuracy,
+                  timestamp = DateFormatters.TIME_FORMAT.format(java.util.Date(loc.time)),
+                )
+              },
+              locationCount = count,
             )
-
-            _uiState.update {
-              it.copy(
-                currentLocation = locationInfo,
-                locationCount = count,
-              )
-            }
           }
-        }.collect { }
-      }
-    } ?: run {
-      logger.w("Location service is null in observeLocationUpdates")
+        }
     }
   }
 
@@ -522,10 +432,5 @@ class TrackingViewModel @Inject constructor(
         }
       }
     }
-  }
-
-  override fun onCleared() {
-    super.onCleared()
-    unbindFromService()
   }
 }
