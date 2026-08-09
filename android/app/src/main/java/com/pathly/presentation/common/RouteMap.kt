@@ -288,7 +288,13 @@ internal fun RouteMapContent(
         }
         Box(modifier = Modifier.padding(top = 2.dp)) {
           RouteBadgeMarker(bg = MarkerCurrentStopTeal) {
-            Box(modifier = Modifier.size(12.dp).background(Color.White, CircleShape))
+            // 「今ここに滞在中」が一目で分かるよう、白の場所ピンのグリフにする（ただの白丸より識別しやすい）。
+            Icon(
+              painter = painterResource(R.drawable.ic_location_on),
+              contentDescription = null,
+              tint = Color.White,
+              modifier = Modifier.size(20.dp),
+            )
           }
         }
       }

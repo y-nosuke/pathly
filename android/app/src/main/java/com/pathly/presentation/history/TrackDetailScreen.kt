@@ -344,7 +344,13 @@ fun TrackDetailScreen(
           manualPickTarget = if (manualMode) manualPick?.latLng else null,
           highlightPoints = manualHighlight,
           stopSegments = stopSegments,
-          registeredPlaces = if (showRegisteredPlaces) registeredPlaces else emptyList(),
+          // この経路の立ち寄り（確定＝紫番号／滞在中＝ティール）と同じ場所は登録済みピンを二重に出さない。
+          registeredPlaces = if (showRegisteredPlaces) {
+            val stopPlaceIds = (stops.map { it.place.id } + listOfNotNull(liveCurrentStop?.place?.id)).toSet()
+            registeredPlaces.filter { it.placeId !in stopPlaceIds }
+          } else {
+            emptyList()
+          },
           focusTarget = focusTarget,
           focusNonce = focusNonce,
           // フォーカスがピンをシート/オーバーレイの裏に隠さないよう、下端を空ける。

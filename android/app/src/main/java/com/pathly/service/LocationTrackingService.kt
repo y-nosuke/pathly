@@ -193,18 +193,21 @@ class LocationTrackingService : Service() {
     isTracking = false
     stopLocationUpdates()
 
+    // 確定処理（末尾の暫定点・立ち寄りの保存）が終わってからサービスを畳む。先に stopSelf すると
+    // onDestroy の serviceScope.cancel() が確定処理を中断し、滞在中に停止した立ち寄りが経路に
+    // 保存されない（場所だけ残る）ため、必ずこの順序を守る。
     serviceScope.launch {
       currentTrackId?.let { trackId ->
-        // 記録終了時に末尾の暫定点・立ち寄りまで確定して保存する。
         gpsTrackRepository.updateSmoothedForTrack(trackId, isFinal = true)
         placeRepository.updateStopsForTrack(trackId, isFinal = true)
         gpsTrackDao.finishTrack(trackId, Date())
       }
       currentTrackId = null
+      withContext(Dispatchers.Main) {
+        stopForeground(STOP_FOREGROUND_REMOVE)
+        stopSelf()
+      }
     }
-
-    stopForeground(STOP_FOREGROUND_REMOVE)
-    stopSelf()
   }
 
   private fun startLocationUpdates() {
