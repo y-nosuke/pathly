@@ -847,7 +847,12 @@ private fun TrackingMapView(
         )
       }
       // 登録済みの場所（トグルON）。トラック未確定でも出せるよう、経路描画とは独立して描く。
-      RegisteredPlaceMarkers(registeredPlaces, onRegisteredPlaceClick)
+      // ただし、この経路の立ち寄り（確定＝紫番号／滞在中＝ティール）と同じ場所は二重に出さない
+      // （登録済みピンが立ち寄りマーカーを覆って分かりにくくなるのを防ぐ）。
+      val stopPlaceIds = remember(stops, currentStop) {
+        (stops.map { it.place.id } + listOfNotNull(currentStop?.place?.id)).toSet()
+      }
+      RegisteredPlaceMarkers(registeredPlaces.filter { it.placeId !in stopPlaceIds }, onRegisteredPlaceClick)
     }
 
     // 現在地ボタン：追従中は活性（色付き）、固定中は非活性（グレー）。タップで追従再開＆リセンター。
