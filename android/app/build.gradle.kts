@@ -133,9 +133,6 @@ dependencies {
   // Places (立ち寄り場所の命名)
   implementation(libs.places)
 
-  // Permissions
-  implementation(libs.accompanist.permissions)
-
   // Coroutines
   implementation(libs.kotlinx.coroutines.android)
 
