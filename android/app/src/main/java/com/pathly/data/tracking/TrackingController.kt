@@ -5,6 +5,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.ServiceConnection
 import android.location.Location
+import android.location.LocationManager
 import android.net.Uri
 import android.os.IBinder
 import android.os.PowerManager
@@ -76,6 +77,15 @@ class TrackingController @Inject constructor(
    */
   val unexpectedDisconnect: SharedFlow<Unit> = _unexpectedDisconnect.asSharedFlow()
 
+  /** 記録を開始できない理由。開始前に判定し、駄目ならサービスを起動しない。 */
+  enum class StartFailure {
+    /** 位置権限（と通知権限）が揃っていない。 */
+    MISSING_PERMISSION,
+
+    /** 端末の位置情報がOFF（GPS・ネットワークともに無効）。 */
+    LOCATION_DISABLED,
+  }
+
   private val connection = object : ServiceConnection {
     override fun onServiceConnected(name: ComponentName?, binder: IBinder?) {
       val service = (binder as? LocationTrackingService.LocationTrackingBinder)?.getService() ?: return
@@ -96,15 +106,30 @@ class TrackingController @Inject constructor(
     }
   }
 
-  /** 記録を開始する。 */
-  fun start() = launchService(LocationTrackingService.ACTION_START_TRACKING)
+  /**
+   * 記録を開始する。開始できない場合は理由を返し、**サービスは起動しない**。
+   *
+   * 事前に権限と位置情報の ON/OFF を確かめるのが重要で、これを怠って
+   * startForegroundService したうえでサービス側が startForeground せずに終了すると、
+   * バインド（BIND_AUTO_CREATE）でサービスが生き残ってしまい、UI は「記録中」のまま
+   * 何も記録されない状態になる（FGS の起動時間制限に抵触する恐れもある）。
+   */
+  fun start(): StartFailure? = launchService(LocationTrackingService.ACTION_START_TRACKING)
 
-  /** 中断されたトラックに続けて記録を再開する。 */
-  fun resume(trackId: Long) = launchService(LocationTrackingService.ACTION_RESUME_TRACKING) {
+  /** 中断されたトラックに続けて記録を再開する。判定は [start] と同じ。 */
+  fun resume(trackId: Long): StartFailure? = launchService(LocationTrackingService.ACTION_RESUME_TRACKING) {
     putExtra(LocationTrackingService.EXTRA_TRACK_ID, trackId)
   }
 
-  private fun launchService(action: String, configure: Intent.() -> Unit = {}) {
+  private fun launchService(action: String, configure: Intent.() -> Unit = {}): StartFailure? {
+    if (!hasRequiredPermissions()) {
+      logger.w("Cannot start tracking: required permissions are missing")
+      return StartFailure.MISSING_PERMISSION
+    }
+    if (!isLocationEnabled()) {
+      logger.w("Cannot start tracking: location services are disabled")
+      return StartFailure.LOCATION_DISABLED
+    }
     context.startForegroundService(
       Intent(context, LocationTrackingService::class.java).apply {
         this.action = action
@@ -113,6 +138,7 @@ class TrackingController @Inject constructor(
     )
     bind()
     _isTracking.value = true
+    return null
   }
 
   /** 記録を停止する。確定処理はサービス側がキューの最後尾で行う。 */
@@ -154,6 +180,13 @@ class TrackingController @Inject constructor(
 
   /** アプリで必要な権限（位置＋通知）が揃っているか。 */
   fun hasRequiredPermissions(): Boolean = PermissionUtils.hasAllRequiredPermissions(context)
+
+  /** 端末の位置情報が有効か（GPS またはネットワーク）。 */
+  fun isLocationEnabled(): Boolean {
+    val locationManager = context.getSystemService(Context.LOCATION_SERVICE) as LocationManager
+    return locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER) ||
+      locationManager.isProviderEnabled(LocationManager.NETWORK_PROVIDER)
+  }
 
   /** 電池の最適化が無効化されているか（＝バックグラウンドで制限されないか）。 */
   fun isIgnoringBatteryOptimizations(): Boolean {

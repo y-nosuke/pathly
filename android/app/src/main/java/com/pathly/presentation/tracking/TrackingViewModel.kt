@@ -151,14 +151,12 @@ class TrackingViewModel @Inject constructor(
 
   fun startTracking() {
     logger.d("startTracking() called")
-
-    if (!_uiState.value.hasLocationPermission) {
-      logger.e("Location permission not granted")
-      _uiState.update { it.copy(errorMessage = "位置情報の権限が必要です") }
+    // 開始できない理由があればサービスは起動せず、そのままエラーを出す
+    // （起動してから失敗すると「記録中なのに何も記録されない」状態になるため）。
+    trackingController.start()?.let { failure ->
+      _uiState.update { it.copy(errorMessage = failure.message()) }
       return
     }
-
-    trackingController.start()
     _uiState.update { it.copy(isTracking = true, errorMessage = null) }
   }
 
@@ -179,7 +177,10 @@ class TrackingViewModel @Inject constructor(
   /** 中断されたトラックに続けて記録を再開する */
   fun resumeTracking() {
     val interrupted = _uiState.value.interruptedTrack ?: return
-    trackingController.resume(interrupted.id)
+    trackingController.resume(interrupted.id)?.let { failure ->
+      _uiState.update { it.copy(errorMessage = failure.message()) }
+      return
+    }
     _uiState.update {
       it.copy(
         isTracking = true,
@@ -188,6 +189,11 @@ class TrackingViewModel @Inject constructor(
         errorMessage = null,
       )
     }
+  }
+
+  private fun TrackingController.StartFailure.message(): String = when (this) {
+    TrackingController.StartFailure.MISSING_PERMISSION -> "位置情報の権限が必要です"
+    TrackingController.StartFailure.LOCATION_DISABLED -> "端末の位置情報がオフです。設定でオンにしてください"
   }
 
   /** 中断されたトラックを完了として履歴に保存する */

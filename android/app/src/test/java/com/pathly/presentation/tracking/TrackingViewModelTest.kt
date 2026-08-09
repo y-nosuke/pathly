@@ -19,6 +19,7 @@ import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
 import org.junit.After
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -99,8 +100,8 @@ class TrackingViewModelTest {
 
   @Test
   fun `startTracking_開始できれば記録中になる`() = runTest {
+    every { mockController.start() } returns null
     val viewModel = createViewModel()
-    viewModel.updateLocationPermission(true)
 
     viewModel.startTracking()
 
@@ -110,9 +111,34 @@ class TrackingViewModelTest {
   }
 
   @Test
-  fun `stopTracking_コントローラへ停止を伝え状態を戻す`() = runTest {
+  fun `startTracking_権限が無ければ記録中にせずエラーを出す`() = runTest {
+    every { mockController.start() } returns TrackingController.StartFailure.MISSING_PERMISSION
     val viewModel = createViewModel()
-    viewModel.updateLocationPermission(true)
+
+    viewModel.startTracking()
+
+    val state = viewModel.uiState.value
+    // 楽観的に記録中にすると「記録中なのに何も記録されない」状態になるため false のまま
+    assertFalse("記録中にはならない", state.isTracking)
+    assertEquals("位置情報の権限が必要です", state.errorMessage)
+  }
+
+  @Test
+  fun `startTracking_位置情報がオフなら記録中にせずエラーを出す`() = runTest {
+    every { mockController.start() } returns TrackingController.StartFailure.LOCATION_DISABLED
+    val viewModel = createViewModel()
+
+    viewModel.startTracking()
+
+    val state = viewModel.uiState.value
+    assertFalse("記録中にはならない", state.isTracking)
+    assertEquals("端末の位置情報がオフです。設定でオンにしてください", state.errorMessage)
+  }
+
+  @Test
+  fun `stopTracking_コントローラへ停止を伝え状態を戻す`() = runTest {
+    every { mockController.start() } returns null
+    val viewModel = createViewModel()
     viewModel.startTracking()
 
     viewModel.stopTracking()
