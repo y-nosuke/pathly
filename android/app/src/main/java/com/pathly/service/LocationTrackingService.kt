@@ -32,10 +32,12 @@ import com.pathly.domain.repository.PlaceRepository
 import com.pathly.util.Logger
 import com.pathly.util.PermissionUtils
 import dagger.hilt.android.AndroidEntryPoint
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -87,9 +89,36 @@ class LocationTrackingService : Service() {
   private val binder = LocationTrackingBinder()
   private lateinit var fusedLocationClient: FusedLocationProviderClient
   private var locationCallback: LocationCallback? = null
+
+  /** 記録中のトラック。[execute] だけが読み書きする（キューの唯一の消費者なので排他不要）。 */
   private var currentTrackId: Long? = null
 
   private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
+  /**
+   * 記録の副作用（トラック生成・点の保存・補正/立ち寄り検出・確定）を積むキュー。
+   * [execute] という**単一の消費者**が到着順に1件ずつ処理する。
+   *
+   * 以前はコールバックごとに `serviceScope.launch` を投げっぱなしにしていたため、次の競合があった:
+   *  1. 生点の挿入が前後すると、補正後点列の差分INSERT（保存済み件数を基準に seq を振る）が
+   *     ずれ、smoothed_points が**恒久的に**壊れる。
+   *  2. 停止時の確定処理が、まだ保存されていないバッチを追い越す。
+   *  3. トラック生成（非同期）より先に最初の位置が届くと、trackId が null で点が捨てられる。
+   *
+   * すべて同じキューに積むことで、この3つをまとめて塞ぐ。
+   */
+  private val commands = Channel<Command>(Channel.UNLIMITED)
+
+  private sealed interface Command {
+    /** 記録開始。[resumeTrackId] があれば既存トラックに続け、無ければ新規に作る。 */
+    data class Start(val resumeTrackId: Long?) : Command
+
+    /** 受信した位置バッチを保存し、補正・立ち寄り検出を進める。 */
+    data class Ingest(val locations: List<Location>) : Command
+
+    /** 記録終了。末尾を確定してトラックを閉じ、完了を [done] で呼び出し元へ知らせる。 */
+    data class Finish(val done: CompletableDeferred<Unit>) : Command
+  }
 
   private val _currentLocation = MutableStateFlow<Location?>(null)
   val currentLocation: StateFlow<Location?> = _currentLocation.asStateFlow()
@@ -108,6 +137,10 @@ class LocationTrackingService : Service() {
     super.onCreate()
     fusedLocationClient = LocationServices.getFusedLocationProviderClient(this)
     createNotificationChannel()
+    // キューの唯一の消費者。ここが1本しか無いことが順序保証の根拠。
+    serviceScope.launch {
+      for (command in commands) execute(command)
+    }
   }
 
   override fun onBind(intent: Intent?): IBinder = binder
@@ -148,28 +181,56 @@ class LocationTrackingService : Service() {
     startForeground(NOTIFICATION_ID, notification)
     isTracking = true
 
-    if (resumeTrackId != null) {
-      // 中断されたトラックに続けて記録する
-      currentTrackId = resumeTrackId
-      logger.d("Resuming existing track with ID: $resumeTrackId")
-      // 中断中にたまった生点の補正・立ち寄りを追いつかせる。
-      serviceScope.launch {
-        gpsTrackRepository.updateSmoothedForTrack(resumeTrackId, isFinal = false)
-        placeRepository.updateStopsForTrack(resumeTrackId, isFinal = false)
-      }
-    } else {
-      serviceScope.launch {
-        // 新しいトラックを作成
-        val track = GpsTrackEntity(
-          startTime = Date(),
-          isActive = true,
-        )
-        currentTrackId = gpsTrackDao.insertTrack(track)
-        logger.d("Created new track with ID: $currentTrackId")
-      }
-    }
+    // トラックの用意もキューに積む。以降の Ingest は必ずこの後ろに並ぶので、
+    // 「trackId がまだ無くて最初の点を捨てる」競合が起きない。
+    commands.trySend(Command.Start(resumeTrackId))
 
     startLocationUpdates()
+  }
+
+  /**
+   * キューの唯一の消費者。[currentTrackId] はこのコルーチンだけが触るので排他は要らない。
+   * 1件の失敗でキューを止めないよう、例外はここで握って次のコマンドへ進む。
+   */
+  private suspend fun execute(command: Command) {
+    try {
+      when (command) {
+        is Command.Start -> {
+          currentTrackId = command.resumeTrackId
+            ?: gpsTrackDao.insertTrack(GpsTrackEntity(startTime = Date(), isActive = true))
+          logger.d("Tracking track $currentTrackId (resumed=${command.resumeTrackId != null})")
+          // 中断中にたまった生点があれば追いつかせる（新規トラックなら点が無いので no-op）。
+          currentTrackId?.let { advance(it, isFinal = false) }
+        }
+
+        is Command.Ingest -> {
+          // 停止後に遅れて届いたバッチは捨てる（確定済みトラックへ追記しない）。
+          val trackId = currentTrackId ?: return
+          gpsPointDao.insertPoints(command.locations.map { it.toGpsPointEntity(trackId) })
+          advance(trackId, isFinal = false)
+        }
+
+        is Command.Finish -> {
+          currentTrackId?.let { trackId ->
+            advance(trackId, isFinal = true)
+            gpsTrackDao.finishTrack(trackId, Date())
+          }
+          currentTrackId = null
+        }
+      }
+    } catch (e: Exception) {
+      // command はそのまま出すと座標がログに乗るので型名だけにする。
+      logger.e("Failed to handle ${command::class.simpleName}", e)
+    } finally {
+      // 失敗しても停止側を待たせない。
+      if (command is Command.Finish) command.done.complete(Unit)
+    }
+  }
+
+  /** 生点から補正後点列を進め、そこから立ち寄りを検出・保存する（記録中は末尾を暫定のまま残す）。 */
+  private suspend fun advance(trackId: Long, isFinal: Boolean) {
+    gpsTrackRepository.updateSmoothedForTrack(trackId, isFinal)
+    placeRepository.updateStopsForTrack(trackId, isFinal)
   }
 
   /**
@@ -195,16 +256,15 @@ class LocationTrackingService : Service() {
     isTracking = false
     stopLocationUpdates()
 
-    // 確定処理（末尾の暫定点・立ち寄りの保存）が終わってからサービスを畳む。先に stopSelf すると
-    // onDestroy の serviceScope.cancel() が確定処理を中断し、滞在中に停止した立ち寄りが経路に
+    // 確定処理はキューの**最後尾**に積む。まだ保存されていないバッチを追い越さないので、
+    // 直前に届いた点まで含めて確定できる。
+    // また、確定が終わってからサービスを畳む。先に stopSelf すると onDestroy の
+    // serviceScope.cancel() が確定処理を中断し、滞在中に停止した立ち寄りが経路に
     // 保存されない（場所だけ残る）ため、必ずこの順序を守る。
+    val done = CompletableDeferred<Unit>()
+    commands.trySend(Command.Finish(done))
     serviceScope.launch {
-      currentTrackId?.let { trackId ->
-        gpsTrackRepository.updateSmoothedForTrack(trackId, isFinal = true)
-        placeRepository.updateStopsForTrack(trackId, isFinal = true)
-        gpsTrackDao.finishTrack(trackId, Date())
-      }
-      currentTrackId = null
+      done.await()
       withContext(Dispatchers.Main) {
         stopForeground(STOP_FOREGROUND_REMOVE)
         stopSelf()
@@ -238,7 +298,7 @@ class LocationTrackingService : Service() {
         // lastLocation だけ使うと中間点を取りこぼすので、locations（古い順）を全部保存する。
         val locations = locationResult.locations
         if (locations.isNotEmpty()) {
-          saveLocationsToDatabase(locations)
+          enqueueLocations(locations)
 
           val latest = locations.last()
           // 位置情報とカウントを更新（カウントは実際に受け取った点数だけ進める）
@@ -364,18 +424,12 @@ class LocationTrackingService : Service() {
     }
   }
 
-  private fun saveLocationsToDatabase(locations: List<Location>) {
-    val trackId = currentTrackId ?: return
-    serviceScope.launch {
-      val points = locations.map { it.toGpsPointEntity(trackId) }
-      gpsPointDao.insertPoints(points)
-
-      // 補正・立ち寄り検出はバッチ挿入後に1回だけ回す（点ごとに回す必要はない）。
-      // 新しい点までの補正を計算し、確定分だけ保存する（末尾は暫定なので保存しない）。
-      gpsTrackRepository.updateSmoothedForTrack(trackId, isFinal = false)
-      // 補正後の点列から立ち寄りを検出・保存し、「立ち寄り中」を更新する。
-      placeRepository.updateStopsForTrack(trackId, isFinal = false)
-    }
+  /**
+   * 受信した位置バッチをキューへ積む（保存・補正・検出は [execute] が到着順に行う）。
+   * ここでは待たないので、位置コールバックを塞がない。
+   */
+  private fun enqueueLocations(locations: List<Location>) {
+    commands.trySend(Command.Ingest(locations))
   }
 
   /**
@@ -481,6 +535,7 @@ class LocationTrackingService : Service() {
     super.onDestroy()
     isTracking = false
     stopLocationUpdates()
+    commands.close()
     serviceScope.cancel()
   }
 }
