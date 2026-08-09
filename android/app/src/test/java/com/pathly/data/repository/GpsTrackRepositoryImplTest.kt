@@ -11,7 +11,6 @@ import com.pathly.data.local.entity.GpsTrackWithPoints
 import com.pathly.data.local.entity.TrackStopCount
 import com.pathly.domain.model.GpsPoint
 import com.pathly.domain.model.GpsTrack
-import com.pathly.util.EncryptionHelper
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
@@ -45,7 +44,6 @@ class GpsTrackRepositoryImplTest {
   private val mockGpsPointDao = mockk<GpsPointDao>(relaxed = true)
   private val mockSmoothedPointDao = mockk<SmoothedPointDao>(relaxed = true)
   private val mockStopDao = mockk<StopDao>(relaxed = true)
-  private val mockEncryptionHelper = mockk<EncryptionHelper>(relaxed = true)
 
   private lateinit var repository: GpsTrackRepositoryImpl
 
@@ -60,7 +58,6 @@ class GpsTrackRepositoryImplTest {
       mockGpsPointDao,
       mockSmoothedPointDao,
       mockStopDao,
-      mockEncryptionHelper,
     )
   }
 

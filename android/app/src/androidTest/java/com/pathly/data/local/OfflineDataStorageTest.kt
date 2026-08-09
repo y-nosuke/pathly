@@ -59,7 +59,6 @@ class OfflineDataStorageTest {
       gpsPointDao,
       database.smoothedPointDao(),
       database.stopDao(),
-      encryptionHelper,
     )
   }
 
@@ -246,23 +245,6 @@ class OfflineDataStorageTest {
 
     val remainingTracks = gpsTrackDao.getAllTracksSync()
     assertEquals("Should have 1 remaining track", 1, remainingTracks.size)
-  }
-
-  @Test
-  fun testEncryptedBackupAndRestore() = runBlocking {
-    // Given: テストデータ
-    val track = createTestTrack(isActive = false)
-    gpsTrackDao.insertTrack(track)
-
-    // When: 暗号化バックアップ作成
-    val backupSuccess = repository.createEncryptedBackup()
-
-    // Then: バックアップが成功する
-    assertTrue("Backup should succeed", backupSuccess)
-
-    // バックアップタイムスタンプが保存されている
-    val backupTimestamp = encryptionHelper.getSecureString("backup_timestamp")
-    assertNotNull("Backup timestamp should be saved", backupTimestamp)
   }
 
   @Test

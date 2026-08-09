@@ -6,7 +6,6 @@ import com.pathly.data.local.dao.SmoothedPointDao
 import com.pathly.data.local.dao.StopDao
 import com.pathly.data.local.entity.GpsPointEntity
 import com.pathly.data.local.entity.SmoothedPointEntity
-import com.pathly.util.EncryptionHelper
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.mockk
@@ -23,13 +22,11 @@ class GpsTrackRepositoryImplSmoothingTest {
   private val gpsPointDao = mockk<GpsPointDao>(relaxed = true)
   private val smoothedPointDao = mockk<SmoothedPointDao>(relaxed = true)
   private val stopDao = mockk<StopDao>(relaxed = true)
-  private val encryptionHelper = mockk<EncryptionHelper>(relaxed = true)
   private val repository = GpsTrackRepositoryImpl(
     gpsTrackDao,
     gpsPointDao,
     smoothedPointDao,
     stopDao,
-    encryptionHelper,
   )
 
   // まっすぐ北へ等速で進む点列（ジャンプ除外に引っかからない）。

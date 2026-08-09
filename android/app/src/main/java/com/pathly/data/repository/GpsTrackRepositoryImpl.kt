@@ -12,7 +12,6 @@ import com.pathly.domain.model.GpsTrack
 import com.pathly.domain.model.SmoothingParams
 import com.pathly.domain.model.TrackSmoother
 import com.pathly.domain.repository.GpsTrackRepository
-import com.pathly.util.EncryptionHelper
 import com.pathly.util.Logger
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.catch
@@ -30,7 +29,6 @@ class GpsTrackRepositoryImpl @Inject constructor(
   private val gpsPointDao: GpsPointDao,
   private val smoothedPointDao: SmoothedPointDao,
   private val stopDao: StopDao,
-  private val encryptionHelper: EncryptionHelper,
 ) : GpsTrackRepository {
 
   private val logger = Logger("GpsTrackRepositoryImpl")
@@ -132,9 +130,6 @@ class GpsTrackRepositoryImpl @Inject constructor(
       )
       gpsTrackDao.deleteTrack(entity)
       logger.i("Successfully deleted track ${track.id}")
-
-      // セキュリティ考慮: 削除された軌跡IDを暗号化保存
-      saveDeletedTrackId(track.id)
     } catch (e: Exception) {
       logger.e("Repository operation failed", e)
       throw e
@@ -212,50 +207,6 @@ class GpsTrackRepositoryImpl @Inject constructor(
   }
 
   /**
-   * ローカルデータの暗号化バックアップを作成
-   */
-  suspend fun createEncryptedBackup(): Boolean = try {
-    logger.i("Creating encrypted backup of local data")
-
-    val allTracks = gpsTrackDao.getAllTracksSync()
-    val allPoints = gpsPointDao.getAllPointsSync()
-
-    // バックアップデータを暗号化して保存
-    val backupData = createBackupData(allTracks, allPoints)
-    encryptionHelper.saveSecureString("backup_data", backupData)
-    encryptionHelper.saveSecureString("backup_timestamp", System.currentTimeMillis().toString())
-
-    logger.i("Encrypted backup created successfully")
-    true
-  } catch (e: Exception) {
-    logger.e("Repository operation failed", e)
-    false
-  }
-
-  /**
-   * 暗号化されたバックアップから復元
-   */
-  suspend fun restoreFromEncryptedBackup(): Boolean {
-    return try {
-      logger.i("Restoring from encrypted backup")
-
-      val backupData = encryptionHelper.getSecureString("backup_data") ?: run {
-        logger.w("No backup data found")
-        return false
-      }
-
-      // バックアップデータを復号化して復元
-      // 実装は将来的に追加
-
-      logger.i("Restored from encrypted backup successfully")
-      true
-    } catch (e: Exception) {
-      logger.e("Repository operation failed", e)
-      false
-    }
-  }
-
-  /**
    * ローカルデータベースの健全性チェック
    */
   suspend fun performDataIntegrityCheck(): Boolean = try {
@@ -294,21 +245,6 @@ class GpsTrackRepositoryImpl @Inject constructor(
   } catch (e: Exception) {
     logger.e("Repository operation failed", e)
     0
-  }
-
-  private fun saveDeletedTrackId(trackId: Long) {
-    try {
-      val existingIds = encryptionHelper.getSecureString("deleted_track_ids", "")
-      val updatedIds = "$existingIds,$trackId"
-      encryptionHelper.saveSecureString("deleted_track_ids", updatedIds)
-    } catch (e: Exception) {
-      logger.e("Repository operation failed", e)
-    }
-  }
-
-  private fun createBackupData(tracks: List<GpsTrackEntity>, points: List<GpsPointEntity>): String {
-    // 簡単なJSON形式でバックアップデータを作成（実際の実装では適切なシリアライゼーション使用）
-    return "tracks:${tracks.size},points:${points.size},timestamp:${System.currentTimeMillis()}"
   }
 
   private fun GpsTrackEntity.toGpsTrack(
