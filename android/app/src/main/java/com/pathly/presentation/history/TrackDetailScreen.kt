@@ -133,6 +133,8 @@ fun TrackDetailScreen(
   onBackClick: () -> Unit,
   modifier: Modifier = Modifier,
   stops: List<Stop> = emptyList(),
+  // 記録中に開いたときの「立ち寄り中（ライブ）」。地図にだけ出す（一覧・保存には出さない）。
+  currentStop: Stop? = null,
   unresolvedCount: Int = 0,
   message: String? = null,
   onEditPlaceName: (placeId: Long, name: String) -> Unit = { _, _ -> },
@@ -306,6 +308,16 @@ fun TrackDetailScreen(
       }
     }
   }
+  // 立ち寄り中（ライブ）の滞在区間。通常表示のときだけ（補正調整・候補・手動追加中は出さない）。
+  val currentStopSegment = remember(track.smoothedPoints, currentStop, tuningMode, candidateMode, manualMode) {
+    if (tuningMode || candidateMode || manualMode) {
+      emptyList()
+    } else {
+      currentStop?.let { stopSegmentPoints(track.smoothedPoints, it.arrivalTime, it.departureTime) }.orEmpty()
+    }
+  }
+  // 記録中の地図に出すライブ立ち寄り（通常表示のときだけ）。
+  val liveCurrentStop = if (tuningMode || candidateMode || manualMode) null else currentStop
   // シートが隠れているか（復帰ボタン表示・地図の下パディング判定に使う）。
   val sheetHidden = detent == SheetDetent.HIDDEN
 
@@ -325,6 +337,8 @@ fun TrackDetailScreen(
           track = track,
           displayPoints = displayPoints,
           stops = stops,
+          currentStop = liveCurrentStop,
+          currentStopSegment = currentStopSegment,
           candidates = if (candidateMode && !manualMode) reanalyzeCandidates.orEmpty() else emptyList(),
           showRawOverlay = tuningMode,
           manualPickTarget = if (manualMode) manualPick?.latLng else null,
@@ -1749,6 +1763,8 @@ private fun TrackMapView(
   displayPoints: List<GpsPoint>,
   modifier: Modifier = Modifier,
   stops: List<Stop> = emptyList(),
+  currentStop: Stop? = null,
+  currentStopSegment: List<GpsPoint> = emptyList(),
   candidates: List<StopCandidate> = emptyList(),
   showRawOverlay: Boolean = false,
   manualPickTarget: LatLng? = null,
@@ -1823,6 +1839,8 @@ private fun TrackMapView(
       displayPoints = displayPoints,
       stops = stops,
       stopSegments = stopSegments,
+      currentStop = currentStop,
+      currentStopSegment = currentStopSegment,
       registeredPlaces = registeredPlaces,
       onStopClick = onStopClick,
       onRegisteredPlaceClick = onRegisteredPlaceClick,

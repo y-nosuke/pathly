@@ -20,6 +20,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.stateIn
@@ -69,6 +70,14 @@ class TrackDetailViewModel @Inject constructor(
   val reanalyzeCandidates: StateFlow<List<StopCandidate>?> = _reanalyzeCandidates.asStateFlow()
 
   private val loadedTrackId = MutableStateFlow<Long?>(null)
+
+  /**
+   * 記録中に開いたときの「立ち寄り中（ライブ）」。表示中のトラックが記録中の当該トラックのときだけ流す
+   * （他トラックを開いていれば null）。地図にだけ出す（一覧・保存には出さない）。
+   */
+  val currentStop: StateFlow<Stop?> = combine(placeRepository.currentStop, loadedTrackId) { stop, id ->
+    stop?.takeIf { it.trackId == id }
+  }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
   /** 未取得（googlePlaceId 無し）の place 件数。「場所を取得」ボタンの表示に使う。 */
   val unresolvedCount: StateFlow<Int> = loadedTrackId

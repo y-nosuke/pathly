@@ -13,6 +13,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
@@ -268,15 +269,15 @@ internal fun RouteMapContent(
       title = stop.place.name ?: stop.place.googleName ?: "立ち寄り中",
       snippet = "%.5f, %.5f ・ 滞在%d分".format(stop.place.latitude, stop.place.longitude, stop.durationMinutes),
     ) {
+      // ラベルはバッジの「上」に出す。マーカーは既定で点が下端（バッジ）に来るので、
+      // 端末の現在地ドット（青）や現在地マーカーと重ならず読める。白フチ＋影でコントラストも確保する。
       Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        RouteBadgeMarker(bg = MarkerCurrentStopTeal) {
-          Box(modifier = Modifier.size(12.dp).background(Color.White, CircleShape))
-        }
         Box(
           modifier = Modifier
-            .padding(top = 2.dp)
+            .shadow(3.dp, RoundedCornerShape(8.dp))
             .background(MarkerCurrentStopTeal, RoundedCornerShape(8.dp))
-            .padding(horizontal = 6.dp, vertical = 1.dp),
+            .border(1.dp, Color.White, RoundedCornerShape(8.dp))
+            .padding(horizontal = 8.dp, vertical = 2.dp),
         ) {
           Text(
             text = "滞在${stop.durationMinutes}分",
@@ -284,6 +285,11 @@ internal fun RouteMapContent(
             fontWeight = FontWeight.Bold,
             fontSize = 11.sp,
           )
+        }
+        Box(modifier = Modifier.padding(top = 2.dp)) {
+          RouteBadgeMarker(bg = MarkerCurrentStopTeal) {
+            Box(modifier = Modifier.size(12.dp).background(Color.White, CircleShape))
+          }
         }
       }
     }
