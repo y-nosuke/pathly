@@ -13,7 +13,6 @@ import android.os.Build
 import android.os.Bundle
 import android.os.IBinder
 import android.os.Looper
-import android.util.Log
 import androidx.core.app.NotificationCompat
 import com.google.android.gms.location.FusedLocationProviderClient
 import com.google.android.gms.location.LocationCallback
@@ -30,6 +29,7 @@ import com.pathly.data.local.entity.GpsTrackEntity
 import com.pathly.data.settings.SettingsRepository
 import com.pathly.domain.repository.GpsTrackRepository
 import com.pathly.domain.repository.PlaceRepository
+import com.pathly.util.Logger
 import com.pathly.util.PermissionUtils
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.CoroutineScope
@@ -82,6 +82,8 @@ class LocationTrackingService : Service() {
   @Inject
   lateinit var placeRepository: PlaceRepository
 
+  private val logger = Logger("LocationService")
+
   private val binder = LocationTrackingBinder()
   private lateinit var fusedLocationClient: FusedLocationProviderClient
   private var locationCallback: LocationCallback? = null
@@ -126,21 +128,21 @@ class LocationTrackingService : Service() {
   }
 
   private fun startLocationTracking(resumeTrackId: Long? = null) {
-    Log.d("LocationService", "startLocationTracking() called (resume=$resumeTrackId)")
+    logger.d("startLocationTracking() called (resume=$resumeTrackId)")
 
     if (!hasLocationPermission()) {
-      Log.e("LocationService", "Location permission not granted")
+      logger.e("Location permission not granted")
       stopSelf()
       return
     }
 
     if (!isLocationEnabled()) {
-      Log.e("LocationService", "Location services are disabled")
+      logger.e("Location services are disabled")
       stopSelf()
       return
     }
 
-    Log.d("LocationService", "Location permission granted, starting foreground service")
+    logger.d("Location permission granted, starting foreground service")
 
     val notification = createNotification("GPS位置を記録中...")
     startForeground(NOTIFICATION_ID, notification)
@@ -149,7 +151,7 @@ class LocationTrackingService : Service() {
     if (resumeTrackId != null) {
       // 中断されたトラックに続けて記録する
       currentTrackId = resumeTrackId
-      Log.d("LocationService", "Resuming existing track with ID: $resumeTrackId")
+      logger.d("Resuming existing track with ID: $resumeTrackId")
       // 中断中にたまった生点の補正・立ち寄りを追いつかせる。
       serviceScope.launch {
         gpsTrackRepository.updateSmoothedForTrack(resumeTrackId, isFinal = false)
@@ -163,7 +165,7 @@ class LocationTrackingService : Service() {
           isActive = true,
         )
         currentTrackId = gpsTrackDao.insertTrack(track)
-        Log.d("LocationService", "Created new track with ID: $currentTrackId")
+        logger.d("Created new track with ID: $currentTrackId")
       }
     }
 
@@ -178,12 +180,12 @@ class LocationTrackingService : Service() {
     serviceScope.launch {
       val activeTrack = gpsTrackDao.getActiveTrack()
       if (activeTrack != null) {
-        Log.d("LocationService", "Restoring tracking for active track ${activeTrack.id}")
+        logger.d("Restoring tracking for active track ${activeTrack.id}")
         withContext(Dispatchers.Main) {
           startLocationTracking(resumeTrackId = activeTrack.id)
         }
       } else {
-        Log.d("LocationService", "No active track to restore; stopping service")
+        logger.d("No active track to restore; stopping service")
         stopSelf()
       }
     }
@@ -211,10 +213,10 @@ class LocationTrackingService : Service() {
   }
 
   private fun startLocationUpdates() {
-    Log.d("LocationService", "startLocationUpdates() called")
+    logger.d("startLocationUpdates() called")
 
     if (!hasLocationPermission()) {
-      Log.e("LocationService", "Permission check failed in startLocationUpdates")
+      logger.e("Permission check failed in startLocationUpdates")
       return
     }
 
@@ -260,20 +262,18 @@ class LocationTrackingService : Service() {
             getSystemService(NOTIFICATION_SERVICE) as NotificationManager
           notificationManager.notify(NOTIFICATION_ID, notification)
         } else {
-          Log.w("LocationService", "Location result had no locations")
+          logger.w("Location result had no locations")
         }
       }
     }
 
     // 最後の既知位置を即座に取得
     try {
-      Log.d("LocationService", "Getting last known location...")
+      logger.d("Getting last known location...")
       fusedLocationClient.lastLocation.addOnSuccessListener { lastLocation ->
         lastLocation?.let { location ->
-          Log.d(
-            "LocationService",
-            "Last known location found: lat=${location.latitude}, lon=${location.longitude}",
-          )
+          // 座標そのものはログに出さない（位置情報が logcat に残らないようにする）。
+          logger.d("Last known location found (accuracy=${location.accuracy}m)")
 
           // 即座に表示用に更新（データベースには保存しない）
           _currentLocation.value = location
@@ -291,31 +291,31 @@ class LocationTrackingService : Service() {
             getSystemService(NOTIFICATION_SERVICE) as NotificationManager
           notificationManager.notify(NOTIFICATION_ID, notification)
         } ?: run {
-          Log.w("LocationService", "No last known location available")
+          logger.w("No last known location available")
         }
       }.addOnFailureListener { exception ->
-        Log.w("LocationService", "Failed to get last known location", exception)
+        logger.w("Failed to get last known location", exception)
       }
     } catch (e: SecurityException) {
-      Log.e("LocationService", "SecurityException when getting last known location", e)
+      logger.e("SecurityException when getting last known location", e)
     }
 
     try {
-      Log.d("LocationService", "Requesting location updates...")
+      logger.d("Requesting location updates...")
       fusedLocationClient.requestLocationUpdates(
         locationRequest,
         locationCallback!!,
         Looper.getMainLooper(),
       )
-      Log.d("LocationService", "Location updates requested successfully")
+      logger.d("Location updates requested successfully")
 
       // 30秒後に位置情報が取得できていない場合の監視タイマーを開始
       startLocationTimeout()
     } catch (e: SecurityException) {
-      Log.e("LocationService", "SecurityException when requesting location updates", e)
+      logger.e("SecurityException when requesting location updates", e)
       stopSelf()
     } catch (e: Exception) {
-      Log.e("LocationService", "Exception when requesting location updates", e)
+      logger.e("Exception when requesting location updates", e)
       stopSelf()
     }
   }
@@ -335,7 +335,7 @@ class LocationTrackingService : Service() {
       delay(30000L) // 30秒待機
 
       if (_locationCount.value == 0) {
-        Log.w("LocationService", "No location received after 30 seconds")
+        logger.w("No location received after 30 seconds")
 
         // 通知を更新して状態を知らせる
         val notification = createNotification("GPS位置を記録中... （位置情報を取得中です）")
@@ -353,10 +353,7 @@ class LocationTrackingService : Service() {
 
       val timeSinceLastLocation = System.currentTimeMillis() - lastLocationTime
       if (timeSinceLastLocation > 60000L) { // 1分以上位置情報がない場合
-        Log.w(
-          "LocationService",
-          "No location received for ${timeSinceLastLocation / 1000} seconds",
-        )
+        logger.w("No location received for ${timeSinceLastLocation / 1000} seconds")
 
         val notification =
           createNotification("GPS位置を記録中... （位置情報の取得が遅延しています）")
@@ -425,12 +422,12 @@ class LocationTrackingService : Service() {
           }
         } catch (e: Exception) {
           // 1キーの失敗で全体を捨てない（残せるものは残す）。
-          Log.w("LocationService", "Failed to serialize extras key=$key", e)
+          logger.w("Failed to serialize extras key=$key", e)
         }
       }
       json.toString().takeIf { it != "{}" }
     } catch (e: Exception) {
-      Log.w("LocationService", "Failed to serialize location extras", e)
+      logger.w("Failed to serialize location extras", e)
       null
     }
   }

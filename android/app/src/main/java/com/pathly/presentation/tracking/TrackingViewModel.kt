@@ -9,7 +9,6 @@ import android.net.Uri
 import android.os.IBinder
 import android.os.PowerManager
 import android.provider.Settings
-import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.pathly.data.settings.MapSurface
@@ -23,6 +22,7 @@ import com.pathly.domain.repository.PlaceRepository
 import com.pathly.domain.repository.WishlistRepository
 import com.pathly.service.LocationTrackingService
 import com.pathly.util.DateFormatters
+import com.pathly.util.Logger
 import com.pathly.util.PermissionUtils
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -47,6 +47,8 @@ class TrackingViewModel @Inject constructor(
   private val settingsRepository: SettingsRepository,
 ) : AndroidViewModel(application) {
 
+  private val logger = Logger("TrackingViewModel")
+
   private val _uiState = MutableStateFlow(TrackingState())
   val uiState: StateFlow<TrackingState> = _uiState.asStateFlow()
 
@@ -55,7 +57,7 @@ class TrackingViewModel @Inject constructor(
 
   private val serviceConnection = object : ServiceConnection {
     override fun onServiceConnected(name: ComponentName?, service: IBinder?) {
-      Log.d("TrackingViewModel", "Service connected")
+      logger.d("Service connected")
       val binder = service as LocationTrackingService.LocationTrackingBinder
       locationService = binder.getService()
       isServiceBound = true
@@ -76,7 +78,7 @@ class TrackingViewModel @Inject constructor(
     }
 
     override fun onServiceDisconnected(name: ComponentName?) {
-      Log.d("TrackingViewModel", "Service disconnected")
+      logger.d("Service disconnected")
       locationService = null
       isServiceBound = false
 
@@ -84,7 +86,7 @@ class TrackingViewModel @Inject constructor(
       viewModelScope.launch {
         val activeTrack = gpsTrackRepository.getActiveTrack()
         if (activeTrack != null) {
-          Log.d("TrackingViewModel", "Service disconnected unexpectedly, finishing track")
+          logger.d("Service disconnected unexpectedly, finishing track")
           gpsTrackRepository.finishTrack(activeTrack.id, java.util.Date())
         }
         _uiState.value = _uiState.value.copy(
@@ -180,10 +182,10 @@ class TrackingViewModel @Inject constructor(
   }
 
   fun startTracking() {
-    Log.d("TrackingViewModel", "startTracking() called")
+    logger.d("startTracking() called")
 
     if (!_uiState.value.hasLocationPermission) {
-      Log.e("TrackingViewModel", "Location permission not granted")
+      logger.e("Location permission not granted")
       _uiState.value = _uiState.value.copy(
         errorMessage = "位置情報の権限が必要です",
       )
@@ -476,7 +478,7 @@ class TrackingViewModel @Inject constructor(
         }.collect { }
       }
     } ?: run {
-      Log.w("TrackingViewModel", "Location service is null in observeLocationUpdates")
+      logger.w("Location service is null in observeLocationUpdates")
     }
   }
 
