@@ -101,6 +101,9 @@ class PlacesViewModel @Inject constructor(
   /** その場所を含むお出掛け（経路）の一覧。詳細画面で購読する。 */
   fun visitsFor(placeId: Long): Flow<List<PlaceVisit>> = wishlistRepository.getVisits(placeId)
 
+  /** 統一の場所シートで既存 place を編集するため、単一 place の現在値を取得する。 */
+  suspend fun loadPlace(placeId: Long): PlaceListItem? = wishlistRepository.getPlace(placeId)
+
   /** POI 登録ダイアログのプレビュー用: placeId から施設情報（カテゴリ等）を取得する。 */
   suspend fun fetchPoiDetails(googlePlaceId: String): PlaceSearchResult? = wishlistRepository.fetchPlaceDetails(googlePlaceId)
 

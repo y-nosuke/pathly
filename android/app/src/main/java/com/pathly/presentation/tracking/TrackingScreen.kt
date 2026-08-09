@@ -79,8 +79,8 @@ import com.pathly.presentation.common.StopReassignDialog
 import com.pathly.presentation.common.defaultDepartureIndex
 import com.pathly.presentation.common.nearestPointIndex
 import com.pathly.presentation.common.stopSegmentPoints
-import com.pathly.presentation.places.RegisterPlaceAtPointDialog
-import com.pathly.presentation.places.RegisterPlaceFromPoiDialog
+import com.pathly.presentation.places.PlaceActionSheet
+import com.pathly.presentation.places.PlaceSheetTarget
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.util.Date
@@ -99,7 +99,7 @@ private data class PendingManualAdd(
 private data class PendingRegister(
   val lat: Double,
   val lng: Double,
-  val name: String,
+  val name: String?,
   val wishlist: Boolean,
   val priority: com.pathly.domain.model.Priority,
   val memo: String?,
@@ -142,7 +142,8 @@ fun TrackingScreen(
     )
   }
 
-  var poiTarget by remember { mutableStateOf<PointOfInterest?>(null) }
+  // 地図の1点タップで開く統一の「場所シート」（未登録の空き地点/未登録POI/登録済みの場所）。
+  var placeSheetTarget by remember { mutableStateOf<PlaceSheetTarget?>(null) }
   // 停止の誤爆防止（記録中の停止だけ確認を挟む）。
   var showStopConfirm by remember { mutableStateOf(false) }
   // 手動で立ち寄りを追加する対象地点（「今ここ」または地図タップ）。非nullで確認ダイアログを出す。
@@ -153,8 +154,6 @@ fun TrackingScreen(
   var linkPlace by remember { mutableStateOf<RegisteredPlace?>(null) }
   // 近接確認（③）: ID無し手動追加で近くに既存があったときの確認（既存place＋保留中の追加内容）。
   var proximityPrompt by remember { mutableStateOf<Pair<RegisteredPlace, PendingManualAdd>?>(null) }
-  // 記録していないとき、何もない地点をタップして「場所として登録」する対象（立ち寄りは作らない）。
-  var registerPointTarget by remember { mutableStateOf<LatLng?>(null) }
   // 表示OFFで場所登録時、近くに既存があったときの確認（既存place＋保留中の登録内容）。
   var registerProximity by remember { mutableStateOf<Pair<RegisteredPlace, PendingRegister>?>(null) }
   // 「立ち寄りを追加」モード（記録中のみ）。ONの間は地図タップ＝立ち寄り追加、OFF＝場所登録。
@@ -173,25 +172,25 @@ fun TrackingScreen(
         currentLocation = uiState.currentLocation,
         stops = uiState.stops,
         currentStop = uiState.currentStop,
-        // 手動追加モード（記録中のみ）: POIタップも立ち寄り追加に。通常は場所登録ダイアログ。
+        // 手動追加モード（記録中のみ）: POIタップも立ち寄り追加に。通常は統一の場所シート（POI登録）。
         onPoiClick = { poi ->
-          if (uiState.isTracking && manualMode) manualTarget = poi.latLng else poiTarget = poi
+          if (uiState.isTracking && manualMode) manualTarget = poi.latLng else placeSheetTarget = PlaceSheetTarget.NewPoi(poi)
         },
-        // 手動追加モード＝立ち寄り追加、それ以外（通常/平常時）＝その地点を場所として登録。
+        // 手動追加モード＝立ち寄り追加、それ以外（通常/平常時）＝場所シート（空き地点の登録）。
         onMapClick = { latLng ->
-          if (uiState.isTracking && manualMode) manualTarget = latLng else registerPointTarget = latLng
+          if (uiState.isTracking && manualMode) manualTarget = latLng else placeSheetTarget = PlaceSheetTarget.NewPoint(latLng)
         },
         // 立ち寄りマーカーのタップで「場所を選び直す」（誤検知の訂正）。
         onStopClick = { reassignTarget = it },
         modifier = Modifier.fillMaxSize(),
         registeredPlaces = if (uiState.showRegisteredPlaces) uiState.registeredPlaces else emptyList(),
-        // 登録済みマーカーのタップ: 手動追加モード＝既存placeへ紐付け／通常＝その場所の詳細を開く。
+        // 登録済みマーカーのタップ: 手動追加モード＝既存placeへ紐付け／通常＝場所シート（その場で編集）。
         onRegisteredPlaceClick = { place ->
           if (uiState.isTracking && manualMode) {
             linkPlace = place
             manualTarget = LatLng(place.latitude, place.longitude)
           } else {
-            onOpenPlaceDetail(place.placeId)
+            placeSheetTarget = PlaceSheetTarget.Existing(place.placeId)
           }
         },
       )
@@ -397,39 +396,20 @@ fun TrackingScreen(
     )
   }
 
-  poiTarget?.let { poi ->
-    RegisterPlaceFromPoiDialog(
-      poi = poi,
-      onDismiss = { poiTarget = null },
-      onFetchDetails = viewModel::fetchPoiDetails,
-      onRegister = { name, wishlist, priority, memo ->
-        viewModel.registerPlace(
-          poi.latLng.latitude,
-          poi.latLng.longitude,
-          name,
-          wishlist,
-          priority,
-          memo,
-          poi.placeId,
-        )
-        poiTarget = null
-      },
-    )
-  }
-
-  // 記録していないときの空きタップ → その地点を場所として登録（立ち寄りは作らない）。
-  // 表示ON＝そのまま新規／表示OFF＝近接確認（近くに既存があれば紐付け/新規）。
-  registerPointTarget?.let { latLng ->
-    RegisterPlaceAtPointDialog(
-      onDismiss = { registerPointTarget = null },
-      onRegister = { name, wishlist, priority, memo ->
-        val lat = latLng.latitude
-        val lng = latLng.longitude
-        registerPointTarget = null
-        if (uiState.showRegisteredPlaces) {
-          viewModel.registerPlace(lat, lng, name, wishlist, priority, memo, null, forceNewPlace = true)
-        } else {
-          scope.launch {
+  // 地図の1点タップで開く統一の「場所シート」。未登録の空き地点/POI＝登録、登録済み＝その場で編集。
+  placeSheetTarget?.let { target ->
+    PlaceActionSheet(
+      target = target,
+      onDismiss = { placeSheetTarget = null },
+      onFetchPoiDetails = viewModel::fetchPoiDetails,
+      onLoadPlace = viewModel::loadPlace,
+      onRegisterNew = { lat, lng, name, wishlist, priority, memo, googlePlaceId ->
+        when {
+          // POI（施設同定）はそのまま登録。
+          googlePlaceId != null -> viewModel.registerPlace(lat, lng, name, wishlist, priority, memo, googlePlaceId)
+          // 空き地点は 表示ON＝新規／OFF＝近接確認。
+          uiState.showRegisteredPlaces -> viewModel.registerPlace(lat, lng, name, wishlist, priority, memo, null, forceNewPlace = true)
+          else -> scope.launch {
             val near = viewModel.nearbyPlace(lat, lng)
             if (near != null) {
               registerProximity = near to PendingRegister(lat, lng, name, wishlist, priority, memo)
@@ -439,6 +419,26 @@ fun TrackingScreen(
           }
         }
       },
+      onSaveExisting = { item, name, note, wishlist, priority, visited ->
+        viewModel.savePlaceEdits(item, name, note, wishlist, priority, visited)
+      },
+      // 記録中のみ「立ち寄りに追加」。この訪問を既存 place にひも付ける手動追加へ流す。
+      onAddStop = if (uiState.isTracking) {
+        { item ->
+          linkPlace = RegisteredPlace(
+            placeId = item.place.id,
+            name = item.displayName,
+            latitude = item.place.latitude,
+            longitude = item.place.longitude,
+            isWishlisted = item.isWishlisted,
+            isVisited = item.isVisited,
+          )
+          manualTarget = LatLng(item.place.latitude, item.place.longitude)
+        }
+      } else {
+        null
+      },
+      onOpenDetail = onOpenPlaceDetail,
     )
   }
 

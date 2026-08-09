@@ -43,6 +43,8 @@ class WishlistRepositoryImpl @Inject constructor(
 
   override fun getPlaces(): Flow<List<PlaceListItem>> = placeDao.getPlacesWithWishlist().map { list -> list.map { it.toPlaceListItem() } }
 
+  override suspend fun getPlace(placeId: Long): PlaceListItem? = placeDao.getPlaceWithWishlist(placeId)?.toPlaceListItem()
+
   override fun getVisits(placeId: Long): Flow<List<PlaceVisit>> = stopDao.getVisitsForPlace(placeId).map { list ->
     list.map {
       PlaceVisit(

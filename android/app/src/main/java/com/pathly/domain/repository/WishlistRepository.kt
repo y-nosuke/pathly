@@ -17,6 +17,9 @@ interface WishlistRepository {
   /** 全ての場所を、行きたい登録（あれば）付きでリアクティブに取得する。 */
   fun getPlaces(): Flow<List<PlaceListItem>>
 
+  /** 単一の場所を、行きたい登録付きで一回取得する（記録画面で既存 place をその場で編集するため）。無ければ null。 */
+  suspend fun getPlace(placeId: Long): PlaceListItem?
+
   /** その場所を含むお出掛け（経路）の一覧。新しい順。訪問が無ければ空。 */
   fun getVisits(placeId: Long): Flow<List<PlaceVisit>>
 

@@ -74,7 +74,6 @@ import com.google.android.gms.location.LocationServices
 import com.google.android.gms.maps.CameraUpdateFactory
 import com.google.android.gms.maps.model.CameraPosition
 import com.google.android.gms.maps.model.LatLng
-import com.google.android.gms.maps.model.PointOfInterest
 import com.google.android.gms.tasks.CancellationTokenSource
 import com.google.maps.android.compose.GoogleMap
 import com.google.maps.android.compose.MapUiSettings
@@ -265,6 +264,10 @@ fun PlaceDetailRoute(
     },
     onFindNearbyPlace = viewModel::nearbyPlace,
     onLinkRegister = { pid, wishlist, priority, memo -> viewModel.linkRegisterToPlace(pid, wishlist, priority, memo) },
+    onLoadPlace = viewModel::loadPlace,
+    onSavePlaceEdits = { editItem, name, note, wishlist, priority, visited ->
+      viewModel.savePlaceEdits(editItem, name, note, wishlist, priority, visited)
+    },
     onOpenPlaceDetail = onOpenPlaceDetail,
     // 確認ダイアログは出さず即時削除。items から消えると item == null になり一覧へ戻り、
     // 取り消しスナックバーは一覧側で出る。
@@ -835,15 +838,18 @@ private fun PlaceDetailContent(
     { _, _, _, _, _, _, _ -> },
   onFindNearbyPlace: suspend (lat: Double, lng: Double) -> RegisteredPlace? = { _, _ -> null },
   onLinkRegister: (placeId: Long, wishlist: Boolean, priority: Priority, memo: String?) -> Unit = { _, _, _, _ -> },
-  // 登録済みマーカー（自身以外）タップでその場所の詳細を開く。
+  // 統一シートで登録済みマーカーをその場で編集するため、単一 place を取得・保存する。
+  onLoadPlace: suspend (placeId: Long) -> PlaceListItem? = { null },
+  onSavePlaceEdits: (item: PlaceListItem, name: String, note: String, wishlist: Boolean, priority: Priority, visited: Boolean) -> Unit = { _, _, _, _, _, _ -> },
+  // 「詳細を開く」でその場所の詳細へ遷移する。
   onOpenPlaceDetail: (placeId: Long) -> Unit = {},
   modifier: Modifier = Modifier,
 ) {
-  var poiTarget by remember { mutableStateOf<PointOfInterest?>(null) }
+  // 地図の1点タップで開く統一の「場所シート」（未登録の空き地点/POI＝登録、登録済み＝その場で編集）。
+  var placeSheetTarget by remember { mutableStateOf<PlaceSheetTarget?>(null) }
   // 「Googleで情報を取得」ダイアログの開閉。
   var linkDialogOpen by remember { mutableStateOf(false) }
-  // 何もない地点をタップして場所登録する対象／近接確認。
-  var registerPointTarget by remember { mutableStateOf<LatLng?>(null) }
+  // 場所登録の近接確認（表示OFFで近くに既存があったとき）。
   var registerProximity by remember { mutableStateOf<RegisteredPlace?>(null) }
   var pendingRegister by remember { mutableStateOf<PendingPointRegister?>(null) }
   val detailScope = rememberCoroutineScope()
@@ -885,17 +891,17 @@ private fun PlaceDetailContent(
         mapToolbarEnabled = false,
         myLocationButtonEnabled = false,
       ),
-      // 詳細のマップで別の施設(POI)を見かけたらタップで登録できる。
-      onPOIClick = { poiTarget = it },
-      // 何もない地点をタップ → その地点を場所として登録（POI と同じく登録できる）。
-      onMapClick = { registerPointTarget = it },
+      // 詳細のマップで別の施設(POI)を見かけたらタップで統一シート（登録）。
+      onPOIClick = { placeSheetTarget = PlaceSheetTarget.NewPoi(it) },
+      // 何もない地点をタップ → 統一シート（その地点を場所として登録）。
+      onMapClick = { placeSheetTarget = PlaceSheetTarget.NewPoint(it) },
     ) {
       val markerState = remember(position) { MarkerState(position = position) }
       Marker(state = markerState, title = item.displayName)
       // 登録済みの場所（トグルON）。この場所自身は主マーカーと重なるので除外済みのリストを描く。
-      // タップでその場所の詳細を開く。
+      // タップで統一シート（その場で編集／詳細を開く）。
       if (showRegisteredPlaces) {
-        RegisteredPlaceMarkers(registeredPlaces) { onOpenPlaceDetail(it.placeId) }
+        RegisteredPlaceMarkers(registeredPlaces) { placeSheetTarget = PlaceSheetTarget.Existing(it.placeId) }
       }
     }
 
@@ -1070,15 +1076,30 @@ private fun PlaceDetailContent(
     }
   }
 
-  poiTarget?.let { poi ->
-    RegisterPlaceFromPoiDialog(
-      poi = poi,
-      onDismiss = { poiTarget = null },
-      onFetchDetails = onFetchPoiDetails,
-      onRegister = { name, wishlist, priority, memo ->
-        onRegisterPoi(poi.latLng.latitude, poi.latLng.longitude, name, wishlist, priority, memo, poi.placeId)
-        poiTarget = null
+  // 地図の1点タップで開く統一の「場所シート」。記録画面と同じ挙動（この画面は記録中でないので立ち寄り追加は出さない）。
+  placeSheetTarget?.let { target ->
+    PlaceActionSheet(
+      target = target,
+      onDismiss = { placeSheetTarget = null },
+      onFetchPoiDetails = onFetchPoiDetails,
+      onLoadPlace = onLoadPlace,
+      onRegisterNew = { lat, lng, name, wishlist, priority, memo, googlePlaceId ->
+        when {
+          googlePlaceId != null -> onRegisterPoi(lat, lng, name.orEmpty(), wishlist, priority, memo, googlePlaceId)
+          showRegisteredPlaces -> onRegisterPlaceAtPoint(lat, lng, name, wishlist, priority, memo, true)
+          else -> detailScope.launch {
+            val near = onFindNearbyPlace(lat, lng)
+            if (near != null) {
+              registerProximity = near
+              pendingRegister = PendingPointRegister(lat, lng, name, wishlist, priority, memo)
+            } else {
+              onRegisterPlaceAtPoint(lat, lng, name, wishlist, priority, memo, true)
+            }
+          }
+        }
       },
+      onSaveExisting = onSavePlaceEdits,
+      onOpenDetail = onOpenPlaceDetail,
     )
   }
 
@@ -1101,31 +1122,6 @@ private fun PlaceDetailContent(
       onDismiss = { linkDialogOpen = false },
       onSearchPredictions = onSearchPredictions,
       onFetchPrediction = onFetchPrediction,
-    )
-  }
-
-  // 何もない地点タップ → その地点を場所として登録（表示ON=そのまま新規／OFF=近接確認）。
-  registerPointTarget?.let { latLng ->
-    RegisterPlaceAtPointDialog(
-      onDismiss = { registerPointTarget = null },
-      onRegister = { rName, rWishlist, rPriority, rMemo ->
-        val lat = latLng.latitude
-        val lng = latLng.longitude
-        registerPointTarget = null
-        if (showRegisteredPlaces) {
-          onRegisterPlaceAtPoint(lat, lng, rName, rWishlist, rPriority, rMemo, true)
-        } else {
-          detailScope.launch {
-            val near = onFindNearbyPlace(lat, lng)
-            if (near != null) {
-              registerProximity = near
-              pendingRegister = PendingPointRegister(lat, lng, rName, rWishlist, rPriority, rMemo)
-            } else {
-              onRegisterPlaceAtPoint(lat, lng, rName, rWishlist, rPriority, rMemo, true)
-            }
-          }
-        }
-      },
     )
   }
 

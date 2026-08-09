@@ -14,6 +14,7 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.pathly.data.settings.MapSurface
 import com.pathly.data.settings.SettingsRepository
+import com.pathly.domain.model.PlaceListItem
 import com.pathly.domain.model.PlaceSearchResult
 import com.pathly.domain.model.Priority
 import com.pathly.domain.model.RegisteredPlace
@@ -322,6 +323,53 @@ class TrackingViewModel @Inject constructor(
         _uiState.value = _uiState.value.copy(placeRegisteredMessage = "この場所に紐付けました")
       } catch (e: Exception) {
         _uiState.value = _uiState.value.copy(errorMessage = "紐付けに失敗しました: ${e.message}")
+      }
+    }
+  }
+
+  /** 登録済みマーカーをタップして記録画面のまま編集するため、単一 place の現在値を取得する。 */
+  suspend fun loadPlace(placeId: Long): PlaceListItem? = wishlistRepository.getPlace(placeId)
+
+  /**
+   * 記録画面のまま既存 place を編集して保存する（名前・メモ・行きたい・優先度・訪問済みを差分適用）。
+   * 場所詳細の [PlacesViewModel.savePlaceEdits] と同じ考え方（Google 紐付けはここでは扱わない）。
+   */
+  fun savePlaceEdits(
+    item: PlaceListItem,
+    name: String,
+    note: String,
+    wishlist: Boolean,
+    priority: Priority,
+    visited: Boolean,
+  ) {
+    viewModelScope.launch {
+      try {
+        if (name.trim() != (item.place.name ?: "").trim()) {
+          wishlistRepository.renamePlace(item.place.id, name.trim())
+        }
+        val newNote = note.ifBlank { null }
+        if (newNote != item.note) {
+          wishlistRepository.updatePlaceNote(item.place.id, newNote)
+        }
+        val wishlistId = item.wishlistId
+        when {
+          wishlist && wishlistId == null -> {
+            val newId = wishlistRepository.addToWishlist(item.place.id, priority)
+            if (visited && item.visitCount == 0) wishlistRepository.setVisited(newId, true)
+          }
+          wishlist && wishlistId != null -> {
+            if (priority != item.priority) wishlistRepository.updateWishlist(wishlistId, priority)
+            if (item.visitCount == 0 && visited != item.isManuallyVisited) {
+              wishlistRepository.setVisited(wishlistId, visited)
+            }
+          }
+          !wishlist && wishlistId != null -> {
+            wishlistRepository.removeFromWishlist(wishlistId)
+          }
+        }
+        _uiState.value = _uiState.value.copy(placeRegisteredMessage = "保存しました")
+      } catch (e: Exception) {
+        _uiState.value = _uiState.value.copy(errorMessage = "保存に失敗しました: ${e.message}")
       }
     }
   }
