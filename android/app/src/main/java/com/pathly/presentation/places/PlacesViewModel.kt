@@ -19,6 +19,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
@@ -41,7 +42,7 @@ class PlacesViewModel @Inject constructor(
   private fun observeShowRegisteredPlaces() {
     viewModelScope.launch {
       settingsRepository.showRegisteredPlaces(MapSurface.PLACE_DETAIL).collect { show ->
-        _uiState.value = _uiState.value.copy(showRegisteredPlaces = show)
+        _uiState.update { it.copy(showRegisteredPlaces = show) }
       }
     }
   }
@@ -52,50 +53,56 @@ class PlacesViewModel @Inject constructor(
 
   private fun observePlaces() {
     viewModelScope.launch {
-      _uiState.value = _uiState.value.copy(isLoading = true)
+      _uiState.update { it.copy(isLoading = true) }
       try {
         wishlistRepository.getPlaces().collect { items ->
-          _uiState.value = _uiState.value.copy(
-            items = items,
-            isLoading = false,
-            errorMessage = null,
-          )
+          _uiState.update {
+            it.copy(
+              items = items,
+              isLoading = false,
+              errorMessage = null,
+            )
+          }
         }
       } catch (e: Exception) {
-        _uiState.value = _uiState.value.copy(
-          isLoading = false,
-          errorMessage = "場所の読み込みに失敗しました: ${e.message}",
-        )
+        _uiState.update {
+          it.copy(
+            isLoading = false,
+            errorMessage = "場所の読み込みに失敗しました: ${e.message}",
+          )
+        }
       }
     }
   }
 
   /** 行きたいの絞り込み（指定なし/行きたい/行きたい以外）。 */
   fun setWishlistFilter(filter: WishlistFilter) {
-    _uiState.value = _uiState.value.copy(wishlistFilter = filter)
+    _uiState.update { it.copy(wishlistFilter = filter) }
   }
 
   /** 訪問状況の絞り込み（指定なし/訪問済み/未訪問）。 */
   fun setVisitedFilter(filter: VisitedFilter) {
-    _uiState.value = _uiState.value.copy(visitedFilter = filter)
+    _uiState.update { it.copy(visitedFilter = filter) }
   }
 
   /** 絞り込みを全解除する（行きたい・訪問状況をまとめて指定なしに戻す）。並べ替えは保持。 */
   fun clearFilters() {
-    _uiState.value = _uiState.value.copy(
-      wishlistFilter = WishlistFilter.ANY,
-      visitedFilter = VisitedFilter.ANY,
-    )
+    _uiState.update {
+      it.copy(
+        wishlistFilter = WishlistFilter.ANY,
+        visitedFilter = VisitedFilter.ANY,
+      )
+    }
   }
 
   /** 並べ替え軸の変更。軸ごとの既定の向き（新しい/多い/高いが先）に合わせる。 */
   fun setSort(sort: PlaceSort) {
-    _uiState.value = _uiState.value.copy(sort = sort, sortDescending = sort.defaultDescending)
+    _uiState.update { it.copy(sort = sort, sortDescending = sort.defaultDescending) }
   }
 
   /** 並べ替えの昇順/降順を反転する。 */
   fun toggleSortDirection() {
-    _uiState.value = _uiState.value.copy(sortDescending = !_uiState.value.sortDescending)
+    _uiState.update { it.copy(sortDescending = !it.sortDescending) }
   }
 
   /** その場所を含むお出掛け（経路）の一覧。詳細画面で購読する。 */
@@ -118,7 +125,7 @@ class PlacesViewModel @Inject constructor(
         if (wishlist) wishlistRepository.addToWishlist(placeId, priority)
         notify("この場所に紐付けました")
       } catch (e: Exception) {
-        _uiState.value = _uiState.value.copy(errorMessage = "紐付けに失敗しました: ${e.message}")
+        _uiState.update { it.copy(errorMessage = "紐付けに失敗しました: ${e.message}") }
       }
     }
   }
@@ -142,7 +149,7 @@ class PlacesViewModel @Inject constructor(
         }
         notifyRegistered(reg.alreadyExisted)
       } catch (e: Exception) {
-        _uiState.value = _uiState.value.copy(errorMessage = "登録に失敗しました: ${e.message}")
+        _uiState.update { it.copy(errorMessage = "登録に失敗しました: ${e.message}") }
       }
     }
   }
@@ -158,7 +165,7 @@ class PlacesViewModel @Inject constructor(
           wishlistRepository.addToWishlist(item.place.id, Priority.MEDIUM)
         }
       } catch (e: Exception) {
-        _uiState.value = _uiState.value.copy(errorMessage = "更新に失敗しました: ${e.message}")
+        _uiState.update { it.copy(errorMessage = "更新に失敗しました: ${e.message}") }
       }
     }
   }
@@ -169,7 +176,7 @@ class PlacesViewModel @Inject constructor(
       try {
         wishlistRepository.renamePlace(placeId, name)
       } catch (e: Exception) {
-        _uiState.value = _uiState.value.copy(errorMessage = "名前の変更に失敗しました: ${e.message}")
+        _uiState.update { it.copy(errorMessage = "名前の変更に失敗しました: ${e.message}") }
       }
     }
   }
@@ -180,7 +187,7 @@ class PlacesViewModel @Inject constructor(
       try {
         wishlistRepository.updatePlaceNote(placeId, note)
       } catch (e: Exception) {
-        _uiState.value = _uiState.value.copy(errorMessage = "更新に失敗しました: ${e.message}")
+        _uiState.update { it.copy(errorMessage = "更新に失敗しました: ${e.message}") }
       }
     }
   }
@@ -191,7 +198,7 @@ class PlacesViewModel @Inject constructor(
       try {
         wishlistRepository.updateWishlist(wishlistId, priority)
       } catch (e: Exception) {
-        _uiState.value = _uiState.value.copy(errorMessage = "更新に失敗しました: ${e.message}")
+        _uiState.update { it.copy(errorMessage = "更新に失敗しました: ${e.message}") }
       }
     }
   }
@@ -201,7 +208,7 @@ class PlacesViewModel @Inject constructor(
       try {
         wishlistRepository.setVisited(id, visited)
       } catch (e: Exception) {
-        _uiState.value = _uiState.value.copy(errorMessage = "更新に失敗しました: ${e.message}")
+        _uiState.update { it.copy(errorMessage = "更新に失敗しました: ${e.message}") }
       }
     }
   }
@@ -253,7 +260,7 @@ class PlacesViewModel @Inject constructor(
           }
         }
       } catch (e: Exception) {
-        _uiState.value = _uiState.value.copy(errorMessage = "保存に失敗しました: ${e.message}")
+        _uiState.update { it.copy(errorMessage = "保存に失敗しました: ${e.message}") }
       }
     }
   }
@@ -265,23 +272,25 @@ class PlacesViewModel @Inject constructor(
   /** 検索画面を開いたとき。セッション開始＋状態リセット。 */
   fun startSearch() {
     placesTextSearcher.startSession()
-    _uiState.value = _uiState.value.copy(search = SearchState())
+    _uiState.update { it.copy(search = SearchState()) }
   }
 
   fun onSearchQueryChange(query: String) {
-    _uiState.value = _uiState.value.copy(search = _uiState.value.search.copy(query = query))
+    _uiState.update { it.copy(search = it.search.copy(query = query)) }
     predictJob?.cancel()
     if (query.isBlank()) {
-      _uiState.value = _uiState.value.copy(search = _uiState.value.search.copy(predictions = emptyList(), isSearching = false))
+      _uiState.update { it.copy(search = it.search.copy(predictions = emptyList(), isSearching = false)) }
       return
     }
     predictJob = viewModelScope.launch {
       delay(300) // デバウンス（打鍵ごとに叩かない）
-      _uiState.value = _uiState.value.copy(search = _uiState.value.search.copy(isSearching = true))
+      _uiState.update { it.copy(search = it.search.copy(isSearching = true)) }
       val preds = placesTextSearcher.predict(query)
-      _uiState.value = _uiState.value.copy(
-        search = _uiState.value.search.copy(predictions = preds, isSearching = false),
-      )
+      _uiState.update {
+        it.copy(
+          search = it.search.copy(predictions = preds, isSearching = false),
+        )
+      }
     }
   }
 
@@ -290,9 +299,9 @@ class PlacesViewModel @Inject constructor(
     viewModelScope.launch {
       val result = placesTextSearcher.fetch(placeId)
       if (result == null) {
-        _uiState.value = _uiState.value.copy(errorMessage = "場所の取得に失敗しました（オフライン等）")
+        _uiState.update { it.copy(errorMessage = "場所の取得に失敗しました（オフライン等）") }
       } else {
-        _uiState.value = _uiState.value.copy(search = _uiState.value.search.copy(result = result))
+        _uiState.update { it.copy(search = it.search.copy(result = result)) }
       }
     }
   }
@@ -322,10 +331,10 @@ class PlacesViewModel @Inject constructor(
         if (wishlist) {
           wishlistRepository.addToWishlist(placeId, priority)
         }
-        _uiState.value = _uiState.value.copy(search = SearchState())
+        _uiState.update { it.copy(search = SearchState()) }
         notifyRegistered(reg.alreadyExisted)
       } catch (e: Exception) {
-        _uiState.value = _uiState.value.copy(errorMessage = "登録に失敗しました: ${e.message}")
+        _uiState.update { it.copy(errorMessage = "登録に失敗しました: ${e.message}") }
       }
     }
   }
@@ -344,15 +353,17 @@ class PlacesViewModel @Inject constructor(
 
   /** 一覧側スナックバーに出すワンショット通知。 */
   private fun notify(message: String) {
-    _uiState.value = _uiState.value.copy(
-      registerToken = _uiState.value.registerToken + 1,
-      registerMessage = message,
-    )
+    _uiState.update {
+      it.copy(
+        registerToken = it.registerToken + 1,
+        registerMessage = message,
+      )
+    }
   }
 
   /** 確定フォームから戻る（候補選び直し）。 */
   fun clearSearchResult() {
-    _uiState.value = _uiState.value.copy(search = _uiState.value.search.copy(result = null))
+    _uiState.update { it.copy(search = it.search.copy(result = null)) }
   }
 
   /**
@@ -364,12 +375,14 @@ class PlacesViewModel @Inject constructor(
       val name = _uiState.value.items.firstOrNull { it.place.id == placeId }?.displayName
       try {
         wishlistRepository.deletePlace(placeId)
-        _uiState.value = _uiState.value.copy(
-          undoDeleteToken = _uiState.value.undoDeleteToken + 1,
-          undoDeleteName = name,
-        )
+        _uiState.update {
+          it.copy(
+            undoDeleteToken = it.undoDeleteToken + 1,
+            undoDeleteName = name,
+          )
+        }
       } catch (e: Exception) {
-        _uiState.value = _uiState.value.copy(errorMessage = "削除に失敗しました: ${e.message}")
+        _uiState.update { it.copy(errorMessage = "削除に失敗しました: ${e.message}") }
       }
     }
   }
@@ -380,12 +393,12 @@ class PlacesViewModel @Inject constructor(
       try {
         wishlistRepository.undoLastPlaceDeletion()
       } catch (e: Exception) {
-        _uiState.value = _uiState.value.copy(errorMessage = "取り消しに失敗しました: ${e.message}")
+        _uiState.update { it.copy(errorMessage = "取り消しに失敗しました: ${e.message}") }
       }
     }
   }
 
   fun clearError() {
-    _uiState.value = _uiState.value.copy(errorMessage = null)
+    _uiState.update { it.copy(errorMessage = null) }
   }
 }

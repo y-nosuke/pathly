@@ -8,6 +8,7 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
@@ -26,58 +27,64 @@ class HistoryViewModel @Inject constructor(
 
   private fun loadTracks() {
     viewModelScope.launch {
-      _uiState.value = _uiState.value.copy(isLoading = true)
+      _uiState.update { it.copy(isLoading = true) }
       try {
         gpsTrackRepository.getAllTracks().collect { tracks ->
           // 完了済み（記録中でなく終了時刻あり）だけを一覧に載せる。並べ替えは state 側で行う。
           val completedTracks = tracks.filter { !it.isActive && it.endTime != null }
-          _uiState.value = _uiState.value.copy(
-            tracks = completedTracks,
-            isLoading = false,
-            errorMessage = null,
-          )
+          _uiState.update {
+            it.copy(
+              tracks = completedTracks,
+              isLoading = false,
+              errorMessage = null,
+            )
+          }
         }
       } catch (e: Exception) {
-        _uiState.value = _uiState.value.copy(
-          isLoading = false,
-          errorMessage = "データの読み込みに失敗しました: ${e.message}",
-        )
+        _uiState.update {
+          it.copy(
+            isLoading = false,
+            errorMessage = "データの読み込みに失敗しました: ${e.message}",
+          )
+        }
       }
     }
   }
 
   /** お気に入りの絞り込み（指定なし/お気に入り/お気に入り以外）。 */
   fun setFavoriteFilter(filter: TrackFavoriteFilter) {
-    _uiState.value = _uiState.value.copy(favoriteFilter = filter)
+    _uiState.update { it.copy(favoriteFilter = filter) }
   }
 
   /** 命名状況の絞り込み（指定なし/名前あり/未命名）。 */
   fun setNamedFilter(filter: TrackNamedFilter) {
-    _uiState.value = _uiState.value.copy(namedFilter = filter)
+    _uiState.update { it.copy(namedFilter = filter) }
   }
 
   /** 立ち寄りの有無の絞り込み（指定なし/あり/なし）。 */
   fun setStopFilter(filter: TrackStopFilter) {
-    _uiState.value = _uiState.value.copy(stopFilter = filter)
+    _uiState.update { it.copy(stopFilter = filter) }
   }
 
   /** 絞り込みを全解除する（3軸まとめて指定なしに戻す）。並べ替えは保持。 */
   fun clearFilters() {
-    _uiState.value = _uiState.value.copy(
-      favoriteFilter = TrackFavoriteFilter.ANY,
-      namedFilter = TrackNamedFilter.ANY,
-      stopFilter = TrackStopFilter.ANY,
-    )
+    _uiState.update {
+      it.copy(
+        favoriteFilter = TrackFavoriteFilter.ANY,
+        namedFilter = TrackNamedFilter.ANY,
+        stopFilter = TrackStopFilter.ANY,
+      )
+    }
   }
 
   /** 並べ替え軸の変更。軸ごとの既定の向き（新しい/多い/長いが先）に合わせる。 */
   fun setSort(sort: TrackSort) {
-    _uiState.value = _uiState.value.copy(sort = sort, sortDescending = sort.defaultDescending)
+    _uiState.update { it.copy(sort = sort, sortDescending = sort.defaultDescending) }
   }
 
   /** 並べ替えの昇順/降順を反転する。 */
   fun toggleSortDirection() {
-    _uiState.value = _uiState.value.copy(sortDescending = !_uiState.value.sortDescending)
+    _uiState.update { it.copy(sortDescending = !it.sortDescending) }
   }
 
   /** お気に入り登録を切り替える。 */
@@ -86,9 +93,11 @@ class HistoryViewModel @Inject constructor(
       try {
         gpsTrackRepository.setFavorite(track.id, !track.isFavorite)
       } catch (e: Exception) {
-        _uiState.value = _uiState.value.copy(
-          errorMessage = "お気に入りの更新に失敗しました: ${e.message}",
-        )
+        _uiState.update {
+          it.copy(
+            errorMessage = "お気に入りの更新に失敗しました: ${e.message}",
+          )
+        }
       }
     }
   }
@@ -99,9 +108,11 @@ class HistoryViewModel @Inject constructor(
       try {
         gpsTrackRepository.renameTrack(trackId, name)
       } catch (e: Exception) {
-        _uiState.value = _uiState.value.copy(
-          errorMessage = "名前の変更に失敗しました: ${e.message}",
-        )
+        _uiState.update {
+          it.copy(
+            errorMessage = "名前の変更に失敗しました: ${e.message}",
+          )
+        }
       }
     }
   }
@@ -111,21 +122,23 @@ class HistoryViewModel @Inject constructor(
       try {
         gpsTrackRepository.deleteTrack(track)
       } catch (e: Exception) {
-        _uiState.value = _uiState.value.copy(
-          errorMessage = "削除に失敗しました: ${e.message}",
-        )
+        _uiState.update {
+          it.copy(
+            errorMessage = "削除に失敗しました: ${e.message}",
+          )
+        }
       }
     }
   }
 
   fun clearError() {
-    _uiState.value = _uiState.value.copy(errorMessage = null)
+    _uiState.update { it.copy(errorMessage = null) }
   }
 
   private fun observeActiveTrack() {
     viewModelScope.launch {
       gpsTrackRepository.getActiveTrackRealtime().collect { activeTrack ->
-        _uiState.value = _uiState.value.copy(activeTrack = activeTrack)
+        _uiState.update { it.copy(activeTrack = activeTrack) }
       }
     }
   }

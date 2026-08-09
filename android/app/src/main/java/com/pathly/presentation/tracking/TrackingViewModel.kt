@@ -34,6 +34,7 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
@@ -66,10 +67,12 @@ class TrackingViewModel @Inject constructor(
       viewModelScope.launch {
         val activeTrack = gpsTrackRepository.getActiveTrack()
         if (activeTrack != null) {
-          _uiState.value = _uiState.value.copy(
-            isTracking = true,
-            currentTrackId = activeTrack.id,
-          )
+          _uiState.update {
+            it.copy(
+              isTracking = true,
+              currentTrackId = activeTrack.id,
+            )
+          }
         }
       }
 
@@ -89,10 +92,12 @@ class TrackingViewModel @Inject constructor(
           logger.d("Service disconnected unexpectedly, finishing track")
           gpsTrackRepository.finishTrack(activeTrack.id, java.util.Date())
         }
-        _uiState.value = _uiState.value.copy(
-          isTracking = false,
-          currentTrackId = null,
-        )
+        _uiState.update {
+          it.copy(
+            isTracking = false,
+            currentTrackId = null,
+          )
+        }
       }
     }
   }
@@ -110,12 +115,12 @@ class TrackingViewModel @Inject constructor(
   private fun observeRegisteredPlaces() {
     viewModelScope.launch {
       settingsRepository.showRegisteredPlaces(MapSurface.RECORDING).collect { show ->
-        _uiState.value = _uiState.value.copy(showRegisteredPlaces = show)
+        _uiState.update { it.copy(showRegisteredPlaces = show) }
       }
     }
     viewModelScope.launch {
       placeRepository.observeRegisteredPlaces().collect { places ->
-        _uiState.value = _uiState.value.copy(registeredPlaces = places)
+        _uiState.update { it.copy(registeredPlaces = places) }
       }
     }
   }
@@ -127,7 +132,7 @@ class TrackingViewModel @Inject constructor(
   private fun observeCurrentStop() {
     viewModelScope.launch {
       placeRepository.currentStop.collect { stop ->
-        _uiState.value = _uiState.value.copy(currentStop = stop)
+        _uiState.update { it.copy(currentStop = stop) }
       }
     }
   }
@@ -141,7 +146,7 @@ class TrackingViewModel @Inject constructor(
           if (id == null) flowOf(emptyList()) else placeRepository.getStopsForTrack(id)
         }
         .collect { stops ->
-          _uiState.value = _uiState.value.copy(stops = stops)
+          _uiState.update { it.copy(stops = stops) }
         }
     }
   }
@@ -153,18 +158,22 @@ class TrackingViewModel @Inject constructor(
       when {
         activeTrack == null -> {
           // アクティブなトラックがない場合
-          _uiState.value = _uiState.value.copy(
-            isTracking = false,
-            currentTrackId = null,
-          )
+          _uiState.update {
+            it.copy(
+              isTracking = false,
+              currentTrackId = null,
+            )
+          }
         }
 
         LocationTrackingService.isTracking -> {
           // 記録中プロセスが生存している → サービスに再接続して継続
-          _uiState.value = _uiState.value.copy(
-            isTracking = true,
-            currentTrackId = activeTrack.id,
-          )
+          _uiState.update {
+            it.copy(
+              isTracking = true,
+              currentTrackId = activeTrack.id,
+            )
+          }
           bindToService()
         }
 
@@ -172,10 +181,12 @@ class TrackingViewModel @Inject constructor(
           // サービスが動いていないのにアクティブなトラックが残っている。
           // 前回の記録がアプリ更新やクラッシュで中断されたもの。
           // 再開するか完了にするかをユーザーに確認する。
-          _uiState.value = _uiState.value.copy(
-            isTracking = false,
-            interruptedTrack = activeTrack,
-          )
+          _uiState.update {
+            it.copy(
+              isTracking = false,
+              interruptedTrack = activeTrack,
+            )
+          }
         }
       }
     }
@@ -186,9 +197,11 @@ class TrackingViewModel @Inject constructor(
 
     if (!_uiState.value.hasLocationPermission) {
       logger.e("Location permission not granted")
-      _uiState.value = _uiState.value.copy(
-        errorMessage = "位置情報の権限が必要です",
-      )
+      _uiState.update {
+        it.copy(
+          errorMessage = "位置情報の権限が必要です",
+        )
+      }
       return
     }
 
@@ -199,10 +212,12 @@ class TrackingViewModel @Inject constructor(
     application.startForegroundService(intent)
     bindToService()
 
-    _uiState.value = _uiState.value.copy(
-      isTracking = true,
-      errorMessage = null,
-    )
+    _uiState.update {
+      it.copy(
+        isTracking = true,
+        errorMessage = null,
+      )
+    }
   }
 
   fun stopTracking() {
@@ -213,14 +228,16 @@ class TrackingViewModel @Inject constructor(
     application.startService(intent)
     unbindFromService()
 
-    _uiState.value = _uiState.value.copy(
-      isTracking = false,
-      currentTrackId = null,
-      // 停止後に古い現在地が残って地図がそこへ寄るのを防ぐ
-      currentLocation = null,
-      locationCount = 0,
-      currentStop = null,
-    )
+    _uiState.update {
+      it.copy(
+        isTracking = false,
+        currentTrackId = null,
+        // 停止後に古い現在地が残って地図がそこへ寄るのを防ぐ
+        currentLocation = null,
+        locationCount = 0,
+        currentStop = null,
+      )
+    }
   }
 
   /** 中断されたトラックに続けて記録を再開する */
@@ -234,12 +251,14 @@ class TrackingViewModel @Inject constructor(
     application.startForegroundService(intent)
     bindToService()
 
-    _uiState.value = _uiState.value.copy(
-      isTracking = true,
-      currentTrackId = interrupted.id,
-      interruptedTrack = null,
-      errorMessage = null,
-    )
+    _uiState.update {
+      it.copy(
+        isTracking = true,
+        currentTrackId = interrupted.id,
+        interruptedTrack = null,
+        errorMessage = null,
+      )
+    }
   }
 
   /** 中断されたトラックを完了として履歴に保存する */
@@ -248,18 +267,22 @@ class TrackingViewModel @Inject constructor(
     viewModelScope.launch {
       val endTime = interrupted.points.lastOrNull()?.timestamp ?: java.util.Date()
       gpsTrackRepository.finishTrack(interrupted.id, endTime)
-      _uiState.value = _uiState.value.copy(
-        isTracking = false,
-        currentTrackId = null,
-        interruptedTrack = null,
-      )
+      _uiState.update {
+        it.copy(
+          isTracking = false,
+          currentTrackId = null,
+          interruptedTrack = null,
+        )
+      }
     }
   }
 
   fun updateLocationPermission(hasPermission: Boolean) {
-    _uiState.value = _uiState.value.copy(
-      hasLocationPermission = hasPermission,
-    )
+    _uiState.update {
+      it.copy(
+        hasLocationPermission = hasPermission,
+      )
+    }
   }
 
   fun checkLocationPermission() {
@@ -271,7 +294,7 @@ class TrackingViewModel @Inject constructor(
   fun checkBatteryOptimization() {
     val powerManager = application.getSystemService(Context.POWER_SERVICE) as PowerManager
     val ignoring = powerManager.isIgnoringBatteryOptimizations(application.packageName)
-    _uiState.value = _uiState.value.copy(isIgnoringBatteryOptimizations = ignoring)
+    _uiState.update { it.copy(isIgnoringBatteryOptimizations = ignoring) }
   }
 
   /** 電池の最適化の無効化を要求するシステムダイアログを開く */
@@ -303,15 +326,17 @@ class TrackingViewModel @Inject constructor(
         if (wishlist) {
           wishlistRepository.addToWishlist(reg.placeId, priority)
         }
-        _uiState.value = _uiState.value.copy(
-          placeRegisteredMessage = if (reg.alreadyExisted) {
-            "この場所は登録済みです"
-          } else {
-            "「${name?.ifBlank { null } ?: "場所"}」を登録しました"
-          },
-        )
+        _uiState.update {
+          it.copy(
+            placeRegisteredMessage = if (reg.alreadyExisted) {
+              "この場所は登録済みです"
+            } else {
+              "「${name?.ifBlank { null } ?: "場所"}」を登録しました"
+            },
+          )
+        }
       } catch (e: Exception) {
-        _uiState.value = _uiState.value.copy(errorMessage = "場所の登録に失敗しました: ${e.message}")
+        _uiState.update { it.copy(errorMessage = "場所の登録に失敗しました: ${e.message}") }
       }
     }
   }
@@ -322,9 +347,9 @@ class TrackingViewModel @Inject constructor(
       try {
         if (!memo.isNullOrBlank()) wishlistRepository.updatePlaceNote(placeId, memo)
         if (wishlist) wishlistRepository.addToWishlist(placeId, priority)
-        _uiState.value = _uiState.value.copy(placeRegisteredMessage = "この場所に紐付けました")
+        _uiState.update { it.copy(placeRegisteredMessage = "この場所に紐付けました") }
       } catch (e: Exception) {
-        _uiState.value = _uiState.value.copy(errorMessage = "紐付けに失敗しました: ${e.message}")
+        _uiState.update { it.copy(errorMessage = "紐付けに失敗しました: ${e.message}") }
       }
     }
   }
@@ -369,9 +394,9 @@ class TrackingViewModel @Inject constructor(
             wishlistRepository.removeFromWishlist(wishlistId)
           }
         }
-        _uiState.value = _uiState.value.copy(placeRegisteredMessage = "保存しました")
+        _uiState.update { it.copy(placeRegisteredMessage = "保存しました") }
       } catch (e: Exception) {
-        _uiState.value = _uiState.value.copy(errorMessage = "保存に失敗しました: ${e.message}")
+        _uiState.update { it.copy(errorMessage = "保存に失敗しました: ${e.message}") }
       }
     }
   }
@@ -391,7 +416,7 @@ class TrackingViewModel @Inject constructor(
       try {
         placeRepository.reassignStopPlace(stopId, chosen, customName)
       } catch (e: Exception) {
-        _uiState.value = _uiState.value.copy(errorMessage = "場所の選び直しに失敗しました: ${e.message}")
+        _uiState.update { it.copy(errorMessage = "場所の選び直しに失敗しました: ${e.message}") }
       }
     }
   }
@@ -413,11 +438,13 @@ class TrackingViewModel @Inject constructor(
     viewModelScope.launch {
       try {
         placeRepository.addManualStop(trackId, latitude, longitude, arrivalTime, departureTime, name, googlePlaceId, forceNewPlace)
-        _uiState.value = _uiState.value.copy(
-          placeRegisteredMessage = "立ち寄りを追加しました",
-        )
+        _uiState.update {
+          it.copy(
+            placeRegisteredMessage = "立ち寄りを追加しました",
+          )
+        }
       } catch (e: Exception) {
-        _uiState.value = _uiState.value.copy(errorMessage = "立ち寄りの追加に失敗しました: ${e.message}")
+        _uiState.update { it.copy(errorMessage = "立ち寄りの追加に失敗しました: ${e.message}") }
       }
     }
   }
@@ -428,19 +455,19 @@ class TrackingViewModel @Inject constructor(
     viewModelScope.launch {
       try {
         placeRepository.addManualStopForPlace(trackId, placeId, arrivalTime, departureTime)
-        _uiState.value = _uiState.value.copy(placeRegisteredMessage = "立ち寄りを追加しました")
+        _uiState.update { it.copy(placeRegisteredMessage = "立ち寄りを追加しました") }
       } catch (e: Exception) {
-        _uiState.value = _uiState.value.copy(errorMessage = "立ち寄りの追加に失敗しました: ${e.message}")
+        _uiState.update { it.copy(errorMessage = "立ち寄りの追加に失敗しました: ${e.message}") }
       }
     }
   }
 
   fun clearPlaceRegisteredMessage() {
-    _uiState.value = _uiState.value.copy(placeRegisteredMessage = null)
+    _uiState.update { it.copy(placeRegisteredMessage = null) }
   }
 
   fun clearError() {
-    _uiState.value = _uiState.value.copy(errorMessage = null)
+    _uiState.update { it.copy(errorMessage = null) }
   }
 
   private fun bindToService() {
@@ -470,10 +497,12 @@ class TrackingViewModel @Inject constructor(
               timestamp = DateFormatters.TIME_FORMAT.format(java.util.Date(loc.time)),
             )
 
-            _uiState.value = _uiState.value.copy(
-              currentLocation = locationInfo,
-              locationCount = count,
-            )
+            _uiState.update {
+              it.copy(
+                currentLocation = locationInfo,
+                locationCount = count,
+              )
+            }
           }
         }.collect { }
       }
@@ -485,10 +514,12 @@ class TrackingViewModel @Inject constructor(
   private fun observeActiveTrack() {
     viewModelScope.launch {
       gpsTrackRepository.getActiveTrackRealtime().collect { activeTrack ->
-        _uiState.value = _uiState.value.copy(
-          currentTrack = activeTrack,
-          currentTrackId = activeTrack?.id,
-        )
+        _uiState.update {
+          it.copy(
+            currentTrack = activeTrack,
+            currentTrackId = activeTrack?.id,
+          )
+        }
       }
     }
   }
