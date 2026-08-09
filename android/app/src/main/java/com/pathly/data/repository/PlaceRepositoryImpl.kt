@@ -16,6 +16,7 @@ import com.pathly.data.local.entity.StopEntity
 import com.pathly.data.local.entity.StopWithPlace
 import com.pathly.data.places.PlacesNameResolver
 import com.pathly.domain.model.DetectedStop
+import com.pathly.domain.model.Geo
 import com.pathly.domain.model.GpsPoint
 import com.pathly.domain.model.Place
 import com.pathly.domain.model.PlaceSearchResult
@@ -37,10 +38,6 @@ import kotlinx.coroutines.sync.withLock
 import java.util.Date
 import javax.inject.Inject
 import javax.inject.Singleton
-import kotlin.math.atan2
-import kotlin.math.cos
-import kotlin.math.sin
-import kotlin.math.sqrt
 
 @Singleton
 class PlaceRepositoryImpl @Inject constructor(
@@ -560,18 +557,10 @@ class PlaceRepositoryImpl @Inject constructor(
   /** 検出候補と既存の立ち寄りの滞在時間帯が重なるか（重なれば同じ訪問とみなす）。 */
   private fun timeOverlaps(candidate: DetectedStop, existing: StopEntity): Boolean = candidate.arrivalTime.before(existing.departureTime) && existing.arrivalTime.before(candidate.departureTime)
 
-  private fun distanceMeters(lat1: Double, lon1: Double, lat2: Double, lon2: Double): Double {
-    val dLat = Math.toRadians(lat2 - lat1)
-    val dLon = Math.toRadians(lon2 - lon1)
-    val h = sin(dLat / 2) * sin(dLat / 2) +
-      cos(Math.toRadians(lat1)) * cos(Math.toRadians(lat2)) *
-      sin(dLon / 2) * sin(dLon / 2)
-    return EARTH_RADIUS_METERS * 2 * atan2(sqrt(h), sqrt(1 - h))
-  }
+  private fun distanceMeters(lat1: Double, lon1: Double, lat2: Double, lon2: Double): Double = Geo.distanceMeters(lat1, lon1, lat2, lon2)
 
   companion object {
     /** 同一場所とみなす距離（重複排除）。 */
     private const val DEDUPE_RADIUS_METERS = 30.0
-    private const val EARTH_RADIUS_METERS = 6371000.0
   }
 }

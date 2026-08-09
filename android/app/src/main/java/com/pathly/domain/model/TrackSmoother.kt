@@ -1,10 +1,6 @@
 package com.pathly.domain.model
 
 import kotlin.math.abs
-import kotlin.math.atan2
-import kotlin.math.cos
-import kotlin.math.sin
-import kotlin.math.sqrt
 
 /**
  * 補正パラメータ。既定値は [TrackSmoother] の定数。調整ツールで値を変えて
@@ -37,8 +33,6 @@ object TrackSmoother {
   /** 平滑化の窓サイズ（奇数）。大きいほど滑らかになる。 */
   const val SMOOTHING_WINDOW = 5
 
-  private const val EARTH_RADIUS_METERS = 6371000.0
-
   /** 補正後の点列を返す。点が少ない場合はそのまま返す。 */
   fun smooth(points: List<GpsPoint>, params: SmoothingParams = SmoothingParams()): List<GpsPoint> {
     if (points.size < 3) return points
@@ -52,7 +46,7 @@ object TrackSmoother {
       val last = result.lastOrNull()
       if (last != null) {
         val seconds = (point.timestamp.time - last.timestamp.time) / 1000.0
-        if (seconds > 0 && distanceMeters(last, point) / seconds > maxSpeedMps) continue
+        if (seconds > 0 && Geo.distanceMeters(last, point) / seconds > maxSpeedMps) continue
       }
       result.add(point)
     }
@@ -91,7 +85,7 @@ object TrackSmoother {
     if (points.size < 2) return 0.0
     var total = 0.0
     for (i in 1 until points.size) {
-      total += distanceMeters(points[i - 1], points[i])
+      total += Geo.distanceMeters(points[i - 1], points[i])
     }
     return total
   }
@@ -104,30 +98,12 @@ object TrackSmoother {
     if (points.size < 3) return 0.0
     var total = 0.0
     for (i in 1 until points.size - 1) {
-      val b1 = bearingDegrees(points[i - 1], points[i])
-      val b2 = bearingDegrees(points[i], points[i + 1])
+      val b1 = Geo.bearingDegrees(points[i - 1], points[i])
+      val b2 = Geo.bearingDegrees(points[i], points[i + 1])
       var diff = abs(b2 - b1) % 360.0
       if (diff > 180.0) diff = 360.0 - diff
       total += diff
     }
     return total
-  }
-
-  private fun bearingDegrees(a: GpsPoint, b: GpsPoint): Double {
-    val lat1 = Math.toRadians(a.latitude)
-    val lat2 = Math.toRadians(b.latitude)
-    val dLon = Math.toRadians(b.longitude - a.longitude)
-    val y = sin(dLon) * cos(lat2)
-    val x = cos(lat1) * sin(lat2) - sin(lat1) * cos(lat2) * cos(dLon)
-    return (Math.toDegrees(atan2(y, x)) + 360.0) % 360.0
-  }
-
-  private fun distanceMeters(a: GpsPoint, b: GpsPoint): Double {
-    val dLat = Math.toRadians(b.latitude - a.latitude)
-    val dLon = Math.toRadians(b.longitude - a.longitude)
-    val h = sin(dLat / 2) * sin(dLat / 2) +
-      cos(Math.toRadians(a.latitude)) * cos(Math.toRadians(b.latitude)) *
-      sin(dLon / 2) * sin(dLon / 2)
-    return EARTH_RADIUS_METERS * 2 * atan2(sqrt(h), sqrt(1 - h))
   }
 }

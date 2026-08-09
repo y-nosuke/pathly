@@ -44,26 +44,8 @@ data class GpsTrack(
 
     var totalDistance = 0.0
     for (i in 1 until pts.size) {
-      val prevPoint = pts[i - 1]
-      val currPoint = pts[i]
-      totalDistance += distanceBetween(
-        prevPoint.latitude,
-        prevPoint.longitude,
-        currPoint.latitude,
-        currPoint.longitude,
-      )
+      totalDistance += Geo.distanceMeters(pts[i - 1], pts[i])
     }
     return totalDistance
-  }
-
-  private fun distanceBetween(lat1: Double, lon1: Double, lat2: Double, lon2: Double): Double {
-    val earthRadius = 6371000.0 // meters
-    val dLat = Math.toRadians(lat2 - lat1)
-    val dLon = Math.toRadians(lon2 - lon1)
-    val a = kotlin.math.sin(dLat / 2) * kotlin.math.sin(dLat / 2) +
-      kotlin.math.cos(Math.toRadians(lat1)) * kotlin.math.cos(Math.toRadians(lat2)) *
-      kotlin.math.sin(dLon / 2) * kotlin.math.sin(dLon / 2)
-    val c = 2 * kotlin.math.atan2(kotlin.math.sqrt(a), kotlin.math.sqrt(1 - a))
-    return earthRadius * c
   }
 }

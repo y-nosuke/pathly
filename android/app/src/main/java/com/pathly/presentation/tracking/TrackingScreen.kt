@@ -66,6 +66,7 @@ import com.google.maps.android.compose.MapType
 import com.google.maps.android.compose.MapUiSettings
 import com.google.maps.android.compose.rememberCameraPositionState
 import com.pathly.R
+import com.pathly.domain.model.Geo
 import com.pathly.domain.model.GpsPoint
 import com.pathly.domain.model.GpsTrack
 import com.pathly.domain.model.PlaceSearchResult
@@ -696,23 +697,13 @@ private fun ManualStopDialog(
 /** 手動追加の到着/出発を、指した地点の近傍の軌跡点から推定する（両端の時刻）。近傍が無ければ最寄り点。 */
 private fun deriveStopWindow(points: List<GpsPoint>, lat: Double, lng: Double): Pair<Date, Date> {
   if (points.isEmpty()) return Date() to Date()
-  val near = points.filter { distanceMeters(it.latitude, it.longitude, lat, lng) <= 60.0 }
+  val near = points.filter { Geo.distanceMeters(it.latitude, it.longitude, lat, lng) <= 60.0 }
   if (near.isNotEmpty()) {
     val times = near.map { it.timestamp }
     return times.min() to times.max()
   }
-  val nearest = points.minByOrNull { distanceMeters(it.latitude, it.longitude, lat, lng) }!!
+  val nearest = points.minByOrNull { Geo.distanceMeters(it.latitude, it.longitude, lat, lng) }!!
   return nearest.timestamp to nearest.timestamp
-}
-
-private fun distanceMeters(lat1: Double, lon1: Double, lat2: Double, lon2: Double): Double {
-  val earthRadius = 6371000.0
-  val dLat = Math.toRadians(lat2 - lat1)
-  val dLon = Math.toRadians(lon2 - lon1)
-  val a = kotlin.math.sin(dLat / 2) * kotlin.math.sin(dLat / 2) +
-    kotlin.math.cos(Math.toRadians(lat1)) * kotlin.math.cos(Math.toRadians(lat2)) *
-    kotlin.math.sin(dLon / 2) * kotlin.math.sin(dLon / 2)
-  return earthRadius * 2 * kotlin.math.atan2(kotlin.math.sqrt(a), kotlin.math.sqrt(1 - a))
 }
 
 @Composable
