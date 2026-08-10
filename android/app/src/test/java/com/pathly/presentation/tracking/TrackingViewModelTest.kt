@@ -2,10 +2,12 @@ package com.pathly.presentation.tracking
 
 import com.pathly.data.settings.SettingsRepository
 import com.pathly.data.tracking.TrackingController
+import com.pathly.domain.model.GpsTrack
 import com.pathly.domain.repository.GpsTrackRepository
 import com.pathly.domain.repository.PlaceRepository
 import com.pathly.domain.repository.WishlistRepository
 import io.mockk.coEvery
+import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
@@ -21,10 +23,12 @@ import kotlinx.coroutines.test.setMain
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
+import java.util.Date
 
 /**
  * TrackingViewModel は TrackingController 越しにしか Android framework を触らないので、
@@ -44,11 +48,14 @@ class TrackingViewModelTest {
   private val mockSettingsRepository = mockk<SettingsRepository>(relaxed = true).also {
     every { it.showRegisteredPlaces(any()) } returns MutableStateFlow(false)
   }
+
+  /** 予期せぬ切断をテストから発火させるための入口。 */
+  private val disconnects = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
   private val mockController = mockk<TrackingController>(relaxed = true).also {
     every { it.currentLocation } returns MutableStateFlow(null)
     every { it.locationCount } returns MutableStateFlow(0)
     every { it.isTracking } returns MutableStateFlow(false)
-    every { it.unexpectedDisconnect } returns MutableSharedFlow()
+    every { it.unexpectedDisconnect } returns disconnects
   }
 
   @Before
@@ -147,5 +154,58 @@ class TrackingViewModelTest {
     val state = viewModel.uiState.value
     assertFalse("記録中でなくなる", state.isTracking)
     assertNull("現在地は消える", state.currentLocation)
+  }
+
+  private fun activeTrack(id: Long = 1L) = GpsTrack(
+    id = id,
+    startTime = Date(),
+    endTime = null,
+    isActive = true,
+    createdAt = Date(),
+    updatedAt = Date(),
+  )
+
+  @Test
+  fun `予期せぬ切断_記録中のトラックを閉じない`() = runTest {
+    val viewModel = createViewModel()
+    coEvery { mockRepository.getActiveTrack() } returns activeTrack()
+
+    disconnects.tryEmit(Unit)
+    testDispatcher.scheduler.advanceUntilIdle()
+
+    // 閉じてしまうと START_STICKY による自己回復（再起動したサービスが続きを記録する）が
+    // 成立しなくなるため、finishTrack は呼ばない。
+    coVerify(exactly = 0) { mockRepository.finishTrack(any(), any()) }
+    assertNotNull("突き合わせが走ること", viewModel.uiState.value)
+  }
+
+  @Test
+  fun `予期せぬ切断_サービスが復帰していれば記録中に戻る`() = runTest {
+    val viewModel = createViewModel()
+    coEvery { mockRepository.getActiveTrack() } returns activeTrack(id = 7L)
+    every { mockController.reattach() } returns true
+
+    disconnects.tryEmit(Unit)
+    testDispatcher.scheduler.advanceUntilIdle()
+
+    val state = viewModel.uiState.value
+    assertTrue("記録中に戻る", state.isTracking)
+    assertEquals(7L, state.currentTrackId)
+    assertNull("中断ダイアログは出さない", state.interruptedTrack)
+  }
+
+  @Test
+  fun `予期せぬ切断_復帰しなければ中断として扱う`() = runTest {
+    val viewModel = createViewModel()
+    val track = activeTrack(id = 9L)
+    coEvery { mockRepository.getActiveTrack() } returns track
+    every { mockController.reattach() } returns false
+
+    disconnects.tryEmit(Unit)
+    testDispatcher.scheduler.advanceUntilIdle()
+
+    val state = viewModel.uiState.value
+    assertFalse("記録中ではない", state.isTracking)
+    assertEquals("再開/完了をユーザーに選ばせる", track, state.interruptedTrack)
   }
 }

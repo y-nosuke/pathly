@@ -155,10 +155,19 @@ class TrackingController @Inject constructor(
     _locationCount.value = 0
   }
 
-  /** 記録中プロセスが生存しているときに、画面から復帰してサービスへ繋ぎ直す。 */
-  fun reattach() {
-    _isTracking.value = LocationTrackingService.isTracking
-    if (LocationTrackingService.isTracking) bind()
+  /**
+   * サービスが実際に記録中かを読み直し、記録中なら繋ぎ直す。記録中だったかを返す。
+   *
+   * 画面起動時の突き合わせと、予期せぬ切断のあとに自己回復（START_STICKY による再起動）が
+   * 成立したかの確認で共用する。すでにバインド済みなら [bind] は何もしない
+   * （BIND_AUTO_CREATE のバインドは切断後も生きていて、サービスが作り直されれば
+   * onServiceConnected が自動で呼び直される）。
+   */
+  fun reattach(): Boolean {
+    val tracking = LocationTrackingService.isTracking
+    _isTracking.value = tracking
+    if (tracking) bind()
+    return tracking
   }
 
   private fun bind() {

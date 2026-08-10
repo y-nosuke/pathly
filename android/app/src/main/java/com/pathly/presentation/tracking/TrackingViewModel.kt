@@ -16,6 +16,7 @@ import com.pathly.util.DateFormatters
 import com.pathly.util.Logger
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -54,16 +55,28 @@ class TrackingViewModel @Inject constructor(
     observeUnexpectedDisconnect()
   }
 
-  /** サービスが予期せず切れたら（プロセスのクラッシュ等）、記録中のトラックを閉じて状態を戻す。 */
+  /**
+   * サービスが予期せず切れたとき（サービスだけが落ちてプロセスは生きている状況）の後始末。
+   *
+   * **記録中のトラックは閉じない。** 以前はここで finishTrack していたが、それだと
+   * START_STICKY による自己回復を自分で壊していた。サービスが再起動すると
+   * restoreTrackingIfNeeded() が「アクティブなトラックがあれば続きを記録する」判断を
+   * するのに、その手前でトラックを完了にしてしまうと対象が無くなり、再起動した
+   * サービスはそのまま止まってしまう。
+   *
+   * 代わりに、OS がサービスを作り直す余地を与えてから実際の状態と突き合わせる。
+   * 復帰していれば記録中に戻し、していなければ「中断された記録」としてユーザーに
+   * 再開／完了を選ばせる（起動時と同じ導線）。
+   */
   private fun observeUnexpectedDisconnect() {
     viewModelScope.launch {
       trackingController.unexpectedDisconnect.collect {
-        val activeTrack = gpsTrackRepository.getActiveTrack()
-        if (activeTrack != null) {
-          logger.d("Service disconnected unexpectedly, finishing track")
-          gpsTrackRepository.finishTrack(activeTrack.id, java.util.Date())
-        }
-        _uiState.update { it.copy(isTracking = false, currentTrackId = null) }
+        logger.w("Service disconnected unexpectedly; leaving the track open for recovery")
+        // 記録中表示だけ一旦下ろす。currentTrackId は残す（トラックはまだ生きており、
+        // 地図の軌跡や立ち寄りの購読を切らないため）。
+        _uiState.update { it.copy(isTracking = false) }
+        delay(SERVICE_RESTART_GRACE_MS)
+        reconcileTrackingState()
       }
     }
   }
@@ -109,41 +122,48 @@ class TrackingViewModel @Inject constructor(
   }
 
   private fun checkActiveTracking() {
-    viewModelScope.launch {
-      val activeTrack = gpsTrackRepository.getActiveTrack()
+    viewModelScope.launch { reconcileTrackingState() }
+  }
 
-      when {
-        activeTrack == null -> {
-          // アクティブなトラックがない場合
-          _uiState.update {
-            it.copy(
-              isTracking = false,
-              currentTrackId = null,
-            )
-          }
+  /**
+   * DB のアクティブトラックとサービスの生死を突き合わせて、記録状態を決め直す。
+   * 画面の初期化時と、予期せぬ切断からの復帰判定で共用する。
+   */
+  private suspend fun reconcileTrackingState() {
+    val activeTrack = gpsTrackRepository.getActiveTrack()
+    // サービスの実際の状態を読み直す（記録中なら接続も張り直す）。
+    val serviceTracking = trackingController.reattach()
+
+    when {
+      activeTrack == null -> {
+        // アクティブなトラックがない場合
+        _uiState.update {
+          it.copy(
+            isTracking = false,
+            currentTrackId = null,
+          )
         }
+      }
 
-        trackingController.isTracking.value -> {
-          // 記録中プロセスが生存している → サービスに再接続して継続
-          _uiState.update {
-            it.copy(
-              isTracking = true,
-              currentTrackId = activeTrack.id,
-            )
-          }
-          trackingController.reattach()
+      serviceTracking -> {
+        // 記録中プロセスが生存している → サービスに再接続して継続
+        _uiState.update {
+          it.copy(
+            isTracking = true,
+            currentTrackId = activeTrack.id,
+          )
         }
+      }
 
-        else -> {
-          // サービスが動いていないのにアクティブなトラックが残っている。
-          // 前回の記録がアプリ更新やクラッシュで中断されたもの。
-          // 再開するか完了にするかをユーザーに確認する。
-          _uiState.update {
-            it.copy(
-              isTracking = false,
-              interruptedTrack = activeTrack,
-            )
-          }
+      else -> {
+        // サービスが動いていないのにアクティブなトラックが残っている。
+        // 前回の記録がアプリ更新やクラッシュで中断されたもの。
+        // 再開するか完了にするかをユーザーに確認する。
+        _uiState.update {
+          it.copy(
+            isTracking = false,
+            interruptedTrack = activeTrack,
+          )
         }
       }
     }
@@ -396,6 +416,15 @@ class TrackingViewModel @Inject constructor(
 
   fun clearError() {
     _uiState.update { it.copy(errorMessage = null) }
+  }
+
+  private companion object {
+    /**
+     * 予期せぬ切断のあと、状態を突き合わせるまでの待ち時間。
+     * OS が START_STICKY でサービスを作り直す猶予を与えるため。短すぎると復帰前に
+     * 「中断されました」を出してしまい、長すぎると記録中表示の復帰が遅れる。
+     */
+    const val SERVICE_RESTART_GRACE_MS = 5_000L
   }
 
   /**
