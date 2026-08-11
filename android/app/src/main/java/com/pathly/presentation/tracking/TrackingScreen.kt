@@ -96,16 +96,6 @@ private data class PendingManualAdd(
   val name: String?,
 )
 
-/** 近接確認で保留する場所登録の内容（表示OFFで近くに既存があったときに使う）。 */
-private data class PendingRegister(
-  val lat: Double,
-  val lng: Double,
-  val name: String?,
-  val wishlist: Boolean,
-  val priority: com.pathly.domain.model.Priority,
-  val memo: String?,
-)
-
 @Composable
 fun TrackingScreen(
   modifier: Modifier = Modifier,
@@ -155,8 +145,6 @@ fun TrackingScreen(
   var linkPlace by remember { mutableStateOf<RegisteredPlace?>(null) }
   // 近接確認（③）: ID無し手動追加で近くに既存があったときの確認（既存place＋保留中の追加内容）。
   var proximityPrompt by remember { mutableStateOf<Pair<RegisteredPlace, PendingManualAdd>?>(null) }
-  // 表示OFFで場所登録時、近くに既存があったときの確認（既存place＋保留中の登録内容）。
-  var registerProximity by remember { mutableStateOf<Pair<RegisteredPlace, PendingRegister>?>(null) }
   // 「立ち寄りを追加」モード（記録中のみ）。ONの間は地図タップ＝立ち寄り追加、OFF＝場所登録。
   var manualMode by remember { mutableStateOf(false) }
   // 記録が止まったら手動追加モードは自動で抜ける（立ち寄りを足すトラックが無い）。
@@ -404,22 +392,8 @@ fun TrackingScreen(
       onDismiss = { placeSheetTarget = null },
       onFetchPoiDetails = viewModel::fetchPoiDetails,
       onLoadPlace = viewModel::loadPlace,
-      onRegisterNew = { lat, lng, name, wishlist, priority, memo, googlePlaceId ->
-        when {
-          // POI（施設同定）はそのまま登録。
-          googlePlaceId != null -> viewModel.registerPlace(lat, lng, name, wishlist, priority, memo, googlePlaceId)
-          // 空き地点は 表示ON＝新規／OFF＝近接確認。
-          uiState.showRegisteredPlaces -> viewModel.registerPlace(lat, lng, name, wishlist, priority, memo, null, forceNewPlace = true)
-          else -> scope.launch {
-            val near = viewModel.nearbyPlace(lat, lng)
-            if (near != null) {
-              registerProximity = near to PendingRegister(lat, lng, name, wishlist, priority, memo)
-            } else {
-              viewModel.registerPlace(lat, lng, name, wishlist, priority, memo, null, forceNewPlace = true)
-            }
-          }
-        }
-      },
+      // POI か空き地点か、近接確認が要るかの判断は ViewModel（PlaceEditUseCase）が持つ。
+      onRegisterNew = viewModel::registerPlaceWithNearbyCheck,
       onSaveExisting = { item, name, note, wishlist, priority, visited ->
         viewModel.savePlaceEdits(item, name, note, wishlist, priority, visited)
       },
@@ -444,18 +418,12 @@ fun TrackingScreen(
   }
 
   // 場所登録の近接確認: 近くの既存に紐付け／新規で登録。
-  registerProximity?.let { (near, pending) ->
+  uiState.nearbyRegisterPrompt?.let { prompt ->
     NearbyPlaceConfirmDialog(
-      place = near,
-      onLink = {
-        viewModel.linkRegisterToPlace(near.placeId, pending.wishlist, pending.priority, pending.memo)
-        registerProximity = null
-      },
-      onCreateNew = {
-        viewModel.registerPlace(pending.lat, pending.lng, pending.name, pending.wishlist, pending.priority, pending.memo, null, forceNewPlace = true)
-        registerProximity = null
-      },
-      onDismiss = { registerProximity = null },
+      place = prompt.nearby,
+      onLink = viewModel::confirmNearbyLink,
+      onCreateNew = viewModel::confirmNearbyNew,
+      onDismiss = viewModel::dismissNearbyPrompt,
     )
   }
 

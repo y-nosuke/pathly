@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.pathly.data.settings.MapSurface
 import com.pathly.data.settings.SettingsRepository
 import com.pathly.domain.model.GpsTrack
+import com.pathly.domain.model.NearbyRegisterPrompt
 import com.pathly.domain.model.PlaceListItem
 import com.pathly.domain.model.PlaceSearchResult
 import com.pathly.domain.model.Priority
@@ -148,15 +149,95 @@ class TrackDetailViewModel @Inject constructor(
     viewModelScope.launch {
       try {
         val reg = placeEditUseCase.register(latitude, longitude, name, wishlist, priority, memo, googlePlaceId, forceNewPlace)
-        _message.value = if (reg.alreadyExisted) {
-          "この場所は登録済みです"
-        } else {
-          "「${name?.ifBlank { null } ?: "場所"}」を登録しました"
+        _message.value = registeredMessage(reg.alreadyExisted, name)
+      } catch (e: Exception) {
+        _message.value = "場所の登録に失敗しました: ${e.message}"
+      }
+    }
+  }
+
+  private val _nearbyRegisterPrompt = MutableStateFlow<NearbyRegisterPrompt?>(null)
+
+  /** 空き地点の登録で近くに既存の場所が見つかったときの確認待ち（紐付け/新規をユーザーが選ぶ）。 */
+  val nearbyRegisterPrompt: StateFlow<NearbyRegisterPrompt?> = _nearbyRegisterPrompt.asStateFlow()
+
+  /**
+   * 地図タップからの場所登録。近くに既存の場所があれば登録せず確認待ちにする。
+   * 「登録済みの場所」を地図に表示中なら、ユーザーは既存を見たうえでの操作なので確認しない。
+   */
+  fun registerPlaceWithNearbyCheck(
+    latitude: Double,
+    longitude: Double,
+    name: String?,
+    wishlist: Boolean,
+    priority: Priority,
+    memo: String?,
+    googlePlaceId: String?,
+  ) {
+    viewModelScope.launch {
+      try {
+        val result = placeEditUseCase.registerWithNearbyCheck(
+          latitude,
+          longitude,
+          name,
+          wishlist,
+          priority,
+          memo,
+          googlePlaceId,
+          nearbyAlreadyVisible = showRegisteredPlaces.value,
+        )
+        when (result) {
+          is PlaceEditUseCase.RegisterResult.NearbyFound ->
+            _nearbyRegisterPrompt.value = NearbyRegisterPrompt(
+              result.nearby,
+              latitude,
+              longitude,
+              name,
+              wishlist,
+              priority,
+              memo,
+            )
+
+          is PlaceEditUseCase.RegisterResult.Registered ->
+            _message.value = registeredMessage(result.alreadyExisted, name)
         }
       } catch (e: Exception) {
         _message.value = "場所の登録に失敗しました: ${e.message}"
       }
     }
+  }
+
+  /** 近接確認で「この場所に紐付け」を選んだとき。 */
+  fun confirmNearbyLink() {
+    val prompt = _nearbyRegisterPrompt.value ?: return
+    _nearbyRegisterPrompt.value = null
+    linkRegisterToPlace(prompt.nearby.placeId, prompt.wishlist, prompt.priority, prompt.memo)
+  }
+
+  /** 近接確認で「新規で登録」を選んだとき。座標同定せず必ず新しい場所を作る。 */
+  fun confirmNearbyNew() {
+    val prompt = _nearbyRegisterPrompt.value ?: return
+    _nearbyRegisterPrompt.value = null
+    registerPlace(
+      prompt.latitude,
+      prompt.longitude,
+      prompt.name,
+      prompt.wishlist,
+      prompt.priority,
+      prompt.memo,
+      googlePlaceId = null,
+      forceNewPlace = true,
+    )
+  }
+
+  fun dismissNearbyPrompt() {
+    _nearbyRegisterPrompt.value = null
+  }
+
+  private fun registeredMessage(alreadyExisted: Boolean, name: String?): String = if (alreadyExisted) {
+    "この場所は登録済みです"
+  } else {
+    "「${name?.ifBlank { null } ?: "場所"}」を登録しました"
   }
 
   /** 近接確認で「この場所に紐付け」を選んだとき: 既存 place に行きたい/メモを反映する（新規は作らない）。 */

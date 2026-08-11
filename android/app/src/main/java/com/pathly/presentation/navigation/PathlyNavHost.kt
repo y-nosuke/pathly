@@ -234,6 +234,7 @@ private fun TrackDetailRoute(
   val reanalyzeCandidates by viewModel.reanalyzeCandidates.collectAsStateWithLifecycle()
   val registeredPlaces by viewModel.registeredPlaces.collectAsStateWithLifecycle()
   val showRegisteredPlaces by viewModel.showRegisteredPlaces.collectAsStateWithLifecycle()
+  val nearbyRegisterPrompt by viewModel.nearbyRegisterPrompt.collectAsStateWithLifecycle()
 
   TrackDetailScreen(
     track = track,
@@ -256,12 +257,11 @@ private fun TrackDetailRoute(
     },
     onFindNearbyPlace = viewModel::nearbyPlace,
     onMessageShown = { viewModel.clearMessage() },
-    onRegisterPlace = { lat, lng, name, wishlist, priority, memo, googlePlaceId, forceNewPlace ->
-      viewModel.registerPlace(lat, lng, name, wishlist, priority, memo, googlePlaceId, forceNewPlace)
-    },
-    onLinkRegister = { placeId, wishlist, priority, memo ->
-      viewModel.linkRegisterToPlace(placeId, wishlist, priority, memo)
-    },
+    onRegisterPlace = viewModel::registerPlaceWithNearbyCheck,
+    nearbyRegisterPrompt = nearbyRegisterPrompt,
+    onConfirmNearbyLink = viewModel::confirmNearbyLink,
+    onConfirmNearbyNew = viewModel::confirmNearbyNew,
+    onDismissNearbyPrompt = viewModel::dismissNearbyPrompt,
     onLoadPlace = viewModel::loadPlace,
     onSavePlaceEdits = { editItem, name, note, wishlist, priority, visited ->
       viewModel.savePlaceEdits(editItem, name, note, wishlist, priority, visited)

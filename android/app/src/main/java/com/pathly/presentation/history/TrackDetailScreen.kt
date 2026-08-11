@@ -94,6 +94,7 @@ import com.pathly.BuildConfig
 import com.pathly.R
 import com.pathly.domain.model.GpsPoint
 import com.pathly.domain.model.GpsTrack
+import com.pathly.domain.model.NearbyRegisterPrompt
 import com.pathly.domain.model.PlaceListItem
 import com.pathly.domain.model.PlaceSearchResult
 import com.pathly.domain.model.Priority
@@ -153,10 +154,14 @@ fun TrackDetailScreen(
   // 登録済みマーカー（通常モード）タップ後、シートの「詳細を開く」でその場所の詳細を開く。
   onOpenPlaceDetail: (placeId: Long) -> Unit = {},
   onMessageShown: () -> Unit = {},
-  onRegisterPlace: (lat: Double, lng: Double, name: String?, wishlist: Boolean, priority: Priority, memo: String?, googlePlaceId: String?, forceNewPlace: Boolean) -> Unit =
-    { _, _, _, _, _, _, _, _ -> },
-  // 近接確認で「紐付け」を選んだとき: 既存 place に行きたい/メモを反映する。
-  onLinkRegister: (placeId: Long, wishlist: Boolean, priority: Priority, memo: String?) -> Unit = { _, _, _, _ -> },
+  // 空き地点/POI の登録。近くに既存があるかの判断は ViewModel（PlaceEditUseCase）側で行う。
+  onRegisterPlace: (lat: Double, lng: Double, name: String?, wishlist: Boolean, priority: Priority, memo: String?, googlePlaceId: String?) -> Unit =
+    { _, _, _, _, _, _, _ -> },
+  // 近接確認の保留状態（非nullで確認ダイアログを出す）とその選択。
+  nearbyRegisterPrompt: NearbyRegisterPrompt? = null,
+  onConfirmNearbyLink: () -> Unit = {},
+  onConfirmNearbyNew: () -> Unit = {},
+  onDismissNearbyPrompt: () -> Unit = {},
   // 統一シートで登録済みマーカーをその場で編集するため、単一 place を取得・保存する。
   onLoadPlace: suspend (placeId: Long) -> PlaceListItem? = { null },
   onSavePlaceEdits: (item: PlaceListItem, name: String, note: String, wishlist: Boolean, priority: Priority, visited: Boolean) -> Unit = { _, _, _, _, _, _ -> },
@@ -176,9 +181,6 @@ fun TrackDetailScreen(
 ) {
   // 通常モードの地図タップで開く統一の「場所シート」（未登録の空き地点/POI＝登録、登録済み＝その場で編集）。
   var placeSheetTarget by remember { mutableStateOf<PlaceSheetTarget?>(null) }
-  // 空き地点の登録で、表示OFFかつ近くに既存があったときの近接確認。
-  var registerProximity by remember { mutableStateOf<RegisteredPlace?>(null) }
-  var pendingRegister by remember { mutableStateOf<PendingRegister?>(null) }
   val scope = rememberCoroutineScope()
   val density = LocalDensity.current
   val screenHeightDp = LocalConfiguration.current.screenHeightDp.dp
@@ -800,45 +802,19 @@ fun TrackDetailScreen(
       onDismiss = { placeSheetTarget = null },
       onFetchPoiDetails = onFetchPoiDetails,
       onLoadPlace = onLoadPlace,
-      onRegisterNew = { lat, lng, name, wishlist, priority, memo, googlePlaceId ->
-        when {
-          googlePlaceId != null -> onRegisterPlace(lat, lng, name, wishlist, priority, memo, googlePlaceId, false)
-          showRegisteredPlaces -> onRegisterPlace(lat, lng, name, wishlist, priority, memo, null, true)
-          else -> scope.launch {
-            val near = onFindNearbyPlace(lat, lng)
-            if (near != null) {
-              registerProximity = near
-              pendingRegister = PendingRegister(lat, lng, name, wishlist, priority, memo)
-            } else {
-              onRegisterPlace(lat, lng, name, wishlist, priority, memo, null, true)
-            }
-          }
-        }
-      },
+      onRegisterNew = onRegisterPlace,
       onSaveExisting = onSavePlaceEdits,
       onOpenDetail = onOpenPlaceDetail,
     )
   }
 
-  // 空き地点登録の近接確認（表示OFF）: 近くの既存に紐付け／新規で登録。
-  registerProximity?.let { near ->
-    val pending = pendingRegister
+  // 空き地点登録の近接確認: 近くの既存に紐付け／新規で登録。
+  nearbyRegisterPrompt?.let { prompt ->
     NearbyPlaceConfirmDialog(
-      place = near,
-      onLink = {
-        pending?.let { onLinkRegister(near.placeId, it.wishlist, it.priority, it.memo) }
-        registerProximity = null
-        pendingRegister = null
-      },
-      onCreateNew = {
-        pending?.let { onRegisterPlace(it.lat, it.lng, it.name, it.wishlist, it.priority, it.memo, null, true) }
-        registerProximity = null
-        pendingRegister = null
-      },
-      onDismiss = {
-        registerProximity = null
-        pendingRegister = null
-      },
+      place = prompt.nearby,
+      onLink = onConfirmNearbyLink,
+      onCreateNew = onConfirmNearbyNew,
+      onDismiss = onDismissNearbyPrompt,
     )
   }
 
@@ -1103,16 +1079,6 @@ private data class ManualPick(
   val googlePlaceId: String?,
   // 登録済みマーカーから選んだ場合の既存 placeId。非nullなら新規placeを作らずここへ紐付ける（②）。
   val existingPlaceId: Long? = null,
-)
-
-/** 通常モードの空き地点登録で、表示OFFの近接確認のときに保留する登録内容。 */
-private data class PendingRegister(
-  val lat: Double,
-  val lng: Double,
-  val name: String?,
-  val wishlist: Boolean,
-  val priority: Priority,
-  val memo: String?,
 )
 
 /** 近接確認（③）で保留する手動追加の内容（近くの既存place＋「新規で追加」を選んだときに使う入力）。 */
