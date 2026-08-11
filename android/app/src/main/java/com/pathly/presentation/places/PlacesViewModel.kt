@@ -5,12 +5,12 @@ import androidx.lifecycle.viewModelScope
 import com.pathly.data.places.PlacesTextSearcher
 import com.pathly.data.settings.MapSurface
 import com.pathly.data.settings.SettingsRepository
+import com.pathly.domain.model.NearbyRegisterPrompt
 import com.pathly.domain.model.PlaceListItem
 import com.pathly.domain.model.PlacePrediction
 import com.pathly.domain.model.PlaceSearchResult
 import com.pathly.domain.model.PlaceVisit
 import com.pathly.domain.model.Priority
-import com.pathly.domain.model.RegisteredPlace
 import com.pathly.domain.repository.WishlistRepository
 import com.pathly.domain.usecase.PlaceEditUseCase
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -116,9 +116,6 @@ class PlacesViewModel @Inject constructor(
   /** POI 登録ダイアログのプレビュー用: placeId から施設情報（カテゴリ等）を取得する。 */
   suspend fun fetchPoiDetails(googlePlaceId: String): PlaceSearchResult? = wishlistRepository.fetchPlaceDetails(googlePlaceId)
 
-  /** 手動追加の近接確認用: 近く（検出半径）に既存の場所があれば最寄り1件を返す。 */
-  suspend fun nearbyPlace(latitude: Double, longitude: Double): RegisteredPlace? = wishlistRepository.findNearbyPlace(latitude, longitude)
-
   /** 近接確認で「この場所に紐付け」を選んだとき: 既存 place に行きたい/メモを反映する（新規は作らない）。 */
   fun linkRegisterToPlace(placeId: Long, wishlist: Boolean, priority: Priority, memo: String?) {
     viewModelScope.launch {
@@ -150,6 +147,82 @@ class PlacesViewModel @Inject constructor(
         _uiState.update { it.copy(errorMessage = "登録に失敗しました: ${e.message}") }
       }
     }
+  }
+
+  /**
+   * 地図タップからの場所登録。近くに既存の場所があれば登録せず確認待ちにする。
+   * 「登録済みの場所」を地図に表示中なら、ユーザーは既存を見たうえでの操作なので確認しない。
+   */
+  fun registerPlaceWithNearbyCheck(
+    latitude: Double,
+    longitude: Double,
+    name: String?,
+    wishlist: Boolean,
+    priority: Priority,
+    memo: String?,
+    googlePlaceId: String?,
+  ) {
+    viewModelScope.launch {
+      try {
+        val result = placeEditUseCase.registerWithNearbyCheck(
+          latitude,
+          longitude,
+          name,
+          wishlist,
+          priority,
+          memo,
+          googlePlaceId,
+          nearbyAlreadyVisible = _uiState.value.showRegisteredPlaces,
+        )
+        when (result) {
+          is PlaceEditUseCase.RegisterResult.NearbyFound ->
+            _uiState.update {
+              it.copy(
+                nearbyRegisterPrompt = NearbyRegisterPrompt(
+                  result.nearby,
+                  latitude,
+                  longitude,
+                  name,
+                  wishlist,
+                  priority,
+                  memo,
+                ),
+              )
+            }
+
+          is PlaceEditUseCase.RegisterResult.Registered -> notifyRegistered(result.alreadyExisted)
+        }
+      } catch (e: Exception) {
+        _uiState.update { it.copy(errorMessage = "登録に失敗しました: ${e.message}") }
+      }
+    }
+  }
+
+  /** 近接確認で「この場所に紐付け」を選んだとき。 */
+  fun confirmNearbyLink() {
+    val prompt = _uiState.value.nearbyRegisterPrompt ?: return
+    _uiState.update { it.copy(nearbyRegisterPrompt = null) }
+    linkRegisterToPlace(prompt.nearby.placeId, prompt.wishlist, prompt.priority, prompt.memo)
+  }
+
+  /** 近接確認で「新規で登録」を選んだとき。座標同定せず必ず新しい場所を作る。 */
+  fun confirmNearbyNew() {
+    val prompt = _uiState.value.nearbyRegisterPrompt ?: return
+    _uiState.update { it.copy(nearbyRegisterPrompt = null) }
+    registerPlace(
+      prompt.latitude,
+      prompt.longitude,
+      prompt.name,
+      prompt.wishlist,
+      prompt.priority,
+      prompt.memo,
+      googlePlaceId = null,
+      forceNewPlace = true,
+    )
+  }
+
+  fun dismissNearbyPrompt() {
+    _uiState.update { it.copy(nearbyRegisterPrompt = null) }
   }
 
   /** 一覧の行や詳細から「行きたい」を付け外しする。 */
