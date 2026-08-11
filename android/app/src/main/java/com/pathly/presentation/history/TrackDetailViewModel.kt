@@ -14,6 +14,7 @@ import com.pathly.domain.model.StopCandidate
 import com.pathly.domain.repository.GpsTrackRepository
 import com.pathly.domain.repository.PlaceRepository
 import com.pathly.domain.repository.WishlistRepository
+import com.pathly.domain.usecase.PlaceEditUseCase
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -40,6 +41,7 @@ class TrackDetailViewModel @Inject constructor(
   private val gpsTrackRepository: GpsTrackRepository,
   private val wishlistRepository: WishlistRepository,
   private val settingsRepository: SettingsRepository,
+  private val placeEditUseCase: PlaceEditUseCase,
 ) : ViewModel() {
 
   private val _stops = MutableStateFlow<List<Stop>>(emptyList())
@@ -145,10 +147,7 @@ class TrackDetailViewModel @Inject constructor(
   ) {
     viewModelScope.launch {
       try {
-        val reg = wishlistRepository.registerPlace(latitude, longitude, name, memo, googlePlaceId, forceNewPlace)
-        if (wishlist) {
-          wishlistRepository.addToWishlist(reg.placeId, priority)
-        }
+        val reg = placeEditUseCase.register(latitude, longitude, name, wishlist, priority, memo, googlePlaceId, forceNewPlace)
         _message.value = if (reg.alreadyExisted) {
           "この場所は登録済みです"
         } else {
@@ -164,8 +163,7 @@ class TrackDetailViewModel @Inject constructor(
   fun linkRegisterToPlace(placeId: Long, wishlist: Boolean, priority: Priority, memo: String?) {
     viewModelScope.launch {
       try {
-        if (!memo.isNullOrBlank()) wishlistRepository.updatePlaceNote(placeId, memo)
-        if (wishlist) wishlistRepository.addToWishlist(placeId, priority)
+        placeEditUseCase.linkToExisting(placeId, wishlist, priority, memo)
         _message.value = "この場所に紐付けました"
       } catch (e: Exception) {
         _message.value = "紐付けに失敗しました: ${e.message}"
@@ -187,29 +185,7 @@ class TrackDetailViewModel @Inject constructor(
   ) {
     viewModelScope.launch {
       try {
-        if (name.trim() != (item.place.name ?: "").trim()) {
-          wishlistRepository.renamePlace(item.place.id, name.trim())
-        }
-        val newNote = note.ifBlank { null }
-        if (newNote != item.note) {
-          wishlistRepository.updatePlaceNote(item.place.id, newNote)
-        }
-        val wishlistId = item.wishlistId
-        when {
-          wishlist && wishlistId == null -> {
-            val newId = wishlistRepository.addToWishlist(item.place.id, priority)
-            if (visited && item.visitCount == 0) wishlistRepository.setVisited(newId, true)
-          }
-          wishlist && wishlistId != null -> {
-            if (priority != item.priority) wishlistRepository.updateWishlist(wishlistId, priority)
-            if (item.visitCount == 0 && visited != item.isManuallyVisited) {
-              wishlistRepository.setVisited(wishlistId, visited)
-            }
-          }
-          !wishlist && wishlistId != null -> {
-            wishlistRepository.removeFromWishlist(wishlistId)
-          }
-        }
+        placeEditUseCase.saveEdits(item, name, note, wishlist, priority, visited)
         _message.value = "保存しました"
       } catch (e: Exception) {
         _message.value = "保存に失敗しました: ${e.message}"

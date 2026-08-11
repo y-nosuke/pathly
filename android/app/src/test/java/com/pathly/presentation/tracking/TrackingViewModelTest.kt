@@ -6,6 +6,7 @@ import com.pathly.domain.model.GpsTrack
 import com.pathly.domain.repository.GpsTrackRepository
 import com.pathly.domain.repository.PlaceRepository
 import com.pathly.domain.repository.WishlistRepository
+import com.pathly.domain.usecase.PlaceEditUseCase
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
@@ -45,6 +46,7 @@ class TrackingViewModelTest {
     every { it.observeRegisteredPlaces() } returns MutableStateFlow(emptyList())
   }
   private val mockWishlistRepository = mockk<WishlistRepository>(relaxed = true)
+  private val mockPlaceEditUseCase = mockk<PlaceEditUseCase>(relaxed = true)
   private val mockSettingsRepository = mockk<SettingsRepository>(relaxed = true).also {
     every { it.showRegisteredPlaces(any()) } returns MutableStateFlow(false)
   }
@@ -76,6 +78,7 @@ class TrackingViewModelTest {
     mockPlaceRepository,
     mockWishlistRepository,
     mockSettingsRepository,
+    mockPlaceEditUseCase,
   ).also { testDispatcher.scheduler.advanceUntilIdle() }
 
   @Test
