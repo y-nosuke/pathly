@@ -2,6 +2,7 @@ package com.pathly.presentation.tracking
 
 import com.pathly.domain.model.GpsTrack
 import com.pathly.domain.model.NearbyRegisterPrompt
+import com.pathly.domain.model.NearbyStopPrompt
 import com.pathly.domain.model.RegisteredPlace
 import com.pathly.domain.model.Stop
 
@@ -28,6 +29,8 @@ data class TrackingState(
   val placeRegisteredMessage: String? = null,
   // 空き地点の登録で近くに既存の場所が見つかったときの確認待ち（紐付け/新規をユーザーが選ぶ）。
   val nearbyRegisterPrompt: NearbyRegisterPrompt? = null,
+  // 手動の立ち寄り追加で近くに既存の場所が見つかったときの確認待ち。
+  val nearbyStopPrompt: NearbyStopPrompt? = null,
 )
 
 data class LocationInfo(

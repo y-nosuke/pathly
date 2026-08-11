@@ -235,6 +235,7 @@ private fun TrackDetailRoute(
   val registeredPlaces by viewModel.registeredPlaces.collectAsStateWithLifecycle()
   val showRegisteredPlaces by viewModel.showRegisteredPlaces.collectAsStateWithLifecycle()
   val nearbyRegisterPrompt by viewModel.nearbyRegisterPrompt.collectAsStateWithLifecycle()
+  val nearbyStopPrompt by viewModel.nearbyStopPrompt.collectAsStateWithLifecycle()
 
   TrackDetailScreen(
     track = track,
@@ -252,10 +253,11 @@ private fun TrackDetailRoute(
     onDismissReanalyze = { viewModel.dismissReanalyze() },
     onDeleteStops = { stopIds -> viewModel.deleteStops(stopIds) },
     onUndoDeletion = { viewModel.undoDeletion() },
-    onAddManualStop = { lat, lng, arrival, departure, name, googlePlaceId, forceNewPlace ->
-      viewModel.addManualStop(lat, lng, arrival, departure, name, googlePlaceId, forceNewPlace)
-    },
-    onFindNearbyPlace = viewModel::nearbyPlace,
+    onAddManualStop = viewModel::addManualStopWithNearbyCheck,
+    nearbyStopPrompt = nearbyStopPrompt,
+    onConfirmNearbyStopLink = viewModel::confirmNearbyStopLink,
+    onConfirmNearbyStopNew = viewModel::confirmNearbyStopNew,
+    onDismissNearbyStopPrompt = viewModel::dismissNearbyStopPrompt,
     onMessageShown = { viewModel.clearMessage() },
     onRegisterPlace = viewModel::registerPlaceWithNearbyCheck,
     nearbyRegisterPrompt = nearbyRegisterPrompt,

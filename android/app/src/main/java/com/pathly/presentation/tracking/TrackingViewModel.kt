@@ -6,13 +6,14 @@ import com.pathly.data.settings.MapSurface
 import com.pathly.data.settings.SettingsRepository
 import com.pathly.data.tracking.TrackingController
 import com.pathly.domain.model.NearbyRegisterPrompt
+import com.pathly.domain.model.NearbyStopPrompt
 import com.pathly.domain.model.PlaceListItem
 import com.pathly.domain.model.PlaceSearchResult
 import com.pathly.domain.model.Priority
-import com.pathly.domain.model.RegisteredPlace
 import com.pathly.domain.repository.GpsTrackRepository
 import com.pathly.domain.repository.PlaceRepository
 import com.pathly.domain.repository.WishlistRepository
+import com.pathly.domain.usecase.AddManualStopUseCase
 import com.pathly.domain.usecase.PlaceEditUseCase
 import com.pathly.util.DateFormatters
 import com.pathly.util.Logger
@@ -40,6 +41,7 @@ class TrackingViewModel @Inject constructor(
   private val wishlistRepository: WishlistRepository,
   private val settingsRepository: SettingsRepository,
   private val placeEditUseCase: PlaceEditUseCase,
+  private val addManualStopUseCase: AddManualStopUseCase,
 ) : ViewModel() {
 
   private val logger = Logger("TrackingViewModel")
@@ -407,9 +409,6 @@ class TrackingViewModel @Inject constructor(
   /** 手動追加の確認ダイアログ用: 座標の近くの POI 候補を複数取得する（取り違え回避）。 */
   suspend fun nearbyPois(latitude: Double, longitude: Double): List<PlaceSearchResult> = placeRepository.nearbyPois(latitude, longitude)
 
-  /** 手動追加の近接確認用: 近く（検出半径）に既存の場所があれば最寄り1件を返す。 */
-  suspend fun nearbyPlace(latitude: Double, longitude: Double): RegisteredPlace? = placeRepository.findNearbyPlace(latitude, longitude)
-
   /** 誤検知の訂正: この訪問だけを、選んだ候補／手入力名の場所へ付け替える。 */
   fun reassignStop(stopId: Long, chosen: PlaceSearchResult?, customName: String?) {
     viewModelScope.launch {
@@ -422,31 +421,85 @@ class TrackingViewModel @Inject constructor(
   }
 
   /**
-   * 記録中に手動で立ち寄りを追加する（「今ここ」ボタン／地図タップ）。到着・出発は呼び出し側が
-   * 近傍の軌跡点から決めて渡す。名前は候補選択／手入力／空（未命名）のいずれか。
+   * 手動で立ち寄りを追加する。近くに既存の場所があれば追加せず確認待ちにする。
+   * 「登録済みの場所」を地図に表示中なら、ユーザーは既存を見たうえでの操作なので確認しない。
    */
-  fun addManualStop(
+  fun addManualStopWithNearbyCheck(
     latitude: Double,
     longitude: Double,
     arrivalTime: java.util.Date,
     departureTime: java.util.Date,
     name: String?,
     googlePlaceId: String?,
-    forceNewPlace: Boolean = false,
   ) {
     val trackId = _uiState.value.currentTrackId ?: return
     viewModelScope.launch {
       try {
-        placeRepository.addManualStop(trackId, latitude, longitude, arrivalTime, departureTime, name, googlePlaceId, forceNewPlace)
-        _uiState.update {
-          it.copy(
-            placeRegisteredMessage = "立ち寄りを追加しました",
-          )
+        val result = addManualStopUseCase.addWithNearbyCheck(
+          trackId,
+          latitude,
+          longitude,
+          arrivalTime,
+          departureTime,
+          name,
+          googlePlaceId,
+          nearbyAlreadyVisible = _uiState.value.showRegisteredPlaces,
+        )
+        when (result) {
+          is AddManualStopUseCase.AddResult.NearbyFound ->
+            _uiState.update {
+              it.copy(
+                nearbyStopPrompt = NearbyStopPrompt(
+                  result.nearby,
+                  latitude,
+                  longitude,
+                  arrivalTime,
+                  departureTime,
+                  name,
+                ),
+              )
+            }
+
+          is AddManualStopUseCase.AddResult.Added ->
+            _uiState.update { it.copy(placeRegisteredMessage = "立ち寄りを追加しました") }
         }
       } catch (e: Exception) {
         _uiState.update { it.copy(errorMessage = "立ち寄りの追加に失敗しました: ${e.message}") }
       }
     }
+  }
+
+  /** 近接確認で「この場所に紐付け」を選んだとき。 */
+  fun confirmNearbyStopLink() {
+    val prompt = _uiState.value.nearbyStopPrompt ?: return
+    _uiState.update { it.copy(nearbyStopPrompt = null) }
+    addManualStopForPlace(prompt.nearby.placeId, prompt.arrivalTime, prompt.departureTime)
+  }
+
+  /** 近接確認で「新規で追加」を選んだとき。座標同定せず必ず新しい場所を作る。 */
+  fun confirmNearbyStopNew() {
+    val prompt = _uiState.value.nearbyStopPrompt ?: return
+    _uiState.update { it.copy(nearbyStopPrompt = null) }
+    val trackId = _uiState.value.currentTrackId ?: return
+    viewModelScope.launch {
+      try {
+        addManualStopUseCase.addAsNew(
+          trackId,
+          prompt.latitude,
+          prompt.longitude,
+          prompt.arrivalTime,
+          prompt.departureTime,
+          prompt.name,
+        )
+        _uiState.update { it.copy(placeRegisteredMessage = "立ち寄りを追加しました") }
+      } catch (e: Exception) {
+        _uiState.update { it.copy(errorMessage = "立ち寄りの追加に失敗しました: ${e.message}") }
+      }
+    }
+  }
+
+  fun dismissNearbyStopPrompt() {
+    _uiState.update { it.copy(nearbyStopPrompt = null) }
   }
 
   /** 地図の登録済みマーカーを選んで、既存 place にこの訪問を紐付ける（新規 place を作らない）。 */

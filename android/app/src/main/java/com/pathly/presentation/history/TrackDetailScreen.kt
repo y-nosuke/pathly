@@ -95,6 +95,7 @@ import com.pathly.R
 import com.pathly.domain.model.GpsPoint
 import com.pathly.domain.model.GpsTrack
 import com.pathly.domain.model.NearbyRegisterPrompt
+import com.pathly.domain.model.NearbyStopPrompt
 import com.pathly.domain.model.PlaceListItem
 import com.pathly.domain.model.PlaceSearchResult
 import com.pathly.domain.model.Priority
@@ -147,10 +148,14 @@ fun TrackDetailScreen(
   onDismissReanalyze: () -> Unit = {},
   onDeleteStops: (stopIds: List<Long>) -> Unit = {},
   onUndoDeletion: () -> Unit = {},
-  onAddManualStop: (lat: Double, lng: Double, arrival: Date, departure: Date, name: String?, googlePlaceId: String?, forceNewPlace: Boolean) -> Unit =
-    { _, _, _, _, _, _, _ -> },
-  // 近接確認（③）用: 近く（検出半径）の既存の場所を探す。
-  onFindNearbyPlace: suspend (lat: Double, lng: Double) -> RegisteredPlace? = { _, _ -> null },
+  // 手動での立ち寄り追加。近くに既存があるかの判断は ViewModel（AddManualStopUseCase）側で行う。
+  onAddManualStop: (lat: Double, lng: Double, arrival: Date, departure: Date, name: String?, googlePlaceId: String?) -> Unit =
+    { _, _, _, _, _, _ -> },
+  // 近接確認の保留状態（非nullで確認ダイアログを出す）とその選択。
+  nearbyStopPrompt: NearbyStopPrompt? = null,
+  onConfirmNearbyStopLink: () -> Unit = {},
+  onConfirmNearbyStopNew: () -> Unit = {},
+  onDismissNearbyStopPrompt: () -> Unit = {},
   // 登録済みマーカー（通常モード）タップ後、シートの「詳細を開く」でその場所の詳細を開く。
   onOpenPlaceDetail: (placeId: Long) -> Unit = {},
   onMessageShown: () -> Unit = {},
@@ -193,8 +198,6 @@ fun TrackDetailScreen(
   var editingNoteStop by remember { mutableStateOf<Stop?>(null) }
   // 「場所を選び直す」対象の立ち寄り（誤検知の訂正・この訪問だけ付け替え）。
   var reassignTarget by remember { mutableStateOf<Stop?>(null) }
-  // 近接確認（③）: ID無し手動追加で近くに既存があったときの確認（既存place＋保留中の追加内容）。
-  var proximityPrompt by remember { mutableStateOf<ProximityPrompt?>(null) }
   // 地図↔一覧の連動用: 選択中の立ち寄り。地図のピン/一覧の行どちらから選んでも相互に強調・スクロールする。
   var highlightedStopId by remember { mutableStateOf<Long?>(null) }
 
@@ -682,34 +685,14 @@ fun TrackDetailScreen(
             val finalName = manualName.trim().ifBlank { null }
             // 名前を POI 名から変えたら googlePlaceId は使わない（別名で解決記録を焼き込まない）。
             val googleId = pick.googlePlaceId?.takeIf { finalName == pick.name }
-            val lat = pick.latLng.latitude
-            val lng = pick.latLng.longitude
-            when {
-              existingPlaceId != null -> {
-                // 登録済みの場所に紐付ける（新規place作らず、調整した滞在区間で）。
-                onAddManualStopForPlace(existingPlaceId, arrival, departure)
-                exitManual()
-                scope.launch { snackbarHostState.showSnackbar("立ち寄りを追加しました") }
-              }
-              // ID無し追加 かつ 登録済み非表示(OFF)のとき、近くの既存を確認する（③）。追加は選択後。
-              googleId == null && !showRegisteredPlaces -> {
-                scope.launch {
-                  val near = onFindNearbyPlace(lat, lng)
-                  if (near != null) {
-                    proximityPrompt = ProximityPrompt(near, lat, lng, arrival, departure, finalName)
-                  } else {
-                    onAddManualStop(lat, lng, arrival, departure, finalName, null, false)
-                    snackbarHostState.showSnackbar("立ち寄りを追加しました")
-                  }
-                }
-                exitManual()
-              }
-              else -> {
-                onAddManualStop(lat, lng, arrival, departure, finalName, googleId, false)
-                exitManual()
-                scope.launch { snackbarHostState.showSnackbar("立ち寄りを追加しました") }
-              }
+            // 登録済みマーカーから開いたときだけ既存 place へ紐付ける。それ以外は
+            // 近接確認の要否も含めて ViewModel（AddManualStopUseCase）が判断する。
+            if (existingPlaceId != null) {
+              onAddManualStopForPlace(existingPlaceId, arrival, departure)
+            } else {
+              onAddManualStop(pick.latLng.latitude, pick.latLng.longitude, arrival, departure, finalName, googleId)
             }
+            exitManual()
           },
           // 編集からのキャンセルは追加モードを抜けず、地点選択（マップ）に戻すだけ。
           onCancel = { manualPick = null },
@@ -760,21 +743,13 @@ fun TrackDetailScreen(
     )
   }
 
-  // 近接確認（③）: 近くに既存があれば紐付け／新規を選ぶ。
-  proximityPrompt?.let { p ->
+  // 近接確認: 近くに既存があれば紐付け／新規を選ぶ。
+  nearbyStopPrompt?.let { prompt ->
     NearbyPlaceConfirmDialog(
-      place = p.place,
-      onLink = {
-        onAddManualStopForPlace(p.place.placeId, p.arrival, p.departure)
-        scope.launch { snackbarHostState.showSnackbar("立ち寄りを追加しました") }
-        proximityPrompt = null
-      },
-      onCreateNew = {
-        onAddManualStop(p.lat, p.lng, p.arrival, p.departure, p.name, null, true)
-        scope.launch { snackbarHostState.showSnackbar("立ち寄りを追加しました") }
-        proximityPrompt = null
-      },
-      onDismiss = { proximityPrompt = null },
+      place = prompt.nearby,
+      onLink = onConfirmNearbyStopLink,
+      onCreateNew = onConfirmNearbyStopNew,
+      onDismiss = onDismissNearbyStopPrompt,
     )
   }
 
@@ -1079,16 +1054,6 @@ private data class ManualPick(
   val googlePlaceId: String?,
   // 登録済みマーカーから選んだ場合の既存 placeId。非nullなら新規placeを作らずここへ紐付ける（②）。
   val existingPlaceId: Long? = null,
-)
-
-/** 近接確認（③）で保留する手動追加の内容（近くの既存place＋「新規で追加」を選んだときに使う入力）。 */
-private data class ProximityPrompt(
-  val place: RegisteredPlace,
-  val lat: Double,
-  val lng: Double,
-  val arrival: Date,
-  val departure: Date,
-  val name: String?,
 )
 
 /** 手動追加モードで地点を指す前に出す案内バー（下部・細め）。 */

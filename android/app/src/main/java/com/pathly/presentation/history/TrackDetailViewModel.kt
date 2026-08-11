@@ -6,6 +6,7 @@ import com.pathly.data.settings.MapSurface
 import com.pathly.data.settings.SettingsRepository
 import com.pathly.domain.model.GpsTrack
 import com.pathly.domain.model.NearbyRegisterPrompt
+import com.pathly.domain.model.NearbyStopPrompt
 import com.pathly.domain.model.PlaceListItem
 import com.pathly.domain.model.PlaceSearchResult
 import com.pathly.domain.model.Priority
@@ -15,6 +16,7 @@ import com.pathly.domain.model.StopCandidate
 import com.pathly.domain.repository.GpsTrackRepository
 import com.pathly.domain.repository.PlaceRepository
 import com.pathly.domain.repository.WishlistRepository
+import com.pathly.domain.usecase.AddManualStopUseCase
 import com.pathly.domain.usecase.PlaceEditUseCase
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Job
@@ -43,6 +45,7 @@ class TrackDetailViewModel @Inject constructor(
   private val wishlistRepository: WishlistRepository,
   private val settingsRepository: SettingsRepository,
   private val placeEditUseCase: PlaceEditUseCase,
+  private val addManualStopUseCase: AddManualStopUseCase,
 ) : ViewModel() {
 
   private val _stops = MutableStateFlow<List<Stop>>(emptyList())
@@ -319,33 +322,94 @@ class TrackDetailViewModel @Inject constructor(
     _reanalyzeCandidates.value = null
   }
 
+  private val _nearbyStopPrompt = MutableStateFlow<NearbyStopPrompt?>(null)
+
+  /** 手動の立ち寄り追加で近くに既存の場所が見つかったときの確認待ち。 */
+  val nearbyStopPrompt: StateFlow<NearbyStopPrompt?> = _nearbyStopPrompt.asStateFlow()
+
   /**
-   * 手動追加: ユーザーが地図で指した地点を立ち寄りとして追加する（検出に頼らない完全手動）。
-   * 到着／出発は画面側で最寄り軌跡点から決めて渡す。追加後は stops の Flow で自動反映される。
+   * 手動で立ち寄りを追加する。近くに既存の場所があれば追加せず確認待ちにする。
+   * 「登録済みの場所」を地図に表示中なら、ユーザーは既存を見たうえでの操作なので確認しない。
    */
-  fun addManualStop(
+  fun addManualStopWithNearbyCheck(
     latitude: Double,
     longitude: Double,
     arrivalTime: Date,
     departureTime: Date,
     name: String?,
     googlePlaceId: String?,
-    forceNewPlace: Boolean = false,
   ) {
     val trackId = loadedTrackId.value ?: return
     viewModelScope.launch {
-      placeRepository.addManualStop(trackId, latitude, longitude, arrivalTime, departureTime, name, googlePlaceId, forceNewPlace)
+      try {
+        val result = addManualStopUseCase.addWithNearbyCheck(
+          trackId,
+          latitude,
+          longitude,
+          arrivalTime,
+          departureTime,
+          name,
+          googlePlaceId,
+          nearbyAlreadyVisible = showRegisteredPlaces.value,
+        )
+        when (result) {
+          is AddManualStopUseCase.AddResult.NearbyFound ->
+            _nearbyStopPrompt.value = NearbyStopPrompt(
+              result.nearby,
+              latitude,
+              longitude,
+              arrivalTime,
+              departureTime,
+              name,
+            )
+
+          is AddManualStopUseCase.AddResult.Added -> _message.value = "立ち寄りを追加しました"
+        }
+      } catch (e: Exception) {
+        _message.value = "立ち寄りの追加に失敗しました: ${e.message}"
+      }
     }
   }
 
-  /** 手動追加の近接確認用: 近く（検出半径）に既存の場所があれば最寄り1件を返す。 */
-  suspend fun nearbyPlace(latitude: Double, longitude: Double): RegisteredPlace? = placeRepository.findNearbyPlace(latitude, longitude)
+  /** 近接確認で「この場所に紐付け」を選んだとき。 */
+  fun confirmNearbyStopLink() {
+    val prompt = _nearbyStopPrompt.value ?: return
+    _nearbyStopPrompt.value = null
+    addManualStopForPlace(prompt.nearby.placeId, prompt.arrivalTime, prompt.departureTime)
+  }
+
+  /** 近接確認で「新規で追加」を選んだとき。座標同定せず必ず新しい場所を作る。 */
+  fun confirmNearbyStopNew() {
+    val prompt = _nearbyStopPrompt.value ?: return
+    _nearbyStopPrompt.value = null
+    val trackId = loadedTrackId.value ?: return
+    viewModelScope.launch {
+      try {
+        addManualStopUseCase.addAsNew(
+          trackId,
+          prompt.latitude,
+          prompt.longitude,
+          prompt.arrivalTime,
+          prompt.departureTime,
+          prompt.name,
+        )
+        _message.value = "立ち寄りを追加しました"
+      } catch (e: Exception) {
+        _message.value = "立ち寄りの追加に失敗しました: ${e.message}"
+      }
+    }
+  }
+
+  fun dismissNearbyStopPrompt() {
+    _nearbyStopPrompt.value = null
+  }
 
   /** 地図の登録済みマーカーを選んで、既存 place にこの訪問を紐付ける（新規 place を作らない）。 */
   fun addManualStopForPlace(placeId: Long, arrivalTime: Date, departureTime: Date) {
     val trackId = loadedTrackId.value ?: return
     viewModelScope.launch {
-      placeRepository.addManualStopForPlace(trackId, placeId, arrivalTime, departureTime)
+      addManualStopUseCase.addForExistingPlace(trackId, placeId, arrivalTime, departureTime)
+      _message.value = "立ち寄りを追加しました"
     }
   }
 }

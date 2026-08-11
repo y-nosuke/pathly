@@ -87,15 +87,6 @@ import kotlinx.coroutines.launch
 import java.util.Date
 import kotlin.math.roundToInt
 
-/** 近接確認（③）で保留する手動追加の内容（「新規で追加」を選んだときに使う）。 */
-private data class PendingManualAdd(
-  val lat: Double,
-  val lng: Double,
-  val arrival: Date,
-  val departure: Date,
-  val name: String?,
-)
-
 @Composable
 fun TrackingScreen(
   modifier: Modifier = Modifier,
@@ -143,8 +134,6 @@ fun TrackingScreen(
   var reassignTarget by remember { mutableStateOf<Stop?>(null) }
   // 記録中に登録済みマーカーをタップ → その既存 place にこの訪問を紐付ける対象（②）。手動追加ダイアログを流用する。
   var linkPlace by remember { mutableStateOf<RegisteredPlace?>(null) }
-  // 近接確認（③）: ID無し手動追加で近くに既存があったときの確認（既存place＋保留中の追加内容）。
-  var proximityPrompt by remember { mutableStateOf<Pair<RegisteredPlace, PendingManualAdd>?>(null) }
   // 「立ち寄りを追加」モード（記録中のみ）。ONの間は地図タップ＝立ち寄り追加、OFF＝場所登録。
   var manualMode by remember { mutableStateOf(false) }
   // 記録が止まったら手動追加モードは自動で抜ける（立ち寄りを足すトラックが無い）。
@@ -434,19 +423,13 @@ fun TrackingScreen(
       onFetchCandidates = viewModel::nearbyPois,
       linkedPlace = linkPlace,
       onConfirm = { lat, lng, arrival, departure, name, googlePlaceId ->
+        // 登録済みマーカーから開いたときだけ既存 place へ紐付ける。それ以外は
+        // 近接確認の要否も含めて ViewModel（AddManualStopUseCase）が判断する。
         val linked = linkPlace
-        when {
-          linked != null -> viewModel.addManualStopForPlace(linked.placeId, arrival, departure)
-          // ID無し追加 かつ 登録済み非表示(OFF)のときは、近くの既存を確認する（③）。
-          googlePlaceId == null && !uiState.showRegisteredPlaces -> scope.launch {
-            val near = viewModel.nearbyPlace(lat, lng)
-            if (near != null) {
-              proximityPrompt = near to PendingManualAdd(lat, lng, arrival, departure, name)
-            } else {
-              viewModel.addManualStop(lat, lng, arrival, departure, name, googlePlaceId)
-            }
-          }
-          else -> viewModel.addManualStop(lat, lng, arrival, departure, name, googlePlaceId)
+        if (linked != null) {
+          viewModel.addManualStopForPlace(linked.placeId, arrival, departure)
+        } else {
+          viewModel.addManualStopWithNearbyCheck(lat, lng, arrival, departure, name, googlePlaceId)
         }
         manualTarget = null
         linkPlace = null
@@ -458,19 +441,13 @@ fun TrackingScreen(
     )
   }
 
-  // 近接確認（③）: 近くに既存があれば紐付け／新規を選ぶ。
-  proximityPrompt?.let { (near, pending) ->
+  // 近接確認: 近くに既存があれば紐付け／新規を選ぶ。
+  uiState.nearbyStopPrompt?.let { prompt ->
     NearbyPlaceConfirmDialog(
-      place = near,
-      onLink = {
-        viewModel.addManualStopForPlace(near.placeId, pending.arrival, pending.departure)
-        proximityPrompt = null
-      },
-      onCreateNew = {
-        viewModel.addManualStop(pending.lat, pending.lng, pending.arrival, pending.departure, pending.name, null, forceNewPlace = true)
-        proximityPrompt = null
-      },
-      onDismiss = { proximityPrompt = null },
+      place = prompt.nearby,
+      onLink = viewModel::confirmNearbyStopLink,
+      onCreateNew = viewModel::confirmNearbyStopNew,
+      onDismiss = viewModel::dismissNearbyStopPrompt,
     )
   }
 
