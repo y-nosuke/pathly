@@ -155,8 +155,10 @@ class TrackDetailScreenTest {
       }
     }
 
+    // 記録中は「● 記録中」バッジと、1行スタッツの所要時間欄（"記録中"）の2箇所に出る。
+    // 部分一致だと両方に当たってしまうので、バッジそのものを指す。
     composeTestRule
-      .onNodeWithText("記録中", substring = true)
+      .onNodeWithText("● 記録中")
       .assertIsDisplayed()
   }
 

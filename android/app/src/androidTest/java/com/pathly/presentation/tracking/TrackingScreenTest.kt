@@ -200,8 +200,12 @@ class TrackingScreenTest {
       }
     }
 
+    // 停止は誤爆防止の確認ダイアログを挟むので、FAB だけでは停止しない。
     composeTestRule
       .onNodeWithContentDescription("記録停止")
+      .performClick()
+    composeTestRule
+      .onNodeWithText("停止する")
       .performClick()
 
     verify { mockViewModel.stopTracking() }

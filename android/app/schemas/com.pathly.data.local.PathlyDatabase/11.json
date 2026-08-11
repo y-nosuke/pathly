@@ -2,7 +2,7 @@
   "formatVersion": 1,
   "database": {
     "version": 11,
-    "identityHash": "a7c358a330e9145aaf2e6fc4613f0d82",
+    "identityHash": "1b73f6570c5dae00413d5e357f8756de",
     "entities": [
       {
         "tableName": "gps_tracks",
@@ -263,19 +263,7 @@
           "columnNames": [
             "id"
           ]
-        },
-        "indices": [
-          {
-            "name": "index_places_latitude_longitude",
-            "unique": false,
-            "columnNames": [
-              "latitude",
-              "longitude"
-            ],
-            "orders": [],
-            "createSql": "CREATE INDEX IF NOT EXISTS `index_places_latitude_longitude` ON `${TABLE_NAME}` (`latitude`, `longitude`)"
-          }
-        ]
+        }
       },
       {
         "tableName": "stops",
@@ -620,7 +608,7 @@
     ],
     "setupQueries": [
       "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
-      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, 'a7c358a330e9145aaf2e6fc4613f0d82')"
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '1b73f6570c5dae00413d5e357f8756de')"
     ]
   }
 }

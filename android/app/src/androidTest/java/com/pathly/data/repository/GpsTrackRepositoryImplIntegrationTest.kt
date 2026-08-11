@@ -123,6 +123,9 @@ class GpsTrackRepositoryImplIntegrationTest {
     database.gpsPointDao().insertPoint(track2Point)
 
     // When
+    // 一覧は点をロードせず、距離は確定時に焼き込んだ値を読む。エンティティを直接入れた
+    // このテストでは距離が未計算なので、アプリ起動時と同じバックフィルを走らせる。
+    repository.backfillMissingDistances()
     val tracks = repository.getAllTracks().first()
 
     // Then
@@ -134,7 +137,8 @@ class GpsTrackRepositoryImplIntegrationTest {
 
     // Track1の検証（距離計算含む）
     val retrievedTrack1 = tracks[1]
-    assertEquals("Track1のpoint数", 2, retrievedTrack1.points.size)
+    assertEquals("Track1のpoint数", 2, retrievedTrack1.pointCount)
+    assertTrue("一覧は点そのものをロードしない", retrievedTrack1.points.isEmpty())
     assertFalse("Track1がinactive", retrievedTrack1.isActive)
     assertTrue("Track1の距離が計算される（>0）", retrievedTrack1.totalDistanceMeters > 0)
     // 東京駅→新宿駅の距離は約3-6km
@@ -145,7 +149,7 @@ class GpsTrackRepositoryImplIntegrationTest {
 
     // Track2の検証
     val retrievedTrack2 = tracks[0]
-    assertEquals("Track2のpoint数", 1, retrievedTrack2.points.size)
+    assertEquals("Track2のpoint数", 1, retrievedTrack2.pointCount)
     assertTrue("Track2がactive", retrievedTrack2.isActive)
     assertEquals("Track2の距離（1点のみ）", 0.0, retrievedTrack2.totalDistanceMeters, 0.001)
   }
@@ -394,6 +398,8 @@ class GpsTrackRepositoryImplIntegrationTest {
     database.gpsTrackDao().updateTrack(completedTrack)
 
     // When - Repository経由でデータを取得
+    // 一覧の距離は焼き込み値。未計算なのでアプリ起動時と同じバックフィルを走らせる。
+    repository.backfillMissingDistances()
     val allTracks = repository.getAllTracks().first()
     val specificTrack = repository.getTrackById(trackId)
     val activeTrack = repository.getActiveTrack()
@@ -406,7 +412,7 @@ class GpsTrackRepositoryImplIntegrationTest {
     assertEquals("開始時刻が正しい", startTime.time, track.startTime.time)
     assertEquals("終了時刻が正しい", endTime.time, track.endTime!!.time)
     assertFalse("トラックが非アクティブ", track.isActive)
-    assertEquals("ポイント数が正しい", 3, track.points.size)
+    assertEquals("ポイント数が正しい", 3, track.pointCount)
 
     // 距離計算の確認
     assertTrue("距離が計算されている", track.totalDistanceMeters > 0)
@@ -419,8 +425,8 @@ class GpsTrackRepositoryImplIntegrationTest {
     // アクティブトラックの確認
     assertNull("完了済みトラックはアクティブトラック検索で見つからない", activeTrack)
 
-    // ポイントの時系列順序確認
-    val points = track.points
+    // ポイントの時系列順序確認（点を持つのは個別取得のほう。一覧は件数だけ）
+    val points = specificTrack.points
     assertTrue(
       "1番目 <= 2番目のタイムスタンプ",
       points[0].timestamp.time <= points[1].timestamp.time,
