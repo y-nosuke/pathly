@@ -3,6 +3,7 @@ package com.pathly.data.local.dao
 import androidx.room.Dao
 import androidx.room.Insert
 import androidx.room.Query
+import com.pathly.data.local.entity.NamedPlaceRow
 import com.pathly.data.local.entity.PlaceEntity
 import com.pathly.data.local.entity.PlaceWithWishlist
 import com.pathly.data.local.entity.RegisteredPlaceRow
@@ -17,6 +18,43 @@ interface PlaceDao {
 
   @Query("SELECT * FROM places")
   suspend fun getAll(): List<PlaceEntity>
+
+  /**
+   * 矩形に入る場所を id 順に返す（近傍検索の**前段の絞り込み**）。
+   * 矩形は円より広いので、正確な距離判定は呼び出し側で行うこと。
+   * 座標索引が効くため、場所が増えても全表走査にならない。
+   */
+  @Query(
+    "SELECT * FROM places " +
+      "WHERE latitude BETWEEN :minLatitude AND :maxLatitude " +
+      "AND longitude BETWEEN :minLongitude AND :maxLongitude " +
+      "ORDER BY id",
+  )
+  suspend fun getInBounds(
+    minLatitude: Double,
+    maxLatitude: Double,
+    minLongitude: Double,
+    maxLongitude: Double,
+  ): List<PlaceEntity>
+
+  /**
+   * 矩形に入る場所を、Google 由来の情報付きで返す（候補の表示名を無料で再利用するため）。
+   * place ごとに google_places を引き直す N+1 を避ける。
+   */
+  @Query(
+    "SELECT p.id AS id, p.name AS name, p.latitude AS latitude, p.longitude AS longitude, " +
+      "g.googlePlaceId AS googlePlaceId, g.name AS googleName, g.address AS googleAddress, g.category AS category " +
+      "FROM places p LEFT JOIN google_places g ON g.placeId = p.id " +
+      "WHERE p.latitude BETWEEN :minLatitude AND :maxLatitude " +
+      "AND p.longitude BETWEEN :minLongitude AND :maxLongitude " +
+      "ORDER BY p.id",
+  )
+  suspend fun getNamedPlacesInBounds(
+    minLatitude: Double,
+    maxLatitude: Double,
+    minLongitude: Double,
+    maxLongitude: Double,
+  ): List<NamedPlaceRow>
 
   /**
    * 「場所」タブ用: 全ての場所を、Google 由来データ・行きたい登録（あれば）と立ち寄り件数付きで取得する。
@@ -69,16 +107,26 @@ interface PlaceDao {
   )
   fun observeRegisteredPlaces(): Flow<List<RegisteredPlaceRow>>
 
-  /** [observeRegisteredPlaces] の一回取得版（手動追加の近接チェック用）。 */
+  /**
+   * [observeRegisteredPlaces] の一回取得版を、矩形で絞って返す（近接確認用）。
+   * 以前は全場所を件数の副問い合わせ付きで読んでから距離で絞っていた。
+   */
   @Query(
     "SELECT p.id AS placeId, COALESCE(p.name, g.name, g.address) AS name, " +
       "p.latitude AS latitude, p.longitude AS longitude, " +
       "(SELECT COUNT(*) FROM wishlist w WHERE w.placeId = p.id) AS wishlistCount, " +
       "(SELECT COUNT(*) FROM stops s WHERE s.placeId = p.id) AS visitCount, " +
       "(SELECT w.visitedAt FROM wishlist w WHERE w.placeId = p.id LIMIT 1) AS visitedAt " +
-      "FROM places p LEFT JOIN google_places g ON g.placeId = p.id",
+      "FROM places p LEFT JOIN google_places g ON g.placeId = p.id " +
+      "WHERE p.latitude BETWEEN :minLatitude AND :maxLatitude " +
+      "AND p.longitude BETWEEN :minLongitude AND :maxLongitude",
   )
-  suspend fun getRegisteredPlacesOnce(): List<RegisteredPlaceRow>
+  suspend fun getRegisteredPlacesInBounds(
+    minLatitude: Double,
+    maxLatitude: Double,
+    minLongitude: Double,
+    maxLongitude: Double,
+  ): List<RegisteredPlaceRow>
 
   /**
    * ある経路の場所のうち、まだ一度も Google に問い合わせていないもの（自動命名の対象）。

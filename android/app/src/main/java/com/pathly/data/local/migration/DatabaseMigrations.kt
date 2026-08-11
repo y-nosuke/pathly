@@ -340,6 +340,28 @@ object DatabaseMigrations {
   }
 
   /**
+   * v11 → v12: places の座標に索引を張る。
+   *
+   * 同一場所の判定（30m）と近接確認（50m）が全表走査になっていた。記録中は位置バッチごと、
+   * 滞在中は毎回引かれるため、場所が増えるほど重くなる。索引名は Room が生成する規約
+   * （index_<テーブル>_<列>...）に合わせること。ずれるとスキーマ検証で落ちる。
+   */
+  val MIGRATION_11_12 = object : Migration(11, 12) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+      try {
+        Logger.i(TAG, "Starting migration from version 11 to 12")
+
+        db.execSQL("CREATE INDEX IF NOT EXISTS `index_places_latitude_longitude` ON `places` (`latitude`, `longitude`)")
+
+        Logger.i(TAG, "Migration from version 11 to 12 completed successfully")
+      } catch (e: Exception) {
+        Logger.e(TAG, "Migration from version 11 to 12 failed", e)
+        throw e
+      }
+    }
+  }
+
+  /**
    * 現在利用可能な全てのマイグレーション
    */
   val ALL_MIGRATIONS = arrayOf(
@@ -353,6 +375,7 @@ object DatabaseMigrations {
     MIGRATION_8_9,
     MIGRATION_9_10,
     MIGRATION_10_11,
+    MIGRATION_11_12,
     // 将来のマイグレーションをここに追加
   )
 
