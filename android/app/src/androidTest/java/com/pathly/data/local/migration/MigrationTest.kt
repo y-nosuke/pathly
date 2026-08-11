@@ -141,6 +141,42 @@ class MigrationTest {
     db.close()
   }
 
+  @Test
+  fun migrate10To11_addsTotalDistanceColumn() {
+    // v10 のスキーマで DB を作成し、既存の完了済み経路を1件入れておく。
+    helper.createDatabase(TEST_DB, 10).apply {
+      execSQL(
+        "INSERT INTO gps_tracks (id, startTime, endTime, isActive, name, isFavorite, createdAt, updatedAt) " +
+          "VALUES (1, 0, 100, 0, '散歩', 1, 0, 0)",
+      )
+      close()
+    }
+
+    // 10→11 を適用。生成スキーマが 11.json と一致しなければここで失敗する。
+    val db = helper.runMigrationsAndValidate(
+      TEST_DB,
+      11,
+      true,
+      DatabaseMigrations.MIGRATION_10_11,
+    )
+
+    // 既存行は距離が未計算（NULL）で残り、他の列は保持される。NULL は起動時のバックフィル対象。
+    db.query("SELECT name, isFavorite, totalDistanceMeters FROM gps_tracks WHERE id = 1").use { cursor ->
+      assertTrue(cursor.moveToFirst())
+      assertEquals("散歩", cursor.getString(0))
+      assertEquals(1, cursor.getInt(1))
+      assertTrue("既存経路の距離は未計算(NULL)", cursor.isNull(2))
+    }
+
+    // 新しい列に値を書ける。
+    db.execSQL("UPDATE gps_tracks SET totalDistanceMeters = 1234.5 WHERE id = 1")
+    db.query("SELECT totalDistanceMeters FROM gps_tracks WHERE id = 1").use { cursor ->
+      assertTrue(cursor.moveToFirst())
+      assertEquals(1234.5, cursor.getDouble(0), 0.001)
+    }
+    db.close()
+  }
+
   companion object {
     private const val TEST_DB = "migration-test"
   }

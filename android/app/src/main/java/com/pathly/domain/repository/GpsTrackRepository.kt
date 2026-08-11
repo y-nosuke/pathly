@@ -23,4 +23,10 @@ interface GpsTrackRepository {
    * （docs/designs/gps-smoothing.md）。
    */
   suspend fun updateSmoothedForTrack(trackId: Long, isFinal: Boolean)
+
+  /**
+   * 総移動距離が未計算の完了済み経路（v11 より前に記録したもの）を埋める。
+   * 起動時に一度だけ走ればよい（対象が無ければ即 return）。
+   */
+  suspend fun backfillMissingDistances()
 }

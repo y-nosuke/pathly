@@ -14,6 +14,16 @@ data class GpsTrack(
   /** この経路の立ち寄り件数（一覧の件数表示・並べ替え用。リポジトリが集計して渡す）。 */
   val stopCount: Int = 0,
   val points: List<GpsPoint> = emptyList(),
+  /**
+   * この経路の生GPS点の件数。履歴一覧は点をロードしないので集計値を受け取る。
+   * 点を読み込む経路（詳細・記録中）では [points] の件数と一致する。
+   */
+  val pointCount: Int = points.size,
+  /**
+   * 保存済みの総移動距離（メートル）。記録の確定時に焼き込まれる。
+   * null（記録中・v11 以前の未計算）なら [points] から都度計算する。
+   */
+  val storedDistanceMeters: Double? = null,
   val createdAt: Date,
   val updatedAt: Date,
   /**
@@ -35,9 +45,15 @@ data class GpsTrack(
 
   private val computedSmoothedPoints: List<GpsPoint> by lazy { TrackSmoother.smooth(points) }
 
-  /** 補正後の点列で計算した総移動距離。 */
+  /**
+   * 総移動距離（メートル）。確定済みなら保存値をそのまま使い、無ければ補正後の点列から計算する。
+   *
+   * 保存値を優先するのが要点で、以前は一覧を描くたびに全経路を平滑化し直していた。
+   * Flow が再発行するたびインスタンスが作り直されて [computedSmoothedPoints] の
+   * lazy キャッシュも捨てられるため、記録中は10秒ごとに全履歴分を再計算していた。
+   */
   val totalDistanceMeters: Double
-    get() = calculateDistance(smoothedPoints)
+    get() = storedDistanceMeters ?: calculateDistance(smoothedPoints)
 
   private fun calculateDistance(pts: List<GpsPoint>): Double {
     if (pts.size < 2) return 0.0

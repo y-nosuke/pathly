@@ -91,4 +91,71 @@ class GpsTrackRepositoryImplSmoothingTest {
 
     coVerify(exactly = 0) { smoothedPointDao.insertAll(any()) }
   }
+
+  // ---- 総移動距離の焼き込み（履歴一覧が点をロードせずに済むようにする） ----
+
+  @Test
+  fun updateSmoothed_whenFinal_persistsTotalDistance() = runTest {
+    coEvery { gpsPointDao.getPointsByTrackIdSync(1L) } returns straightPoints(6)
+    coEvery { smoothedPointDao.countByTrack(1L) } returns 0
+
+    repository.updateSmoothedForTrack(1L, isFinal = true)
+
+    val meters = slot<Double>()
+    coVerify { gpsTrackDao.updateTotalDistance(1L, capture(meters)) }
+    // 0.0001度 × 5区間 ≒ 55.6m（緯度1度 ≒ 111km）。桁が合っていることを確認する。
+    assertEquals(55.6, meters.captured, 1.0)
+  }
+
+  @Test
+  fun updateSmoothed_whenNotFinal_doesNotTouchTotalDistance() = runTest {
+    // 記録中は距離を焼き込まない（確定していないため）。一覧は都度計算にフォールバックする。
+    coEvery { gpsPointDao.getPointsByTrackIdSync(1L) } returns straightPoints(6)
+    coEvery { smoothedPointDao.countByTrack(1L) } returns 0
+
+    repository.updateSmoothedForTrack(1L, isFinal = false)
+
+    coVerify(exactly = 0) { gpsTrackDao.updateTotalDistance(any(), any()) }
+  }
+
+  @Test
+  fun updateSmoothed_whenFinalWithTooFewPoints_persistsZero() = runTest {
+    // 点が1つ以下でも未計算のまま残さない（一覧が毎回フォールバック計算に落ちないように）。
+    coEvery { gpsPointDao.getPointsByTrackIdSync(1L) } returns straightPoints(1)
+
+    repository.updateSmoothedForTrack(1L, isFinal = true)
+
+    coVerify { gpsTrackDao.updateTotalDistance(1L, 0.0) }
+  }
+
+  @Test
+  fun backfill_usesPersistedSmoothedPoints_withoutResmoothing() = runTest {
+    // v11 以前の経路。保存済みの補正後点列があるので、生点は読まずにそれで距離を出す。
+    coEvery { gpsTrackDao.getFinishedTrackIdsWithoutDistance() } returns listOf(42L)
+    coEvery { smoothedPointDao.getByTrack(42L) } returns (0 until 6).map { i ->
+      SmoothedPointEntity(
+        trackId = 42L,
+        seq = i,
+        latitude = 35.0 + i * 0.0001,
+        longitude = 139.0,
+        timestamp = Date(i * 10_000L),
+      )
+    }
+
+    repository.backfillMissingDistances()
+
+    val meters = slot<Double>()
+    coVerify { gpsTrackDao.updateTotalDistance(42L, capture(meters)) }
+    assertEquals(55.6, meters.captured, 1.0)
+    coVerify(exactly = 0) { gpsPointDao.getPointsByTrackIdSync(42L) }
+  }
+
+  @Test
+  fun backfill_whenNothingMissing_doesNothing() = runTest {
+    coEvery { gpsTrackDao.getFinishedTrackIdsWithoutDistance() } returns emptyList()
+
+    repository.backfillMissingDistances()
+
+    coVerify(exactly = 0) { gpsTrackDao.updateTotalDistance(any(), any()) }
+  }
 }

@@ -318,6 +318,28 @@ object DatabaseMigrations {
   }
 
   /**
+   * v10 → v11: gps_tracks に総移動距離（メートル）を持たせる。
+   *
+   * 一覧の距離表示・距離順の並べ替えのために、毎回全経路の全GPS点を読み込んで
+   * 平滑化し直していたのをやめ、確定時に計算した値を持つ。既存の経路は NULL
+   * （未計算）で入り、初回起動時のバックフィルで埋める。
+   */
+  val MIGRATION_10_11 = object : Migration(10, 11) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+      try {
+        Logger.i(TAG, "Starting migration from version 10 to 11")
+
+        db.execSQL("ALTER TABLE `gps_tracks` ADD COLUMN `totalDistanceMeters` REAL")
+
+        Logger.i(TAG, "Migration from version 10 to 11 completed successfully")
+      } catch (e: Exception) {
+        Logger.e(TAG, "Migration from version 10 to 11 failed", e)
+        throw e
+      }
+    }
+  }
+
+  /**
    * 現在利用可能な全てのマイグレーション
    */
   val ALL_MIGRATIONS = arrayOf(
@@ -330,6 +352,7 @@ object DatabaseMigrations {
     MIGRATION_7_8,
     MIGRATION_8_9,
     MIGRATION_9_10,
+    MIGRATION_10_11,
     // 将来のマイグレーションをここに追加
   )
 

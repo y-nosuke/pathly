@@ -36,16 +36,19 @@ class GpsTrackRepositoryImpl @Inject constructor(
   // 補正後の書き込みを直列化する（記録中の各点更新と詳細画面の再補正が競合しないように）。
   private val smoothingMutex = Mutex()
 
+  /**
+   * 履歴一覧。**GPS点はロードしない**（点数は集計、距離は gps_tracks の焼き込み値）。
+   * 以前は全経路の全点を読み込み、表示のたびに平滑化して距離を計算し直していた。
+   */
   override fun getAllTracks(): Flow<List<GpsTrack>> = combine(
-    gpsTrackDao.getAllTracksWithPoints(),
+    gpsTrackDao.getTrackListRows(),
     stopDao.observeStopCountsByTrack(),
-  ) { tracksWithPoints, stopCounts ->
+  ) { rows, stopCounts ->
     val countByTrack = stopCounts.associate { it.trackId to it.count }
-    tracksWithPoints.map { trackWithPoints ->
-      val points = trackWithPoints.points.map { it.toGpsPoint() }
-      trackWithPoints.track.toGpsTrack(
-        points = points,
-        stopCount = countByTrack[trackWithPoints.track.id] ?: 0,
+    rows.map { row ->
+      row.track.toGpsTrack(
+        stopCount = countByTrack[row.track.id] ?: 0,
+        pointCount = row.pointCount,
       )
     }
   }
@@ -182,9 +185,15 @@ class GpsTrackRepositoryImpl @Inject constructor(
    */
   private suspend fun persistSmoothed(trackId: Long, isFinal: Boolean) {
     val raw = gpsPointDao.getPointsByTrackIdSync(trackId).map { it.toGpsPoint() }
-    if (raw.size < 2) return
+    if (raw.size < 2) {
+      // 点が無い／1点だけの経路も距離を確定させる（一覧が未計算のまま残らないように）。
+      if (isFinal) gpsTrackDao.updateTotalDistance(trackId, 0.0)
+      return
+    }
 
     val smoothed = TrackSmoother.smooth(raw)
+    // 確定時に総移動距離を焼き込む。一覧はこの値だけを読み、点をロードしない。
+    if (isFinal) gpsTrackDao.updateTotalDistance(trackId, TrackSmoother.totalDistanceMeters(smoothed))
     val half = SmoothingParams().window / 2
     val finalizedCount = if (isFinal) smoothed.size else (smoothed.size - half).coerceAtLeast(0)
 
@@ -204,6 +213,27 @@ class GpsTrackRepositoryImpl @Inject constructor(
     }
     smoothedPointDao.insertAll(rows)
     logger.d("Persisted ${rows.size} smoothed points for track $trackId (total $finalizedCount)")
+  }
+
+  /**
+   * v11 以前に記録した経路は総移動距離を持たないので、初回起動時にまとめて計算して埋める。
+   * 保存済みの補正後点列があればそれを使い（再平滑化しない）、無ければ生点から計算する。
+   * 一度埋めれば二度と走らない。
+   */
+  override suspend fun backfillMissingDistances() {
+    try {
+      val ids = gpsTrackDao.getFinishedTrackIdsWithoutDistance()
+      if (ids.isEmpty()) return
+      logger.i("Backfilling total distance for ${ids.size} tracks")
+      for (trackId in ids) {
+        val smoothed = smoothedPointDao.getByTrack(trackId).map { it.toGpsPoint() }
+          .ifEmpty { TrackSmoother.smooth(gpsPointDao.getPointsByTrackIdSync(trackId).map { it.toGpsPoint() }) }
+        gpsTrackDao.updateTotalDistance(trackId, TrackSmoother.totalDistanceMeters(smoothed))
+      }
+      logger.i("Backfilled total distance for ${ids.size} tracks")
+    } catch (e: Exception) {
+      logger.e("backfillMissingDistances failed", e)
+    }
   }
 
   /**
@@ -251,6 +281,7 @@ class GpsTrackRepositoryImpl @Inject constructor(
     points: List<GpsPoint> = emptyList(),
     stopCount: Int = 0,
     smoothedOverride: List<GpsPoint>? = null,
+    pointCount: Int = points.size,
   ): GpsTrack = GpsTrack(
     id = this.id,
     startTime = this.startTime,
@@ -260,6 +291,8 @@ class GpsTrackRepositoryImpl @Inject constructor(
     isFavorite = this.isFavorite,
     stopCount = stopCount,
     points = points,
+    pointCount = pointCount,
+    storedDistanceMeters = this.totalDistanceMeters,
     createdAt = this.createdAt,
     updatedAt = this.updatedAt,
     smoothedOverride = smoothedOverride,

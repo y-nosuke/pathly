@@ -4,6 +4,7 @@ import android.app.Application
 import com.google.android.gms.maps.MapsInitializer
 import com.google.android.gms.maps.OnMapsSdkInitializedCallback
 import com.google.android.libraries.places.api.Places
+import com.pathly.domain.repository.GpsTrackRepository
 import com.pathly.domain.repository.PlaceRepository
 import com.pathly.util.Logger
 import dagger.hilt.android.HiltAndroidApp
@@ -26,6 +27,9 @@ class PathlyApplication :
   @Inject
   lateinit var placeRepository: PlaceRepository
 
+  @Inject
+  lateinit var gpsTrackRepository: GpsTrackRepository
+
   override fun onCreate() {
     super.onCreate()
     MapsInitializer.initialize(applicationContext, MapsInitializer.Renderer.LATEST, this)
@@ -41,6 +45,9 @@ class PathlyApplication :
     // オフライン記録の未解決な立ち寄りをオンライン時に一括で名前解決する（設計: オンライン復帰後キャッチアップ）。
     // オフライン時は各 place で no-op（解決ログを残さず、次回起動で再度拾う）＝無駄な課金なし。
     appScope.launch { placeRepository.resolveAllUnresolvedNames() }
+
+    // v11 より前に記録した経路の総移動距離を埋める（対象が無ければ即終了する一度きりの処理）。
+    appScope.launch { gpsTrackRepository.backfillMissingDistances() }
   }
 
   override fun onMapsSdkInitialized(renderer: MapsInitializer.Renderer) {

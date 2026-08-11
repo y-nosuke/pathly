@@ -444,7 +444,7 @@ private fun ActiveTrackItem(
 
         val distanceKm = (track.totalDistanceMeters / 1000.0 * 100).roundToInt() / 100.0
         Text(
-          text = "移動距離: ${distanceKm}km (${track.points.size}点)",
+          text = "移動距離: ${distanceKm}km (${track.pointCount}点)",
           style = MaterialTheme.typography.bodyMedium,
           color = MaterialTheme.colorScheme.secondary,
           fontWeight = FontWeight.Medium,
