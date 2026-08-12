@@ -5,17 +5,22 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
@@ -32,6 +37,7 @@ import com.pathly.domain.model.PlaceListItem
 import com.pathly.domain.model.PlaceSearchResult
 import com.pathly.domain.model.Priority
 import com.pathly.presentation.common.FloatingSheet
+import com.pathly.presentation.common.SheetDetent
 import com.pathly.presentation.common.rememberFloatingSheetState
 
 /**
@@ -69,46 +75,70 @@ internal fun PlaceActionSheet(
 ) {
   // 地図を見ながら操作できるよう、スクリムを持たない自前のシートで出す。
   // ModalBottomSheet はスクリムがタップを吸うため、色を透明にしても地図を動かせず、
-  // 触ると閉じてしまう。ここでは地図のパン・ズーム・タップをそのまま生かす。
-  // フォームなのでドラッグで隠しきれないようにする（allowHidden = false）。
-  val sheetState = rememberFloatingSheetState(allowHidden = false)
+  // 触ると閉じてしまう。ここでは地図のパン・ズーム・タップをそのまま生かす（ADR-0010）。
+  val sheetState = rememberFloatingSheetState()
 
   // 非モーダルなのでバックは自分で受ける（モーダルのときは自動で閉じていた）。
   BackHandler { onDismiss() }
 
-  FloatingSheet(state = sheetState, modifier = modifier) {
-    Column(
-      modifier = Modifier
-        .fillMaxWidth()
-        .verticalScroll(rememberScrollState())
-        .padding(horizontal = 20.dp)
-        .padding(bottom = 24.dp),
-    ) {
-      when (target) {
-        is PlaceSheetTarget.NewPoint -> NewPlaceEditor(
-          latLng = target.latLng,
-          poi = null,
-          onFetchPoiDetails = onFetchPoiDetails,
-          onRegisterNew = onRegisterNew,
-          onDismiss = onDismiss,
-        )
+  // 別の地点をタップし直したら、畳んでいても開き直す（変化が見えないと操作を見失う）。
+  LaunchedEffect(target) { sheetState.settleTo(SheetDetent.PEEK) }
 
-        is PlaceSheetTarget.NewPoi -> NewPlaceEditor(
-          latLng = target.poi.latLng,
-          poi = target.poi,
-          onFetchPoiDetails = onFetchPoiDetails,
-          onRegisterNew = onRegisterNew,
-          onDismiss = onDismiss,
+  Column(modifier = modifier, horizontalAlignment = Alignment.CenterHorizontally) {
+    // 畳んでいる間は地図が全面に見える。入力内容は保持したままなので、ここから戻せる。
+    if (sheetState.detent == SheetDetent.HIDDEN) {
+      Surface(
+        onClick = { sheetState.settleTo(SheetDetent.PEEK) },
+        shape = RoundedCornerShape(20.dp),
+        color = MaterialTheme.colorScheme.surface,
+        shadowElevation = 4.dp,
+        modifier = Modifier
+          .navigationBarsPadding()
+          .padding(bottom = 24.dp),
+      ) {
+        Text(
+          text = "▲ 入力に戻る",
+          style = MaterialTheme.typography.labelLarge,
+          fontWeight = FontWeight.Medium,
+          modifier = Modifier.padding(horizontal = 20.dp, vertical = 10.dp),
         )
+      }
+    }
 
-        is PlaceSheetTarget.Existing -> ExistingPlaceEditor(
-          placeId = target.placeId,
-          onLoadPlace = onLoadPlace,
-          onSaveExisting = onSaveExisting,
-          onAddStop = onAddStop,
-          onOpenDetail = onOpenDetail,
-          onDismiss = onDismiss,
-        )
+    FloatingSheet(state = sheetState) {
+      Column(
+        modifier = Modifier
+          .fillMaxWidth()
+          .verticalScroll(rememberScrollState())
+          .padding(horizontal = 20.dp)
+          .padding(bottom = 24.dp),
+      ) {
+        when (target) {
+          is PlaceSheetTarget.NewPoint -> NewPlaceEditor(
+            latLng = target.latLng,
+            poi = null,
+            onFetchPoiDetails = onFetchPoiDetails,
+            onRegisterNew = onRegisterNew,
+            onDismiss = onDismiss,
+          )
+
+          is PlaceSheetTarget.NewPoi -> NewPlaceEditor(
+            latLng = target.poi.latLng,
+            poi = target.poi,
+            onFetchPoiDetails = onFetchPoiDetails,
+            onRegisterNew = onRegisterNew,
+            onDismiss = onDismiss,
+          )
+
+          is PlaceSheetTarget.Existing -> ExistingPlaceEditor(
+            placeId = target.placeId,
+            onLoadPlace = onLoadPlace,
+            onSaveExisting = onSaveExisting,
+            onAddStop = onAddStop,
+            onOpenDetail = onOpenDetail,
+            onDismiss = onDismiss,
+          )
+        }
       }
     }
   }

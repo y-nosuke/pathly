@@ -153,14 +153,16 @@ fun FloatingSheet(
   content: @Composable ColumnScope.() -> Unit,
 ) {
   val density = LocalDensity.current
+  // 高さの読み取りはここ（シートの内側）だけに閉じ込める。
+  val heightPx = state.currentHeightPx()
   Surface(
     modifier = modifier
       .fillMaxWidth()
-      // 高さの読み取りはここ（シートの内側）だけに閉じ込める。
-      .height(with(density) { state.currentHeightPx().toDp() }),
+      .height(with(density) { heightPx.toDp() }),
     shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
     color = MaterialTheme.colorScheme.surface,
-    shadowElevation = 12.dp,
+    // 完全に畳んだときは影を消す（高さ0の面に影が残ると画面下端に線が出る）。
+    shadowElevation = if (heightPx <= 0.5f) 0.dp else 12.dp,
   ) {
     Column(
       modifier = Modifier
