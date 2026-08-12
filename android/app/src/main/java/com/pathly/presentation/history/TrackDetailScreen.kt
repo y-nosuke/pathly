@@ -59,12 +59,13 @@ import com.pathly.domain.model.Stop
 import com.pathly.domain.model.StopCandidate
 import com.pathly.domain.model.TrackSmoother
 import com.pathly.presentation.common.FloatingSheet
+import com.pathly.presentation.common.ManualStopOrigin
+import com.pathly.presentation.common.ManualStopSheet
+import com.pathly.presentation.common.ManualStopTarget
 import com.pathly.presentation.common.NearbyPlaceConfirmDialog
 import com.pathly.presentation.common.SheetDetent
 import com.pathly.presentation.common.StopReassignDialog
-import com.pathly.presentation.common.defaultDepartureIndex
 import com.pathly.presentation.common.heightOf
-import com.pathly.presentation.common.nearestPointIndex
 import com.pathly.presentation.common.rememberFloatingSheetState
 import com.pathly.presentation.common.stopSegmentPoints
 import com.pathly.presentation.places.PlaceActionSheet
@@ -207,17 +208,9 @@ fun TrackDetailScreen(
   // 到着/出発を仮置きしてレンジで微調整する。滞在区間は地図に青くハイライトして見せる。
   val manualPoints = track.smoothedPoints
   var manualMode by remember { mutableStateOf(false) }
-  var manualPick by remember { mutableStateOf<ManualPick?>(null) }
-  val manualLastIdx = (manualPoints.size - 1).coerceAtLeast(0)
-  var manualArrivalIdx by remember(manualPick) {
-    mutableIntStateOf(
-      manualPick?.let { nearestPointIndex(manualPoints, it.latLng.latitude, it.latLng.longitude) } ?: 0,
-    )
-  }
-  var manualDepartureIdx by remember(manualPick) {
-    mutableIntStateOf(defaultDepartureIndex(manualPoints, manualArrivalIdx))
-  }
-  var manualName by remember(manualPick) { mutableStateOf(manualPick?.name ?: "") }
+  var manualPick by remember { mutableStateOf<ManualStopTarget?>(null) }
+  // 手動追加で選んでいる滞在区間（到着〜出発の点インデックス）。地図に青くハイライトする。
+  var manualRange by remember(manualPick) { mutableStateOf<Pair<Int, Int>?>(null) }
   val exitManual: () -> Unit = {
     manualMode = false
     manualPick = null
@@ -226,8 +219,6 @@ fun TrackDetailScreen(
   BackHandler(enabled = manualMode) {
     if (manualPick != null) manualPick = null else exitManual()
   }
-  // 手動追加オーバーレイ（地点確定後）の高さ。地点を指す前は下部に細い案内だけ出す。
-  val manualOverlayHeight = screenHeightDp * 0.46f
 
   // 地図に描く点列。調整モードではスライダーの値で補正する。
   val displayPoints = remember(track, tuningMode, tuningParams) {
@@ -265,7 +256,9 @@ fun TrackDetailScreen(
       } else {
         // 手動追加で選んだ滞在区間（到着〜出発）の点列。地図に青くハイライトする。
         val manualHighlight = if (manualMode && manualPick != null && manualPoints.size >= 2) {
-          manualPoints.subList(manualArrivalIdx, (manualDepartureIdx + 1).coerceAtMost(manualPoints.size))
+          manualRange?.let { (start, end) ->
+            manualPoints.subList(start, (end + 1).coerceAtMost(manualPoints.size))
+          }.orEmpty()
         } else {
           emptyList()
         }
@@ -277,7 +270,7 @@ fun TrackDetailScreen(
           currentStopSegment = currentStopSegment,
           candidates = if (candidateMode && !manualMode) reanalyzeCandidates.orEmpty() else emptyList(),
           showRawOverlay = tuningMode,
-          manualPickTarget = if (manualMode) manualPick?.latLng else null,
+          manualPickTarget = if (manualMode) manualPick?.let { LatLng(it.latitude, it.longitude) } else null,
           highlightPoints = manualHighlight,
           stopSegments = stopSegments,
           // この経路の立ち寄り（確定＝紫番号／滞在中＝ティール）と同じ場所は登録済みピンを二重に出さない。
@@ -294,7 +287,7 @@ fun TrackDetailScreen(
           contentPadding = PaddingValues(
             bottom = when {
               candidateMode -> candidateOverlayHeight
-              manualMode && manualPick != null -> manualOverlayHeight
+              manualMode && manualPick != null -> sheetState.heightOf(SheetDetent.PEEK)
               manualMode -> 96.dp
               tuningMode -> tuningSheetPeekHeight
               else -> sheetState.heightOf(detent)
@@ -302,7 +295,7 @@ fun TrackDetailScreen(
           ),
           onPoiClick = { poi ->
             if (manualMode) {
-              manualPick = ManualPick(poi.latLng, poi.name, poi.placeId)
+              manualPick = ManualStopTarget(poi.latLng.latitude, poi.latLng.longitude, ManualStopOrigin.Poi(poi.name, poi.placeId))
               focusTarget = poi.latLng
               focusNonce++
             } else {
@@ -311,7 +304,7 @@ fun TrackDetailScreen(
           },
           onMapClick = { latLng ->
             if (manualMode) {
-              manualPick = ManualPick(latLng, null, null)
+              manualPick = ManualStopTarget(latLng.latitude, latLng.longitude, ManualStopOrigin.MapPoint)
               focusTarget = latLng
               focusNonce++
             } else {
@@ -330,11 +323,10 @@ fun TrackDetailScreen(
           // 通常モード＝場所シートでその場編集（詳細も開ける）。
           onRegisteredPlaceClick = { place ->
             if (manualMode) {
-              manualPick = ManualPick(
-                LatLng(place.latitude, place.longitude),
-                place.displayName,
-                null,
-                existingPlaceId = place.placeId,
+              manualPick = ManualStopTarget(
+                place.latitude,
+                place.longitude,
+                ManualStopOrigin.ExistingPlace(place.placeId, place.displayName),
               )
               focusTarget = LatLng(place.latitude, place.longitude)
               focusNonce++
@@ -573,43 +565,32 @@ fun TrackDetailScreen(
             .navigationBarsPadding(),
           onCancel = exitManual,
         )
-      } else if (manualPoints.size >= 2) {
-        val arrival = manualPoints[manualArrivalIdx].timestamp
-        val departure = manualPoints[manualDepartureIdx].timestamp
-        ManualAddOverlay(
-          name = manualName,
-          onNameChange = { manualName = it },
-          // 登録済みマーカーから開いたときは、その場所へ紐付ける（名前欄の代わりに場所名を出す）。
-          linkedPlaceName = pick.existingPlaceId?.let { pick.name ?: "登録済みの場所" },
-          arrivalTime = arrival,
-          departureTime = departure,
-          arrivalIdx = manualArrivalIdx,
-          departureIdx = manualDepartureIdx,
-          lastIdx = manualLastIdx,
-          height = manualOverlayHeight,
-          modifier = Modifier
-            .align(Alignment.BottomCenter)
-            .navigationBarsPadding(),
-          onRangeChange = { start, end ->
-            manualArrivalIdx = start
-            manualDepartureIdx = end
-          },
-          onConfirm = {
-            val existingPlaceId = pick.existingPlaceId
-            val finalName = manualName.trim().ifBlank { null }
-            // 名前を POI 名から変えたら googlePlaceId は使わない（別名で解決記録を焼き込まない）。
-            val googleId = pick.googlePlaceId?.takeIf { finalName == pick.name }
-            // 登録済みマーカーから開いたときだけ既存 place へ紐付ける。それ以外は
-            // 近接確認の要否も含めて ViewModel（AddManualStopUseCase）が判断する。
-            if (existingPlaceId != null) {
-              onAddManualStopForPlace(existingPlaceId, arrival, departure)
+      } else {
+        ManualStopSheet(
+          origin = pick.origin,
+          latitude = pick.latitude,
+          longitude = pick.longitude,
+          points = manualPoints,
+          onFetchCandidates = onFetchNearbyPois,
+          onConfirm = { input ->
+            val origin = pick.origin
+            if (origin is ManualStopOrigin.ExistingPlace) {
+              onAddManualStopForPlace(origin.placeId, input.arrivalTime, input.departureTime)
             } else {
-              onAddManualStop(pick.latLng.latitude, pick.latLng.longitude, arrival, departure, finalName, googleId)
+              onAddManualStop(
+                input.latitude,
+                input.longitude,
+                input.arrivalTime,
+                input.departureTime,
+                input.name,
+                input.googlePlaceId,
+              )
             }
             exitManual()
           },
-          // 編集からのキャンセルは追加モードを抜けず、地点選択（マップ）に戻すだけ。
           onCancel = { manualPick = null },
+          onRangeChange = { start, end -> manualRange = start to end },
+          modifier = Modifier.align(Alignment.BottomCenter),
         )
       }
     }
@@ -712,12 +693,3 @@ fun TrackDetailScreen(
     GpsDebugDialog(points = track.points, onDismiss = { debugInfoOpen = false })
   }
 }
-
-/** 手動追加で指した地点（座標＋POI由来の名前/ID）。空きタップは name/googlePlaceId が null。 */
-private data class ManualPick(
-  val latLng: LatLng,
-  val name: String?,
-  val googlePlaceId: String?,
-  // 登録済みマーカーから選んだ場合の既存 placeId。非nullなら新規placeを作らずここへ紐付ける（②）。
-  val existingPlaceId: Long? = null,
-)

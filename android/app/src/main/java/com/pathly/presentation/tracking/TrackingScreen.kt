@@ -1,6 +1,5 @@
 package com.pathly.presentation.tracking
 
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -8,16 +7,12 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -26,15 +21,12 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -43,6 +35,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
@@ -55,6 +48,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.google.android.gms.location.LocationServices
 import com.google.android.gms.location.Priority
 import com.google.android.gms.maps.CameraUpdateFactory
+import com.google.android.gms.maps.model.BitmapDescriptorFactory
 import com.google.android.gms.maps.model.CameraPosition
 import com.google.android.gms.maps.model.LatLng
 import com.google.android.gms.maps.model.PointOfInterest
@@ -64,21 +58,22 @@ import com.google.maps.android.compose.GoogleMap
 import com.google.maps.android.compose.MapProperties
 import com.google.maps.android.compose.MapType
 import com.google.maps.android.compose.MapUiSettings
+import com.google.maps.android.compose.Marker
+import com.google.maps.android.compose.MarkerState
+import com.google.maps.android.compose.Polyline
 import com.google.maps.android.compose.rememberCameraPositionState
 import com.pathly.R
-import com.pathly.domain.model.Geo
 import com.pathly.domain.model.GpsPoint
 import com.pathly.domain.model.GpsTrack
-import com.pathly.domain.model.PlaceSearchResult
 import com.pathly.domain.model.RegisteredPlace
 import com.pathly.domain.model.Stop
+import com.pathly.presentation.common.ManualStopOrigin
+import com.pathly.presentation.common.ManualStopSheet
+import com.pathly.presentation.common.ManualStopTarget
 import com.pathly.presentation.common.NearbyPlaceConfirmDialog
 import com.pathly.presentation.common.RegisteredPlaceMarkers
 import com.pathly.presentation.common.RouteMapContent
-import com.pathly.presentation.common.StopRangeEditor
 import com.pathly.presentation.common.StopReassignDialog
-import com.pathly.presentation.common.defaultDepartureIndex
-import com.pathly.presentation.common.nearestPointIndex
 import com.pathly.presentation.common.stopSegmentPoints
 import com.pathly.presentation.places.PlaceActionSheet
 import com.pathly.presentation.places.PlaceSheetTarget
@@ -86,6 +81,9 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.util.Date
 import kotlin.math.roundToInt
+
+/** 手動追加のハイライト（選択した滞在区間）。軌跡・立ち寄りと見分ける青。経路詳細と揃える。 */
+private val manualHighlightColor = Color(0xFF1E88E5)
 
 @Composable
 fun TrackingScreen(
@@ -128,12 +126,12 @@ fun TrackingScreen(
   var placeSheetTarget by remember { mutableStateOf<PlaceSheetTarget?>(null) }
   // 停止の誤爆防止（記録中の停止だけ確認を挟む）。
   var showStopConfirm by remember { mutableStateOf(false) }
-  // 手動で立ち寄りを追加する対象地点（「今ここ」または地図タップ）。非nullで確認ダイアログを出す。
-  var manualTarget by remember { mutableStateOf<LatLng?>(null) }
+  // 手動で立ち寄りを追加する対象。起点（POI/空き地点/今ここ/登録済み）ごとに出す内容が変わる。
+  var manualTarget by remember { mutableStateOf<ManualStopTarget?>(null) }
+  // 手動追加で選んでいる滞在区間（到着〜出発の点インデックス）。地図に青くハイライトする。
+  var manualRange by remember(manualTarget) { mutableStateOf<Pair<Int, Int>?>(null) }
   // 立ち寄りマーカーをタップして「場所を選び直す」対象（誤検知の訂正）。
   var reassignTarget by remember { mutableStateOf<Stop?>(null) }
-  // 記録中に登録済みマーカーをタップ → その既存 place にこの訪問を紐付ける対象（②）。手動追加ダイアログを流用する。
-  var linkPlace by remember { mutableStateOf<RegisteredPlace?>(null) }
   // 「立ち寄りを追加」モード（記録中のみ）。ONの間は地図タップ＝立ち寄り追加、OFF＝場所登録。
   var manualMode by remember { mutableStateOf(false) }
   // 記録が止まったら手動追加モードは自動で抜ける（立ち寄りを足すトラックが無い）。
@@ -152,21 +150,44 @@ fun TrackingScreen(
         currentStop = uiState.currentStop,
         // 手動追加モード（記録中のみ）: POIタップも立ち寄り追加に。通常は統一の場所シート（POI登録）。
         onPoiClick = { poi ->
-          if (uiState.isTracking && manualMode) manualTarget = poi.latLng else placeSheetTarget = PlaceSheetTarget.NewPoi(poi)
+          if (uiState.isTracking && manualMode) {
+            // 施設は確定しているので、名前と placeId を持ったまま渡す（候補の選び直しは出さない）。
+            manualTarget = ManualStopTarget(
+              poi.latLng.latitude,
+              poi.latLng.longitude,
+              ManualStopOrigin.Poi(poi.name, poi.placeId),
+            )
+          } else {
+            placeSheetTarget = PlaceSheetTarget.NewPoi(poi)
+          }
         },
         // 手動追加モード＝立ち寄り追加、それ以外（通常/平常時）＝場所シート（空き地点の登録）。
         onMapClick = { latLng ->
-          if (uiState.isTracking && manualMode) manualTarget = latLng else placeSheetTarget = PlaceSheetTarget.NewPoint(latLng)
+          if (uiState.isTracking && manualMode) {
+            manualTarget = ManualStopTarget(latLng.latitude, latLng.longitude, ManualStopOrigin.MapPoint)
+          } else {
+            placeSheetTarget = PlaceSheetTarget.NewPoint(latLng)
+          }
         },
         // 立ち寄りマーカーのタップで「場所を選び直す」（誤検知の訂正）。
         onStopClick = { reassignTarget = it },
         modifier = Modifier.fillMaxSize(),
         registeredPlaces = if (uiState.showRegisteredPlaces) uiState.registeredPlaces else emptyList(),
         // 登録済みマーカーのタップ: 手動追加モード＝既存placeへ紐付け／通常＝場所シート（その場で編集）。
+        manualHighlight = manualTarget?.let { _ ->
+          val pts = uiState.currentTrack?.smoothedPoints.orEmpty()
+          manualRange?.let { (start, end) ->
+            if (pts.size >= 2) pts.subList(start, (end + 1).coerceAtMost(pts.size)) else emptyList()
+          }
+        }.orEmpty(),
+        manualPickTarget = manualTarget?.let { LatLng(it.latitude, it.longitude) },
         onRegisteredPlaceClick = { place ->
           if (uiState.isTracking && manualMode) {
-            linkPlace = place
-            manualTarget = LatLng(place.latitude, place.longitude)
+            manualTarget = ManualStopTarget(
+              place.latitude,
+              place.longitude,
+              ManualStopOrigin.ExistingPlace(place.placeId, place.displayName),
+            )
           } else {
             placeSheetTarget = PlaceSheetTarget.Existing(place.placeId)
           }
@@ -233,7 +254,10 @@ fun TrackingScreen(
         if (uiState.hasLocationPermission) {
           val loc = uiState.currentLocation
           Surface(
-            onClick = { loc?.let { manualTarget = LatLng(it.latitude, it.longitude) } },
+            // 地点を指していないので、近くの施設候補から選ばせる。
+            onClick = {
+              loc?.let { manualTarget = ManualStopTarget(it.latitude, it.longitude, ManualStopOrigin.CurrentLocation) }
+            },
             enabled = loc != null,
             shape = RoundedCornerShape(20.dp),
             color = MaterialTheme.colorScheme.surface,
@@ -368,20 +392,45 @@ fun TrackingScreen(
         // 記録中のみ「立ち寄りに追加」。この訪問を既存 place にひも付ける手動追加へ流す。
         onAddStop = if (uiState.isTracking) {
           { item ->
-            linkPlace = RegisteredPlace(
-              placeId = item.place.id,
-              name = item.displayName,
-              latitude = item.place.latitude,
-              longitude = item.place.longitude,
-              isWishlisted = item.isWishlisted,
-              isVisited = item.isVisited,
+            manualTarget = ManualStopTarget(
+              item.place.latitude,
+              item.place.longitude,
+              ManualStopOrigin.ExistingPlace(item.place.id, item.displayName),
             )
-            manualTarget = LatLng(item.place.latitude, item.place.longitude)
           }
         } else {
           null
         },
         onOpenDetail = onOpenPlaceDetail,
+        modifier = Modifier.align(Alignment.BottomCenter),
+      )
+    }
+
+    manualTarget?.let { target ->
+      ManualStopSheet(
+        origin = target.origin,
+        latitude = target.latitude,
+        longitude = target.longitude,
+        points = uiState.currentTrack?.smoothedPoints.orEmpty(),
+        onFetchCandidates = viewModel::nearbyPois,
+        onConfirm = { input ->
+          val origin = target.origin
+          if (origin is ManualStopOrigin.ExistingPlace) {
+            viewModel.addManualStopForPlace(origin.placeId, input.arrivalTime, input.departureTime)
+          } else {
+            viewModel.addManualStopWithNearbyCheck(
+              input.latitude,
+              input.longitude,
+              input.arrivalTime,
+              input.departureTime,
+              input.name,
+              input.googlePlaceId,
+            )
+          }
+          manualTarget = null
+        },
+        onCancel = { manualTarget = null },
+        onRangeChange = { start, end -> manualRange = start to end },
         modifier = Modifier.align(Alignment.BottomCenter),
       )
     }
@@ -417,31 +466,6 @@ fun TrackingScreen(
     )
   }
 
-  manualTarget?.let { target ->
-    ManualStopDialog(
-      target = target,
-      points = uiState.currentTrack?.smoothedPoints.orEmpty(),
-      onFetchCandidates = viewModel::nearbyPois,
-      linkedPlace = linkPlace,
-      onConfirm = { lat, lng, arrival, departure, name, googlePlaceId ->
-        // 登録済みマーカーから開いたときだけ既存 place へ紐付ける。それ以外は
-        // 近接確認の要否も含めて ViewModel（AddManualStopUseCase）が判断する。
-        val linked = linkPlace
-        if (linked != null) {
-          viewModel.addManualStopForPlace(linked.placeId, arrival, departure)
-        } else {
-          viewModel.addManualStopWithNearbyCheck(lat, lng, arrival, departure, name, googlePlaceId)
-        }
-        manualTarget = null
-        linkPlace = null
-      },
-      onDismiss = {
-        manualTarget = null
-        linkPlace = null
-      },
-    )
-  }
-
   // 近接確認: 近くに既存があれば紐付け／新規を選ぶ。
   uiState.nearbyStopPrompt?.let { prompt ->
     NearbyPlaceConfirmDialog(
@@ -465,193 +489,6 @@ fun TrackingScreen(
   }
 }
 
-/**
- * 記録中に手動で立ち寄りを追加する確認ダイアログ。到着/出発は近傍の軌跡点から自動導出して表示し、
- * 名前は「近くのPOI候補から選ぶ／自分で入力／名前なし」から決める（最寄り1件の自動命名で
- * 隣の別施設に化けるのを避けるため、候補はユーザーが選ぶ）。
- */
-@Composable
-private fun ManualStopDialog(
-  target: LatLng,
-  points: List<GpsPoint>,
-  onFetchCandidates: suspend (Double, Double) -> List<PlaceSearchResult>,
-  onConfirm: (lat: Double, lng: Double, arrival: Date, departure: Date, name: String?, googlePlaceId: String?) -> Unit,
-  onDismiss: () -> Unit,
-  // 非nullなら登録済みの場所へ紐付けるモード（候補選びは出さず、その場所へ足す）。
-  linkedPlace: RegisteredPlace? = null,
-) {
-  // 滞在区間は軌跡点のインデックスで調整（履歴詳細と同じ StopRangeEditor）。点が少なければ推定にフォールバック。
-  val hasRange = points.size >= 2
-  val lastIdx = (points.size - 1).coerceAtLeast(0)
-  var arrivalIdx by remember(target, points) {
-    mutableIntStateOf(if (hasRange) nearestPointIndex(points, target.latitude, target.longitude) else 0)
-  }
-  var departureIdx by remember(target, points) {
-    mutableIntStateOf(if (hasRange) defaultDepartureIndex(points, arrivalIdx) else 0)
-  }
-  val fallback = remember(target, points) { deriveStopWindow(points, target.latitude, target.longitude) }
-  val arrival = if (hasRange) points[arrivalIdx].timestamp else fallback.first
-  val departure = if (hasRange) points[departureIdx].timestamp else fallback.second
-
-  var candidates by remember { mutableStateOf<List<PlaceSearchResult>?>(null) } // null=読込中
-  var selected by remember { mutableStateOf<PlaceSearchResult?>(null) }
-  var customName by remember { mutableStateOf("") }
-
-  LaunchedEffect(target) {
-    // 紐付けモードは既存placeを使うので候補は引かない。
-    if (linkedPlace == null) candidates = onFetchCandidates(target.latitude, target.longitude)
-  }
-
-  AlertDialog(
-    onDismissRequest = onDismiss,
-    title = { Text(if (linkedPlace != null) "この場所に立ち寄りを追加" else "立ち寄りを追加") },
-    text = {
-      Column {
-        val onRange: (Int, Int) -> Unit = { s, e ->
-          arrivalIdx = s
-          departureIdx = e
-        }
-        if (linkedPlace != null) {
-          Text(linkedPlace.displayName, style = MaterialTheme.typography.bodyLarge)
-          Text(
-            linkedPlace.statusLabel,
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-          )
-          Spacer(modifier = Modifier.height(8.dp))
-          if (hasRange) {
-            StopRangeEditor(arrival, departure, arrivalIdx, departureIdx, lastIdx, onRange)
-          } else {
-            Text(
-              "この地点付近（滞在時間は軌跡から推定）",
-              style = MaterialTheme.typography.bodySmall,
-              color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-          }
-          Text(
-            "登録済みの場所に紐付けます（新しい場所は作りません）。",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-          )
-          return@Column
-        }
-        if (hasRange) {
-          StopRangeEditor(arrival, departure, arrivalIdx, departureIdx, lastIdx, onRange)
-        } else {
-          Text(
-            "この地点付近（滞在時間は軌跡から推定）",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-          )
-        }
-        Spacer(modifier = Modifier.height(12.dp))
-
-        Text("名前", style = MaterialTheme.typography.labelLarge)
-        when (val list = candidates) {
-          null -> Row(
-            modifier = Modifier.padding(vertical = 8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-          ) {
-            CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
-            Spacer(modifier = Modifier.width(8.dp))
-            Text("近くの候補を検索中…", style = MaterialTheme.typography.bodySmall)
-          }
-
-          else -> {
-            if (list.isEmpty()) {
-              Text(
-                "近くの候補は見つかりませんでした（名前を入力するか、名前なしで追加できます）。",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(vertical = 4.dp),
-              )
-            } else {
-              Column(
-                modifier = Modifier
-                  .heightIn(max = 220.dp)
-                  .verticalScroll(rememberScrollState()),
-              ) {
-                list.forEach { poi ->
-                  Row(
-                    modifier = Modifier
-                      .fillMaxWidth()
-                      .clickable {
-                        selected = poi
-                        customName = ""
-                      }
-                      .padding(vertical = 6.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                  ) {
-                    RadioButton(
-                      selected = selected?.googlePlaceId == poi.googlePlaceId,
-                      onClick = {
-                        selected = poi
-                        customName = ""
-                      },
-                    )
-                    Column(modifier = Modifier.padding(start = 4.dp)) {
-                      Text(poi.name ?: "（名称不明）", style = MaterialTheme.typography.bodyMedium)
-                      poi.category?.let {
-                        Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                      }
-                    }
-                  }
-                }
-              }
-            }
-            Spacer(modifier = Modifier.height(8.dp))
-            OutlinedTextField(
-              value = customName,
-              onValueChange = {
-                customName = it
-                if (it.isNotEmpty()) selected = null
-              },
-              singleLine = true,
-              label = { Text("自分で入力（任意）") },
-              modifier = Modifier.fillMaxWidth(),
-            )
-          }
-        }
-      }
-    },
-    confirmButton = {
-      if (linkedPlace != null) {
-        // 既存placeへ紐付け。座標はその場所、名前・googleは使わない（呼び出し側が紐付けに分岐）。
-        TextButton(onClick = { onConfirm(target.latitude, target.longitude, arrival, departure, null, null) }) {
-          Text("この場所に追加")
-        }
-      } else {
-        TextButton(onClick = {
-          val picked = selected
-          val name = picked?.name ?: customName.trim().ifBlank { null }
-          // 候補を選んだときは place を候補の Google 座標で保存（他経路と統一）。無ければタップ地点。
-          val lat = picked?.latitude ?: target.latitude
-          val lng = picked?.longitude ?: target.longitude
-          onConfirm(lat, lng, arrival, departure, name, picked?.googlePlaceId)
-        }) {
-          // 名前が決まっていなければ「名前なしで追加」を明示する。
-          Text(if (selected == null && customName.isBlank()) "名前なしで追加" else "追加")
-        }
-      }
-    },
-    dismissButton = {
-      TextButton(onClick = onDismiss) { Text("キャンセル") }
-    },
-  )
-}
-
-/** 手動追加の到着/出発を、指した地点の近傍の軌跡点から推定する（両端の時刻）。近傍が無ければ最寄り点。 */
-private fun deriveStopWindow(points: List<GpsPoint>, lat: Double, lng: Double): Pair<Date, Date> {
-  if (points.isEmpty()) return Date() to Date()
-  val near = points.filter { Geo.distanceMeters(it.latitude, it.longitude, lat, lng) <= 60.0 }
-  if (near.isNotEmpty()) {
-    val times = near.map { it.timestamp }
-    return times.min() to times.max()
-  }
-  val nearest = points.minByOrNull { Geo.distanceMeters(it.latitude, it.longitude, lat, lng) }!!
-  return nearest.timestamp to nearest.timestamp
-}
-
 @Composable
 private fun TrackingMapView(
   hasPermission: Boolean,
@@ -665,6 +502,9 @@ private fun TrackingMapView(
   modifier: Modifier = Modifier,
   registeredPlaces: List<RegisteredPlace> = emptyList(),
   onRegisteredPlaceClick: (RegisteredPlace) -> Unit = {},
+  // 手動追加で選んでいる滞在区間（青くハイライト）と、指した地点（青いピン）。
+  manualHighlight: List<GpsPoint> = emptyList(),
+  manualPickTarget: LatLng? = null,
 ) {
   val cameraPositionState = rememberCameraPositionState {
     position = CameraPosition.fromLatLngZoom(LatLng(35.6762, 139.6503), 15f)
@@ -781,6 +621,22 @@ private fun TrackingMapView(
           // 記録中は端末の現在地ドットがあるので、終了/現在地マーカーは重複を避けて出さない。
           showEndMarker = false,
           onStopClick = onStopClick,
+        )
+      }
+      // 手動追加: 選んだ滞在区間を青い太線で見せる（経路詳細と同じ描き分け）。
+      if (manualHighlight.size >= 2) {
+        Polyline(
+          points = manualHighlight.map { LatLng(it.latitude, it.longitude) },
+          color = manualHighlightColor,
+          width = 14f,
+        )
+      }
+      manualPickTarget?.let { pick ->
+        val pickMarkerState = remember(pick) { MarkerState(position = pick) }
+        Marker(
+          state = pickMarkerState,
+          title = "追加する地点",
+          icon = BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_AZURE),
         )
       }
       // 登録済みの場所（トグルON）。トラック未確定でも出せるよう、経路描画とは独立して描く。
