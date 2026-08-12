@@ -123,6 +123,11 @@ dependencies {
   implementation(libs.hilt.navigation.compose)
   ksp(libs.hilt.compiler)
 
+  // WorkManager（オンライン復帰後の名前解決キャッチアップ）
+  implementation(libs.androidx.work.runtime)
+  implementation(libs.androidx.hilt.work)
+  ksp(libs.androidx.hilt.compiler)
+
   // Location Services
   implementation(libs.play.services.location)
 
