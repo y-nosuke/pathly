@@ -24,6 +24,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -65,8 +66,16 @@ internal fun PlaceActionSheet(
   // 既存 place の詳細画面を開く。
   onOpenDetail: (placeId: Long) -> Unit = {},
 ) {
-  val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-  ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState) {
+  // 地図を見ながら操作できるようにする。
+  //  - skipPartiallyExpanded を外し、まず半分の高さで開く（必要なら上へドラッグして全面に）
+  //  - スクリムを透明にして、背後の地図が暗くならないようにする
+  // 以前は全展開＋既定のスクリムで、タップした地点の周りが見えなかった。
+  val sheetState = rememberModalBottomSheetState()
+  ModalBottomSheet(
+    onDismissRequest = onDismiss,
+    sheetState = sheetState,
+    scrimColor = Color.Transparent,
+  ) {
     Column(
       modifier = Modifier
         .fillMaxWidth()
