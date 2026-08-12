@@ -6,7 +6,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
+import androidx.activity.viewModels
 import com.pathly.presentation.navigation.PathlyNavHost
 import com.pathly.presentation.tracking.TrackingViewModel
 import com.pathly.ui.theme.PathlyAndroidTheme
@@ -16,7 +16,9 @@ import dagger.hilt.android.AndroidEntryPoint
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
 
-  private lateinit var viewModel: TrackingViewModel
+  // 権限ランチャー（Activity 側）と記録画面で同一インスタンスを共有するため、
+  // TrackingViewModel は Activity スコープで持つ。
+  private val viewModel: TrackingViewModel by viewModels()
 
   private val locationPermissionLauncher = registerForActivityResult(
     ActivityResultContracts.RequestMultiplePermissions(),
@@ -47,9 +49,6 @@ class MainActivity : ComponentActivity() {
     enableEdgeToEdge()
     setContent {
       PathlyAndroidTheme {
-        // 権限ランチャー（Activity 側）と記録画面で同一インスタンスを共有するため、
-        // TrackingViewModel は Activity スコープで生成して NavHost へ渡す。
-        viewModel = hiltViewModel()
         PathlyNavHost(
           trackingViewModel = viewModel,
           onRequestPermission = {
