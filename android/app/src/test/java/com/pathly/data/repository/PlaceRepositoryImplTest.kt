@@ -649,6 +649,29 @@ class PlaceRepositoryImplTest {
   }
 
   @Test
+  fun resolveAllUnresolvedNames_propagatesFailure_soCallerCanRetry() = runTest {
+    // ここで例外を握り潰すと、WorkManager は「成功」と受け取って再試行しない。
+    // オンライン復帰後のキャッチアップが目的なので、失敗は呼び出し元まで伝える必要がある。
+    coEvery { placeDao.getUnresolvedPlaces() } throws IllegalStateException("db down")
+
+    val thrown = runCatching { repository.resolveAllUnresolvedNames() }.exceptionOrNull()
+
+    assertTrue("呼び出し元へ例外が伝わる（実際は $thrown）", thrown is IllegalStateException)
+  }
+
+  @Test
+  fun resolveAllUnresolvedNames_whenResolverFails_propagates() = runTest {
+    coEvery { placeDao.getUnresolvedPlaces() } returns listOf(
+      PlaceEntity(id = 30L, latitude = 35.0, longitude = 139.0),
+    )
+    coEvery { resolver.resolve(any(), any()) } throws IllegalStateException("network down")
+
+    val thrown = runCatching { repository.resolveAllUnresolvedNames() }.exceptionOrNull()
+
+    assertTrue("解決中の失敗も伝わる（実際は $thrown）", thrown is IllegalStateException)
+  }
+
+  @Test
   fun resolveAllUnresolvedNames_resolvesEachUnresolvedPlaceAndAdoptsCoordinates() = runTest {
     coEvery { placeDao.getUnresolvedPlaces() } returns listOf(
       PlaceEntity(id = 30L, latitude = 35.0, longitude = 139.0),

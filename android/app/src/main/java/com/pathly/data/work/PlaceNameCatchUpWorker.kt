@@ -13,6 +13,7 @@ import com.pathly.domain.repository.PlaceRepository
 import com.pathly.util.Logger
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
+import kotlin.coroutines.cancellation.CancellationException
 
 /**
  * オフラインで記録した立ち寄り場所の名前を、オンラインになってから解決するキャッチアップ。
@@ -37,6 +38,10 @@ class PlaceNameCatchUpWorker @AssistedInject constructor(
   override suspend fun doWork(): Result = try {
     placeRepository.resolveAllUnresolvedNames()
     Result.success()
+  } catch (e: CancellationException) {
+    // WorkManager によるキャンセル。Kotlin では CancellationException も Exception なので、
+    // 下の catch に落とすと「失敗」と誤認して再試行を積んでしまう。素通しする。
+    throw e
   } catch (e: Exception) {
     // 一時的な失敗（通信断など）は再試行に任せる。
     logger.w("Place name catch-up failed; will retry", e)
