@@ -23,3 +23,4 @@
 | [0007](0007-reassign-stop-this-visit-only.md)    | 誤検知の立ち寄りは「この訪問だけ」正しい場所へ付け替える（Model B）       | Accepted |
 | [0008](0008-registered-places-on-map.md)         | 登録済みの場所を地図に出し、紐付け・近接確認・Google 座標採用・起動時解決 | Accepted |
 | [0009](0009-map-tap-behavior.md)                 | 地図タップの挙動を統一（表示 ON=そのまま新規／OFF=近接確認、半径 50m）    | Accepted |
+| [0010](0010-non-modal-map-sheets.md)             | 地図の上に出すシートは非モーダル（自前）にする                            | Accepted |
