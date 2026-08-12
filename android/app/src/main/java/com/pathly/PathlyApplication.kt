@@ -1,6 +1,7 @@
 package com.pathly
 
 import android.app.Application
+import android.util.Log
 import androidx.hilt.work.HiltWorkerFactory
 import androidx.work.Configuration
 import com.google.android.gms.maps.MapsInitializer
@@ -35,7 +36,10 @@ class PathlyApplication :
 
   /** WorkManager から Hilt でワーカーを組み立てるための設定。 */
   override val workManagerConfiguration: Configuration
-    get() = Configuration.Builder().setWorkerFactory(workerFactory).build()
+    get() = Configuration.Builder()
+      .setWorkerFactory(workerFactory)
+      .setMinimumLoggingLevel(if (BuildConfig.DEBUG) Log.DEBUG else Log.INFO)
+      .build()
 
   override fun onCreate() {
     super.onCreate()

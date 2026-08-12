@@ -44,7 +44,9 @@ class PlaceNameCatchUpWorker @AssistedInject constructor(
   }
 
   companion object {
-    private const val UNIQUE_NAME = "place_name_catch_up"
+    internal const val UNIQUE_NAME = "place_name_catch_up"
+
+    private val logger = Logger("PlaceNameCatchUpWorker")
 
     /**
      * キャッチアップを予約する。ネットワークが繋がったときに動く。
@@ -60,6 +62,7 @@ class PlaceNameCatchUpWorker @AssistedInject constructor(
         .build()
       WorkManager.getInstance(context)
         .enqueueUniqueWork(UNIQUE_NAME, ExistingWorkPolicy.KEEP, request)
+      logger.i("Enqueued place name catch-up")
     }
   }
 }
