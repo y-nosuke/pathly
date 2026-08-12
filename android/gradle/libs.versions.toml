@@ -23,7 +23,7 @@ hiltNavigationCompose = "1.4.0"
 androidxHilt = "1.4.0"
 work = "2.11.2"
 navigationCompose = "2.9.8"
-spotless = "8.8.0"
+spotless = "8.9.0"
 turbine = "1.2.1"
 
 [libraries]
