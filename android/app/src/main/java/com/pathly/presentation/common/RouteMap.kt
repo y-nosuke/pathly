@@ -177,7 +177,7 @@ internal fun RouteMapContent(
       startPoint.longitude,
       state = startMarkerState,
       title = "開始",
-      snippet = "記録開始地点 - ${DateFormatters.TIME_FORMAT.format(track.startTime)}",
+      snippet = "記録開始地点 - ${DateFormatters.time(track.startTime)}",
     ) {
       RouteBadgeMarker(bg = MarkerStartGreen) {
         Icon(
@@ -203,7 +203,7 @@ internal fun RouteMapContent(
         state = endMarkerState,
         title = if (track.isActive) "現在地" else "終了",
         snippet = track.endTime?.let {
-          "記録終了地点 - ${DateFormatters.TIME_FORMAT.format(it)}"
+          "記録終了地点 - ${DateFormatters.time(it)}"
         } ?: "記録中の最新地点",
       ) {
         if (track.isActive) {
@@ -238,7 +238,7 @@ internal fun RouteMapContent(
       index,
       state = stopMarkerState,
       title = stop.place.name ?: stop.place.googleName ?: "立ち寄り",
-      snippet = "${DateFormatters.SHORT_TIME_FORMAT.format(stop.arrivalTime)} ・ 滞在${stop.durationMinutes}分",
+      snippet = "${DateFormatters.shortTime(stop.arrivalTime)} ・ 滞在${stop.durationMinutes}分",
       onClick = {
         onStopClick(stop)
         false

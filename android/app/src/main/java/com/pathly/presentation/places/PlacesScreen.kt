@@ -69,6 +69,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.core.net.toUri
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.google.android.gms.location.LocationServices
 import com.google.android.gms.maps.CameraUpdateFactory
@@ -214,8 +215,8 @@ fun PlaceDetailRoute(
   placeId: Long,
   onBack: () -> Unit,
   onOpenTrack: (trackId: Long) -> Unit,
-  onOpenPlaceDetail: (placeId: Long) -> Unit = {},
   modifier: Modifier = Modifier,
+  onOpenPlaceDetail: (placeId: Long) -> Unit = {},
 ) {
   val uiState by viewModel.uiState.collectAsStateWithLifecycle()
 
@@ -526,9 +527,9 @@ private fun PlaceItemRow(
 
         // 現在の並び順に対応する日付だけを小さく出す（何で並んでいるか分かる・常時全部は出さない）。
         val sortDate: String? = when (sort) {
-          PlaceSort.REGISTERED -> "登録 " + DateFormatters.SHORT_DATE_FORMAT.format(item.place.createdAt)
-          PlaceSort.UPDATED -> "更新 " + DateFormatters.SHORT_DATE_FORMAT.format(item.place.updatedAt)
-          PlaceSort.VISITED -> item.visitRecencyAt?.let { "訪問 " + DateFormatters.SHORT_DATE_FORMAT.format(it) }
+          PlaceSort.REGISTERED -> "登録 " + DateFormatters.shortDate(item.place.createdAt)
+          PlaceSort.UPDATED -> "更新 " + DateFormatters.shortDate(item.place.updatedAt)
+          PlaceSort.VISITED -> item.visitRecencyAt?.let { "訪問 " + DateFormatters.shortDate(it) }
           // 訪問回数は既存の「✓ 訪問N回」バッジで分かるので追加表示しない。
           PlaceSort.VISIT_COUNT, PlaceSort.PRIORITY, PlaceSort.NAME -> null
         }
@@ -818,6 +819,7 @@ private fun PlaceDetailContent(
   // 座標がずれて周辺に出ない施設用: 名前で検索するフォールバック。
   onSearchPredictions: suspend (query: String) -> List<PlacePrediction>,
   onFetchPrediction: suspend (placeId: String) -> PlaceSearchResult?,
+  modifier: Modifier = Modifier,
   // 登録済みの場所の地図表示（画面別トグル）。この場所自身は主マーカーと重なるので呼び出し側で除外して渡す。
   registeredPlaces: List<RegisteredPlace> = emptyList(),
   showRegisteredPlaces: Boolean = false,
@@ -835,7 +837,6 @@ private fun PlaceDetailContent(
   onSavePlaceEdits: (item: PlaceListItem, name: String, note: String, wishlist: Boolean, priority: Priority, visited: Boolean) -> Unit = { _, _, _, _, _, _ -> },
   // 「詳細を開く」でその場所の詳細へ遷移する。
   onOpenPlaceDetail: (placeId: Long) -> Unit = {},
-  modifier: Modifier = Modifier,
 ) {
   // 地図の1点タップで開く統一の「場所シート」（未登録の空き地点/POI＝登録、登録済み＝その場で編集）。
   var placeSheetTarget by remember { mutableStateOf<PlaceSheetTarget?>(null) }
@@ -1344,12 +1345,12 @@ private fun VisitRow(
       .padding(vertical = 10.dp),
   ) {
     Text(
-      text = DateFormatters.SHORT_DATE_FORMAT.format(visit.outingDate),
+      text = DateFormatters.shortDate(visit.outingDate),
       style = MaterialTheme.typography.bodyLarge,
     )
     Text(
-      text = "${DateFormatters.SHORT_TIME_FORMAT.format(visit.arrivalTime)}–" +
-        "${DateFormatters.SHORT_TIME_FORMAT.format(visit.departureTime)} ・滞在${visit.stayMinutes}分",
+      text = "${DateFormatters.shortTime(visit.arrivalTime)}–" +
+        "${DateFormatters.shortTime(visit.departureTime)} ・滞在${visit.stayMinutes}分",
       style = MaterialTheme.typography.bodySmall,
       color = MaterialTheme.colorScheme.onSurfaceVariant,
     )
@@ -1518,10 +1519,10 @@ internal fun openPlaceInGoogleMaps(
 ) {
   val uri = if (googlePlaceId != null) {
     val query = Uri.encode(label)
-    Uri.parse("https://www.google.com/maps/search/?api=1&query=$query&query_place_id=$googlePlaceId")
+    "https://www.google.com/maps/search/?api=1&query=$query&query_place_id=$googlePlaceId".toUri()
   } else {
     val enc = Uri.encode(label)
-    Uri.parse("geo:$latitude,$longitude?q=$latitude,$longitude($enc)")
+    "geo:$latitude,$longitude?q=$latitude,$longitude($enc)".toUri()
   }
   val intent = Intent(Intent.ACTION_VIEW, uri).setPackage("com.google.android.apps.maps")
   try {

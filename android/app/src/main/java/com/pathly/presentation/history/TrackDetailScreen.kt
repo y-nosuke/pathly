@@ -67,8 +67,8 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -117,6 +117,7 @@ import com.pathly.presentation.places.PlaceSheetTarget
 import com.pathly.util.DateFormatters
 import kotlinx.coroutines.launch
 import java.util.Date
+import java.util.Locale
 import kotlin.math.roundToInt
 
 private val tuningSheetPeekHeight = 360.dp
@@ -188,7 +189,9 @@ fun TrackDetailScreen(
   var placeSheetTarget by remember { mutableStateOf<PlaceSheetTarget?>(null) }
   val scope = rememberCoroutineScope()
   val density = LocalDensity.current
-  val screenHeightDp = LocalConfiguration.current.screenHeightDp.dp
+  // 画面高は LocalWindowInfo から取る（Configuration.screenHeightDp は非推奨で、
+  // 分割画面などコンテナ実サイズと食い違う）。containerSize は px なので dp に直す。
+  val screenHeightDp = with(density) { LocalWindowInfo.current.containerSize.height.toDp() }
   var tuningMode by remember { mutableStateOf(false) }
   var tuningParams by remember { mutableStateOf(SmoothingParams()) }
   // デバッグビルドのみ: 生GPS点の付随情報（provider/各種精度/MSL/extras等）を確認するダイアログ。
@@ -270,7 +273,7 @@ fun TrackDetailScreen(
   // 候補モード中のシステムバックは、画面を抜けるのではなく候補選択をやめる。
   BackHandler(enabled = candidateMode) { onDismissReanalyze() }
   // 候補オーバーレイの高さ（画面の約42%）。地図はこの分だけ下を空けてピンを隠さない。
-  val candidateOverlayHeight = (LocalConfiguration.current.screenHeightDp * 0.42f).dp
+  val candidateOverlayHeight = screenHeightDp * 0.42f
 
   // 手動追加モード。地図の通常タップ（POI はそのままタップ）で地点を指し、最寄り軌跡点から
   // 到着/出発を仮置きしてレンジで微調整する。滞在区間は地図に青くハイライトして見せる。
@@ -296,7 +299,7 @@ fun TrackDetailScreen(
     if (manualPick != null) manualPick = null else exitManual()
   }
   // 手動追加オーバーレイ（地点確定後）の高さ。地点を指す前は下部に細い案内だけ出す。
-  val manualOverlayHeight = (LocalConfiguration.current.screenHeightDp * 0.46f).dp
+  val manualOverlayHeight = screenHeightDp * 0.46f
 
   // 地図に描く点列。調整モードではスライダーの値で補正する。
   val displayPoints = remember(track, tuningMode, tuningParams) {
@@ -808,8 +811,8 @@ private fun GpsDebugDialog(
   points: List<GpsPoint>,
   onDismiss: () -> Unit,
 ) {
-  fun f(v: Float?): String = v?.let { String.format("%.1f", it) } ?: "―"
-  fun d(v: Double?): String = v?.let { String.format("%.1f", it) } ?: "―"
+  fun f(v: Float?): String = v?.let { String.format(Locale.US, "%.1f", it) } ?: "―"
+  fun d(v: Double?): String = v?.let { String.format(Locale.US, "%.1f", it) } ?: "―"
 
   val providers = points.mapNotNull { it.provider }.groupingBy { it }.eachCount()
   val withVertical = points.count { it.verticalAccuracyMeters != null }
@@ -846,7 +849,7 @@ private fun GpsDebugDialog(
           itemsIndexed(points) { i, p ->
             Column(modifier = Modifier.padding(vertical = 4.dp)) {
               Text(
-                "#$i  ${DateFormatters.TIME_FORMAT.format(p.timestamp)}" +
+                "#$i  ${DateFormatters.time(p.timestamp)}" +
                   (if (p.isMock) "  [MOCK]" else ""),
                 style = MaterialTheme.typography.labelMedium,
                 fontWeight = FontWeight.Bold,
@@ -1019,8 +1022,8 @@ private fun CandidateOverlay(
                 fontWeight = FontWeight.Medium,
               )
               Text(
-                text = "${DateFormatters.TIME_FORMAT.format(candidate.detected.arrivalTime)} – " +
-                  "${DateFormatters.TIME_FORMAT.format(candidate.detected.departureTime)} ・ 滞在${candidate.detected.durationMinutes}分",
+                text = "${DateFormatters.time(candidate.detected.arrivalTime)} – " +
+                  "${DateFormatters.time(candidate.detected.departureTime)} ・ 滞在${candidate.detected.durationMinutes}分",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
               )
@@ -1349,7 +1352,7 @@ private fun TrackSummaryHeader(
       verticalAlignment = Alignment.CenterVertically,
     ) {
       Text(
-        text = DateFormatters.DATE_FORMAT.format(track.startTime),
+        text = DateFormatters.date(track.startTime),
         style = MaterialTheme.typography.titleLarge,
         fontWeight = FontWeight.Bold,
       )
@@ -1527,8 +1530,8 @@ private fun StopRow(
         fontWeight = FontWeight.Medium,
       )
       Text(
-        text = "${DateFormatters.SHORT_TIME_FORMAT.format(stop.arrivalTime)}" +
-          " – ${DateFormatters.SHORT_TIME_FORMAT.format(stop.departureTime)}" +
+        text = "${DateFormatters.shortTime(stop.arrivalTime)}" +
+          " – ${DateFormatters.shortTime(stop.departureTime)}" +
           " ・ 滞在${stop.durationMinutes}分",
         style = MaterialTheme.typography.bodyMedium,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -1792,7 +1795,7 @@ private fun TrackMapView(
       Marker(
         state = candidateMarkerState,
         title = candidate.name ?: "候補（名称未取得）",
-        snippet = "${DateFormatters.SHORT_TIME_FORMAT.format(d.arrivalTime)} ・ 滞在${d.durationMinutes}分",
+        snippet = "${DateFormatters.shortTime(d.arrivalTime)} ・ 滞在${d.durationMinutes}分",
         icon = BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_ORANGE),
       )
     }

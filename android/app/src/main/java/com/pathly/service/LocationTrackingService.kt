@@ -9,7 +9,6 @@ import android.content.Intent
 import android.location.Location
 import android.location.LocationManager
 import android.os.Binder
-import android.os.Build
 import android.os.Bundle
 import android.os.IBinder
 import android.os.Looper
@@ -46,6 +45,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
 import java.util.Date
+import java.util.Locale
 import javax.inject.Inject
 
 @AndroidEntryPoint
@@ -312,11 +312,8 @@ class LocationTrackingService : Service() {
           // 通知を更新
           val notification = createNotification(
             "GPS位置を記録中... (${
-              String.format(
-                "%.6f",
-                latest.latitude,
-              )
-            }, ${String.format("%.6f", latest.longitude)})",
+              String.format(Locale.US, "%.6f", latest.latitude)
+            }, ${String.format(Locale.US, "%.6f", latest.longitude)})",
           )
           val notificationManager =
             getSystemService(NOTIFICATION_SERVICE) as NotificationManager
@@ -341,11 +338,8 @@ class LocationTrackingService : Service() {
           // 通知を更新
           val notification = createNotification(
             "GPS位置を記録中... 最後の既知位置 (${
-              String.format(
-                "%.6f",
-                location.latitude,
-              )
-            }, ${String.format("%.6f", location.longitude)})",
+              String.format(Locale.US, "%.6f", location.latitude)
+            }, ${String.format(Locale.US, "%.6f", location.longitude)})",
           )
           val notificationManager =
             getSystemService(NOTIFICATION_SERVICE) as NotificationManager
@@ -497,19 +491,18 @@ class LocationTrackingService : Service() {
   }
 
   private fun createNotificationChannel() {
-    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-      val channel = NotificationChannel(
-        CHANNEL_ID,
-        "位置情報記録",
-        NotificationManager.IMPORTANCE_LOW,
-      ).apply {
-        description = "GPS位置情報を記録中です"
-        setShowBadge(false)
-      }
-
-      val notificationManager = getSystemService(NotificationManager::class.java)
-      notificationManager.createNotificationChannel(channel)
+    // 通知チャンネルは API 26 以降で必須。minSdk 34 なのでバージョン分岐は不要。
+    val channel = NotificationChannel(
+      CHANNEL_ID,
+      "位置情報記録",
+      NotificationManager.IMPORTANCE_LOW,
+    ).apply {
+      description = "GPS位置情報を記録中です"
+      setShowBadge(false)
     }
+
+    val notificationManager = getSystemService(NotificationManager::class.java)
+    notificationManager.createNotificationChannel(channel)
   }
 
   private fun createNotification(contentText: String): Notification {

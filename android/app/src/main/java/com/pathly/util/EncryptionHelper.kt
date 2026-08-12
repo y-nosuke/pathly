@@ -2,6 +2,7 @@ package com.pathly.util
 
 import android.content.Context
 import android.content.SharedPreferences
+import androidx.core.content.edit
 import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKey
 
@@ -60,9 +61,7 @@ class EncryptionHelper(private val context: Context) {
    */
   fun setEncryptionEnabled(enabled: Boolean) {
     try {
-      encryptedSharedPreferences.edit()
-        .putBoolean(KEY_ENCRYPTION_ENABLED, enabled)
-        .apply()
+      encryptedSharedPreferences.edit { putBoolean(KEY_ENCRYPTION_ENABLED, enabled) }
       logger.i("Encryption ${if (enabled) "enabled" else "disabled"}")
     } catch (e: Exception) {
       logger.e("Encryption operation failed", e)
@@ -79,9 +78,7 @@ class EncryptionHelper(private val context: Context) {
       existingPassphrase
     } else {
       val newPassphrase = generateSecurePassphrase()
-      encryptedSharedPreferences.edit()
-        .putString(KEY_DB_PASSPHRASE, newPassphrase)
-        .apply()
+      encryptedSharedPreferences.edit { putString(KEY_DB_PASSPHRASE, newPassphrase) }
       logger.i("Created new database passphrase")
       newPassphrase
     }
@@ -95,9 +92,7 @@ class EncryptionHelper(private val context: Context) {
    */
   fun saveSecureString(key: String, value: String) {
     try {
-      encryptedSharedPreferences.edit()
-        .putString(key, value)
-        .apply()
+      encryptedSharedPreferences.edit { putString(key, value) }
       logger.d("Saved secure string for key: $key")
     } catch (e: Exception) {
       logger.e("Encryption operation failed", e)
@@ -123,9 +118,7 @@ class EncryptionHelper(private val context: Context) {
    */
   fun removeSecureString(key: String) {
     try {
-      encryptedSharedPreferences.edit()
-        .remove(key)
-        .apply()
+      encryptedSharedPreferences.edit { remove(key) }
       logger.d("Removed secure string for key: $key")
     } catch (e: Exception) {
       logger.e("Encryption operation failed", e)
@@ -137,9 +130,7 @@ class EncryptionHelper(private val context: Context) {
    */
   fun clearAllSecureData() {
     try {
-      encryptedSharedPreferences.edit()
-        .clear()
-        .apply()
+      encryptedSharedPreferences.edit { clear() }
       logger.w("Cleared all encrypted data")
     } catch (e: Exception) {
       logger.e("Encryption operation failed", e)

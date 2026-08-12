@@ -551,7 +551,7 @@ class TrackingViewModel @Inject constructor(
                   latitude = loc.latitude,
                   longitude = loc.longitude,
                   accuracy = loc.accuracy,
-                  timestamp = DateFormatters.TIME_FORMAT.format(java.util.Date(loc.time)),
+                  timestamp = DateFormatters.time(java.util.Date(loc.time)),
                 )
               },
               locationCount = count,

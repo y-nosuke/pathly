@@ -133,7 +133,7 @@ private fun StepperRow(
       color = MaterialTheme.colorScheme.onSurfaceVariant,
     )
     Text(
-      text = DateFormatters.TIME_FORMAT.format(time),
+      text = DateFormatters.time(time),
       style = MaterialTheme.typography.titleMedium,
       fontWeight = FontWeight.Medium,
       modifier = Modifier.padding(start = 12.dp),
