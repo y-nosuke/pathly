@@ -10,7 +10,7 @@ import com.pathly.util.Logger
  */
 object DatabaseMigrations {
 
-  private const val TAG = "DatabaseMigrations"
+  private val logger = Logger("DatabaseMigrations")
 
   /**
    * バージョン1から2へのマイグレーション。
@@ -22,7 +22,7 @@ object DatabaseMigrations {
   val MIGRATION_1_2 = object : Migration(1, 2) {
     override fun migrate(db: SupportSQLiteDatabase) {
       try {
-        Logger.i(TAG, "Starting migration from version 1 to 2")
+        logger.i("Starting migration from version 1 to 2")
 
         // places（場所そのもの・経路と独立）
         db.execSQL(
@@ -51,9 +51,9 @@ object DatabaseMigrations {
         db.execSQL("CREATE INDEX IF NOT EXISTS `index_stops_placeId` ON `stops` (`placeId`)")
         db.execSQL("CREATE INDEX IF NOT EXISTS `index_stops_trackId` ON `stops` (`trackId`)")
 
-        Logger.i(TAG, "Migration from version 1 to 2 completed successfully")
+        logger.i("Migration from version 1 to 2 completed successfully")
       } catch (e: Exception) {
-        Logger.e(TAG, "Migration from version 1 to 2 failed", e)
+        logger.e("Migration from version 1 to 2 failed", e)
         throw e
       }
     }
@@ -69,7 +69,7 @@ object DatabaseMigrations {
   val MIGRATION_2_3 = object : Migration(2, 3) {
     override fun migrate(db: SupportSQLiteDatabase) {
       try {
-        Logger.i(TAG, "Starting migration from version 2 to 3")
+        logger.i("Starting migration from version 2 to 3")
 
         // smoothed_points（補正後の点列・gps_tracks に従属）
         db.execSQL(
@@ -88,9 +88,9 @@ object DatabaseMigrations {
           "CREATE INDEX IF NOT EXISTS `index_smoothed_points_trackId` ON `smoothed_points` (`trackId`)",
         )
 
-        Logger.i(TAG, "Migration from version 2 to 3 completed successfully")
+        logger.i("Migration from version 2 to 3 completed successfully")
       } catch (e: Exception) {
-        Logger.e(TAG, "Migration from version 2 to 3 failed", e)
+        logger.e("Migration from version 2 to 3 failed", e)
         throw e
       }
     }
@@ -106,7 +106,7 @@ object DatabaseMigrations {
   val MIGRATION_3_4 = object : Migration(3, 4) {
     override fun migrate(db: SupportSQLiteDatabase) {
       try {
-        Logger.i(TAG, "Starting migration from version 3 to 4")
+        logger.i("Starting migration from version 3 to 4")
 
         db.execSQL(
           "CREATE TABLE IF NOT EXISTS `place_resolutions` (" +
@@ -117,9 +117,9 @@ object DatabaseMigrations {
             "FOREIGN KEY(`placeId`) REFERENCES `places`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
         )
 
-        Logger.i(TAG, "Migration from version 3 to 4 completed successfully")
+        logger.i("Migration from version 3 to 4 completed successfully")
       } catch (e: Exception) {
-        Logger.e(TAG, "Migration from version 3 to 4 failed", e)
+        logger.e("Migration from version 3 to 4 failed", e)
         throw e
       }
     }
@@ -135,7 +135,7 @@ object DatabaseMigrations {
   val MIGRATION_4_5 = object : Migration(4, 5) {
     override fun migrate(db: SupportSQLiteDatabase) {
       try {
-        Logger.i(TAG, "Starting migration from version 4 to 5")
+        logger.i("Starting migration from version 4 to 5")
 
         db.execSQL(
           "CREATE TABLE IF NOT EXISTS `wishlist` (" +
@@ -152,9 +152,9 @@ object DatabaseMigrations {
           "CREATE UNIQUE INDEX IF NOT EXISTS `index_wishlist_placeId` ON `wishlist` (`placeId`)",
         )
 
-        Logger.i(TAG, "Migration from version 4 to 5 completed successfully")
+        logger.i("Migration from version 4 to 5 completed successfully")
       } catch (e: Exception) {
-        Logger.e(TAG, "Migration from version 4 to 5 failed", e)
+        logger.e("Migration from version 4 to 5 failed", e)
         throw e
       }
     }
@@ -170,13 +170,13 @@ object DatabaseMigrations {
   val MIGRATION_5_6 = object : Migration(5, 6) {
     override fun migrate(db: SupportSQLiteDatabase) {
       try {
-        Logger.i(TAG, "Starting migration from version 5 to 6")
+        logger.i("Starting migration from version 5 to 6")
 
         db.execSQL("ALTER TABLE `stops` ADD COLUMN `note` TEXT")
 
-        Logger.i(TAG, "Migration from version 5 to 6 completed successfully")
+        logger.i("Migration from version 5 to 6 completed successfully")
       } catch (e: Exception) {
-        Logger.e(TAG, "Migration from version 5 to 6 failed", e)
+        logger.e("Migration from version 5 to 6 failed", e)
         throw e
       }
     }
@@ -196,7 +196,7 @@ object DatabaseMigrations {
   val MIGRATION_6_7 = object : Migration(6, 7) {
     override fun migrate(db: SupportSQLiteDatabase) {
       try {
-        Logger.i(TAG, "Starting migration from version 6 to 7")
+        logger.i("Starting migration from version 6 to 7")
 
         // 1. places に note を追加し、wishlist.memo を移送する（落とす前に読む）。
         db.execSQL("ALTER TABLE `places` ADD COLUMN `note` TEXT")
@@ -230,9 +230,9 @@ object DatabaseMigrations {
         db.execSQL("ALTER TABLE `wishlist` DROP COLUMN `memo`")
         db.execSQL("ALTER TABLE `place_resolutions` DROP COLUMN `googlePlaceId`")
 
-        Logger.i(TAG, "Migration from version 6 to 7 completed successfully")
+        logger.i("Migration from version 6 to 7 completed successfully")
       } catch (e: Exception) {
-        Logger.e(TAG, "Migration from version 6 to 7 failed", e)
+        logger.e("Migration from version 6 to 7 failed", e)
         throw e
       }
     }
@@ -250,14 +250,14 @@ object DatabaseMigrations {
   val MIGRATION_7_8 = object : Migration(7, 8) {
     override fun migrate(db: SupportSQLiteDatabase) {
       try {
-        Logger.i(TAG, "Starting migration from version 7 to 8")
+        logger.i("Starting migration from version 7 to 8")
 
         db.execSQL("ALTER TABLE `gps_tracks` ADD COLUMN `name` TEXT")
         db.execSQL("ALTER TABLE `gps_tracks` ADD COLUMN `isFavorite` INTEGER NOT NULL DEFAULT 0")
 
-        Logger.i(TAG, "Migration from version 7 to 8 completed successfully")
+        logger.i("Migration from version 7 to 8 completed successfully")
       } catch (e: Exception) {
-        Logger.e(TAG, "Migration from version 7 to 8 failed", e)
+        logger.e("Migration from version 7 to 8 failed", e)
         throw e
       }
     }
@@ -272,7 +272,7 @@ object DatabaseMigrations {
   val MIGRATION_8_9 = object : Migration(8, 9) {
     override fun migrate(db: SupportSQLiteDatabase) {
       try {
-        Logger.i(TAG, "Starting migration from version 8 to 9")
+        logger.i("Starting migration from version 8 to 9")
 
         db.execSQL("ALTER TABLE `gps_points` ADD COLUMN `provider` TEXT")
         db.execSQL("ALTER TABLE `gps_points` ADD COLUMN `verticalAccuracyMeters` REAL")
@@ -287,9 +287,9 @@ object DatabaseMigrations {
         // extras（Bundle）を JSON 文字列化して保存する列（バイナリではなくテキスト）。
         db.execSQL("ALTER TABLE `gps_points` ADD COLUMN `extrasJson` TEXT")
 
-        Logger.i(TAG, "Migration from version 8 to 9 completed successfully")
+        logger.i("Migration from version 8 to 9 completed successfully")
       } catch (e: Exception) {
-        Logger.e(TAG, "Migration from version 8 to 9 failed", e)
+        logger.e("Migration from version 8 to 9 failed", e)
         throw e
       }
     }
@@ -305,13 +305,13 @@ object DatabaseMigrations {
   val MIGRATION_9_10 = object : Migration(9, 10) {
     override fun migrate(db: SupportSQLiteDatabase) {
       try {
-        Logger.i(TAG, "Starting migration from version 9 to 10")
+        logger.i("Starting migration from version 9 to 10")
 
         db.execSQL("ALTER TABLE `places` ADD COLUMN `source` TEXT NOT NULL DEFAULT 'USER'")
 
-        Logger.i(TAG, "Migration from version 9 to 10 completed successfully")
+        logger.i("Migration from version 9 to 10 completed successfully")
       } catch (e: Exception) {
-        Logger.e(TAG, "Migration from version 9 to 10 failed", e)
+        logger.e("Migration from version 9 to 10 failed", e)
         throw e
       }
     }
@@ -327,13 +327,13 @@ object DatabaseMigrations {
   val MIGRATION_10_11 = object : Migration(10, 11) {
     override fun migrate(db: SupportSQLiteDatabase) {
       try {
-        Logger.i(TAG, "Starting migration from version 10 to 11")
+        logger.i("Starting migration from version 10 to 11")
 
         db.execSQL("ALTER TABLE `gps_tracks` ADD COLUMN `totalDistanceMeters` REAL")
 
-        Logger.i(TAG, "Migration from version 10 to 11 completed successfully")
+        logger.i("Migration from version 10 to 11 completed successfully")
       } catch (e: Exception) {
-        Logger.e(TAG, "Migration from version 10 to 11 failed", e)
+        logger.e("Migration from version 10 to 11 failed", e)
         throw e
       }
     }
@@ -349,13 +349,13 @@ object DatabaseMigrations {
   val MIGRATION_11_12 = object : Migration(11, 12) {
     override fun migrate(db: SupportSQLiteDatabase) {
       try {
-        Logger.i(TAG, "Starting migration from version 11 to 12")
+        logger.i("Starting migration from version 11 to 12")
 
         db.execSQL("CREATE INDEX IF NOT EXISTS `index_places_latitude_longitude` ON `places` (`latitude`, `longitude`)")
 
-        Logger.i(TAG, "Migration from version 11 to 12 completed successfully")
+        logger.i("Migration from version 11 to 12 completed successfully")
       } catch (e: Exception) {
-        Logger.e(TAG, "Migration from version 11 to 12 failed", e)
+        logger.e("Migration from version 11 to 12 failed", e)
         throw e
       }
     }
@@ -383,9 +383,9 @@ object DatabaseMigrations {
    * マイグレーション履歴をログに記録
    */
   fun logMigrationHistory() {
-    Logger.i(TAG, "Available database migrations:")
+    logger.i("Available database migrations:")
     ALL_MIGRATIONS.forEach { migration ->
-      Logger.i(TAG, "- Migration ${migration.startVersion} -> ${migration.endVersion}")
+      logger.i("- Migration ${migration.startVersion} -> ${migration.endVersion}")
     }
   }
 
@@ -394,10 +394,7 @@ object DatabaseMigrations {
    */
   fun validateDatabaseVersion(currentVersion: Int, expectedVersion: Int): Boolean {
     val isValid = currentVersion == expectedVersion
-    Logger.i(
-      TAG,
-      "Database version validation: current=$currentVersion, expected=$expectedVersion, valid=$isValid",
-    )
+    logger.i("Database version validation: current=$currentVersion, expected=$expectedVersion, valid=$isValid")
     return isValid
   }
 
@@ -405,7 +402,7 @@ object DatabaseMigrations {
    * マイグレーション失敗時の復旧処理
    */
   fun handleMigrationFailure(fromVersion: Int, toVersion: Int, error: Throwable) {
-    Logger.e(TAG, "Migration failed from version $fromVersion to $toVersion", error)
+    logger.e("Migration failed from version $fromVersion to $toVersion", error)
 
     // マイグレーション失敗時の追加処理をここに実装
     // 例：エラー報告、バックアップ復元など
@@ -416,7 +413,7 @@ object DatabaseMigrations {
    * 本番環境では使用禁止
    */
   fun performDestructiveMigration() {
-    Logger.w(TAG, "DESTRUCTIVE MIGRATION - This will delete all data!")
+    logger.w("DESTRUCTIVE MIGRATION - This will delete all data!")
     // この機能は fallbackToDestructiveMigration() で自動的に処理される
   }
 }
