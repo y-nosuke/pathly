@@ -31,7 +31,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ### データ管理
 
 - **データベース：** PostgreSQL（Supabase）
-- **ローカル保存：** Android Encrypted SharedPreferences
+- **ローカル保存：** Room (SQLite)。端末内のみで完結し、暗号化はしていない（クラウド同期は Phase 3）
 - **同期：** リアルタイム同期（Supabase Realtime）
 
 ## 現在の開発フェーズ
@@ -184,7 +184,7 @@ app/src/main/java/com/pathly/
 - **認証：** Supabase Auth（ID+パスワード）
 - **データ暗号化：** Supabase自動暗号化 + 機密データはアプリレベル暗号化
 - **通信：** HTTPS/TLS必須
-- **ローカル：** Android Encrypted SharedPreferences
+- **ローカル：** 暗号化なし。Room の DB は平文で、設定は SharedPreferences。将来 DB を暗号化するなら SQLCipher 等の導入が必要（Jetpack Security は Deprecated）
 
 ### パフォーマンス
 

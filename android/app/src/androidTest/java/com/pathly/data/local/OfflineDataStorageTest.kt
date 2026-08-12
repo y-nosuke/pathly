@@ -9,7 +9,6 @@ import com.pathly.data.local.dao.GpsTrackDao
 import com.pathly.data.local.entity.GpsPointEntity
 import com.pathly.data.local.entity.GpsTrackEntity
 import com.pathly.data.repository.GpsTrackRepositoryImpl
-import com.pathly.util.EncryptionHelper
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import org.junit.After
@@ -25,7 +24,6 @@ import java.util.Date
  * ローカルデータ保存のオフライン動作テスト
  * 受け入れ基準のテスト:
  * - GPS軌跡データをローカルデータベース（Room）に保存する
- * - データは暗号化して保存する
  * - インターネット接続がなくても記録・閲覧ができる
  * - アプリを再インストールしてもデータが失われない
  * - データベースのバージョン管理・マイグレーション機能がある
@@ -38,7 +36,6 @@ class OfflineDataStorageTest {
   private lateinit var gpsPointDao: GpsPointDao
   private lateinit var repository: GpsTrackRepositoryImpl
   private lateinit var context: Context
-  private lateinit var encryptionHelper: EncryptionHelper
 
   @Before
   fun setup() {
@@ -53,7 +50,6 @@ class OfflineDataStorageTest {
     gpsTrackDao = database.gpsTrackDao()
     gpsPointDao = database.gpsPointDao()
 
-    encryptionHelper = EncryptionHelper(context)
     repository = GpsTrackRepositoryImpl(
       gpsTrackDao,
       gpsPointDao,
@@ -153,29 +149,6 @@ class OfflineDataStorageTest {
     assertEquals("Should retrieve 2 tracks", 2, allTracks.size)
     assertNotNull("Should find active track", activeTrack)
     assertEquals("Active track ID should match", trackId2, activeTrack?.id)
-  }
-
-  @Test
-  fun testDataEncryption() {
-    // Given: 暗号化ヘルパー
-    val testKey = "test_gps_data"
-    val testValue = "latitude:35.6762,longitude:139.6503"
-
-    // When: データを暗号化して保存
-    encryptionHelper.saveSecureString(testKey, testValue)
-
-    // Then: 暗号化されたデータが取得できる
-    val retrievedValue = encryptionHelper.getSecureString(testKey)
-    assertEquals("Encrypted data should be retrievable", testValue, retrievedValue)
-  }
-
-  @Test
-  fun testEncryptionIntegrity() {
-    // When: 暗号化システムの健全性チェック
-    val isIntegrityValid = encryptionHelper.verifyEncryptionIntegrity()
-
-    // Then: 暗号化システムが正常に動作している
-    assertTrue("Encryption integrity should be valid", isIntegrityValid)
   }
 
   @Test

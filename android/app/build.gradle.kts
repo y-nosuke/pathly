@@ -147,9 +147,6 @@ dependencies {
   // BOM で core/json を 1.8.1 に揃える（androidTest 側も追従する）。
   implementation(platform(libs.kotlinx.serialization.bom))
 
-  // Security - Encrypted SharedPreferences
-  implementation(libs.androidx.security.crypto)
-
   testImplementation(libs.junit)
 
   // Unit Test dependencies

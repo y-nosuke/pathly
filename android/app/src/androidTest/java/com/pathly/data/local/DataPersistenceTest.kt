@@ -6,12 +6,10 @@ import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.pathly.data.local.entity.GpsPointEntity
 import com.pathly.data.local.entity.GpsTrackEntity
-import com.pathly.util.EncryptionHelper
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
-import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -29,7 +27,6 @@ class DataPersistenceTest {
   private lateinit var context: Context
   private lateinit var database: PathlyDatabase
   private lateinit var databaseFile: File
-  private lateinit var encryptionHelper: EncryptionHelper
 
   companion object {
     private const val TEST_DB_NAME = "test_pathly_database"
@@ -49,7 +46,6 @@ class DataPersistenceTest {
       .build()
 
     databaseFile = context.getDatabasePath(TEST_DB_NAME)
-    encryptionHelper = EncryptionHelper(context)
   }
 
   @After
@@ -57,7 +53,6 @@ class DataPersistenceTest {
     database.close()
     // テスト後のクリーンアップ
     databaseFile.delete()
-    encryptionHelper.clearAllSecureData()
   }
 
   /**
@@ -111,10 +106,6 @@ class DataPersistenceTest {
 
     database.gpsPointDao().insertPoints(gpsPoints)
 
-    // 暗号化データも保存
-    encryptionHelper.saveSecureString("user_preference", "track_auto_start=true")
-    encryptionHelper.saveSecureString("api_key", "test_secret_key_12345")
-
     // データベースファイルの存在確認
     assertTrue("データベースファイルが作成されていない", databaseFile.exists())
     assertTrue("データベースファイルが空", databaseFile.length() > 0)
@@ -125,10 +116,6 @@ class DataPersistenceTest {
 
     val savedPoints = database.gpsPointDao().getPointsByTrackIdSync(trackId)
     assertEquals("GPS座標データが保存されていない", 2, savedPoints.size)
-
-    // 暗号化データ確認
-    val userPref = encryptionHelper.getSecureString("user_preference")
-    assertEquals("暗号化データが保存されていない", "track_auto_start=true", userPref)
 
     // Phase 2: データベース接続を閉じる（アプリ終了をシミュレート）
     database.close()
@@ -150,13 +137,6 @@ class DataPersistenceTest {
     val restoredPoints = database.gpsPointDao().getPointsByTrackIdSync(trackId)
     assertEquals("再起動後にGPS座標データが失われている", 2, restoredPoints.size)
     assertEquals("GPS座標の緯度が保持されていない", 35.6762, restoredPoints[0].latitude, 0.0001)
-
-    // 暗号化データの永続性確認
-    val restoredUserPref = encryptionHelper.getSecureString("user_preference")
-    assertEquals("再起動後に暗号化データが失われている", "track_auto_start=true", restoredUserPref)
-
-    val restoredApiKey = encryptionHelper.getSecureString("api_key")
-    assertEquals("機密データが保持されていない", "test_secret_key_12345", restoredApiKey)
   }
 
   /**
@@ -275,27 +255,6 @@ class DataPersistenceTest {
           e.message?.contains("corrupt") == true,
       )
     }
-  }
-
-  /**
-   * 暗号化キーの永続性テスト
-   */
-  @Test
-  fun testEncryptionKeyPersistence() {
-    // 暗号化キーを生成
-    val originalPassphrase = encryptionHelper.getOrCreateDatabasePassphrase()
-    assertNotNull("パスフレーズが生成されていない", originalPassphrase)
-    assertTrue("パスフレーズの長さが不十分", originalPassphrase.length >= 16)
-
-    // 新しいEncryptionHelperインスタンスを作成（アプリ再起動をシミュレート）
-    val newEncryptionHelper = EncryptionHelper(context)
-    val restoredPassphrase = newEncryptionHelper.getOrCreateDatabasePassphrase()
-
-    // パスフレーズが保持されていることを確認
-    assertEquals("暗号化キーが保持されていない", originalPassphrase, restoredPassphrase)
-
-    // 暗号化機能の整合性確認
-    assertTrue("暗号化システムの整合性に問題", newEncryptionHelper.verifyEncryptionIntegrity())
   }
 
   /**

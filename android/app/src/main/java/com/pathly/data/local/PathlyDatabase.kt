@@ -24,7 +24,6 @@ import com.pathly.data.local.entity.SmoothedPointEntity
 import com.pathly.data.local.entity.StopEntity
 import com.pathly.data.local.entity.WishlistEntity
 import com.pathly.data.local.migration.DatabaseMigrations
-import com.pathly.util.EncryptionHelper
 import com.pathly.util.Logger
 
 @Database(
@@ -69,13 +68,6 @@ abstract class PathlyDatabase : RoomDatabase() {
 
     private fun createDatabase(context: Context): PathlyDatabase {
       logger.i("Creating PathlyDatabase instance")
-
-      val encryptionHelper = EncryptionHelper(context)
-
-      // 暗号化の健全性をチェック
-      if (!encryptionHelper.verifyEncryptionIntegrity()) {
-        logger.w("Encryption integrity check failed, continuing without encryption")
-      }
 
       return Room.databaseBuilder(
         context.applicationContext,
