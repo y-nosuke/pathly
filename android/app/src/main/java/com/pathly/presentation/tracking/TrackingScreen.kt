@@ -352,6 +352,39 @@ fun TrackingScreen(
         )
       }
     }
+
+    // 地図の1点タップで開く統一の「場所シート」。未登録の空き地点/POI＝登録、登録済み＝その場で編集。
+    placeSheetTarget?.let { target ->
+      PlaceActionSheet(
+        target = target,
+        onDismiss = { placeSheetTarget = null },
+        onFetchPoiDetails = viewModel::fetchPoiDetails,
+        onLoadPlace = viewModel::loadPlace,
+        // POI か空き地点か、近接確認が要るかの判断は ViewModel（PlaceEditUseCase）が持つ。
+        onRegisterNew = viewModel::registerPlaceWithNearbyCheck,
+        onSaveExisting = { item, name, note, wishlist, priority, visited ->
+          viewModel.savePlaceEdits(item, name, note, wishlist, priority, visited)
+        },
+        // 記録中のみ「立ち寄りに追加」。この訪問を既存 place にひも付ける手動追加へ流す。
+        onAddStop = if (uiState.isTracking) {
+          { item ->
+            linkPlace = RegisteredPlace(
+              placeId = item.place.id,
+              name = item.displayName,
+              latitude = item.place.latitude,
+              longitude = item.place.longitude,
+              isWishlisted = item.isWishlisted,
+              isVisited = item.isVisited,
+            )
+            manualTarget = LatLng(item.place.latitude, item.place.longitude)
+          }
+        } else {
+          null
+        },
+        onOpenDetail = onOpenPlaceDetail,
+        modifier = Modifier.align(Alignment.BottomCenter),
+      )
+    }
   }
 
   // 停止の確認ダイアログ（誤爆防止）。
@@ -371,38 +404,6 @@ fun TrackingScreen(
       dismissButton = {
         TextButton(onClick = { showStopConfirm = false }) { Text("続ける") }
       },
-    )
-  }
-
-  // 地図の1点タップで開く統一の「場所シート」。未登録の空き地点/POI＝登録、登録済み＝その場で編集。
-  placeSheetTarget?.let { target ->
-    PlaceActionSheet(
-      target = target,
-      onDismiss = { placeSheetTarget = null },
-      onFetchPoiDetails = viewModel::fetchPoiDetails,
-      onLoadPlace = viewModel::loadPlace,
-      // POI か空き地点か、近接確認が要るかの判断は ViewModel（PlaceEditUseCase）が持つ。
-      onRegisterNew = viewModel::registerPlaceWithNearbyCheck,
-      onSaveExisting = { item, name, note, wishlist, priority, visited ->
-        viewModel.savePlaceEdits(item, name, note, wishlist, priority, visited)
-      },
-      // 記録中のみ「立ち寄りに追加」。この訪問を既存 place にひも付ける手動追加へ流す。
-      onAddStop = if (uiState.isTracking) {
-        { item ->
-          linkPlace = RegisteredPlace(
-            placeId = item.place.id,
-            name = item.displayName,
-            latitude = item.place.latitude,
-            longitude = item.place.longitude,
-            isWishlisted = item.isWishlisted,
-            isVisited = item.isVisited,
-          )
-          manualTarget = LatLng(item.place.latitude, item.place.longitude)
-        }
-      } else {
-        null
-      },
-      onOpenDetail = onOpenPlaceDetail,
     )
   }
 

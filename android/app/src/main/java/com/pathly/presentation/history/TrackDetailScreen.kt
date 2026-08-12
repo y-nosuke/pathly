@@ -1,7 +1,6 @@
 package com.pathly.presentation.history
 
 import androidx.activity.compose.BackHandler
-import androidx.compose.animation.core.Animatable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -59,10 +58,14 @@ import com.pathly.domain.model.SmoothingParams
 import com.pathly.domain.model.Stop
 import com.pathly.domain.model.StopCandidate
 import com.pathly.domain.model.TrackSmoother
+import com.pathly.presentation.common.FloatingSheet
 import com.pathly.presentation.common.NearbyPlaceConfirmDialog
+import com.pathly.presentation.common.SheetDetent
 import com.pathly.presentation.common.StopReassignDialog
 import com.pathly.presentation.common.defaultDepartureIndex
+import com.pathly.presentation.common.heightOf
 import com.pathly.presentation.common.nearestPointIndex
+import com.pathly.presentation.common.rememberFloatingSheetState
 import com.pathly.presentation.common.stopSegmentPoints
 import com.pathly.presentation.places.PlaceActionSheet
 import com.pathly.presentation.places.PlaceSheetTarget
@@ -70,9 +73,6 @@ import kotlinx.coroutines.launch
 import java.util.Date
 
 private val tuningSheetPeekHeight = 360.dp
-
-/** フローティングシートの開き具合。隠す（全画面地図）／ハーフ（地図＋一覧）／フル（一覧を大きく）。 */
-private enum class SheetDetent { HIDDEN, PEEK, FULL }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -156,25 +156,8 @@ fun TrackDetailScreen(
   // --- 自前フローティングシートの開閉（地図の上に重ねる。標準ボトムシートは使わない）---
   // 3段階: 隠す（全画面地図）/ ハーフ（地図＋一覧を同時に）/ フル（一覧を大きく、地図は上に少し覗く）。
   // つまみ／上部のドラッグでシートだけを開閉し、一覧（LazyColumn）は独立してスクロールする。
-  val peekHeight = screenHeightDp * 0.45f
-  val fullHeight = screenHeightDp * 0.92f
-  val peekPx = with(density) { peekHeight.toPx() }
-  val fullPx = with(density) { fullHeight.toPx() }
-  var detent by remember { mutableStateOf(SheetDetent.PEEK) }
-  // 高さは Animatable(px)。ドラッグ中は snapTo で指に追従、離すと最寄りの段へ animateTo する。
-  val sheetHeightPx = remember { Animatable(peekPx) }
-  val settleTo: (SheetDetent) -> Unit = { target ->
-    detent = target
-    scope.launch {
-      sheetHeightPx.animateTo(
-        when (target) {
-          SheetDetent.HIDDEN -> 0f
-          SheetDetent.PEEK -> peekPx
-          SheetDetent.FULL -> fullPx
-        },
-      )
-    }
-  }
+  val sheetState = rememberFloatingSheetState(peekFraction = 0.45f, fullFraction = 0.92f)
+  val detent = sheetState.detent
 
   // 削除などで stops が変わったら、消えた ID を選択から外す。空になったら選択モードを抜ける。
   LaunchedEffect(stops) {
@@ -314,9 +297,7 @@ fun TrackDetailScreen(
               manualMode && manualPick != null -> manualOverlayHeight
               manualMode -> 96.dp
               tuningMode -> tuningSheetPeekHeight
-              detent == SheetDetent.HIDDEN -> 0.dp
-              detent == SheetDetent.FULL -> fullHeight
-              else -> peekHeight
+              else -> sheetState.heightOf(detent)
             },
           ),
           onPoiClick = { poi ->
@@ -342,7 +323,7 @@ fun TrackDetailScreen(
             highlightedStopId = stop.id
             focusTarget = LatLng(stop.place.latitude, stop.place.longitude)
             focusNonce++
-            if (detent == SheetDetent.HIDDEN) settleTo(SheetDetent.PEEK)
+            if (detent == SheetDetent.HIDDEN) sheetState.settleTo(SheetDetent.PEEK)
             reassignTarget = stop
           },
           // 登録済みマーカーのタップ: 手動追加モード＝既存placeへ紐付け（滞在調整ありのオーバーレイ）／
@@ -460,7 +441,7 @@ fun TrackDetailScreen(
       if (sheetHidden) {
         // 隠しているときは、下部中央に復帰ボタンを出す。
         Surface(
-          onClick = { settleTo(SheetDetent.PEEK) },
+          onClick = { sheetState.settleTo(SheetDetent.PEEK) },
           shape = RoundedCornerShape(20.dp),
           color = MaterialTheme.colorScheme.surface,
           shadowElevation = 4.dp,
@@ -477,23 +458,8 @@ fun TrackDetailScreen(
           )
         }
       } else {
-        FloatingStopSheet(
-          heightPx = { sheetHeightPx.value },
-          onDrag = { delta ->
-            scope.launch {
-              sheetHeightPx.snapTo((sheetHeightPx.value - delta).coerceIn(0f, fullPx))
-            }
-          },
-          onDragEnd = {
-            val h = sheetHeightPx.value
-            settleTo(
-              when {
-                h < peekPx * 0.55f -> SheetDetent.HIDDEN
-                h < (peekPx + fullPx) / 2f -> SheetDetent.PEEK
-                else -> SheetDetent.FULL
-              },
-            )
-          },
+        FloatingSheet(
+          state = sheetState,
           modifier = Modifier.align(Alignment.BottomCenter),
         ) {
           TrackDetailSheet(
@@ -655,6 +621,20 @@ fun TrackDetailScreen(
         .align(Alignment.BottomCenter)
         .navigationBarsPadding(),
     )
+
+    // 通常モードの地図タップで開く統一の「場所シート」。立ち寄り追加は手動追加モード（到着/出発の調整あり）に任せるため出さない。
+    placeSheetTarget?.let { target ->
+      PlaceActionSheet(
+        target = target,
+        onDismiss = { placeSheetTarget = null },
+        onFetchPoiDetails = onFetchPoiDetails,
+        onLoadPlace = onLoadPlace,
+        onRegisterNew = onRegisterPlace,
+        onSaveExisting = onSavePlaceEdits,
+        onOpenDetail = onOpenPlaceDetail,
+        modifier = Modifier.align(Alignment.BottomCenter),
+      )
+    }
   }
 
   editingStop?.let { stop ->
@@ -716,19 +696,6 @@ fun TrackDetailScreen(
     val text = message ?: return@LaunchedEffect
     snackbarHostState.showSnackbar(text, duration = SnackbarDuration.Short)
     onMessageShown()
-  }
-
-  // 通常モードの地図タップで開く統一の「場所シート」。立ち寄り追加は手動追加モード（到着/出発の調整あり）に任せるため出さない。
-  placeSheetTarget?.let { target ->
-    PlaceActionSheet(
-      target = target,
-      onDismiss = { placeSheetTarget = null },
-      onFetchPoiDetails = onFetchPoiDetails,
-      onLoadPlace = onLoadPlace,
-      onRegisterNew = onRegisterPlace,
-      onSaveExisting = onSavePlaceEdits,
-      onOpenDetail = onOpenPlaceDetail,
-    )
   }
 
   // 空き地点登録の近接確認: 近くの既存に紐付け／新規で登録。

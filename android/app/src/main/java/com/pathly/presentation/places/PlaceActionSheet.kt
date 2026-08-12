@@ -1,5 +1,6 @@
 package com.pathly.presentation.places
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -10,12 +11,10 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -24,7 +23,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -33,6 +31,8 @@ import com.google.android.gms.maps.model.PointOfInterest
 import com.pathly.domain.model.PlaceListItem
 import com.pathly.domain.model.PlaceSearchResult
 import com.pathly.domain.model.Priority
+import com.pathly.presentation.common.FloatingSheet
+import com.pathly.presentation.common.rememberFloatingSheetState
 
 /**
  * 地図上の1点をタップしたときに出す**統一の「場所シート」**（ModalBottomSheet）。
@@ -65,17 +65,18 @@ internal fun PlaceActionSheet(
   onAddStop: ((item: PlaceListItem) -> Unit)? = null,
   // 既存 place の詳細画面を開く。
   onOpenDetail: (placeId: Long) -> Unit = {},
+  modifier: Modifier = Modifier,
 ) {
-  // 地図を見ながら操作できるようにする。
-  //  - skipPartiallyExpanded を外し、まず半分の高さで開く（必要なら上へドラッグして全面に）
-  //  - スクリムを透明にして、背後の地図が暗くならないようにする
-  // 以前は全展開＋既定のスクリムで、タップした地点の周りが見えなかった。
-  val sheetState = rememberModalBottomSheetState()
-  ModalBottomSheet(
-    onDismissRequest = onDismiss,
-    sheetState = sheetState,
-    scrimColor = Color.Transparent,
-  ) {
+  // 地図を見ながら操作できるよう、スクリムを持たない自前のシートで出す。
+  // ModalBottomSheet はスクリムがタップを吸うため、色を透明にしても地図を動かせず、
+  // 触ると閉じてしまう。ここでは地図のパン・ズーム・タップをそのまま生かす。
+  // フォームなのでドラッグで隠しきれないようにする（allowHidden = false）。
+  val sheetState = rememberFloatingSheetState(allowHidden = false)
+
+  // 非モーダルなのでバックは自分で受ける（モーダルのときは自動で閉じていた）。
+  BackHandler { onDismiss() }
+
+  FloatingSheet(state = sheetState, modifier = modifier) {
     Column(
       modifier = Modifier
         .fillMaxWidth()

@@ -1063,20 +1063,21 @@ private fun PlaceDetailContent(
         }
       }
     }
-  }
 
-  // 地図の1点タップで開く統一の「場所シート」。記録画面と同じ挙動（この画面は記録中でないので立ち寄り追加は出さない）。
-  placeSheetTarget?.let { target ->
-    PlaceActionSheet(
-      target = target,
-      onDismiss = { placeSheetTarget = null },
-      onFetchPoiDetails = onFetchPoiDetails,
-      onLoadPlace = onLoadPlace,
-      // POI か空き地点か、近接確認が要るかの判断は ViewModel（PlaceEditUseCase）が持つ。
-      onRegisterNew = onRegisterPlaceAtPoint,
-      onSaveExisting = onSavePlaceEdits,
-      onOpenDetail = onOpenPlaceDetail,
-    )
+    // 地図の1点タップで開く統一の「場所シート」。記録画面と同じ挙動（この画面は記録中でないので立ち寄り追加は出さない）。
+    placeSheetTarget?.let { target ->
+      PlaceActionSheet(
+        target = target,
+        onDismiss = { placeSheetTarget = null },
+        onFetchPoiDetails = onFetchPoiDetails,
+        onLoadPlace = onLoadPlace,
+        // POI か空き地点か、近接確認が要るかの判断は ViewModel（PlaceEditUseCase）が持つ。
+        onRegisterNew = onRegisterPlaceAtPoint,
+        onSaveExisting = onSavePlaceEdits,
+        onOpenDetail = onOpenPlaceDetail,
+        modifier = Modifier.align(Alignment.BottomCenter),
+      )
+    }
   }
 
   if (linkDialogOpen) {
