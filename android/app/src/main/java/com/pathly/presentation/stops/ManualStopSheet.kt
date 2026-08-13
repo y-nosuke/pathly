@@ -1,4 +1,4 @@
-package com.pathly.presentation.common
+package com.pathly.presentation.stops
 
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -31,6 +31,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.pathly.domain.model.GpsPoint
 import com.pathly.domain.model.PlaceSearchResult
+import com.pathly.presentation.common.FloatingSheet
+import com.pathly.presentation.common.rememberFloatingSheetState
 import java.util.Date
 
 /**

@@ -1,4 +1,4 @@
-package com.pathly.presentation.common
+package com.pathly.presentation.stops
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column

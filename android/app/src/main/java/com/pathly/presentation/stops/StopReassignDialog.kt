@@ -1,8 +1,9 @@
-package com.pathly.presentation.common
+package com.pathly.presentation.stops
 
 import androidx.compose.runtime.Composable
 import com.pathly.domain.model.PlaceSearchResult
 import com.pathly.domain.model.Stop
+import com.pathly.presentation.common.NearbyCandidatePickerDialog
 
 /**
  * 誤検知の訂正: 確定済みの立ち寄り（[stop]）の場所を、近くの POI 候補から選び直す／自分で入力し直す

@@ -59,17 +59,17 @@ import com.pathly.domain.model.Stop
 import com.pathly.domain.model.StopCandidate
 import com.pathly.domain.model.TrackSmoother
 import com.pathly.presentation.common.FloatingSheet
-import com.pathly.presentation.common.ManualStopOrigin
-import com.pathly.presentation.common.ManualStopSheet
-import com.pathly.presentation.common.ManualStopTarget
 import com.pathly.presentation.common.NearbyPlaceConfirmDialog
 import com.pathly.presentation.common.SheetDetent
-import com.pathly.presentation.common.StopReassignDialog
 import com.pathly.presentation.common.heightOf
 import com.pathly.presentation.common.rememberFloatingSheetState
 import com.pathly.presentation.common.stopSegmentPoints
 import com.pathly.presentation.places.PlaceActionSheet
 import com.pathly.presentation.places.PlaceSheetTarget
+import com.pathly.presentation.stops.ManualStopOrigin
+import com.pathly.presentation.stops.ManualStopSheet
+import com.pathly.presentation.stops.ManualStopTarget
+import com.pathly.presentation.stops.StopReassignDialog
 import kotlinx.coroutines.launch
 import java.util.Date
 
