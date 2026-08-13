@@ -189,18 +189,12 @@ private fun NewPlaceEditor(
     value = knownDetails ?: googlePlaceId?.let { onFetchPoiDetails(it) }
   }
 
-  val isFacility = googlePlaceId != null
-  Text(
-    text = if (isFacility) "この場所を登録" else "この地点を場所として登録",
-    style = androidx.compose.material3.MaterialTheme.typography.titleMedium,
-    fontWeight = FontWeight.Bold,
-    modifier = Modifier.padding(bottom = 12.dp),
-  )
   PlaceFormBody(
     name = name,
     onNameChange = { name = it },
     nameLabel = "自分で付ける名前（任意）",
-    namePlaceholder = initialName,
+    // 施設なら名前を見出しに。名前を持たない地点は、何をしようとしているかを出す。
+    heading = initialName ?: "この地点を場所として登録",
     namePrefill = initialName,
     category = details?.category,
     address = details?.address,
@@ -255,19 +249,11 @@ private fun ExistingPlaceEditor(
   var visited by remember(loaded.wishlistId) { mutableStateOf(loaded.isManuallyVisited) }
   val context = LocalContext.current
 
-  Text(
-    text = "場所を編集",
-    style = androidx.compose.material3.MaterialTheme.typography.titleMedium,
-    fontWeight = FontWeight.Bold,
-    modifier = Modifier.padding(bottom = 12.dp),
-  )
   PlaceFormBody(
     name = name,
     onNameChange = { name = it },
     nameLabel = "自分で付ける名前（任意）",
-    // places.name は「自分で付けた名前」なので、Google 名で表示されている場所は空欄になる。
-    // 何も無いように見えないよう、表示に使われている名前をプレースホルダに出す。
-    namePlaceholder = loaded.place.googleName,
+    heading = loaded.displayName,
     namePrefill = loaded.place.googleName,
     category = loaded.place.category,
     address = loaded.place.googleAddress,

@@ -871,7 +871,7 @@ private fun PlaceDetailContent(
           name = name,
           onNameChange = { name = it },
           nameLabel = "自分で付ける名前（任意）",
-          namePlaceholder = item.displayName,
+          heading = item.displayName,
           // 書き換えの元にできるのは Google 名だけ（住所・座標のフォールバックは元にしない）。
           namePrefill = item.place.googleName,
           category = item.place.category,
@@ -1269,7 +1269,9 @@ internal fun PlaceFormBody(
   priority: Priority,
   onPriorityChange: (Priority) -> Unit,
   modifier: Modifier = Modifier,
-  namePlaceholder: String? = null,
+  // この場所の名前（表示名）。名前欄は空で始まるので、識別はこの見出しが担う。
+  // 施設でない地点のように名前が無いときは、操作の説明を入れる。
+  heading: String? = null,
   // Google 由来の名前。空欄のときだけ「これを直して使う」導線を出す。名前欄は「自分で付けた名前」
   // 専用にしたので、施設名を少し変えたいだけのときに打ち直さずに済むようにする。
   namePrefill: String? = null,
@@ -1277,24 +1279,31 @@ internal fun PlaceFormBody(
   visitedContent: (@Composable () -> Unit)? = null,
 ) {
   Column(modifier = modifier) {
+    heading?.let {
+      Text(
+        text = it,
+        style = MaterialTheme.typography.titleMedium,
+        fontWeight = FontWeight.Bold,
+        modifier = Modifier.padding(bottom = 12.dp),
+      )
+    }
+
     OutlinedTextField(
       value = name,
       onValueChange = onNameChange,
       label = { Text(nameLabel) },
-      placeholder = namePlaceholder?.let {
-        { Text(it, maxLines = 1, overflow = TextOverflow.Ellipsis) }
-      },
       singleLine = true,
       modifier = Modifier.fillMaxWidth(),
     )
 
+    // 名前は見出しに出ているので、ここでは繰り返さない（1行に収める）。
     namePrefill?.takeIf { it.isNotBlank() && name.isEmpty() }?.let { candidate ->
       TextButton(
         onClick = { onNameChange(candidate) },
         contentPadding = PaddingValues(horizontal = 4.dp, vertical = 0.dp),
       ) {
         Text(
-          text = "「$candidate」から書き換える",
+          text = "この名前から書き換える",
           style = MaterialTheme.typography.labelLarge,
           maxLines = 1,
           overflow = TextOverflow.Ellipsis,

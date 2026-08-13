@@ -140,9 +140,11 @@ fun ManualStopSheet(
         .padding(horizontal = 20.dp),
       verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
+      // 見出しは場所の名前。名前欄は空で始まるので、識別はここが担う。
       Text(
-        text = when (origin) {
-          is ManualStopOrigin.ExistingPlace -> "この場所に立ち寄りを追加"
+        text = when {
+          origin is ManualStopOrigin.ExistingPlace -> origin.name ?: "登録済みの場所"
+          googleName != null -> googleName
           else -> "立ち寄りを追加"
         },
         style = MaterialTheme.typography.titleMedium,
@@ -151,14 +153,11 @@ fun ManualStopSheet(
 
       when (origin) {
         // 既存の場所へ紐付ける。名前は編集しない（その場所のものを使う）。
-        is ManualStopOrigin.ExistingPlace -> {
-          Text(origin.name ?: "登録済みの場所", style = MaterialTheme.typography.bodyLarge)
-          Text(
-            text = "登録済みの場所に紐付けます（新しい場所は作りません）。",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-          )
-        }
+        is ManualStopOrigin.ExistingPlace -> Text(
+          text = "登録済みの場所に紐付けます（新しい場所は作りません）。",
+          style = MaterialTheme.typography.bodySmall,
+          color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
 
         // 「今ここ」は地点を指していないので、近くの施設から選ばせる。
         ManualStopOrigin.CurrentLocation -> CandidatePicker(
@@ -254,16 +253,16 @@ private fun UserNameField(
       value = name,
       onValueChange = onNameChange,
       label = { Text("自分で付ける名前（任意）") },
-      placeholder = googleName?.let { { Text(it, maxLines = 1) } },
       singleLine = true,
       modifier = Modifier.fillMaxWidth(),
     )
+    // 名前は見出しに出ているので、ここでは繰り返さない（1行に収める）。
     googleName?.takeIf { name.isEmpty() }?.let { candidate ->
       TextButton(
         onClick = { onNameChange(candidate) },
         contentPadding = PaddingValues(horizontal = 4.dp, vertical = 0.dp),
       ) {
-        Text("「$candidate」から書き換える", style = MaterialTheme.typography.labelLarge, maxLines = 1)
+        Text("この名前から書き換える", style = MaterialTheme.typography.labelLarge, maxLines = 1)
       }
     }
   }
