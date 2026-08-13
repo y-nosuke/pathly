@@ -201,9 +201,12 @@ fun SearchAddRoute(
     onSelectPrediction = viewModel::selectPrediction,
     onBackToPredictions = viewModel::clearSearchResult,
     onCancel = onDone,
-    onRegister = { result, name, wishlist, priority, memo ->
-      viewModel.registerSearchResult(result, name, wishlist, priority, memo)
-      onDone()
+    onRegister = { _, _, name, wishlist, priority, memo, _ ->
+      // 座標・placeId は選んだ候補（search.result）そのものなので、候補から登録する。
+      uiState.search.result?.let { result ->
+        viewModel.registerSearchResult(result, name, wishlist, priority, memo)
+        onDone()
+      }
     },
   )
 }
@@ -599,26 +602,15 @@ private fun AddPlaceContent(
   onConfirmNearbyNew: () -> Unit = {},
   onDismissNearbyPrompt: () -> Unit = {},
 ) {
-  var picked by remember { mutableStateOf<LatLng?>(null) }
-  var pickedPlaceId by remember { mutableStateOf<String?>(null) }
-  var name by remember { mutableStateOf("") }
-  var memo by remember { mutableStateOf("") }
-  var priority by remember { mutableStateOf(Priority.MEDIUM) }
-  var wishlist by remember { mutableStateOf(false) }
-  var details by remember { mutableStateOf<PlaceSearchResult?>(null) }
+  // 選んだ対象。フォームの中身（名前・メモ・行きたい・優先度）と Google 情報の取得は
+  // 場所シート側が持つので、この画面は「どこを選んだか」だけを持つ。
+  var target by remember { mutableStateOf<PlaceSheetTarget?>(null) }
+  val picked = when (val t = target) {
+    is PlaceSheetTarget.NewPoint -> t.latLng
+    is PlaceSheetTarget.NewPoi -> t.poi.latLng
+    else -> null
+  }
   val context = LocalContext.current
-
-  // POI をタップしたら Google からカテゴリ・住所をプレビュー取得する（登録時の取得で使い回されるので二度叩かない）。
-  LaunchedEffect(pickedPlaceId) {
-    details = pickedPlaceId?.let { onFetchDetails(it) }
-  }
-
-  // 地点を選んだ後の戻るは、画面を閉じず選択を解除して地図に戻す（「選び直す」と同じ・検索追加の候補戻りと揃える）。
-  BackHandler(enabled = picked != null) {
-    picked = null
-    pickedPlaceId = null
-    details = null
-  }
 
   val cameraPositionState = rememberCameraPositionState {
     position = CameraPosition.fromLatLngZoom(DEFAULT_LOCATION, 12f)
@@ -653,19 +645,10 @@ private fun AddPlaceContent(
         mapToolbarEnabled = false,
         myLocationButtonEnabled = false,
       ),
-      // アイコン（POI）をタップしたら名前を自動で入れ、Google の placeId も控える（カテゴリ取得用）。
-      onPOIClick = { poi ->
-        picked = poi.latLng
-        pickedPlaceId = poi.placeId
-        name = poi.name.orEmpty()
-      },
-      // 何もない場所をタップしたら空欄で（POI ではないので placeId 無し・プレビューも無し）。
-      onMapClick = { latLng ->
-        picked = latLng
-        pickedPlaceId = null
-        name = ""
-        details = null
-      },
+      // アイコン（POI）をタップしたら施設として、何もない場所なら任意の地点として扱う。
+      // 名前の初期値やカテゴリ・住所の取得は場所シートに任せる。
+      onPOIClick = { poi -> target = PlaceSheetTarget.NewPoi(poi) },
+      onMapClick = { latLng -> target = PlaceSheetTarget.NewPoint(latLng) },
     ) {
       picked?.let { p ->
         val markerState = remember(p) { MarkerState(position = p) }
@@ -716,76 +699,16 @@ private fun AddPlaceContent(
         Text("キャンセル")
       }
     } else {
-      Card(
-        modifier = Modifier
-          .align(Alignment.BottomCenter)
-          .fillMaxWidth()
-          .heightIn(max = 460.dp)
-          .padding(12.dp),
-        shape = RoundedCornerShape(12.dp),
-      ) {
-        Column(
-          modifier = Modifier
-            .verticalScroll(rememberScrollState())
-            .padding(16.dp),
-        ) {
-          Text(
-            text = "この場所を登録",
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.Bold,
-          )
-
-          Spacer(modifier = Modifier.height(8.dp))
-
-          PlaceFormBody(
-            name = name,
-            onNameChange = { name = it },
-            nameLabel = "名前（任意・後で取得も可）",
-            category = details?.category,
-            address = details?.address,
-            onOpenInMaps = picked?.let { p ->
-              { openPlaceInGoogleMaps(context, pickedPlaceId, p.latitude, p.longitude, name.ifBlank { "選択した場所" }) }
-            },
-            memo = memo,
-            onMemoChange = { memo = it },
-            wishlist = wishlist,
-            onWishlistChange = { wishlist = it },
-            priority = priority,
-            onPriorityChange = { priority = it },
-          )
-
-          Spacer(modifier = Modifier.height(12.dp))
-
-          Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            OutlinedButton(
-              onClick = {
-                picked = null
-                pickedPlaceId = null
-                details = null
-              },
-              modifier = Modifier.weight(1f),
-            ) {
-              Text("選び直す")
-            }
-            Button(
-              onClick = {
-                val p = picked ?: return@Button
-                onRegister(
-                  p.latitude,
-                  p.longitude,
-                  name.ifBlank { null },
-                  wishlist,
-                  priority,
-                  memo.ifBlank { null },
-                  pickedPlaceId,
-                )
-              },
-              modifier = Modifier.weight(1f),
-            ) {
-              Text("保存")
-            }
-          }
-        }
+      // 地図タップと同じ「場所シート」。畳めば地図を全画面で確認でき、キャンセル（＝旧「選び直す」）
+      // で選択を解除して地図に戻る。システムバックもシート側が受ける。
+      target?.let { t ->
+        PlaceActionSheet(
+          target = t,
+          onDismiss = { target = null },
+          onFetchPoiDetails = onFetchDetails,
+          onRegisterNew = onRegister,
+          modifier = Modifier.align(Alignment.BottomCenter),
+        )
       }
     }
 
@@ -1124,7 +1047,7 @@ private fun SearchAddContent(
   onSelectPrediction: (String) -> Unit,
   onBackToPredictions: () -> Unit,
   onCancel: () -> Unit,
-  onRegister: (result: PlaceSearchResult, name: String?, wishlist: Boolean, priority: Priority, memo: String?) -> Unit,
+  onRegister: (lat: Double, lng: Double, name: String?, wishlist: Boolean, priority: Priority, memo: String?, googlePlaceId: String?) -> Unit,
   modifier: Modifier = Modifier,
 ) {
   val result = search.result
@@ -1233,18 +1156,9 @@ private fun PredictionRow(
 private fun SearchResultForm(
   result: PlaceSearchResult,
   onBack: () -> Unit,
-  onRegister: (result: PlaceSearchResult, name: String?, wishlist: Boolean, priority: Priority, memo: String?) -> Unit,
+  onRegister: (lat: Double, lng: Double, name: String?, wishlist: Boolean, priority: Priority, memo: String?, googlePlaceId: String?) -> Unit,
   modifier: Modifier = Modifier,
 ) {
-  var name by remember(result) { mutableStateOf(result.name.orEmpty()) }
-  var wishlist by remember(result) { mutableStateOf(false) }
-  var priority by remember(result) { mutableStateOf(Priority.MEDIUM) }
-  var memo by remember(result) { mutableStateOf("") }
-  val context = LocalContext.current
-
-  // 下部カードの高さを測り、その分マップ下部に余白を入れてピンがカードに隠れないようにする。
-  var sheetHeightPx by remember { mutableIntStateOf(0) }
-  val density = LocalDensity.current
   val position = LatLng(result.latitude, result.longitude)
   val cameraPositionState = rememberCameraPositionState {
     this.position = CameraPosition.fromLatLngZoom(position, 16f)
@@ -1255,7 +1169,6 @@ private fun SearchResultForm(
     GoogleMap(
       modifier = Modifier.fillMaxSize(),
       cameraPositionState = cameraPositionState,
-      contentPadding = PaddingValues(bottom = with(density) { sheetHeightPx.toDp() }),
       uiSettings = MapUiSettings(
         zoomControlsEnabled = false,
         mapToolbarEnabled = false,
@@ -1275,61 +1188,15 @@ private fun SearchResultForm(
       Icon(painter = painterResource(R.drawable.ic_arrow_back), contentDescription = "候補に戻る")
     }
 
-    Card(
-      modifier = Modifier
-        .align(Alignment.BottomCenter)
-        .onSizeChanged { sheetHeightPx = it.height }
-        .fillMaxWidth()
-        .heightIn(max = 460.dp)
-        .padding(12.dp),
-      shape = RoundedCornerShape(12.dp),
-    ) {
-      Column(
-        modifier = Modifier
-          .verticalScroll(rememberScrollState())
-          .padding(16.dp),
-      ) {
-        Text(
-          text = "この場所を登録",
-          style = MaterialTheme.typography.titleMedium,
-          fontWeight = FontWeight.Bold,
-        )
-
-        Spacer(modifier = Modifier.height(8.dp))
-
-        PlaceFormBody(
-          name = name,
-          onNameChange = { name = it },
-          nameLabel = "名前",
-          category = result.category,
-          address = result.address,
-          onOpenInMaps = {
-            openPlaceInGoogleMaps(
-              context,
-              result.googlePlaceId,
-              result.latitude,
-              result.longitude,
-              name.ifBlank { result.name ?: "選択した場所" },
-            )
-          },
-          memo = memo,
-          onMemoChange = { memo = it },
-          wishlist = wishlist,
-          onWishlistChange = { wishlist = it },
-          priority = priority,
-          onPriorityChange = { priority = it },
-        )
-
-        Spacer(modifier = Modifier.height(16.dp))
-
-        Button(
-          onClick = { onRegister(result, name.ifBlank { null }, wishlist, priority, memo.ifBlank { null }) },
-          modifier = Modifier.fillMaxWidth(),
-        ) {
-          Text("登録")
-        }
-      }
-    }
+    // 地図タップ・地図で選ぶと同じ「場所シート」。畳めば地図を全画面で確認できる。
+    // 候補（カテゴリ・住所）は検索時に取得済みなので、シート側で引き直さない。
+    PlaceActionSheet(
+      target = PlaceSheetTarget.NewSearchResult(result),
+      onDismiss = onBack,
+      onFetchPoiDetails = { null },
+      onRegisterNew = onRegister,
+      modifier = Modifier.align(Alignment.BottomCenter),
+    )
   }
 }
 

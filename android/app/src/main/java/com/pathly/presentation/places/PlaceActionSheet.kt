@@ -41,9 +41,9 @@ import com.pathly.presentation.common.SheetDetent
 import com.pathly.presentation.common.rememberFloatingSheetState
 
 /**
- * 地図上の1点をタップしたときに出す**統一の「場所シート」**（ModalBottomSheet）。
- * タップ対象（未登録の空き地点 / 未登録 POI / 登録済みの場所）に応じて中身と操作を出し分ける。
- * 本体は追加・検索・編集と同じ [PlaceFormBody] を共有する。詳細は docs/designs/map-tap-behavior.md を参照。
+ * 地図の上に出す**統一の「場所シート」**。対象（未登録の空き地点 / 未登録 POI / 検索で選んだ施設 /
+ * 登録済みの場所）に応じて中身と操作を出し分ける。本体は追加・検索・編集と同じ [PlaceFormBody] を
+ * 共有する。詳細は docs/designs/map-tap-behavior.md を参照。
  */
 sealed interface PlaceSheetTarget {
   /** 施設ではない任意の地点。 */
@@ -51,6 +51,9 @@ sealed interface PlaceSheetTarget {
 
   /** 未登録の施設(POI)。 */
   data class NewPoi(val poi: PointOfInterest) : PlaceSheetTarget
+
+  /** キーワード検索で選んだ施設。詳細（カテゴリ・住所）は取得済みなので引き直さない。 */
+  data class NewSearchResult(val result: PlaceSearchResult) : PlaceSheetTarget
 
   /** 登録済みの場所（その場で編集する）。 */
   data class Existing(val placeId: Long) : PlaceSheetTarget
@@ -62,11 +65,11 @@ internal fun PlaceActionSheet(
   target: PlaceSheetTarget,
   onDismiss: () -> Unit,
   onFetchPoiDetails: suspend (googlePlaceId: String) -> PlaceSearchResult?,
-  onLoadPlace: suspend (placeId: Long) -> PlaceListItem?,
-  // 新規登録（空き地点/POI）を確定する。近接確認（表示ON=新規/OFF=確認）は呼び出し側に委ねる。
+  // 新規登録（空き地点/POI/検索結果）を確定する。近接確認（表示ON=新規/OFF=確認）は呼び出し側に委ねる。
   onRegisterNew: (lat: Double, lng: Double, name: String?, wishlist: Boolean, priority: Priority, memo: String?, googlePlaceId: String?) -> Unit,
-  // 既存 place の編集を保存する。
-  onSaveExisting: (item: PlaceListItem, name: String, note: String, wishlist: Boolean, priority: Priority, visited: Boolean) -> Unit,
+  // 以下2つは [PlaceSheetTarget.Existing] を渡す画面だけが必要（新規登録専用の画面は既定のままでよい）。
+  onLoadPlace: suspend (placeId: Long) -> PlaceListItem? = { null },
+  onSaveExisting: (item: PlaceListItem, name: String, note: String, wishlist: Boolean, priority: Priority, visited: Boolean) -> Unit = { _, _, _, _, _, _ -> },
   // 既存 place に「立ち寄りに追加」（記録中のみ）。null なら出さない。
   onAddStop: ((item: PlaceListItem) -> Unit)? = null,
   // 既存 place の詳細画面を開く。
@@ -116,7 +119,9 @@ internal fun PlaceActionSheet(
         when (target) {
           is PlaceSheetTarget.NewPoint -> NewPlaceEditor(
             latLng = target.latLng,
-            poi = null,
+            googlePlaceId = null,
+            initialName = null,
+            knownDetails = null,
             onFetchPoiDetails = onFetchPoiDetails,
             onRegisterNew = onRegisterNew,
             onDismiss = onDismiss,
@@ -124,7 +129,19 @@ internal fun PlaceActionSheet(
 
           is PlaceSheetTarget.NewPoi -> NewPlaceEditor(
             latLng = target.poi.latLng,
-            poi = target.poi,
+            googlePlaceId = target.poi.placeId,
+            initialName = target.poi.name,
+            knownDetails = null,
+            onFetchPoiDetails = onFetchPoiDetails,
+            onRegisterNew = onRegisterNew,
+            onDismiss = onDismiss,
+          )
+
+          is PlaceSheetTarget.NewSearchResult -> NewPlaceEditor(
+            latLng = LatLng(target.result.latitude, target.result.longitude),
+            googlePlaceId = target.result.googlePlaceId,
+            initialName = target.result.name,
+            knownDetails = target.result,
             onFetchPoiDetails = onFetchPoiDetails,
             onRegisterNew = onRegisterNew,
             onDismiss = onDismiss,
@@ -144,28 +161,35 @@ internal fun PlaceActionSheet(
   }
 }
 
-/** 未登録の地点/POI を場所として登録する編集部。POI なら Google 情報（カテゴリ/住所）をプレビューする。 */
+/**
+ * 未登録の地点/施設を場所として登録する編集部。施設（POI・検索結果）なら Google 情報
+ * （カテゴリ/住所）をプレビューする。[knownDetails] があれば取得済みとしてそれを使い、
+ * 無ければ [googlePlaceId] から引く。
+ */
 @Composable
 private fun NewPlaceEditor(
   latLng: LatLng,
-  poi: PointOfInterest?,
+  googlePlaceId: String?,
+  initialName: String?,
+  knownDetails: PlaceSearchResult?,
   onFetchPoiDetails: suspend (googlePlaceId: String) -> PlaceSearchResult?,
   onRegisterNew: (lat: Double, lng: Double, name: String?, wishlist: Boolean, priority: Priority, memo: String?, googlePlaceId: String?) -> Unit,
   onDismiss: () -> Unit,
 ) {
-  var name by remember(poi) { mutableStateOf(poi?.name ?: "") }
-  var memo by remember(poi) { mutableStateOf("") }
-  var wishlist by remember(poi) { mutableStateOf(false) }
-  var priority by remember(poi) { mutableStateOf(Priority.MEDIUM) }
+  var name by remember(latLng, googlePlaceId) { mutableStateOf(initialName.orEmpty()) }
+  var memo by remember(latLng, googlePlaceId) { mutableStateOf("") }
+  var wishlist by remember(latLng, googlePlaceId) { mutableStateOf(false) }
+  var priority by remember(latLng, googlePlaceId) { mutableStateOf(Priority.MEDIUM) }
   val context = LocalContext.current
 
-  // POI は開いたら Google から施設情報（カテゴリ・住所）を取得してプレビューする（結果は登録時に使い回し）。
-  val details by produceState<PlaceSearchResult?>(null, poi) {
-    value = poi?.placeId?.let { onFetchPoiDetails(it) }
+  // 施設は開いたら Google から施設情報（カテゴリ・住所）を取得してプレビューする（結果は登録時に使い回し）。
+  val details by produceState(knownDetails, latLng, googlePlaceId) {
+    value = knownDetails ?: googlePlaceId?.let { onFetchPoiDetails(it) }
   }
 
+  val isFacility = googlePlaceId != null
   Text(
-    text = if (poi != null) "この場所を登録" else "この地点を場所として登録",
+    text = if (isFacility) "この場所を登録" else "この地点を場所として登録",
     style = androidx.compose.material3.MaterialTheme.typography.titleMedium,
     fontWeight = FontWeight.Bold,
     modifier = Modifier.padding(bottom = 12.dp),
@@ -173,11 +197,11 @@ private fun NewPlaceEditor(
   PlaceFormBody(
     name = name,
     onNameChange = { name = it },
-    nameLabel = if (poi != null) "名前" else "名前（任意）",
+    nameLabel = if (isFacility) "名前" else "名前（任意）",
     category = details?.category,
     address = details?.address,
-    onOpenInMaps = poi?.let { p ->
-      { openPlaceInGoogleMaps(context, p.placeId, p.latLng.latitude, p.latLng.longitude, p.name) }
+    onOpenInMaps = {
+      openPlaceInGoogleMaps(context, googlePlaceId, latLng.latitude, latLng.longitude, name.ifBlank { "選択した場所" })
     },
     memo = memo,
     onMemoChange = { memo = it },
@@ -189,7 +213,7 @@ private fun NewPlaceEditor(
   SheetActions {
     TextButton(onClick = onDismiss) { Text("キャンセル") }
     Button(onClick = {
-      onRegisterNew(latLng.latitude, latLng.longitude, name.ifBlank { null }, wishlist, priority, memo.ifBlank { null }, poi?.placeId)
+      onRegisterNew(latLng.latitude, latLng.longitude, name.ifBlank { null }, wishlist, priority, memo.ifBlank { null }, googlePlaceId)
       onDismiss()
     }) { Text("登録") }
   }
