@@ -5,17 +5,13 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -29,7 +25,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.google.android.gms.maps.model.LatLng
 import com.google.android.gms.maps.model.PointOfInterest
@@ -87,75 +82,54 @@ internal fun PlaceActionSheet(
   // 別の地点をタップし直したら、畳んでいても開き直す（変化が見えないと操作を見失う）。
   LaunchedEffect(target) { sheetState.settleTo(SheetDetent.PEEK) }
 
-  Column(modifier = modifier, horizontalAlignment = Alignment.CenterHorizontally) {
-    // 畳んでいる間は地図が全面に見える。入力内容は保持したままなので、ここから戻せる。
-    if (sheetState.detent == SheetDetent.HIDDEN) {
-      Surface(
-        onClick = { sheetState.settleTo(SheetDetent.PEEK) },
-        shape = RoundedCornerShape(20.dp),
-        color = MaterialTheme.colorScheme.surface,
-        shadowElevation = 4.dp,
-        modifier = Modifier
-          .navigationBarsPadding()
-          .padding(bottom = 24.dp),
-      ) {
-        Text(
-          text = "▲ 入力に戻る",
-          style = MaterialTheme.typography.labelLarge,
-          fontWeight = FontWeight.Medium,
-          modifier = Modifier.padding(horizontal = 20.dp, vertical = 10.dp),
+  // 畳んでいる間は地図が全面に見える。入力内容は保持したままなので、ここから戻せる。
+  FloatingSheet(state = sheetState, modifier = modifier, restoreLabel = "▲ 入力に戻る") {
+    Column(
+      modifier = Modifier
+        .fillMaxWidth()
+        .verticalScroll(rememberScrollState())
+        .padding(horizontal = 20.dp)
+        .padding(bottom = 24.dp),
+    ) {
+      when (target) {
+        is PlaceSheetTarget.NewPoint -> NewPlaceEditor(
+          latLng = target.latLng,
+          googlePlaceId = null,
+          initialName = null,
+          knownDetails = null,
+          onFetchPoiDetails = onFetchPoiDetails,
+          onRegisterNew = onRegisterNew,
+          onDismiss = onDismiss,
         )
-      }
-    }
 
-    FloatingSheet(state = sheetState) {
-      Column(
-        modifier = Modifier
-          .fillMaxWidth()
-          .verticalScroll(rememberScrollState())
-          .padding(horizontal = 20.dp)
-          .padding(bottom = 24.dp),
-      ) {
-        when (target) {
-          is PlaceSheetTarget.NewPoint -> NewPlaceEditor(
-            latLng = target.latLng,
-            googlePlaceId = null,
-            initialName = null,
-            knownDetails = null,
-            onFetchPoiDetails = onFetchPoiDetails,
-            onRegisterNew = onRegisterNew,
-            onDismiss = onDismiss,
-          )
+        is PlaceSheetTarget.NewPoi -> NewPlaceEditor(
+          latLng = target.poi.latLng,
+          googlePlaceId = target.poi.placeId,
+          initialName = target.poi.name,
+          knownDetails = null,
+          onFetchPoiDetails = onFetchPoiDetails,
+          onRegisterNew = onRegisterNew,
+          onDismiss = onDismiss,
+        )
 
-          is PlaceSheetTarget.NewPoi -> NewPlaceEditor(
-            latLng = target.poi.latLng,
-            googlePlaceId = target.poi.placeId,
-            initialName = target.poi.name,
-            knownDetails = null,
-            onFetchPoiDetails = onFetchPoiDetails,
-            onRegisterNew = onRegisterNew,
-            onDismiss = onDismiss,
-          )
+        is PlaceSheetTarget.NewSearchResult -> NewPlaceEditor(
+          latLng = LatLng(target.result.latitude, target.result.longitude),
+          googlePlaceId = target.result.googlePlaceId,
+          initialName = target.result.name,
+          knownDetails = target.result,
+          onFetchPoiDetails = onFetchPoiDetails,
+          onRegisterNew = onRegisterNew,
+          onDismiss = onDismiss,
+        )
 
-          is PlaceSheetTarget.NewSearchResult -> NewPlaceEditor(
-            latLng = LatLng(target.result.latitude, target.result.longitude),
-            googlePlaceId = target.result.googlePlaceId,
-            initialName = target.result.name,
-            knownDetails = target.result,
-            onFetchPoiDetails = onFetchPoiDetails,
-            onRegisterNew = onRegisterNew,
-            onDismiss = onDismiss,
-          )
-
-          is PlaceSheetTarget.Existing -> ExistingPlaceEditor(
-            placeId = target.placeId,
-            onLoadPlace = onLoadPlace,
-            onSaveExisting = onSaveExisting,
-            onAddStop = onAddStop,
-            onOpenDetail = onOpenDetail,
-            onDismiss = onDismiss,
-          )
-        }
+        is PlaceSheetTarget.Existing -> ExistingPlaceEditor(
+          placeId = target.placeId,
+          onLoadPlace = onLoadPlace,
+          onSaveExisting = onSaveExisting,
+          onAddStop = onAddStop,
+          onOpenDetail = onOpenDetail,
+          onDismiss = onDismiss,
+        )
       }
     }
   }

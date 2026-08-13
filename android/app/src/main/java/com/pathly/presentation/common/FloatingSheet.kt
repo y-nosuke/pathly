@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
@@ -27,6 +28,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalWindowInfo
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.CoroutineScope
@@ -145,35 +147,61 @@ fun FloatingSheetState.heightOf(detent: SheetDetent): Dp {
 /**
  * 地図の上に重ねるシート本体。角丸＋影で"浮いている"見た目にし、上部のつまみで段を変える。
  * 呼び出し側の Box で `.align(Alignment.BottomCenter)` して使う。
+ *
+ * [restoreLabel] を渡すと、畳みきった（[SheetDetent.HIDDEN]）ときに戻すためのボタンを出す。
+ * 畳めるシートは戻す手段が無いと操作を見失うので、[FloatingSheetState.allowHidden] が
+ * true のシートでは基本的に指定する。
  */
 @Composable
 fun FloatingSheet(
   state: FloatingSheetState,
   modifier: Modifier = Modifier,
+  restoreLabel: String? = null,
   content: @Composable ColumnScope.() -> Unit,
 ) {
   val density = LocalDensity.current
   // 高さの読み取りはここ（シートの内側）だけに閉じ込める。
   val heightPx = state.currentHeightPx()
-  Surface(
-    modifier = modifier
-      .fillMaxWidth()
-      .height(with(density) { heightPx.toDp() }),
-    shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
-    color = MaterialTheme.colorScheme.surface,
-    // 完全に畳んだときは影を消す（高さ0の面に影が残ると画面下端に線が出る）。
-    shadowElevation = if (heightPx <= 0.5f) 0.dp else 12.dp,
-  ) {
-    Column(
+  Column(modifier = modifier, horizontalAlignment = Alignment.CenterHorizontally) {
+    if (restoreLabel != null && state.detent == SheetDetent.HIDDEN) {
+      Surface(
+        onClick = { state.settleTo(SheetDetent.PEEK) },
+        shape = RoundedCornerShape(20.dp),
+        color = MaterialTheme.colorScheme.surface,
+        shadowElevation = 4.dp,
+        modifier = Modifier
+          .navigationBarsPadding()
+          .padding(bottom = 24.dp),
+      ) {
+        Text(
+          text = restoreLabel,
+          style = MaterialTheme.typography.labelLarge,
+          fontWeight = FontWeight.Medium,
+          modifier = Modifier.padding(horizontal = 20.dp, vertical = 10.dp),
+        )
+      }
+    }
+
+    Surface(
       modifier = Modifier
-        .fillMaxSize()
-        .navigationBarsPadding(),
+        .fillMaxWidth()
+        .height(with(density) { heightPx.toDp() }),
+      shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
+      color = MaterialTheme.colorScheme.surface,
+      // 完全に畳んだときは影を消す（高さ0の面に影が残ると画面下端に線が出る）。
+      shadowElevation = if (heightPx <= 0.5f) 0.dp else 12.dp,
     ) {
-      SheetDragHandle(
-        onDrag = { state.dragBy(it) },
-        onDragEnd = { state.settleToNearest() },
-      )
-      content()
+      Column(
+        modifier = Modifier
+          .fillMaxSize()
+          .navigationBarsPadding(),
+      ) {
+        SheetDragHandle(
+          onDrag = { state.dragBy(it) },
+          onDragEnd = { state.settleToNearest() },
+        )
+        content()
+      }
     }
   }
 }

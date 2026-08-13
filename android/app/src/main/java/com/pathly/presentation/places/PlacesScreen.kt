@@ -16,7 +16,6 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -53,7 +52,6 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -61,9 +59,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -90,9 +86,12 @@ import com.pathly.domain.model.PlaceSearchResult
 import com.pathly.domain.model.PlaceVisit
 import com.pathly.domain.model.Priority
 import com.pathly.domain.model.RegisteredPlace
+import com.pathly.presentation.common.FloatingSheet
 import com.pathly.presentation.common.NearbyCandidatePickerDialog
 import com.pathly.presentation.common.NearbyPlaceConfirmDialog
 import com.pathly.presentation.common.RegisteredPlaceMarkers
+import com.pathly.presentation.common.heightOf
+import com.pathly.presentation.common.rememberFloatingSheetState
 import com.pathly.util.DateFormatters
 import kotlinx.coroutines.launch
 
@@ -793,9 +792,11 @@ private fun PlaceDetailContent(
     (wishlist && item.visitCount == 0 && visited != item.isManuallyVisited) ||
     pendingLink != null
 
-  // 下部カードの高さを測り、その分マップ下部に余白を入れてピンがカードに隠れないようにする。
-  var sheetHeightPx by remember { mutableIntStateOf(0) }
-  val density = LocalDensity.current
+  // 地図タップ・地図で選ぶ・検索して追加と同じ非モーダルのシートで出す（ADR-0010）。
+  // 畳めば地図を全画面で確認できる。
+  val sheetState = rememberFloatingSheetState(peekFraction = 0.55f)
+  // マップ下部の余白はシートの段に合わせる（高さそのものを読むと、ドラッグのたびに地図が再描画される）。
+  val mapBottomPadding = sheetState.heightOf(sheetState.detent)
 
   val position = LatLng(item.place.latitude, item.place.longitude)
   val cameraPositionState = rememberCameraPositionState {
@@ -806,7 +807,7 @@ private fun PlaceDetailContent(
     GoogleMap(
       modifier = Modifier.fillMaxSize(),
       cameraPositionState = cameraPositionState,
-      contentPadding = PaddingValues(bottom = with(density) { sheetHeightPx.toDp() }),
+      contentPadding = PaddingValues(bottom = mapBottomPadding),
       uiSettings = MapUiSettings(
         zoomControlsEnabled = false,
         mapToolbarEnabled = false,
@@ -853,147 +854,147 @@ private fun PlaceDetailContent(
       Icon(painter = painterResource(R.drawable.ic_arrow_back), contentDescription = "一覧に戻る")
     }
 
-    Card(
-      modifier = Modifier
-        .align(Alignment.BottomCenter)
-        .onSizeChanged { sheetHeightPx = it.height }
-        .fillMaxWidth()
-        .heightIn(max = 460.dp)
-        .padding(12.dp),
-      shape = RoundedCornerShape(12.dp),
-    ) {
-      Column(
-        modifier = Modifier
-          .verticalScroll(rememberScrollState())
-          .padding(16.dp),
+    // 地図タップの場所シートを開いている間は重なるので引っ込める（どちらも下端に出る）。
+    if (placeSheetTarget == null) {
+      FloatingSheet(
+        state = sheetState,
+        modifier = Modifier.align(Alignment.BottomCenter),
+        restoreLabel = "▲ 詳細に戻る",
       ) {
-        PlaceFormBody(
-          name = name,
-          onNameChange = { name = it },
-          nameLabel = "自分で付ける名前（任意）",
-          heading = item.displayName,
-          // 書き換えの元にできるのは Google 名だけ（住所・座標のフォールバックは元にしない）。
-          namePrefill = item.place.googleName,
-          category = item.place.category,
-          address = item.place.googleAddress,
-          onOpenInMaps = { openInGoogleMaps(context, item.place) },
-          memo = note,
-          onMemoChange = { note = it },
-          wishlist = wishlist,
-          onWishlistChange = { wishlist = it },
-          priority = priority,
-          onPriorityChange = { priority = it },
-          wishlistOffHint = "「行きたい」に登録すると、優先度を付けられます。",
-          // 立ち寄り記録がある場所は自動で訪問済み（切替不可・件数を表示）。無ければ手動トグル。
-          visitedContent = if (item.visitCount > 0) {
-            {
-              Text(
-                text = "訪問済み（立ち寄り記録 ${item.visitCount} 件）",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.secondary,
-              )
-            }
-          } else {
-            {
-              Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
-              ) {
-                Text(text = if (visited) "訪問済み" else "未訪問")
-                Switch(checked = visited, onCheckedChange = { visited = it })
+        Column(
+          modifier = Modifier
+            .verticalScroll(rememberScrollState())
+            .padding(horizontal = 20.dp)
+            .padding(bottom = 24.dp),
+        ) {
+          PlaceFormBody(
+            name = name,
+            onNameChange = { name = it },
+            nameLabel = "自分で付ける名前（任意）",
+            heading = item.displayName,
+            // 書き換えの元にできるのは Google 名だけ（住所・座標のフォールバックは元にしない）。
+            namePrefill = item.place.googleName,
+            category = item.place.category,
+            address = item.place.googleAddress,
+            onOpenInMaps = { openInGoogleMaps(context, item.place) },
+            memo = note,
+            onMemoChange = { note = it },
+            wishlist = wishlist,
+            onWishlistChange = { wishlist = it },
+            priority = priority,
+            onPriorityChange = { priority = it },
+            wishlistOffHint = "「行きたい」に登録すると、優先度を付けられます。",
+            // 立ち寄り記録がある場所は自動で訪問済み（切替不可・件数を表示）。無ければ手動トグル。
+            visitedContent = if (item.visitCount > 0) {
+              {
+                Text(
+                  text = "訪問済み（立ち寄り記録 ${item.visitCount} 件）",
+                  style = MaterialTheme.typography.bodyMedium,
+                  color = MaterialTheme.colorScheme.secondary,
+                )
               }
-            }
-          },
-        )
-
-        // Google 施設情報の取得・紐付け。ID の無い場所（オフライン記録・手動登録）に住所・カテゴリ・正確な座標を補える。
-        Spacer(modifier = Modifier.height(8.dp))
-        TextButton(
-          onClick = { linkDialogOpen = true },
-          modifier = Modifier.align(Alignment.End),
-        ) {
-          Icon(
-            painter = painterResource(R.drawable.ic_place),
-            contentDescription = null,
-            modifier = Modifier.size(18.dp),
+            } else {
+              {
+                Row(
+                  modifier = Modifier.fillMaxWidth(),
+                  horizontalArrangement = Arrangement.SpaceBetween,
+                  verticalAlignment = Alignment.CenterVertically,
+                ) {
+                  Text(text = if (visited) "訪問済み" else "未訪問")
+                  Switch(checked = visited, onCheckedChange = { visited = it })
+                }
+              }
+            },
           )
-          Text(
-            text = if (item.place.googlePlaceId == null) " Googleで情報を取得" else " Google施設を選び直す",
-          )
-        }
 
-        // 選んだ施設は保存で確定する（即保存しない）。未保存の紐付け予定をここに見せる。
-        pendingLink?.let { link ->
-          Row(
-            modifier = Modifier
-              .fillMaxWidth()
-              .padding(vertical = 4.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween,
+          // Google 施設情報の取得・紐付け。ID の無い場所（オフライン記録・手動登録）に住所・カテゴリ・正確な座標を補える。
+          Spacer(modifier = Modifier.height(8.dp))
+          TextButton(
+            onClick = { linkDialogOpen = true },
+            modifier = Modifier.align(Alignment.End),
           ) {
-            Text(
-              text = "紐付け予定: ${link.name ?: "（名称不明）"}（保存で確定）",
-              style = MaterialTheme.typography.bodySmall,
-              color = MaterialTheme.colorScheme.primary,
-              modifier = Modifier.weight(1f),
+            Icon(
+              painter = painterResource(R.drawable.ic_place),
+              contentDescription = null,
+              modifier = Modifier.size(18.dp),
             )
-            TextButton(onClick = { pendingLink = null }) { Text("取消") }
+            Text(
+              text = if (item.place.googlePlaceId == null) " Googleで情報を取得" else " Google施設を選び直す",
+            )
           }
-        }
 
-        Spacer(modifier = Modifier.height(4.dp))
-        Button(
-          onClick = {
-            onSave(name, note, wishlist, priority, visited, pendingLink)
-            // 保存したら紐付け予定は消化済み。残すとボタンが活性のまま・予定表示が残るため確実にクリアする。
-            pendingLink = null
-          },
-          enabled = hasChanges,
-          modifier = Modifier.fillMaxWidth(),
-        ) {
-          Text("保存")
-        }
+          // 選んだ施設は保存で確定する（即保存しない）。未保存の紐付け予定をここに見せる。
+          pendingLink?.let { link ->
+            Row(
+              modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 4.dp),
+              verticalAlignment = Alignment.CenterVertically,
+              horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
+              Text(
+                text = "紐付け予定: ${link.name ?: "（名称不明）"}（保存で確定）",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.weight(1f),
+              )
+              TextButton(onClick = { pendingLink = null }) { Text("取消") }
+            }
+          }
 
-        if (visits.isNotEmpty()) {
-          Spacer(modifier = Modifier.height(16.dp))
-          Text(
-            text = "この場所を含むお出掛け（${visits.size}件）",
-            style = MaterialTheme.typography.titleSmall,
-            fontWeight = FontWeight.Bold,
-          )
           Spacer(modifier = Modifier.height(4.dp))
-          visits.forEach { visit ->
-            VisitRow(visit = visit, onClick = { onOpenTrack(visit.trackId) })
-            HorizontalDivider()
+          Button(
+            onClick = {
+              onSave(name, note, wishlist, priority, visited, pendingLink)
+              // 保存したら紐付け予定は消化済み。残すとボタンが活性のまま・予定表示が残るため確実にクリアする。
+              pendingLink = null
+            },
+            enabled = hasChanges,
+            modifier = Modifier.fillMaxWidth(),
+          ) {
+            Text("保存")
           }
-        }
 
-        Spacer(modifier = Modifier.height(8.dp))
-        val canDelete = item.visitCount == 0
-        val deleteColor = if (canDelete) {
-          MaterialTheme.colorScheme.error
-        } else {
-          MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
-        }
-        OutlinedButton(
-          onClick = onDeleteRequest,
-          enabled = canDelete,
-          modifier = Modifier.fillMaxWidth(),
-        ) {
-          Icon(
-            painter = painterResource(R.drawable.ic_delete),
-            contentDescription = null,
-            tint = deleteColor,
-          )
-          Text(text = " この場所を削除", color = deleteColor)
-        }
-        if (!canDelete) {
-          Text(
-            text = "立ち寄り記録があるため削除できません（記録を残します）",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-          )
+          if (visits.isNotEmpty()) {
+            Spacer(modifier = Modifier.height(16.dp))
+            Text(
+              text = "この場所を含むお出掛け（${visits.size}件）",
+              style = MaterialTheme.typography.titleSmall,
+              fontWeight = FontWeight.Bold,
+            )
+            Spacer(modifier = Modifier.height(4.dp))
+            visits.forEach { visit ->
+              VisitRow(visit = visit, onClick = { onOpenTrack(visit.trackId) })
+              HorizontalDivider()
+            }
+          }
+
+          Spacer(modifier = Modifier.height(8.dp))
+          val canDelete = item.visitCount == 0
+          val deleteColor = if (canDelete) {
+            MaterialTheme.colorScheme.error
+          } else {
+            MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
+          }
+          OutlinedButton(
+            onClick = onDeleteRequest,
+            enabled = canDelete,
+            modifier = Modifier.fillMaxWidth(),
+          ) {
+            Icon(
+              painter = painterResource(R.drawable.ic_delete),
+              contentDescription = null,
+              tint = deleteColor,
+            )
+            Text(text = " この場所を削除", color = deleteColor)
+          }
+          if (!canDelete) {
+            Text(
+              text = "立ち寄り記録があるため削除できません（記録を残します）",
+              style = MaterialTheme.typography.bodySmall,
+              color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+          }
         }
       }
     }

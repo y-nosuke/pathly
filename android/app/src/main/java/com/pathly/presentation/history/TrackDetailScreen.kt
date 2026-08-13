@@ -42,7 +42,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.google.android.gms.maps.model.LatLng
 import com.pathly.BuildConfig
@@ -430,78 +429,59 @@ fun TrackDetailScreen(
 
     // ---- 通常モードのフローティングシート（つまみで開閉・一覧は独立スクロール）----
     if (!tuningMode && !candidateMode && !manualMode) {
-      if (sheetHidden) {
-        // 隠しているときは、下部中央に復帰ボタンを出す。
-        Surface(
-          onClick = { sheetState.settleTo(SheetDetent.PEEK) },
-          shape = RoundedCornerShape(20.dp),
-          color = MaterialTheme.colorScheme.surface,
-          shadowElevation = 4.dp,
+      FloatingSheet(
+        state = sheetState,
+        modifier = Modifier.align(Alignment.BottomCenter),
+        // 隠しているときは、下部中央に復帰ボタンが出る。
+        restoreLabel = "▲ 詳細を表示",
+      ) {
+        TrackDetailSheet(
+          track = track,
+          stops = stops,
+          unresolvedCount = unresolvedCount,
+          selectionMode = selectionMode,
+          selectedStopIds = selectedStopIds,
+          highlightedStopId = highlightedStopId,
           modifier = Modifier
-            .align(Alignment.BottomCenter)
-            .navigationBarsPadding()
-            .padding(bottom = 24.dp),
-        ) {
-          Text(
-            text = "▲ 詳細を表示",
-            style = MaterialTheme.typography.labelLarge,
-            fontWeight = FontWeight.Medium,
-            modifier = Modifier.padding(horizontal = 20.dp, vertical = 10.dp),
-          )
-        }
-      } else {
-        FloatingSheet(
-          state = sheetState,
-          modifier = Modifier.align(Alignment.BottomCenter),
-        ) {
-          TrackDetailSheet(
-            track = track,
-            stops = stops,
-            unresolvedCount = unresolvedCount,
-            selectionMode = selectionMode,
-            selectedStopIds = selectedStopIds,
-            highlightedStopId = highlightedStopId,
-            modifier = Modifier
-              .weight(1f)
-              .fillMaxWidth(),
-            onFocusStop = {
-              highlightedStopId = it.id
-              focusTarget = LatLng(it.place.latitude, it.place.longitude)
-              focusNonce++
-            },
-            onEditStop = { editingStop = it },
-            onEditStopNote = { editingNoteStop = it },
-            onReassignStop = { reassignTarget = it },
-            onDeleteStop = { deleteWithUndo(listOf(it.id)) },
-            onResolveNames = onResolveNames,
-            onReanalyze = onReanalyze,
-            onManualAdd = {
-              manualPick = null
-              manualMode = true
-            },
-            onEnterSelection = { stop ->
-              selectionMode = true
-              if (stop.id !in selectedStopIds) selectedStopIds.add(stop.id)
-            },
-            onToggleSelect = { stop ->
-              if (stop.id in selectedStopIds) selectedStopIds.remove(stop.id) else selectedStopIds.add(stop.id)
-            },
-            onSelectAll = {
-              val allSelected = selectedStopIds.size == stops.size
-              selectedStopIds.clear()
-              if (!allSelected) selectedStopIds.addAll(stops.map { it.id })
-            },
-            onCancelSelection = {
-              selectionMode = false
-              selectedStopIds.clear()
-            },
-            onDeleteSelected = {
-              deleteWithUndo(selectedStopIds.toList())
-              selectionMode = false
-              selectedStopIds.clear()
-            },
-          )
-        }
+            .weight(1f)
+            .fillMaxWidth(),
+          onFocusStop = {
+            highlightedStopId = it.id
+            focusTarget = LatLng(it.place.latitude, it.place.longitude)
+            focusNonce++
+          },
+          onEditStop = { editingStop = it },
+          onEditStopNote = { editingNoteStop = it },
+          onReassignStop = { reassignTarget = it },
+          onDeleteStop = { deleteWithUndo(listOf(it.id)) },
+          onResolveNames = onResolveNames,
+          onReanalyze = onReanalyze,
+          onManualAdd = {
+            manualPick = null
+            manualMode = true
+          },
+          onEnterSelection = { stop ->
+            selectionMode = true
+            if (stop.id !in selectedStopIds) selectedStopIds.add(stop.id)
+          },
+          onToggleSelect = { stop ->
+            if (stop.id in selectedStopIds) selectedStopIds.remove(stop.id) else selectedStopIds.add(stop.id)
+          },
+          onSelectAll = {
+            val allSelected = selectedStopIds.size == stops.size
+            selectedStopIds.clear()
+            if (!allSelected) selectedStopIds.addAll(stops.map { it.id })
+          },
+          onCancelSelection = {
+            selectionMode = false
+            selectedStopIds.clear()
+          },
+          onDeleteSelected = {
+            deleteWithUndo(selectedStopIds.toList())
+            selectionMode = false
+            selectedStopIds.clear()
+          },
+        )
       }
     }
 
