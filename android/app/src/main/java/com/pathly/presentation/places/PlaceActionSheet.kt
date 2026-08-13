@@ -200,8 +200,9 @@ private fun NewPlaceEditor(
     nameLabel = if (isFacility) "名前" else "名前（任意）",
     category = details?.category,
     address = details?.address,
-    onOpenInMaps = {
-      openPlaceInGoogleMaps(context, googlePlaceId, latLng.latitude, latLng.longitude, name.ifBlank { "選択した場所" })
+    // 施設のときだけ。空き地点は Google に開く先（施設ページ）が無く、座標にピンが立つだけなので出さない。
+    onOpenInMaps = googlePlaceId?.let { id ->
+      { openPlaceInGoogleMaps(context, id, latLng.latitude, latLng.longitude, name.ifBlank { "選択した場所" }) }
     },
     memo = memo,
     onMemoChange = { memo = it },
