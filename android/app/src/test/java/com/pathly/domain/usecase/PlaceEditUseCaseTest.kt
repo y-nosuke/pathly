@@ -31,7 +31,7 @@ class PlaceEditUseCaseTest {
 
   @Before
   fun setup() {
-    coEvery { wishlistRepository.registerPlace(any(), any(), any(), any(), any(), any()) } returns
+    coEvery { wishlistRepository.registerPlace(any(), any(), any(), any(), any(), any(), any()) } returns
       PlaceRegistration(placeId = 100L, alreadyExisted = false)
     coEvery { wishlistRepository.addToWishlist(any(), any()) } returns 200L
   }
@@ -53,9 +53,36 @@ class PlaceEditUseCaseTest {
 
     assertTrue(result is PlaceEditUseCase.RegisterResult.Registered)
     // 施設の同一性で同定するので forceNewPlace は false。
-    coVerify { wishlistRepository.registerPlace(35.0, 139.0, "カフェ", null, "gp-1", false) }
+    coVerify { wishlistRepository.registerPlace(35.0, 139.0, "カフェ", null, "gp-1", false, null) }
     // POI は確認不要なので近くの既存は探さない。
     coVerify(exactly = 0) { wishlistRepository.findNearbyPlace(any(), any()) }
+  }
+
+  @Test
+  fun `検索結果は取得済みの施設情報をそのまま渡す`() = runTest {
+    val known = PlaceSearchResult(
+      googlePlaceId = "gp-1",
+      name = "カフェ",
+      address = "東京都…",
+      category = "カフェ",
+      latitude = 35.0,
+      longitude = 139.0,
+    )
+
+    useCase.registerWithNearbyCheck(
+      latitude = 35.0,
+      longitude = 139.0,
+      name = null,
+      wishlist = false,
+      priority = Priority.MEDIUM,
+      memo = null,
+      googlePlaceId = "gp-1",
+      nearbyAlreadyVisible = false,
+      knownDetails = known,
+    )
+
+    // 検索時に取得済みなので、登録でもう一度 Google を引かせない。
+    coVerify { wishlistRepository.registerPlace(35.0, 139.0, null, null, "gp-1", false, known) }
   }
 
   @Test
@@ -73,7 +100,7 @@ class PlaceEditUseCaseTest {
 
     assertTrue(result is PlaceEditUseCase.RegisterResult.Registered)
     coVerify(exactly = 0) { wishlistRepository.findNearbyPlace(any(), any()) }
-    coVerify { wishlistRepository.registerPlace(35.0, 139.0, null, null, null, true) }
+    coVerify { wishlistRepository.registerPlace(35.0, 139.0, null, null, null, true, null) }
   }
 
   @Test
@@ -94,7 +121,7 @@ class PlaceEditUseCaseTest {
 
     assertEquals(PlaceEditUseCase.RegisterResult.NearbyFound(nearby), result)
     // ユーザーが選ぶまで登録しない。
-    coVerify(exactly = 0) { wishlistRepository.registerPlace(any(), any(), any(), any(), any(), any()) }
+    coVerify(exactly = 0) { wishlistRepository.registerPlace(any(), any(), any(), any(), any(), any(), any()) }
   }
 
   @Test
@@ -113,7 +140,7 @@ class PlaceEditUseCaseTest {
     )
 
     assertTrue(result is PlaceEditUseCase.RegisterResult.Registered)
-    coVerify { wishlistRepository.registerPlace(35.0, 139.0, null, null, null, true) }
+    coVerify { wishlistRepository.registerPlace(35.0, 139.0, null, null, null, true, null) }
   }
 
   @Test

@@ -66,6 +66,7 @@ class WishlistRepositoryImpl @Inject constructor(
     note: String?,
     googlePlaceId: String?,
     forceNewPlace: Boolean,
+    knownDetails: PlaceSearchResult?,
   ): PlaceRegistration {
     // POI 由来（googlePlaceId あり）は施設の同一性で同定（隣接店を分離・同一POIはまとめる）。
     // forceNewPlace（近接確認で「新規」/ 表示ONでそのまま登録）なら座標同定せず必ず新規。無ければ座標同定にフォールバック。
@@ -86,7 +87,8 @@ class WishlistRepositoryImpl @Inject constructor(
     // POI 由来なら Google データ（カテゴリ・住所）を取得して保存する（未取得の place にだけ）。
     // これで詳細にカテゴリが出て、Google マップで施設ページを開ける。
     if (googlePlaceId != null && googlePlaceDao.getByPlace(placeId) == null) {
-      val result = placesTextSearcher.fetch(googlePlaceId)
+      // 検索結果のように取得済みならそれを使う（同じ施設のときだけ）。オフラインでも欠落しない。
+      val result = knownDetails?.takeIf { it.googlePlaceId == googlePlaceId } ?: placesTextSearcher.fetch(googlePlaceId)
       googlePlaceDao.upsert(
         if (result != null) {
           GooglePlaceEntity(placeId, result.googlePlaceId, result.name, result.address, result.category)
@@ -115,25 +117,6 @@ class WishlistRepositoryImpl @Inject constructor(
   override suspend fun nearbyPois(latitude: Double, longitude: Double): List<PlaceSearchResult> = placeRepository.nearbyPois(latitude, longitude)
 
   override suspend fun findNearbyPlace(latitude: Double, longitude: Double): RegisteredPlace? = placeRepository.findNearbyPlace(latitude, longitude)
-
-  override suspend fun registerSearchedPlace(result: PlaceSearchResult): PlaceRegistration {
-    // 検索結果は施設の同一性で同定（同じ POI の再登録は同じ place にまとめる）。
-    val (placeId, alreadyExisted) = placeRepository.findOrCreateByGooglePlaceId(
-      result.googlePlaceId,
-      result.latitude,
-      result.longitude,
-      PlaceSource.USER,
-    )
-    // 検索結果は Google 由来なので google_places に記録（places.name はユーザー名専用）。
-    // 表示は google_places.name にフォールバックするので、名前は自動で出る。
-    googlePlaceDao.upsert(
-      GooglePlaceEntity(placeId, result.googlePlaceId, result.name, result.address, result.category),
-    )
-    // 問い合わせlog に記録 → 以後は自動命名で Nearby を叩かない。
-    placeResolutionDao.upsert(PlaceResolutionEntity(placeId, Date()))
-    logger.i("Registered searched place $placeId (google=${result.googlePlaceId}, existed=$alreadyExisted)")
-    return PlaceRegistration(placeId, alreadyExisted)
-  }
 
   override suspend fun renamePlace(placeId: Long, name: String) {
     placeDao.updateName(placeId, name.trim().ifBlank { null }, Date())

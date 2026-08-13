@@ -150,8 +150,9 @@ class PlacesViewModel @Inject constructor(
   }
 
   /**
-   * 地図タップからの場所登録。近くに既存の場所があれば登録せず確認待ちにする。
+   * 地図タップ・検索からの場所登録。近くに既存の場所があれば登録せず確認待ちにする。
    * 「登録済みの場所」を地図に表示中なら、ユーザーは既存を見たうえでの操作なので確認しない。
+   * [knownDetails] は検索結果のように施設情報を取得済みのとき（Google を引き直さない）。
    */
   fun registerPlaceWithNearbyCheck(
     latitude: Double,
@@ -161,6 +162,7 @@ class PlacesViewModel @Inject constructor(
     priority: Priority,
     memo: String?,
     googlePlaceId: String?,
+    knownDetails: PlaceSearchResult? = null,
   ) {
     viewModelScope.launch {
       try {
@@ -173,6 +175,7 @@ class PlacesViewModel @Inject constructor(
           memo,
           googlePlaceId,
           nearbyAlreadyVisible = _uiState.value.showRegisteredPlaces,
+          knownDetails = knownDetails,
         )
         when (result) {
           is PlaceEditUseCase.RegisterResult.NearbyFound ->
@@ -344,39 +347,6 @@ class PlacesViewModel @Inject constructor(
         _uiState.update { it.copy(errorMessage = "場所の取得に失敗しました（オフライン等）") }
       } else {
         _uiState.update { it.copy(search = it.search.copy(result = result)) }
-      }
-    }
-  }
-
-  /**
-   * 検索結果を登録する。[name] が Google 由来の名前と違えばユーザー名として設定する。
-   * 行きたい ON なら wishlist にも入れる。
-   */
-  fun registerSearchResult(
-    result: PlaceSearchResult,
-    name: String?,
-    wishlist: Boolean,
-    priority: Priority,
-    memo: String?,
-  ) {
-    viewModelScope.launch {
-      try {
-        val reg = wishlistRepository.registerSearchedPlace(result)
-        val placeId = reg.placeId
-        val trimmed = name?.trim().orEmpty()
-        if (trimmed.isNotEmpty() && trimmed != result.name?.trim()) {
-          wishlistRepository.renamePlace(placeId, trimmed)
-        }
-        if (!memo.isNullOrBlank()) {
-          wishlistRepository.updatePlaceNote(placeId, memo)
-        }
-        if (wishlist) {
-          wishlistRepository.addToWishlist(placeId, priority)
-        }
-        _uiState.update { it.copy(search = SearchState()) }
-        notifyRegistered(reg.alreadyExisted)
-      } catch (e: Exception) {
-        _uiState.update { it.copy(errorMessage = "登録に失敗しました: ${e.message}") }
       }
     }
   }

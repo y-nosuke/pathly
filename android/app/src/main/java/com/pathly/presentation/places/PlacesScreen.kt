@@ -201,12 +201,22 @@ fun SearchAddRoute(
     onSelectPrediction = viewModel::selectPrediction,
     onBackToPredictions = viewModel::clearSearchResult,
     onCancel = onDone,
-    onRegister = { _, _, name, wishlist, priority, memo, _ ->
-      // 座標・placeId は選んだ候補（search.result）そのものなので、候補から登録する。
-      uiState.search.result?.let { result ->
-        viewModel.registerSearchResult(result, name, wishlist, priority, memo)
-        onDone()
-      }
+    onRegister = { lat, lng, name, wishlist, priority, memo, googlePlaceId ->
+      // 地図タップと同じ登録経路に通す（近接確認の要否も UseCase 側の判断に任せる）。
+      // 施設情報は検索時に取得済みなので渡して引き直させない。名前は Google 由来の
+      // ままなら places.name（ユーザー名）に書かない。
+      val result = uiState.search.result
+      viewModel.registerPlaceWithNearbyCheck(
+        lat,
+        lng,
+        name?.takeIf { it.trim() != result?.name?.trim() },
+        wishlist,
+        priority,
+        memo,
+        googlePlaceId,
+        knownDetails = result,
+      )
+      onDone()
     },
   )
 }

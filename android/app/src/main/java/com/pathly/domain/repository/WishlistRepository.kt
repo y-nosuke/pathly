@@ -45,17 +45,12 @@ interface WishlistRepository {
     googlePlaceId: String? = null,
     // true のとき座標30m同定をせず必ず新しい place を作る（近接確認で「新規」/ 表示ONでそのまま登録）。
     forceNewPlace: Boolean = false,
+    // 施設情報を取得済みなら渡す（キーワード検索の結果）。Google を引き直さない。
+    knownDetails: PlaceSearchResult? = null,
   ): PlaceRegistration
 
   /** 手動登録の近接確認用: 近く（検出半径 50m）に既存の場所があれば最寄り1件を返す（無ければ null）。 */
   suspend fun findNearbyPlace(latitude: Double, longitude: Double): RegisteredPlace?
-
-  /**
-   * キーワード検索の結果から場所を登録する。find-or-create（30m）で場所を同定し、
-   * Google 由来の名前・住所・place ID を google_places に記録する（以後 Nearby を叩かない）。
-   * 返り値は place の id。行きたい登録はしない（呼び出し側で任意に [addToWishlist]）。
-   */
-  suspend fun registerSearchedPlace(result: PlaceSearchResult): PlaceRegistration
 
   /**
    * 既存の場所を、検索で選んだ Google 施設に紐付ける（`googlePlaceId` を持たない場所の情報補完）。

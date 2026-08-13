@@ -56,10 +56,11 @@ class PlaceEditUseCase @Inject constructor(
     memo: String?,
     googlePlaceId: String?,
     nearbyAlreadyVisible: Boolean,
+    knownDetails: PlaceSearchResult? = null,
   ): RegisterResult {
     if (googlePlaceId != null) {
       // 施設同定に任せる（隣接する別施設に相乗りしない）。
-      return register(latitude, longitude, name, wishlist, priority, memo, googlePlaceId, forceNewPlace = false)
+      return register(latitude, longitude, name, wishlist, priority, memo, googlePlaceId, forceNewPlace = false, knownDetails = knownDetails)
     }
     if (!nearbyAlreadyVisible) {
       wishlistRepository.findNearbyPlace(latitude, longitude)?.let { return RegisterResult.NearbyFound(it) }
@@ -70,6 +71,7 @@ class PlaceEditUseCase @Inject constructor(
   /**
    * 同定方法を呼び出し側が決めている場合の登録（近接確認はしない）。
    * [forceNewPlace] が true なら座標同定せず必ず新しい場所を作る。
+   * [knownDetails] があれば施設情報の取得を省く（キーワード検索は取得済み）。
    */
   suspend fun register(
     latitude: Double,
@@ -80,8 +82,9 @@ class PlaceEditUseCase @Inject constructor(
     memo: String?,
     googlePlaceId: String?,
     forceNewPlace: Boolean,
+    knownDetails: PlaceSearchResult? = null,
   ): RegisterResult.Registered {
-    val registration = wishlistRepository.registerPlace(latitude, longitude, name, memo, googlePlaceId, forceNewPlace)
+    val registration = wishlistRepository.registerPlace(latitude, longitude, name, memo, googlePlaceId, forceNewPlace, knownDetails)
     if (wishlist) wishlistRepository.addToWishlist(registration.placeId, priority)
     return RegisterResult.Registered(registration.placeId, registration.alreadyExisted)
   }
