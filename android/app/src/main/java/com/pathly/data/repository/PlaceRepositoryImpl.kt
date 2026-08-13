@@ -192,6 +192,7 @@ class PlaceRepositoryImpl @Inject constructor(
     name: String?,
     googlePlaceId: String?,
     forceNewPlace: Boolean,
+    googleName: String?,
   ): Long = mutex.withLock {
     // 手動追加はユーザーの明示操作なので USER 由来（自動回収から守る）。
     // POI 候補を選んだ（googlePlaceId あり）ときは施設の同一性で同定（隣接店を分離）。座標は Google 座標。
@@ -215,9 +216,10 @@ class PlaceRepositoryImpl @Inject constructor(
     if (trimmedName != null && placeDao.getById(placeId)?.name == null) {
       placeDao.updateName(placeId, trimmedName, Date())
     }
-    // POI 由来の googlePlaceId があれば google_places に控える。
-    if (googlePlaceId != null && googlePlaceDao.getByPlace(placeId) == null) {
-      googlePlaceDao.upsert(GooglePlaceEntity(placeId, googlePlaceId))
+    // POI 由来の googlePlaceId があれば google_places に控える。施設名も Google 由来なので
+    // ここに入れる（places.name はユーザーが付けた名前の列。表示は displayName が拾う）。
+    if (googlePlaceId != null && googlePlaceDao.getByPlace(placeId)?.name == null) {
+      googlePlaceDao.upsert(GooglePlaceEntity(placeId, googlePlaceId, googleName))
     }
     // 手動追加は「ユーザーが名前を決めた」印として解決ログを残し、以後の自動命名（記録中のライブ検出）で
     // 勝手に近くの別施設名に上書きされないようにする。名前なしで追加した場合も未命名のまま保つ。

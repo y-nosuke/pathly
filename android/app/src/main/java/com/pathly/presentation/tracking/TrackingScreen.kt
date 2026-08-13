@@ -425,6 +425,7 @@ fun TrackingScreen(
               input.departureTime,
               input.name,
               input.googlePlaceId,
+              input.googleName,
             )
           }
           manualTarget = null

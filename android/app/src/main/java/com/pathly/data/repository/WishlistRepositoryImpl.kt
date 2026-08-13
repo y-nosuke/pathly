@@ -67,6 +67,7 @@ class WishlistRepositoryImpl @Inject constructor(
     googlePlaceId: String?,
     forceNewPlace: Boolean,
     knownDetails: PlaceSearchResult?,
+    googleName: String?,
   ): PlaceRegistration {
     // POI 由来（googlePlaceId あり）は施設の同一性で同定（隣接店を分離・同一POIはまとめる）。
     // forceNewPlace（近接確認で「新規」/ 表示ONでそのまま登録）なら座標同定せず必ず新規。無ければ座標同定にフォールバック。
@@ -84,17 +85,18 @@ class WishlistRepositoryImpl @Inject constructor(
     if (trimmedNote != null) {
       placeDao.updateNote(placeId, trimmedNote, Date())
     }
-    // POI 由来なら Google データ（カテゴリ・住所）を取得して保存する（未取得の place にだけ）。
+    // POI 由来なら Google データ（カテゴリ・住所）を取得して保存する（名前が未取得の place にだけ）。
     // これで詳細にカテゴリが出て、Google マップで施設ページを開ける。
-    if (googlePlaceId != null && googlePlaceDao.getByPlace(placeId) == null) {
+    if (googlePlaceId != null && googlePlaceDao.getByPlace(placeId)?.name == null) {
       // 検索結果のように取得済みならそれを使う（同じ施設のときだけ）。オフラインでも欠落しない。
       val result = knownDetails?.takeIf { it.googlePlaceId == googlePlaceId } ?: placesTextSearcher.fetch(googlePlaceId)
       googlePlaceDao.upsert(
         if (result != null) {
           GooglePlaceEntity(placeId, result.googlePlaceId, result.name, result.address, result.category)
         } else {
-          // オフライン等で取れなくても id だけ控える（Google マップは施設ページで開ける）。
-          GooglePlaceEntity(placeId, googlePlaceId)
+          // オフライン等で取れなくても、id とタップ時に分かっている施設名は控える
+          // （住所・カテゴリは欠けるが、少なくとも未命名にはならない）。
+          GooglePlaceEntity(placeId, googlePlaceId, googleName)
         },
       )
       placeResolutionDao.upsert(PlaceResolutionEntity(placeId, Date()))

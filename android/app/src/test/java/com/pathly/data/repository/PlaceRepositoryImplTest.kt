@@ -416,6 +416,24 @@ class PlaceRepositoryImplTest {
   }
 
   @Test
+  fun addManualStop_poiName_goesToGooglePlacesNotPlaceName() = runTest {
+    coEvery { placeDao.getInBounds(any(), any(), any(), any()) } returns emptyList()
+    coEvery { placeDao.insert(any()) } returns 10L
+    coEvery { stopDao.insert(any()) } returns 100L
+    coEvery { placeDao.getById(10L) } returns PlaceEntity(id = 10L, latitude = 35.0, longitude = 139.0)
+    coEvery { placeResolutionDao.getByPlace(10L) } returns null
+    coEvery { googlePlaceDao.getByPlace(10L) } returns null
+    coEvery { googlePlaceDao.getPlaceIdByGoogleId("gp-9") } returns null
+
+    // POI の名前をそのまま使った（自分では入力していない）ケース。
+    repository.addManualStop(1L, 35.0, 139.0, Date(0), Date(180_000), null, "gp-9", googleName = "スタバ")
+
+    // Google が付けた名前は google_places.name へ。places.name（自分で付けた名前）は空のまま。
+    coVerify { googlePlaceDao.upsert(match { it.placeId == 10L && it.googlePlaceId == "gp-9" && it.name == "スタバ" }) }
+    coVerify(exactly = 0) { placeDao.updateName(any(), any(), any()) }
+  }
+
+  @Test
   fun addManualStop_poiAlreadyRegistered_reusesPlaceByGoogleId() = runTest {
     // 既に同じ googlePlaceId の place(77) がある → 施設の同一性で再利用し、新規作成しない。
     coEvery { googlePlaceDao.getPlaceIdByGoogleId("gp-9") } returns 77L

@@ -153,6 +153,21 @@ class WishlistRepositoryImplTest {
   }
 
   @Test
+  fun registerPlace_whenFetchFails_keepsPoiNameAsGoogleName() = runTest {
+    coEvery { placeRepository.findOrCreateByGooglePlaceId("gp-9", any(), any(), any()) } returns (7L to false)
+    coEvery { googlePlaceDao.getByPlace(7L) } returns null
+    // オフライン等で施設情報が取れない。
+    coEvery { placesTextSearcher.fetch("gp-9") } returns null
+
+    repository.registerPlace(35.0, 139.0, name = null, googlePlaceId = "gp-9", googleName = "スタバ")
+
+    // 住所・カテゴリは欠けても、タップ時に分かっている名前は残す（未命名にしない）。
+    coVerify { googlePlaceDao.upsert(match { it.placeId == 7L && it.googlePlaceId == "gp-9" && it.name == "スタバ" }) }
+    // Google が付けた名前を places.name（自分で付けた名前）には書かない。
+    coVerify(exactly = 0) { placeDao.updateName(any(), any(), any()) }
+  }
+
+  @Test
   fun registerPlace_withKnownDetailsOfAnotherFacility_refetches() = runTest {
     val other = PlaceSearchResult(
       googlePlaceId = "gp-other",

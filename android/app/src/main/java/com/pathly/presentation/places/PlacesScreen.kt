@@ -201,20 +201,19 @@ fun SearchAddRoute(
     onSelectPrediction = viewModel::selectPrediction,
     onBackToPredictions = viewModel::clearSearchResult,
     onCancel = onDone,
-    onRegister = { lat, lng, name, wishlist, priority, memo, googlePlaceId ->
+    onRegister = { lat, lng, name, wishlist, priority, memo, googlePlaceId, googleName ->
       // 地図タップと同じ登録経路に通す（近接確認の要否も UseCase 側の判断に任せる）。
-      // 施設情報は検索時に取得済みなので渡して引き直させない。名前は Google 由来の
-      // ままなら places.name（ユーザー名）に書かない。
-      val result = uiState.search.result
+      // 施設情報は検索時に取得済みなので渡して引き直させない。
       viewModel.registerPlaceWithNearbyCheck(
         lat,
         lng,
-        name?.takeIf { it.trim() != result?.name?.trim() },
+        name,
         wishlist,
         priority,
         memo,
         googlePlaceId,
-        knownDetails = result,
+        googleName = googleName,
+        knownDetails = uiState.search.result,
       )
       onDone()
     },
@@ -603,7 +602,7 @@ private fun WishlistFlagButton(
 private fun AddPlaceContent(
   onCancel: () -> Unit,
   // 近くに既存があるかの判断は ViewModel（PlaceEditUseCase）側で行う。
-  onRegister: (lat: Double, lng: Double, name: String?, wishlist: Boolean, priority: Priority, memo: String?, googlePlaceId: String?) -> Unit,
+  onRegister: (lat: Double, lng: Double, name: String?, wishlist: Boolean, priority: Priority, memo: String?, googlePlaceId: String?, googleName: String?) -> Unit,
   onFetchDetails: suspend (googlePlaceId: String) -> PlaceSearchResult?,
   modifier: Modifier = Modifier,
   // 近接確認の保留状態（非nullで確認ダイアログを出す）とその選択。
@@ -758,8 +757,8 @@ private fun PlaceDetailContent(
   showRegisteredPlaces: Boolean = false,
   onToggleRegisteredPlaces: () -> Unit = {},
   // 地図タップでの場所登録（POI・空き地点とも）。近接確認の要否は ViewModel 側で判断する。
-  onRegisterPlaceAtPoint: (lat: Double, lng: Double, name: String?, wishlist: Boolean, priority: Priority, memo: String?, googlePlaceId: String?) -> Unit =
-    { _, _, _, _, _, _, _ -> },
+  onRegisterPlaceAtPoint: (lat: Double, lng: Double, name: String?, wishlist: Boolean, priority: Priority, memo: String?, googlePlaceId: String?, googleName: String?) -> Unit =
+    { _, _, _, _, _, _, _, _ -> },
   // 近接確認の保留状態（非nullで確認ダイアログを出す）とその選択。
   nearbyRegisterPrompt: NearbyRegisterPrompt? = null,
   onConfirmNearbyLink: () -> Unit = {},
@@ -1057,7 +1056,7 @@ private fun SearchAddContent(
   onSelectPrediction: (String) -> Unit,
   onBackToPredictions: () -> Unit,
   onCancel: () -> Unit,
-  onRegister: (lat: Double, lng: Double, name: String?, wishlist: Boolean, priority: Priority, memo: String?, googlePlaceId: String?) -> Unit,
+  onRegister: (lat: Double, lng: Double, name: String?, wishlist: Boolean, priority: Priority, memo: String?, googlePlaceId: String?, googleName: String?) -> Unit,
   modifier: Modifier = Modifier,
 ) {
   val result = search.result
@@ -1166,7 +1165,7 @@ private fun PredictionRow(
 private fun SearchResultForm(
   result: PlaceSearchResult,
   onBack: () -> Unit,
-  onRegister: (lat: Double, lng: Double, name: String?, wishlist: Boolean, priority: Priority, memo: String?, googlePlaceId: String?) -> Unit,
+  onRegister: (lat: Double, lng: Double, name: String?, wishlist: Boolean, priority: Priority, memo: String?, googlePlaceId: String?, googleName: String?) -> Unit,
   modifier: Modifier = Modifier,
 ) {
   val position = LatLng(result.latitude, result.longitude)

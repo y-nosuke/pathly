@@ -63,7 +63,10 @@ data class ManualStopTarget(
   val origin: ManualStopOrigin,
 )
 
-/** 手動追加で確定した内容。 */
+/**
+ * 手動追加で確定した内容。名前は出どころで分ける（[com.pathly.domain.model.Place] の設計）。
+ * [name] は自分で入力したぶんだけ（→ `places.name`）、施設から来た名前は [googleName]（→ `google_places.name`）。
+ */
 data class ManualStopInput(
   val latitude: Double,
   val longitude: Double,
@@ -71,6 +74,7 @@ data class ManualStopInput(
   val departureTime: Date,
   val name: String?,
   val googlePlaceId: String?,
+  val googleName: String?,
 )
 
 /**
@@ -217,10 +221,14 @@ fun ManualStopSheet(
             ManualStopOrigin.CurrentLocation -> picked?.googlePlaceId
             else -> null
           }
+          // 施設から来た名前は Google 由来なので places.name（自分で付けた名前）には入れない。
+          // googleId が残っている＝名前も施設のまま、という関係になっている。
+          val googleName = finalName?.takeIf { googleId != null }
+          val userName = finalName?.takeIf { googleId == null }
           // 候補を選んだときはその施設の座標を使う（他経路と揃える）。
           val lat = picked?.latitude ?: latitude
           val lng = picked?.longitude ?: longitude
-          onConfirm(ManualStopInput(lat, lng, arrival, departure, finalName, googleId))
+          onConfirm(ManualStopInput(lat, lng, arrival, departure, userName, googleId, googleName))
         },
         modifier = Modifier.weight(1f),
       ) {

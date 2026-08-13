@@ -57,10 +57,22 @@ class PlaceEditUseCase @Inject constructor(
     googlePlaceId: String?,
     nearbyAlreadyVisible: Boolean,
     knownDetails: PlaceSearchResult? = null,
+    googleName: String? = null,
   ): RegisterResult {
     if (googlePlaceId != null) {
       // 施設同定に任せる（隣接する別施設に相乗りしない）。
-      return register(latitude, longitude, name, wishlist, priority, memo, googlePlaceId, forceNewPlace = false, knownDetails = knownDetails)
+      return register(
+        latitude,
+        longitude,
+        name,
+        wishlist,
+        priority,
+        memo,
+        googlePlaceId,
+        forceNewPlace = false,
+        knownDetails = knownDetails,
+        googleName = googleName,
+      )
     }
     if (!nearbyAlreadyVisible) {
       wishlistRepository.findNearbyPlace(latitude, longitude)?.let { return RegisterResult.NearbyFound(it) }
@@ -83,8 +95,10 @@ class PlaceEditUseCase @Inject constructor(
     googlePlaceId: String?,
     forceNewPlace: Boolean,
     knownDetails: PlaceSearchResult? = null,
+    googleName: String? = null,
   ): RegisterResult.Registered {
-    val registration = wishlistRepository.registerPlace(latitude, longitude, name, memo, googlePlaceId, forceNewPlace, knownDetails)
+    val registration =
+      wishlistRepository.registerPlace(latitude, longitude, name, memo, googlePlaceId, forceNewPlace, knownDetails, googleName)
     if (wishlist) wishlistRepository.addToWishlist(registration.placeId, priority)
     return RegisterResult.Registered(registration.placeId, registration.alreadyExisted)
   }

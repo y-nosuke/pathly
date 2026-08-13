@@ -176,6 +176,7 @@ class TrackDetailViewModel @Inject constructor(
     priority: Priority,
     memo: String?,
     googlePlaceId: String?,
+    googleName: String? = null,
   ) {
     viewModelScope.launch {
       try {
@@ -188,6 +189,7 @@ class TrackDetailViewModel @Inject constructor(
           memo,
           googlePlaceId,
           nearbyAlreadyVisible = showRegisteredPlaces.value,
+          googleName = googleName,
         )
         when (result) {
           is PlaceEditUseCase.RegisterResult.NearbyFound ->
@@ -338,6 +340,7 @@ class TrackDetailViewModel @Inject constructor(
     departureTime: Date,
     name: String?,
     googlePlaceId: String?,
+    googleName: String? = null,
   ) {
     val trackId = loadedTrackId.value ?: return
     viewModelScope.launch {
@@ -351,6 +354,7 @@ class TrackDetailViewModel @Inject constructor(
           name,
           googlePlaceId,
           nearbyAlreadyVisible = showRegisteredPlaces.value,
+          googleName = googleName,
         )
         when (result) {
           is AddManualStopUseCase.AddResult.NearbyFound ->

@@ -66,7 +66,7 @@ internal fun PlaceActionSheet(
   onDismiss: () -> Unit,
   onFetchPoiDetails: suspend (googlePlaceId: String) -> PlaceSearchResult?,
   // 新規登録（空き地点/POI/検索結果）を確定する。近接確認（表示ON=新規/OFF=確認）は呼び出し側に委ねる。
-  onRegisterNew: (lat: Double, lng: Double, name: String?, wishlist: Boolean, priority: Priority, memo: String?, googlePlaceId: String?) -> Unit,
+  onRegisterNew: (lat: Double, lng: Double, name: String?, wishlist: Boolean, priority: Priority, memo: String?, googlePlaceId: String?, googleName: String?) -> Unit,
   // 以下2つは [PlaceSheetTarget.Existing] を渡す画面だけが必要（新規登録専用の画面は既定のままでよい）。
   onLoadPlace: suspend (placeId: Long) -> PlaceListItem? = { null },
   onSaveExisting: (item: PlaceListItem, name: String, note: String, wishlist: Boolean, priority: Priority, visited: Boolean) -> Unit = { _, _, _, _, _, _ -> },
@@ -173,7 +173,7 @@ private fun NewPlaceEditor(
   initialName: String?,
   knownDetails: PlaceSearchResult?,
   onFetchPoiDetails: suspend (googlePlaceId: String) -> PlaceSearchResult?,
-  onRegisterNew: (lat: Double, lng: Double, name: String?, wishlist: Boolean, priority: Priority, memo: String?, googlePlaceId: String?) -> Unit,
+  onRegisterNew: (lat: Double, lng: Double, name: String?, wishlist: Boolean, priority: Priority, memo: String?, googlePlaceId: String?, googleName: String?) -> Unit,
   onDismiss: () -> Unit,
 ) {
   var name by remember(latLng, googlePlaceId) { mutableStateOf(initialName.orEmpty()) }
@@ -213,7 +213,12 @@ private fun NewPlaceEditor(
   SheetActions {
     TextButton(onClick = onDismiss) { Text("キャンセル") }
     Button(onClick = {
-      onRegisterNew(latLng.latitude, latLng.longitude, name.ifBlank { null }, wishlist, priority, memo.ifBlank { null }, googlePlaceId)
+      // Google が付けた名前のままなら「自分で付けた名前」ではないので places.name には書かない
+      // （表示は google_places.name から出る）。変えたときだけユーザー名として渡す。
+      val typed = name.trim().ifBlank { null }
+      val googleName = initialName?.trim()?.ifBlank { null }
+      val userName = typed?.takeIf { it != googleName }
+      onRegisterNew(latLng.latitude, latLng.longitude, userName, wishlist, priority, memo.ifBlank { null }, googlePlaceId, googleName)
       onDismiss()
     }) { Text("登録") }
   }
@@ -255,6 +260,9 @@ private fun ExistingPlaceEditor(
     name = name,
     onNameChange = { name = it },
     nameLabel = "名前",
+    // places.name は「自分で付けた名前」なので、Google 名で表示されている場所は空欄になる。
+    // 何も無いように見えないよう、表示に使われている名前をプレースホルダに出す。
+    namePlaceholder = loaded.place.googleName,
     category = loaded.place.category,
     address = loaded.place.googleAddress,
     onOpenInMaps = {

@@ -31,11 +31,16 @@ interface WishlistRepository {
   suspend fun fetchPlaceDetails(googlePlaceId: String): PlaceSearchResult?
 
   /**
-   * 座標から場所を登録する（地図タップ）。find-or-create（30m）で場所を同定し、
+   * 座標から場所を登録する（地図タップ・検索）。find-or-create（30m）で場所を同定し、
    * [name] が非空で場所が未命名なら名前（ユーザー名）を設定し、[note] があればメモも設定する。
-   * [googlePlaceId]（POI タップ由来）があれば Google データ（カテゴリ・住所）を取得して
+   * [googlePlaceId]（POI タップ・検索由来）があれば Google データ（カテゴリ・住所）を取得して
    * `google_places` に保存する（詳細でカテゴリ表示・Google マップで施設ページを開けるようにする）。
    * 行きたい登録はしない。返り値は place の id。
+   *
+   * 名前は出どころで列を分ける（[com.pathly.domain.model.Place] の設計）。
+   * @param name ユーザーが自分で入力した名前 → `places.name`。Google が付けた名前を入れないこと。
+   * @param googleName 施設名が分かっているとき（POI タップ）→ `google_places.name`。
+   *   施設情報の取得に失敗しても、これがあれば未命名にならない。
    */
   suspend fun registerPlace(
     latitude: Double,
@@ -47,6 +52,7 @@ interface WishlistRepository {
     forceNewPlace: Boolean = false,
     // 施設情報を取得済みなら渡す（キーワード検索の結果）。Google を引き直さない。
     knownDetails: PlaceSearchResult? = null,
+    googleName: String? = null,
   ): PlaceRegistration
 
   /** 手動登録の近接確認用: 近く（検出半径 50m）に既存の場所があれば最寄り1件を返す（無ければ null）。 */

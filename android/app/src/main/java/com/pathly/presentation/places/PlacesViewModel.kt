@@ -162,6 +162,7 @@ class PlacesViewModel @Inject constructor(
     priority: Priority,
     memo: String?,
     googlePlaceId: String?,
+    googleName: String? = null,
     knownDetails: PlaceSearchResult? = null,
   ) {
     viewModelScope.launch {
@@ -176,6 +177,7 @@ class PlacesViewModel @Inject constructor(
           googlePlaceId,
           nearbyAlreadyVisible = _uiState.value.showRegisteredPlaces,
           knownDetails = knownDetails,
+          googleName = googleName,
         )
         when (result) {
           is PlaceEditUseCase.RegisterResult.NearbyFound ->

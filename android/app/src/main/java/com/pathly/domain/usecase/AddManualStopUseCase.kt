@@ -47,6 +47,7 @@ class AddManualStopUseCase @Inject constructor(
     name: String?,
     googlePlaceId: String?,
     nearbyAlreadyVisible: Boolean,
+    googleName: String? = null,
   ): AddResult {
     if (googlePlaceId == null && !nearbyAlreadyVisible) {
       placeRepository.findNearbyPlace(latitude, longitude)?.let { return AddResult.NearbyFound(it) }
@@ -60,6 +61,7 @@ class AddManualStopUseCase @Inject constructor(
       name,
       googlePlaceId,
       forceNewPlace = false,
+      googleName = googleName,
     )
     return AddResult.Added(stopId)
   }

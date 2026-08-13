@@ -96,8 +96,8 @@ fun TrackDetailScreen(
   onDeleteStops: (stopIds: List<Long>) -> Unit = {},
   onUndoDeletion: () -> Unit = {},
   // 手動での立ち寄り追加。近くに既存があるかの判断は ViewModel（AddManualStopUseCase）側で行う。
-  onAddManualStop: (lat: Double, lng: Double, arrival: Date, departure: Date, name: String?, googlePlaceId: String?) -> Unit =
-    { _, _, _, _, _, _ -> },
+  onAddManualStop: (lat: Double, lng: Double, arrival: Date, departure: Date, name: String?, googlePlaceId: String?, googleName: String?) -> Unit =
+    { _, _, _, _, _, _, _ -> },
   // 近接確認の保留状態（非nullで確認ダイアログを出す）とその選択。
   nearbyStopPrompt: NearbyStopPrompt? = null,
   onConfirmNearbyStopLink: () -> Unit = {},
@@ -107,8 +107,8 @@ fun TrackDetailScreen(
   onOpenPlaceDetail: (placeId: Long) -> Unit = {},
   onMessageShown: () -> Unit = {},
   // 空き地点/POI の登録。近くに既存があるかの判断は ViewModel（PlaceEditUseCase）側で行う。
-  onRegisterPlace: (lat: Double, lng: Double, name: String?, wishlist: Boolean, priority: Priority, memo: String?, googlePlaceId: String?) -> Unit =
-    { _, _, _, _, _, _, _ -> },
+  onRegisterPlace: (lat: Double, lng: Double, name: String?, wishlist: Boolean, priority: Priority, memo: String?, googlePlaceId: String?, googleName: String?) -> Unit =
+    { _, _, _, _, _, _, _, _ -> },
   // 近接確認の保留状態（非nullで確認ダイアログを出す）とその選択。
   nearbyRegisterPrompt: NearbyRegisterPrompt? = null,
   onConfirmNearbyLink: () -> Unit = {},
@@ -584,6 +584,7 @@ fun TrackDetailScreen(
                 input.departureTime,
                 input.name,
                 input.googlePlaceId,
+                input.googleName,
               )
             }
             exitManual()

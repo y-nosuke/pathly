@@ -31,7 +31,7 @@ class PlaceEditUseCaseTest {
 
   @Before
   fun setup() {
-    coEvery { wishlistRepository.registerPlace(any(), any(), any(), any(), any(), any(), any()) } returns
+    coEvery { wishlistRepository.registerPlace(any(), any(), any(), any(), any(), any(), any(), any()) } returns
       PlaceRegistration(placeId = 100L, alreadyExisted = false)
     coEvery { wishlistRepository.addToWishlist(any(), any()) } returns 200L
   }
@@ -121,7 +121,7 @@ class PlaceEditUseCaseTest {
 
     assertEquals(PlaceEditUseCase.RegisterResult.NearbyFound(nearby), result)
     // ユーザーが選ぶまで登録しない。
-    coVerify(exactly = 0) { wishlistRepository.registerPlace(any(), any(), any(), any(), any(), any(), any()) }
+    coVerify(exactly = 0) { wishlistRepository.registerPlace(any(), any(), any(), any(), any(), any(), any(), any()) }
   }
 
   @Test
