@@ -870,8 +870,10 @@ private fun PlaceDetailContent(
         PlaceFormBody(
           name = name,
           onNameChange = { name = it },
-          nameLabel = "名前",
+          nameLabel = "自分で付ける名前（任意）",
           namePlaceholder = item.displayName,
+          // 書き換えの元にできるのは Google 名だけ（住所・座標のフォールバックは元にしない）。
+          namePrefill = item.place.googleName,
           category = item.place.category,
           address = item.place.googleAddress,
           onOpenInMaps = { openInGoogleMaps(context, item.place) },
@@ -1268,6 +1270,9 @@ internal fun PlaceFormBody(
   onPriorityChange: (Priority) -> Unit,
   modifier: Modifier = Modifier,
   namePlaceholder: String? = null,
+  // Google 由来の名前。空欄のときだけ「これを直して使う」導線を出す。名前欄は「自分で付けた名前」
+  // 専用にしたので、施設名を少し変えたいだけのときに打ち直さずに済むようにする。
+  namePrefill: String? = null,
   wishlistOffHint: String? = null,
   visitedContent: (@Composable () -> Unit)? = null,
 ) {
@@ -1282,6 +1287,20 @@ internal fun PlaceFormBody(
       singleLine = true,
       modifier = Modifier.fillMaxWidth(),
     )
+
+    namePrefill?.takeIf { it.isNotBlank() && name.isEmpty() }?.let { candidate ->
+      TextButton(
+        onClick = { onNameChange(candidate) },
+        contentPadding = PaddingValues(horizontal = 4.dp, vertical = 0.dp),
+      ) {
+        Text(
+          text = "「$candidate」から書き換える",
+          style = MaterialTheme.typography.labelLarge,
+          maxLines = 1,
+          overflow = TextOverflow.Ellipsis,
+        )
+      }
+    }
 
     // Google 由来のカテゴリ・住所（あれば）。「どんな場所か」の手がかり。読取専用。
     category?.takeIf { it.isNotBlank() }?.let { c ->

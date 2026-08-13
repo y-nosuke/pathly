@@ -434,6 +434,24 @@ class PlaceRepositoryImplTest {
   }
 
   @Test
+  fun addManualStop_ownNameOnFacility_keepsBothNamesAndTheLink() = runTest {
+    coEvery { placeDao.getInBounds(any(), any(), any(), any()) } returns emptyList()
+    coEvery { placeDao.insert(any()) } returns 10L
+    coEvery { stopDao.insert(any()) } returns 100L
+    coEvery { placeDao.getById(10L) } returns PlaceEntity(id = 10L, latitude = 35.0, longitude = 139.0)
+    coEvery { placeResolutionDao.getByPlace(10L) } returns null
+    coEvery { googlePlaceDao.getByPlace(10L) } returns null
+    coEvery { googlePlaceDao.getPlaceIdByGoogleId("gp-9") } returns null
+
+    // 「スタバだけど自分は休憩と呼ぶ」。列が分かれているので両立する。
+    repository.addManualStop(1L, 35.0, 139.0, Date(0), Date(180_000), "休憩", "gp-9", googleName = "スタバ")
+
+    coVerify { placeDao.updateName(10L, "休憩", any()) }
+    // 名前を変えても施設との紐付けは外さない（カテゴリ・住所・施設ページが残る）。
+    coVerify { googlePlaceDao.upsert(match { it.placeId == 10L && it.googlePlaceId == "gp-9" && it.name == "スタバ" }) }
+  }
+
+  @Test
   fun addManualStop_poiAlreadyRegistered_reusesPlaceByGoogleId() = runTest {
     // 既に同じ googlePlaceId の place(77) がある → 施設の同一性で再利用し、新規作成しない。
     coEvery { googlePlaceDao.getPlaceIdByGoogleId("gp-9") } returns 77L

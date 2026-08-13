@@ -3,6 +3,7 @@ package com.pathly.presentation.stops
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -123,10 +124,12 @@ fun ManualStopSheet(
     if (needsCandidates) candidates = onFetchCandidates(latitude, longitude)
   }
 
-  // 名前欄。POI から来たときはその名前を初期値にする。
-  var name by remember(origin) {
-    mutableStateOf((origin as? ManualStopOrigin.Poi)?.name.orEmpty())
-  }
+  // 名前欄は「自分で付けた名前」専用なので、施設名は初期値に入れず薄字の候補として見せる
+  // （入っているかどうかで、自分で付けたのか Google の名前なのかが分かる）。
+  var name by remember(origin) { mutableStateOf("") }
+
+  // Google 由来の名前（POI タップならその施設、「今ここ」なら選んだ候補）。
+  val googleName = (selected?.name ?: (origin as? ManualStopOrigin.Poi)?.name)?.trim()?.ifBlank { null }
 
   FloatingSheet(state = sheetState, modifier = modifier) {
     Column(
@@ -161,24 +164,17 @@ fun ManualStopSheet(
         ManualStopOrigin.CurrentLocation -> CandidatePicker(
           candidates = candidates,
           selected = selected,
-          onSelect = {
-            selected = it
-            name = ""
-          },
+          onSelect = { selected = it },
           name = name,
-          onNameChange = {
-            name = it
-            if (it.isNotEmpty()) selected = null
-          },
+          onNameChange = { name = it },
+          googleName = googleName,
         )
 
         // POI・空き地点は施設が確定済み（または名前なし）なので候補は出さない。
-        else -> OutlinedTextField(
-          value = name,
-          onValueChange = { name = it },
-          label = { Text("名前（任意）") },
-          singleLine = true,
-          modifier = Modifier.fillMaxWidth(),
+        else -> UserNameField(
+          name = name,
+          onNameChange = { name = it },
+          googleName = googleName,
         )
       }
 
@@ -214,17 +210,13 @@ fun ManualStopSheet(
       Button(
         onClick = {
           val picked = selected
-          val finalName = picked?.name ?: name.trim().ifBlank { null }
-          // 名前を POI 名から変えたら googlePlaceId は使わない（別名で解決記録を焼き込まない）。
-          val googleId = when (origin) {
-            is ManualStopOrigin.Poi -> origin.googlePlaceId?.takeIf { finalName == origin.name }
-            ManualStopOrigin.CurrentLocation -> picked?.googlePlaceId
-            else -> null
-          }
-          // 施設から来た名前は Google 由来なので places.name（自分で付けた名前）には入れない。
-          // googleId が残っている＝名前も施設のまま、という関係になっている。
-          val googleName = finalName?.takeIf { googleId != null }
-          val userName = finalName?.takeIf { googleId == null }
+          // 名前欄は空で始まるので、入力があれば自分で付けた名前。候補を書き換えずにそのまま
+          // 確定したときは Google の名前と同じなので、ユーザー名としては残さない。
+          // 施設との紐付け（googlePlaceId）は名前を変えても外さない。列が分かれているので
+          // 「スタバだけど自分は休憩と呼ぶ」がそのまま表現でき、カテゴリ・住所も残る。
+          val typed = name.trim().ifBlank { null }
+          val userName = typed?.takeIf { it != googleName }
+          val googleId = picked?.googlePlaceId ?: (origin as? ManualStopOrigin.Poi)?.googlePlaceId
           // 候補を選んだときはその施設の座標を使う（他経路と揃える）。
           val lat = picked?.latitude ?: latitude
           val lng = picked?.longitude ?: longitude
@@ -235,7 +227,8 @@ fun ManualStopSheet(
         Text(
           when {
             origin is ManualStopOrigin.ExistingPlace -> "この場所に追加"
-            selected == null && name.isBlank() -> "名前なしで追加"
+            // 名前欄が空でも、施設の名前が使われるなら「名前なし」ではない。
+            googleName == null && name.isBlank() -> "名前なしで追加"
             else -> "追加"
           },
         )
@@ -244,7 +237,39 @@ fun ManualStopSheet(
   }
 }
 
-/** 近くの施設候補から選ぶ（「今ここ」用）。自分で入力もできる。 */
+/**
+ * 「自分で付ける名前」の入力欄。名前欄は `places.name`（自分で付けた名前）専用なので、
+ * Google 由来の名前は初期値に入れず薄字で見せ、欄が空のときだけ書き換えの導線を出す
+ * （施設名を少し変えたいときに打ち直さずに済むように）。
+ */
+@Composable
+private fun UserNameField(
+  name: String,
+  onNameChange: (String) -> Unit,
+  googleName: String?,
+  modifier: Modifier = Modifier,
+) {
+  Column(modifier = modifier) {
+    OutlinedTextField(
+      value = name,
+      onValueChange = onNameChange,
+      label = { Text("自分で付ける名前（任意）") },
+      placeholder = googleName?.let { { Text(it, maxLines = 1) } },
+      singleLine = true,
+      modifier = Modifier.fillMaxWidth(),
+    )
+    googleName?.takeIf { name.isEmpty() }?.let { candidate ->
+      TextButton(
+        onClick = { onNameChange(candidate) },
+        contentPadding = PaddingValues(horizontal = 4.dp, vertical = 0.dp),
+      ) {
+        Text("「$candidate」から書き換える", style = MaterialTheme.typography.labelLarge, maxLines = 1)
+      }
+    }
+  }
+}
+
+/** 近くの施設候補から選ぶ（「今ここ」用）。選んだうえで自分の名前を付けることもできる。 */
 @Composable
 private fun CandidatePicker(
   candidates: List<PlaceSearchResult>?,
@@ -252,8 +277,9 @@ private fun CandidatePicker(
   onSelect: (PlaceSearchResult) -> Unit,
   name: String,
   onNameChange: (String) -> Unit,
+  googleName: String?,
 ) {
-  Text("名前", style = MaterialTheme.typography.labelLarge)
+  Text("場所", style = MaterialTheme.typography.labelLarge)
   when (candidates) {
     null -> Row(verticalAlignment = Alignment.CenterVertically) {
       CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
@@ -290,13 +316,7 @@ private fun CandidatePicker(
         }
       }
       Spacer(modifier = Modifier.height(4.dp))
-      OutlinedTextField(
-        value = name,
-        onValueChange = onNameChange,
-        singleLine = true,
-        label = { Text("自分で入力（任意）") },
-        modifier = Modifier.fillMaxWidth(),
-      )
+      UserNameField(name = name, onNameChange = onNameChange, googleName = googleName)
     }
   }
 }

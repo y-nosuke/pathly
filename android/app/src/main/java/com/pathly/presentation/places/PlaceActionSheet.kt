@@ -176,7 +176,9 @@ private fun NewPlaceEditor(
   onRegisterNew: (lat: Double, lng: Double, name: String?, wishlist: Boolean, priority: Priority, memo: String?, googlePlaceId: String?, googleName: String?) -> Unit,
   onDismiss: () -> Unit,
 ) {
-  var name by remember(latLng, googlePlaceId) { mutableStateOf(initialName.orEmpty()) }
+  // 名前欄は「自分で付けた名前」専用なので、施設名を初期値には入れない（薄字の候補として見せる）。
+  // 入っているかどうかで「自分で付けたのか、Google の名前なのか」が一目で分かる。
+  var name by remember(latLng, googlePlaceId) { mutableStateOf("") }
   var memo by remember(latLng, googlePlaceId) { mutableStateOf("") }
   var wishlist by remember(latLng, googlePlaceId) { mutableStateOf(false) }
   var priority by remember(latLng, googlePlaceId) { mutableStateOf(Priority.MEDIUM) }
@@ -197,12 +199,14 @@ private fun NewPlaceEditor(
   PlaceFormBody(
     name = name,
     onNameChange = { name = it },
-    nameLabel = if (isFacility) "名前" else "名前（任意）",
+    nameLabel = "自分で付ける名前（任意）",
+    namePlaceholder = initialName,
+    namePrefill = initialName,
     category = details?.category,
     address = details?.address,
     // 施設のときだけ。空き地点は Google に開く先（施設ページ）が無く、座標にピンが立つだけなので出さない。
     onOpenInMaps = googlePlaceId?.let { id ->
-      { openPlaceInGoogleMaps(context, id, latLng.latitude, latLng.longitude, name.ifBlank { "選択した場所" }) }
+      { openPlaceInGoogleMaps(context, id, latLng.latitude, latLng.longitude, name.ifBlank { initialName ?: "選択した場所" }) }
     },
     memo = memo,
     onMemoChange = { memo = it },
@@ -214,8 +218,8 @@ private fun NewPlaceEditor(
   SheetActions {
     TextButton(onClick = onDismiss) { Text("キャンセル") }
     Button(onClick = {
-      // Google が付けた名前のままなら「自分で付けた名前」ではないので places.name には書かない
-      // （表示は google_places.name から出る）。変えたときだけユーザー名として渡す。
+      // 名前欄は空で始まるので、入力があれば自分で付けた名前。ただし候補を書き換えずに
+      // そのまま確定したときは Google の名前と同じなので、ユーザー名としては残さない。
       val typed = name.trim().ifBlank { null }
       val googleName = initialName?.trim()?.ifBlank { null }
       val userName = typed?.takeIf { it != googleName }
@@ -260,10 +264,11 @@ private fun ExistingPlaceEditor(
   PlaceFormBody(
     name = name,
     onNameChange = { name = it },
-    nameLabel = "名前",
+    nameLabel = "自分で付ける名前（任意）",
     // places.name は「自分で付けた名前」なので、Google 名で表示されている場所は空欄になる。
     // 何も無いように見えないよう、表示に使われている名前をプレースホルダに出す。
     namePlaceholder = loaded.place.googleName,
+    namePrefill = loaded.place.googleName,
     category = loaded.place.category,
     address = loaded.place.googleAddress,
     onOpenInMaps = {
