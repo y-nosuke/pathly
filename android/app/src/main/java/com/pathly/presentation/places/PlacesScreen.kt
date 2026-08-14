@@ -623,6 +623,13 @@ private fun AddPlaceContent(
   val cameraPositionState = rememberCameraPositionState {
     position = CameraPosition.fromLatLngZoom(DEFAULT_LOCATION, 12f)
   }
+  val sheetState = rememberFloatingSheetState()
+
+  // タップした地点がシートの下に隠れることがあるので、選んだら見える範囲へ寄せる
+  // （地図の下パディングを段に合わせてあるので、パディングを除いた中央に来る）。
+  LaunchedEffect(picked) {
+    picked?.let { cameraPositionState.animate(CameraUpdateFactory.newLatLng(it)) }
+  }
 
   // 現在地へ地図を寄せる（記録画面の現在地ボタンと同じ挙動）。権限が無ければ何もしない。
   val scope = rememberCoroutineScope()
@@ -648,6 +655,8 @@ private fun AddPlaceContent(
     GoogleMap(
       modifier = Modifier.fillMaxSize(),
       cameraPositionState = cameraPositionState,
+      // シートが出ている間は、その分を除いた範囲を地図の可視領域として扱う。
+      contentPadding = PaddingValues(bottom = if (picked == null) 0.dp else sheetState.heightOf(sheetState.detent)),
       uiSettings = MapUiSettings(
         zoomControlsEnabled = false,
         mapToolbarEnabled = false,
@@ -716,6 +725,7 @@ private fun AddPlaceContent(
           onFetchPoiDetails = onFetchDetails,
           onRegisterNew = onRegister,
           modifier = Modifier.align(Alignment.BottomCenter),
+          sheetState = sheetState,
         )
       }
     }
@@ -1175,12 +1185,15 @@ private fun SearchResultForm(
   val cameraPositionState = rememberCameraPositionState {
     this.position = CameraPosition.fromLatLngZoom(position, 16f)
   }
+  val sheetState = rememberFloatingSheetState()
 
   Box(modifier = modifier.fillMaxSize()) {
     // 検索で選んだ場所を地図で示す（どこか視覚的に分かるように）。
+    // 下パディングをシートの段に合わせて、選んだ場所がシートの下に隠れないようにする。
     GoogleMap(
       modifier = Modifier.fillMaxSize(),
       cameraPositionState = cameraPositionState,
+      contentPadding = PaddingValues(bottom = sheetState.heightOf(sheetState.detent)),
       uiSettings = MapUiSettings(
         zoomControlsEnabled = false,
         mapToolbarEnabled = false,
@@ -1208,6 +1221,7 @@ private fun SearchResultForm(
       onFetchPoiDetails = { null },
       onRegisterNew = onRegister,
       modifier = Modifier.align(Alignment.BottomCenter),
+      sheetState = sheetState,
     )
   }
 }

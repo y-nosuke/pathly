@@ -32,6 +32,7 @@ import com.pathly.domain.model.PlaceListItem
 import com.pathly.domain.model.PlaceSearchResult
 import com.pathly.domain.model.Priority
 import com.pathly.presentation.common.FloatingSheet
+import com.pathly.presentation.common.FloatingSheetState
 import com.pathly.presentation.common.SheetDetent
 import com.pathly.presentation.common.rememberFloatingSheetState
 
@@ -70,12 +71,13 @@ internal fun PlaceActionSheet(
   // 既存 place の詳細画面を開く。
   onOpenDetail: (placeId: Long) -> Unit = {},
   modifier: Modifier = Modifier,
-) {
   // 地図を見ながら操作できるよう、スクリムを持たない自前のシートで出す。
   // ModalBottomSheet はスクリムがタップを吸うため、色を透明にしても地図を動かせず、
   // 触ると閉じてしまう。ここでは地図のパン・ズーム・タップをそのまま生かす（ADR-0010）。
-  val sheetState = rememberFloatingSheetState()
-
+  // シートの下に隠れる地点があると困る画面（対象を地図で示す画面）は、地図の下パディングを
+  // 合わせるためにここへ自分で作った state を渡す。
+  sheetState: FloatingSheetState = rememberFloatingSheetState(),
+) {
   // 非モーダルなのでバックは自分で受ける（モーダルのときは自動で閉じていた）。
   BackHandler { onDismiss() }
 
