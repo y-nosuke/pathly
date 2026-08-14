@@ -33,6 +33,7 @@ import androidx.compose.ui.unit.dp
 import com.pathly.domain.model.GpsPoint
 import com.pathly.domain.model.PlaceSearchResult
 import com.pathly.presentation.common.FloatingSheet
+import com.pathly.presentation.common.FloatingSheetState
 import com.pathly.presentation.common.rememberFloatingSheetState
 import java.util.Date
 
@@ -96,9 +97,9 @@ fun ManualStopSheet(
   modifier: Modifier = Modifier,
   // 滞在区間の変更を地図のハイライトへ伝える（到着〜出発のインデックス）。
   onRangeChange: (start: Int, end: Int) -> Unit = { _, _ -> },
+  // 地図の下パディングを合わせたい画面は、自分で作った state を渡す。
+  sheetState: FloatingSheetState = rememberFloatingSheetState(peekFraction = 0.5f),
 ) {
-  val sheetState = rememberFloatingSheetState(peekFraction = 0.5f)
-
   // 滞在区間は軌跡点のインデックスで調整する。点が2つ未満なら近傍から推定する。
   val hasRange = points.size >= 2
   val lastIdx = (points.size - 1).coerceAtLeast(0)

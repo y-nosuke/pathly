@@ -132,6 +132,8 @@ fun TrackDetailScreen(
 ) {
   // 通常モードの地図タップで開く統一の「場所シート」（未登録の空き地点/POI＝登録、登録済み＝その場で編集）。
   var placeSheetTarget by remember { mutableStateOf<PlaceSheetTarget?>(null) }
+  // 場所シートの開き具合。地図の下パディングを合わせて、選んだ地点が裏に来ないようにする。
+  val placeSheetState = rememberFloatingSheetState()
   val scope = rememberCoroutineScope()
   val density = LocalDensity.current
   // 画面高は LocalWindowInfo から取る（Configuration.screenHeightDp は非推奨で、
@@ -289,6 +291,8 @@ fun TrackDetailScreen(
               manualMode && manualPick != null -> sheetState.heightOf(SheetDetent.PEEK)
               manualMode -> 96.dp
               tuningMode -> tuningSheetPeekHeight
+              // 場所シートを開いている間は立ち寄り一覧を引っ込めるので、そちらの高さで空ける。
+              placeSheetTarget != null -> placeSheetState.heightOf(placeSheetState.detent)
               else -> sheetState.heightOf(detent)
             },
           ),
@@ -300,6 +304,8 @@ fun TrackDetailScreen(
             } else {
               placeSheetTarget = PlaceSheetTarget.NewPoi(poi)
             }
+            focusTarget = poi.latLng
+            focusNonce++
           },
           onMapClick = { latLng ->
             if (manualMode) {
@@ -309,6 +315,8 @@ fun TrackDetailScreen(
             } else {
               placeSheetTarget = PlaceSheetTarget.NewPoint(latLng)
             }
+            focusTarget = latLng
+            focusNonce++
           },
           // 地図の立ち寄りピンをタップ → 一覧の該当行を強調＆スクロール＋「選び直し」を出す（記録画面と統一）。
           onStopClick = { stop ->
@@ -332,6 +340,8 @@ fun TrackDetailScreen(
             } else {
               placeSheetTarget = PlaceSheetTarget.Existing(place.placeId)
             }
+            focusTarget = LatLng(place.latitude, place.longitude)
+            focusNonce++
           },
           modifier = Modifier.fillMaxSize(),
         )
@@ -428,7 +438,7 @@ fun TrackDetailScreen(
     }
 
     // ---- 通常モードのフローティングシート（つまみで開閉・一覧は独立スクロール）----
-    if (!tuningMode && !candidateMode && !manualMode) {
+    if (!tuningMode && !candidateMode && !manualMode && placeSheetTarget == null) {
       FloatingSheet(
         state = sheetState,
         modifier = Modifier.align(Alignment.BottomCenter),
@@ -595,6 +605,7 @@ fun TrackDetailScreen(
         onSaveExisting = onSavePlaceEdits,
         onOpenDetail = onOpenPlaceDetail,
         modifier = Modifier.align(Alignment.BottomCenter),
+        sheetState = placeSheetState,
       )
     }
   }

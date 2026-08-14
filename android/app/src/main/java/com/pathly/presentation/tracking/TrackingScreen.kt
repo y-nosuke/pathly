@@ -3,6 +3,7 @@ package com.pathly.presentation.tracking
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -27,6 +28,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -70,6 +72,8 @@ import com.pathly.domain.model.Stop
 import com.pathly.presentation.common.NearbyPlaceConfirmDialog
 import com.pathly.presentation.common.RegisteredPlaceMarkers
 import com.pathly.presentation.common.RouteMapContent
+import com.pathly.presentation.common.heightOf
+import com.pathly.presentation.common.rememberFloatingSheetState
 import com.pathly.presentation.common.stopSegmentPoints
 import com.pathly.presentation.places.PlaceActionSheet
 import com.pathly.presentation.places.PlaceSheetTarget
@@ -134,6 +138,16 @@ fun TrackingScreen(
   var reassignTarget by remember { mutableStateOf<Stop?>(null) }
   // 「立ち寄りを追加」モード（記録中のみ）。ONの間は地図タップ＝立ち寄り追加、OFF＝場所登録。
   var manualMode by remember { mutableStateOf(false) }
+  // シートの開き具合。地図の下パディングを合わせて、選んだ地点がシートの裏に来ないようにする。
+  val placeSheetState = rememberFloatingSheetState()
+  val manualSheetState = rememberFloatingSheetState(peekFraction = 0.5f)
+  // 地図で選んだ地点。可視領域へ寄せる合図（同じ地点を選び直しても効くよう nonce で送る）。
+  var focusTarget by remember { mutableStateOf<LatLng?>(null) }
+  var focusNonce by remember { mutableIntStateOf(0) }
+  fun focusOn(latLng: LatLng) {
+    focusTarget = latLng
+    focusNonce++
+  }
   // 記録が止まったら手動追加モードは自動で抜ける（立ち寄りを足すトラックが無い）。
   LaunchedEffect(uiState.isTracking) { if (!uiState.isTracking) manualMode = false }
   val scope = rememberCoroutineScope()
@@ -160,6 +174,7 @@ fun TrackingScreen(
           } else {
             placeSheetTarget = PlaceSheetTarget.NewPoi(poi)
           }
+          focusOn(poi.latLng)
         },
         // 手動追加モード＝立ち寄り追加、それ以外（通常/平常時）＝場所シート（空き地点の登録）。
         onMapClick = { latLng ->
@@ -168,6 +183,7 @@ fun TrackingScreen(
           } else {
             placeSheetTarget = PlaceSheetTarget.NewPoint(latLng)
           }
+          focusOn(latLng)
         },
         // 立ち寄りマーカーのタップで「場所を選び直す」（誤検知の訂正）。
         onStopClick = { reassignTarget = it },
@@ -181,6 +197,16 @@ fun TrackingScreen(
           }
         }.orEmpty(),
         manualPickTarget = manualTarget?.let { LatLng(it.latitude, it.longitude) },
+        // シートが出ている分だけ可視領域を狭める（ドラッグ中の逐次値ではなく段の確定値）。
+        contentPadding = PaddingValues(
+          bottom = when {
+            manualTarget != null -> manualSheetState.heightOf(manualSheetState.detent)
+            placeSheetTarget != null -> placeSheetState.heightOf(placeSheetState.detent)
+            else -> 0.dp
+          },
+        ),
+        focusTarget = focusTarget,
+        focusNonce = focusNonce,
         onRegisteredPlaceClick = { place ->
           if (uiState.isTracking && manualMode) {
             manualTarget = ManualStopTarget(
@@ -191,6 +217,7 @@ fun TrackingScreen(
           } else {
             placeSheetTarget = PlaceSheetTarget.Existing(place.placeId)
           }
+          focusOn(LatLng(place.latitude, place.longitude))
         },
       )
     }
@@ -403,6 +430,7 @@ fun TrackingScreen(
         },
         onOpenDetail = onOpenPlaceDetail,
         modifier = Modifier.align(Alignment.BottomCenter),
+        sheetState = placeSheetState,
       )
     }
 
@@ -433,6 +461,7 @@ fun TrackingScreen(
         onCancel = { manualTarget = null },
         onRangeChange = { start, end -> manualRange = start to end },
         modifier = Modifier.align(Alignment.BottomCenter),
+        sheetState = manualSheetState,
       )
     }
   }
@@ -506,6 +535,12 @@ private fun TrackingMapView(
   // 手動追加で選んでいる滞在区間（青くハイライト）と、指した地点（青いピン）。
   manualHighlight: List<GpsPoint> = emptyList(),
   manualPickTarget: LatLng? = null,
+  // シートが出ている分だけ地図の可視領域を狭める（下に隠れる地点を作らない）。
+  contentPadding: PaddingValues = PaddingValues(0.dp),
+  // 地図で場所を選んだときに、その地点を可視領域へ寄せる。同じ地点を選び直しても
+  // 効くよう、実行の合図は [focusNonce] の変化で受ける（経路詳細と同じ仕組み）。
+  focusTarget: LatLng? = null,
+  focusNonce: Int = 0,
 ) {
   val cameraPositionState = rememberCameraPositionState {
     position = CameraPosition.fromLatLngZoom(LatLng(35.6762, 139.6503), 15f)
@@ -580,10 +615,21 @@ private fun TrackingMapView(
     }
   }
 
+  // 地図で場所を選んだら、そこへ寄せる。関心が現在地から選んだ場所へ移っているので
+  // 追従も止める（現在地ボタンで戻せる）。
+  LaunchedEffect(focusNonce) {
+    if (focusNonce == 0) return@LaunchedEffect
+    focusTarget?.let {
+      followUser = false
+      cameraPositionState.animate(CameraUpdateFactory.newLatLng(it))
+    }
+  }
+
   Box(modifier = modifier) {
     GoogleMap(
       modifier = Modifier.fillMaxSize(),
       cameraPositionState = cameraPositionState,
+      contentPadding = contentPadding,
       properties = MapProperties(
         mapType = MapType.NORMAL,
         isMyLocationEnabled = hasPermission,
