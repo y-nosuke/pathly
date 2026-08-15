@@ -18,8 +18,21 @@
 
 - `StopDao.observeStopCountsByTrack()` … `SELECT trackId, COUNT(*) FROM stops GROUP BY trackId` を
   `Flow<List<TrackStopCount>>` で流す。立ち寄り0件の経路は行に出ない（=0件として扱う）。
-- リポジトリ `GpsTrackRepositoryImpl.getAllTracks()` は「経路＋点列」の Flow と件数 Flow を `combine` し、
+- リポジトリ `GpsTrackRepositoryImpl.getAllTracks()` は一覧用の行 Flow と件数 Flow を `combine` し、
   `GpsTrack.stopCount` に載せて返す。
+
+### 距離は確定時に焼き込む（v11）
+
+`gps_tracks.totalDistanceMeters`（REAL・nullable）に、記録の**確定時**に補正後点列で計算した総移動距離を
+書き込む。一覧はこの値を読むだけで、**GPS 点を一切ロードしない**。
+
+以前は一覧を描くたびに全経路の全点を読み、その場で平滑化して距離を出していた。経路が増えるほど重くなり、
+しかも UI スレッドで走っていたため、記録が溜まると履歴タブが目に見えて詰まった。
+
+- 一覧の 1 行は `TrackListRow`（経路 ＋ 生点の件数だけを集計した射影）で取る。点数表示はこの集計で賄う。
+- v11 より前に記録した経路は `null` なので、起動時に `GpsTrackRepository.backfillMissingDistances()` が
+  一度だけ埋める（対象が無ければ即終了）。
+- 距離順の並べ替えもこの列を見る。補正パラメータを変えても**再計算はしない**（焼き込み済みの値が残る）。
 
 ## ドメイン
 
@@ -60,12 +73,15 @@
 
 ## 実装マップ
 
-| 何を                         | どこで                                                             |
-| ---------------------------- | ------------------------------------------------------------------ |
-| 列追加（name/isFavorite）    | `GpsTrackEntity` / `DatabaseMigrations.MIGRATION_7_8`（DB v8）     |
-| 名前・お気に入り更新         | `GpsTrackDao.updateName` / `updateFavorite`                        |
-| 立ち寄り件数の集計           | `StopDao.observeStopCountsByTrack`（`TrackStopCount`）             |
-| 件数の合流                   | `GpsTrackRepositoryImpl.getAllTracks`（`combine`）                 |
-| 絞り込み・並べ替え（純関数） | `HistoryState.visibleTracks`                                       |
-| 操作                         | `HistoryViewModel`（setter 群・`toggleFavorite`・`renameTrack`）   |
-| 画面                         | `HistoryScreen`（フィルタ/ソートバー・カード・名前編集ダイアログ） |
+| 何を                         | どこで                                                                                       |
+| ---------------------------- | -------------------------------------------------------------------------------------------- |
+| 列追加（name/isFavorite）    | `GpsTrackEntity` / `DatabaseMigrations.MIGRATION_7_8`（DB v8）                               |
+| 距離の焼き込み（v11）        | `GpsTrackEntity.totalDistanceMeters` / `MIGRATION_10_11` / `GpsTrackDao.updateTotalDistance` |
+| 一覧用の射影                 | `data/local/entity/TrackListRow.kt`（経路＋点数の集計・点はロードしない）                    |
+| 既存分の埋め戻し             | `GpsTrackRepository.backfillMissingDistances`（`PathlyApplication` から一度だけ）            |
+| 名前・お気に入り更新         | `GpsTrackDao.updateName` / `updateFavorite`                                                  |
+| 立ち寄り件数の集計           | `StopDao.observeStopCountsByTrack`（`TrackStopCount`）                                       |
+| 件数の合流                   | `GpsTrackRepositoryImpl.getAllTracks`（`combine`）                                           |
+| 絞り込み・並べ替え（純関数） | `HistoryState.visibleTracks`                                                                 |
+| 操作                         | `HistoryViewModel`（setter 群・`toggleFavorite`・`renameTrack`）                             |
+| 画面                         | `HistoryScreen`（フィルタ/ソートバー・カード・名前編集ダイアログ）                           |

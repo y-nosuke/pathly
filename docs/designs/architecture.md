@@ -21,15 +21,19 @@ Pathly Android の構成方針と、その背景にある設計判断をまと�
 
 ```
 presentation ──▶ domain ◀── data
-   (UI/VM)      (interface)   (impl/Room/Places)
+   (UI/VM)    (interface/UseCase)  (impl/Room/Places/Work)
                     ▲
-         service ───┘（Repository 経由で書き込む）
+         service ───┘（Repository と DAO で書き込む）
 ```
 
 - **presentation（プレゼンテーション）**: Compose 画面 + ViewModel。UI 状態を `StateFlow` で持ち、画面は購読するだけ。
-- **domain（ドメイン）**: ドメインモデルと **Repository インターフェース**。他レイヤーに依存しない中心。
-- **data（データ）**: Repository の実装、Room（DAO/Entity/マイグレーション）、Places 連携、設定の保存。
-- **service（サービス）**: バックグラウンド GPS 追跡。UI ではなく **Repository を通して**永続化する。
+  画面別のパッケージに加え、画面をまたぐ部品を `common/`（`FloatingSheet`・地図描画・確認ダイアログ）と
+  `stops/`（立ち寄りの追加・付け替え UI）に置く。
+- **domain（ドメイン）**: ドメインモデル、**Repository インターフェース**、複数画面で共有する UseCase。
+  他レイヤーに依存しない中心。
+- **data（データ）**: Repository の実装、Room（DAO/Entity/マイグレーション）、Places 連携、設定の保存に加え、
+  記録サービスの制御（`tracking/`）とバックグラウンドジョブ（`work/`）。
+- **service（サービス）**: バックグラウンド GPS 追跡。UI からは切り離され、Repository と DAO で永続化する。
 
 **依存はすべて domain に向く**（presentation も data も domain の抽象に依存し、domain は誰にも依存しない）。
 これにより data 層の差し替え（例: 将来のクラウド同期）が presentation に波及しない。
@@ -50,20 +54,47 @@ UI とサービスの**唯一の合流点が Repository** で、記録中の書�
 
 ## 設計判断（このプロジェクト固有の「なぜ」）
 
-### UseCase 層を置かない
+### UseCase は「複数画面で重複したもの」だけ置く
 
-ViewModel から **Repository を直接呼ぶ**。一人開発で画面ごとのロジックが薄いため、UseCase を挟むと
-ボイラープレートが増えるだけで得が小さい。ロジックが太ってきた画面が出たら、その画面にだけ UseCase を足す。
+原則は **ViewModel から Repository を直接呼ぶ**。一人開発で画面ごとのロジックが薄く、
+全操作に UseCase を用意してもボイラープレートが増えるだけだから。
+
+例外として、**同じ手順が 3 画面に重複した**ものだけ `domain/usecase/` に切り出してある。
+
+- `PlaceEditUseCase` … 場所の登録・近接確認・紐付け・編集の差分適用。記録画面・経路詳細・場所タブに
+  同じコードが散らばっており、しかも近接確認の分岐が Composable 側にあってテストできなかった。
+- `AddManualStopUseCase` … 手動での立ち寄り追加（近接確認の要否判断を含む）。記録画面と経路詳細で共有。
+
+「層として全部に置く」のではなく「重複とテスト不能を潰すために置く」という基準にしている。
+1 画面でしか使わない操作は ViewModel に置いたままでよい。
 
 ### Repository インターフェースは domain、実装は data
 
 依存を反転させ、domain を技術（Room/Places）から独立させる。テストでは Repository をモックして
-ViewModel を単体テストできる（[testing.md](./testing.md)）。
+ViewModel・UseCase を単体テストできる（[testing.md](./testing.md)）。
 
-### Service も Repository 経由で書く
+### Service の Android 依存は data 層へ寄せる
 
-`LocationTrackingService` は Room を直接触らず Repository を通す。書き込み口を一本化することで、
-記録中の増分保存（補正・立ち寄り）と画面表示が同じデータ経路に乗り、整合させやすい。
+記録サービスは 2 つに分かれている。
+
+- `service/LocationTrackingService` … フォアグラウンドサービス本体。位置の受信・通知・永続化。
+  補正と立ち寄り検出は Repository（`updateSmoothedForTrack` / `updateStopsForTrack`）を通すが、
+  トラックと生点の insert は DAO を直接呼ぶ（Repository を挟んでも素通しになるだけのため）。
+- `data/tracking/TrackingController` … サービスの起動・停止・バインドと、権限／位置情報 ON-OFF／
+  電池の最適化といった**端末側の状態**をまとめて扱うアプリスコープのクラス。
+
+分けたのは、これらを ViewModel が直接持つと (1) Service 参照を抱えて lint の `StaticFieldLeak` が出る、
+(2) Android framework 依存で ViewModel のユニットテストがほぼ書けない、という 2 つの実害があったため。
+ViewModel は `TrackingController` が公開する Flow と suspend 関数だけを見る。
+
+### バックグラウンドジョブは WorkManager
+
+「オフラインで記録した立ち寄りの名前解決」のように、**アプリが起動していなくても・通信が戻ってから
+一度走ればよい**処理は WorkManager に載せる（`data/work/PlaceNameCatchUpWorker`）。
+起動時に自前で叩くと、そのとき圏外なら次の起動まで解決されないため。
+
+ワーカーの組み立てに Hilt を使うので、WorkManager の自動初期化はマニフェストで止め、
+`PathlyApplication`（`Configuration.Provider`）が初期化を担う。
 
 ### Entity ↔ Domain を変換して分離
 

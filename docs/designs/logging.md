@@ -1,225 +1,89 @@
 # ログ管理ガイドライン
 
-## 概要
+Pathly のログ出力の方針。デバッグしやすさとコードの読みやすさを両立させ、
+**位置情報アプリとして出してはいけないものを出さない**ことを目的にする。
 
-Pathlyアプリのログ出力に関する方針とガイドラインを定めています。
-コードの可読性を保ちながら、効果的なデバッグとトラブルシューティングを実現することを目的としています。
+## Logger の使い方
 
-## ログレベルの分類
-
-### 1. エラー (Log.e)
-
-**常に本番環境でも出力**
-
-- アプリケーションの動作に重大な影響を与える問題
-- ユーザーに影響するエラー
-
-```kotlin
-Log.e("LocationService", "Location permission not granted")
-Log.e("LocationService", "Location services are disabled")
-Log.e("TrackingViewModel", "Failed to save track to database", exception)
-```
-
-### 2. 警告 (Log.w)
-
-**常に本番環境でも出力**
-
-- 潜在的な問題や予期しない状況
-- アプリは動作するが注意が必要な状況
-
-```kotlin
-Log.w("LocationService", "No location received after 30 seconds")
-Log.w("LocationService", "GPS accuracy is very low: ${accuracy}m")
-Log.w("TrackingViewModel", "Location service is null in observeLocationUpdates")
-```
-
-### 3. 情報 (Log.i)
-
-**常に出力**
-
-- 重要な状態変更やアプリの動作状況
-- ユーザーアクションの記録
-
-```kotlin
-Log.i("LocationService", "Location tracking started")
-Log.i("TrackingViewModel", "Track completed with ${pointCount} points")
-```
-
-### 4. デバッグ (Log.d)
-
-**DEBUGビルドでのみ出力**
-
-- 開発・デバッグ時に必要な情報
-- 重要な処理の開始・終了
-
-```kotlin
-Log.d("LocationService", "startLocationTracking() called")
-Log.d("LocationService", "Location updates requested successfully")
-Log.d("TrackingViewModel", "Service connected")
-```
-
-## カスタムLoggerの使用
-
-### Logger.ktの活用
-
-プロジェクトでは `com.pathly.util.Logger` を提供しています：
+`android.util.Log` を直接呼ばず、`com.pathly.util.Logger` を使う。
+**クラスごとにインスタンスを 1 つ持つ**スタイル（タグを毎回書かない）。
 
 ```kotlin
 import com.pathly.util.Logger
 
-// 自動的にBuildConfig.DEBUGを考慮
-Logger.d("LocationService", "Debug information")     // DEBUGビルドのみ
-Logger.i("LocationService", "Important information") // 常に出力
-Logger.w("LocationService", "Warning message")       // 常に出力
-Logger.e("LocationService", "Error message")         // 常に出力
+class TrackingController {
+  private val logger = Logger("TrackingController")
 
-// 非常に詳細なデバッグ情報
-Logger.verbose("LocationService", "Very detailed debug info") // DEBUGビルドのみ
+  fun start() {
+    logger.d("start() called")      // DEBUGビルドのみ
+    logger.i("Tracking started")    // 常に出力
+    logger.w("Location is off")     // 常に出力
+    logger.e("Failed to bind", e)   // 常に出力（Throwable 付きは w / e のみ）
+  }
+}
 ```
 
-### タグの命名規則
+- タグには `Pathly-` の接頭辞が自動で付く（`Logger("TrackingController")` → `Pathly-TrackingController`）。
+  接頭辞を自分で書かないこと。
+- `d` だけが `BuildConfig.DEBUG` を見て出し分ける。`i` / `w` / `e` は常に出る。
+- レベルは 4 つだけ。`verbose` は用意していない（詳細ログも `d` に寄せる）。
+- タグ名は**クラス名に揃える**（`Logger("PlacesViewModel")`）。画面・レイヤー横断の
+  独自命名はしない。
 
-- **サービス**: `"LocationService"`, `"DatabaseService"`
-- **ViewModel**: `"TrackingViewModel"`, `"HistoryViewModel"`
-- **Repository**: `"GpsTrackRepository"`, `"UserRepository"`
-- **UI**: `"TrackingScreen"`, `"MapScreen"`
+## レベルの使い分け
 
-## ログ出力の指針
+| レベル | 出力       | 用途                                                    |
+| ------ | ---------- | ------------------------------------------------------- |
+| `e`    | 常に       | 動作に影響する失敗。例外は第2引数で渡す                 |
+| `w`    | 常に       | 動くが注意が要る状況（権限なし・位置情報 OFF・0件応答） |
+| `i`    | 常に       | 重要な状態変化（記録の開始・終了、サービスの起動）      |
+| `d`    | DEBUG のみ | 処理の入口・分岐の確認、開発中の調査                    |
 
-### ✅ 推奨されるログ
+## 出してはいけないもの
 
-1. **ユーザーアクションの開始/終了**
+### 座標・位置に紐づく値
 
-   ```kotlin
-   Logger.d("TrackingViewModel", "User started GPS tracking")
-   Logger.i("LocationService", "GPS tracking completed")
-   ```
-
-2. **重要な状態変更**
-
-   ```kotlin
-   Logger.i("LocationService", "Foreground service started")
-   Logger.d("TrackingViewModel", "Service connected successfully")
-   ```
-
-3. **エラーと例外**
-
-   ```kotlin
-   Logger.e("LocationService", "Failed to request location updates", exception)
-   Logger.w("TrackingViewModel", "Location permission denied")
-   ```
-
-4. **パフォーマンス関連**
-
-   ```kotlin
-   Logger.i("DatabaseService", "Saved ${pointCount} GPS points in ${duration}ms")
-   ```
-
-### ❌ 避けるべきログ
-
-1. **冗長な詳細情報**
-
-   ```kotlin
-   // ❌ 避ける
-   Logger.d("LocationService", "Permission check - Fine: true, Coarse: true")
-   Logger.d("LocationService", "Location: lat=35.123456, lon=139.654321")
-
-   // ✅ 必要な場合のみ
-   Logger.verbose("LocationService", "Location: lat=${lat}, lon=${lon}, accuracy=${accuracy}")
-   ```
-
-2. **頻繁に呼ばれる処理内のログ**
-
-   ```kotlin
-   // ❌ 避ける（30秒間隔で大量ログが出力される）
-   onLocationResult { location ->
-       Logger.d("LocationService", "Location received: ${location}")
-       // 処理...
-   }
-   ```
-
-3. **機密情報を含むログ**
-
-   ```kotlin
-   // ❌ 絶対避ける
-   Logger.d("AuthService", "User token: ${token}")
-   Logger.d("UserService", "User email: ${email}")
-   ```
-
-## 開発時のログ戦略
-
-### 1. 通常開発時
-
-- 必要最小限のログを残す
-- エラー・警告・重要な状態変更のみ
-
-### 2. デバッグ時
-
-- 問題箇所に一時的に `Logger.verbose()` を追加
-- 問題解決後は削除またはコメントアウト
-
-### 3. 新機能開発時
-
-- 開発中は詳細ログを追加
-- 完成後は必要なもののみ残して削除
-
-## 本番環境での考慮事項
-
-### リリースビルドでの自動除去
+**最優先の禁止事項**。リリースビルドで R8 を有効にしていない（`isMinifyEnabled = false`）ため、
+出力した文字列はそのまま logcat に残る。
 
 ```kotlin
-// DEBUGビルドでのみ実行される
-if (BuildConfig.DEBUG) {
-    Logger.d("LocationService", "Detailed debug info")
-}
+// ❌ 絶対に書かない
+logger.d("Location: lat=$lat, lon=$lng")
+logger.d("Saved stop at ${place.latitude},${place.longitude}")
+logger.e("Failed to handle $command")   // データクラスの toString に座標が乗る
 
-// Logger.d()は内部でBuildConfig.DEBUGをチェック済み
-Logger.d("LocationService", "Auto-filtered debug info")
+// ✅ 件数・ID・型名など、場所を特定できない情報にする
+logger.d("Saved ${points.size} points to track $trackId")
+logger.e("Failed to handle ${command::class.simpleName}", e)
 ```
 
-### パフォーマンス考慮
+住所・施設名も「どこにいたか」が分かるので同じ扱いにする。
 
-- 文字列フォーマットは必要な場合のみ実行
-- ログレベルチェック後に重い処理を実行
+### 高頻度で呼ばれる箇所
 
-```kotlin
-// ✅ 推奨
-if (BuildConfig.DEBUG) {
-    Logger.d("LocationService", "Heavy computation result: ${heavyComputation()}")
-}
+GPS のコールバックや Compose の再コンポジションの中でログを出すと、
+実質的に座標の軌跡がログに落ちるうえ、ログが流れて読めなくなる。バッチ単位・
+状態変化のタイミングにまとめる。
 
-// ❌ 避ける（リリースビルドでもheavyComputation()が実行される）
-Logger.d("LocationService", "Heavy computation result: ${heavyComputation()}")
-```
+### 文字列の組み立てコスト
 
-## トラブルシューティング
+`logger.d("...${heavy()}")` は**リリースビルドでも `heavy()` が走る**（引数の評価が先）。
+重い処理を挟むときだけ `if (BuildConfig.DEBUG)` で囲む。
 
-### 1. 位置情報関連の問題
+## 確認のしかた
 
 ```bash
-# 関連ログを確認
-adb logcat -s Pathly-LocationService Pathly-TrackingViewModel
+adb logcat -s Pathly-LocationTrackingService Pathly-TrackingController
 ```
-
-### 2. データベース関連の問題
 
 ```bash
-# データベース関連ログを確認
-adb logcat -s Pathly-GpsTrackRepository Pathly-DatabaseService
+adb logcat | grep "^.*Pathly-"
 ```
 
-### 3. 権限関連の問題
+接頭辞が共通なので、`Pathly-` で絞ればアプリのログだけを追える。
 
-```bash
-# 権限とサービス関連ログを確認
-adb logcat -s Pathly-LocationService | grep -E "(permission|Permission)"
-```
+## 運用
 
-## まとめ
-
-- **可読性重視**: 不要なログは削除し、コードをクリーンに保つ
-- **目的明確**: エラー、警告、重要な状態変更に焦点を当てる
-- **環境考慮**: DEBUGビルドと本番ビルドでログレベルを適切に分ける
-- **継続改善**: 新しい問題が発生したら、必要に応じてログ戦略を見直す
-
-このガイドラインに従うことで、効率的なデバッグとメンテナンスしやすいコードベースを維持できます。
+- 新機能の開発中は `d` を厚めに入れてよいが、**完成時に必要なものだけ残す**。
+- 調査のために一時的に足したログは、原因が分かった時点で消す。
+- 「動いていることの確認」だけのログは残さない（`i` が増えるとリリースビルドで邪魔になる）。

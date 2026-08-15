@@ -80,7 +80,7 @@
 
 - 一覧・詳細（`PlaceDao` の射影）に加え、**履歴の立ち寄り表示・関連経路一覧**（`StopDao` の射影）も
   `google_places` を LEFT JOIN して同じフォールバックを適用する。
-- カテゴリ・住所も同じ JOIN で取り、一覧カード／詳細／POI 登録ダイアログに出す。
+- カテゴリ・住所も同じ JOIN で取り、一覧カード／詳細／場所シートに出す。
 - フォールバックの計算は 1 か所（表示名ヘルパ）に集約し、各射影から使う。
 
 ---
@@ -121,12 +121,15 @@ minSdk 34（SQLite 3.35+）で `ALTER TABLE ... DROP COLUMN` が使えるため�
 
 ### 名前の入力
 
-名前欄は **`places.name`（自分で付けた名前）専用**。Google 由来の名前は初期値に入れず、
-薄字のプレースホルダで見せる。欄が埋まっているかどうかが、そのまま
-「自分で名前を付けたか、Google の名前で表示されているか」を表す。
+名前欄は **`places.name`（自分で付けた名前）専用**。Google 由来の名前は**初期値に入れない**ので、
+欄が埋まっているかどうかが、そのまま「自分で名前を付けたか、Google の名前で表示されているか」を表す。
 
-- 施設名を少し変えたいときのために、欄が空のときだけ「〈施設名〉から書き換える」を出して
-  文字列を流し込めるようにする（打ち直しを強いない）。
+Google の名前は**シートの見出し**に出す（名前欄のプレースホルダには入れない）。プレースホルダだと
+名前に関する場所が縦に 2 つ並んで場所を食ううえ、どちらが表示名なのか分かりにくかったため、
+「いま何という名前で表示されるか」は見出し 1 か所に集約した。
+
+- 施設名を少し変えたいときのために、欄が空のときだけ名前欄の下に「この名前から書き換える」を出して
+  見出しの名前を流し込めるようにする（打ち直しを強いない）。
 - 書き換えずに確定した場合は Google の名前と同じなので、ユーザー名としては保存しない。
 - **名前を変えても `googlePlaceId` は外さない**。列が分かれているので「スタバだけど自分は休憩と
   呼ぶ」がそのまま表現でき、カテゴリ・住所も残る。施設ごと取り違えたときは
@@ -154,8 +157,10 @@ minSdk 34（SQLite 3.35+）で `ALTER TABLE ... DROP COLUMN` が使えるため�
 
 ## 既知の限界
 
-- **既存の解決済み場所はカテゴリが埋まらない**（自動命名は place 1 件 1 回で対象外、手動「場所を取得」も
-  `googlePlaceId` 無しが対象）。必要なら「解決済みも category だけ取り直す」導線を別途足す。
+- **既存の解決済み場所は、自動ではカテゴリが埋まらない**（自動命名は place 1 件 1 回なので対象外）。
+  手で埋めるなら詳細の「**Google施設を選び直す**」で同じ施設を選び直す（`linkPlaceToGoogle` が
+  名前・住所・カテゴリを上書きする）。ただしそのとき**座標も施設の座標へ置き換わる**ので、
+  地図上のピンが動いて見えることがある → [ADR-0011](../adr/0011-place-coordinate-source.md)。
 - `google_places.googlePlaceId` は NOT NULL（行がある＝マッチ）。「叩いたが該当なし」は
   `place_resolutions` に行だけ残す。
 - 削除・取り消し（Undo）の実体スナップショットは `google_places` の行も含める。
@@ -179,15 +184,16 @@ minSdk 34（SQLite 3.35+）で `ALTER TABLE ... DROP COLUMN` が使えるため�
 
 ## 実装マップ
 
-| 要素             | ファイル                                                                                                               |
-| ---------------- | ---------------------------------------------------------------------------------------------------------------------- |
-| Entity           | `data/local/entity/PlaceEntity.kt`, `WishlistEntity.kt`, `PlaceResolutionEntity.kt`, `GooglePlaceEntity.kt`（新）      |
-| DAO              | `data/local/dao/PlaceDao.kt`, `StopDao.kt`, `PlaceResolutionDao.kt`, `GooglePlaceDao.kt`（新）                         |
-| マイグレーション | `data/local/migration/DatabaseMigrations.kt`（`MIGRATION_6_7`）, `PathlyDatabase.kt`（version=7）                      |
-| 読み取り射影     | `PlaceWithWishlist.kt`, `StopWithPlace.kt`, `PlaceVisitRow.kt`（`google_places` JOIN・表示名）                         |
-| リポジトリ       | `data/repository/PlaceRepositoryImpl.kt`, `WishlistRepositoryImpl.kt`（Google データの書き込み先変更・memo→note）      |
-| ドメイン         | `domain/model/Place.kt`, `PlaceListItem.kt`（address 除去・note・表示名）                                              |
-| Places 呼び出し  | `data/places/PlacesNameResolver.kt`, `PlacesTextSearcher.kt`（category フィールド追加）                                |
-| 画面             | `presentation/places/PlacesScreen.kt`, `RegisterPlaceFromPoiDialog.kt`（カテゴリ表示・メモ・フォーム統一・マップ起動） |
+| 要素             | ファイル                                                                                                                |
+| ---------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| Entity           | `data/local/entity/PlaceEntity.kt`, `WishlistEntity.kt`, `PlaceResolutionEntity.kt`, `GooglePlaceEntity.kt`（新）       |
+| DAO              | `data/local/dao/PlaceDao.kt`, `StopDao.kt`, `PlaceResolutionDao.kt`, `GooglePlaceDao.kt`（新）                          |
+| マイグレーション | `data/local/migration/DatabaseMigrations.kt`（`MIGRATION_6_7`）, `PathlyDatabase.kt`（version=7）                       |
+| 読み取り射影     | `PlaceWithWishlist.kt`, `StopWithPlace.kt`, `PlaceVisitRow.kt`（`google_places` JOIN・表示名）                          |
+| リポジトリ       | `data/repository/PlaceRepositoryImpl.kt`, `WishlistRepositoryImpl.kt`（Google データの書き込み先変更・memo→note）       |
+| ドメイン         | `domain/model/Place.kt`, `PlaceListItem.kt`（address 除去・note・表示名）                                               |
+| Places 呼び出し  | `data/places/PlacesNameResolver.kt`, `PlacesTextSearcher.kt`（category フィールド追加）                                 |
+| UseCase          | `domain/usecase/PlaceEditUseCase.kt`（登録・近接確認・紐付け・編集の差分適用を3画面で共有）                             |
+| 画面             | `presentation/places/PlacesScreen.kt`（`PlaceFormBody`）, `PlaceActionSheet.kt`, `presentation/common/FloatingSheet.kt` |
 
 > 実装時に [../specs/model.md](../specs/model.md)（概念モデル・ER）も v7 の構成へ更新する。

@@ -83,12 +83,17 @@ android/app/src/
 - **特徴**: 依存なし、高速実行
 
 ```kotlin
-// 例: GpsTrackTest.kt
+// 例: GeoTest.kt / TrackSmootherTest.kt / StopDetectorTest.kt
 @Test
 fun calculateDistance_twoPoints_returnsCorrectDistance() {
     // ドメインモデルの距離計算ロジックをテスト
 }
 ```
+
+**UseCase（`domain/usecase/`）はここで厚く守る**。`PlaceEditUseCase` / `AddManualStopUseCase` は
+記録画面・経路詳細・場所タブの 3 画面で共有しており、しかも切り出す前は近接確認の分岐が Composable 側に
+あってテストできなかった。Repository をモックすれば 3 画面ぶんの挙動をまとめて検証できるので、
+**画面から UseCase に移したロジックには必ずテストを付ける**。
 
 #### 2. データ層テスト
 
@@ -449,31 +454,35 @@ Expected at most 1 node but found 3 nodes
 
 #### Android Emulator設定（推奨）
 
-- **API Level**: 36 (Android 16+)
-- **Device**: Medium Phone API 36
+- **API Level**: `compileSdk` / `targetSdk` に合わせる（現行値は Gradle 定義を正とする）
 - **特徴**: Compose UI、Room、権限システムの完全サポート
 
 #### 実機テスト
 
-- **最小要件**: API 34 (Android 14) 以上
+- **最小要件**: `minSdk`（現行 API 34 / Android 14）以上
 - **権限**: 位置情報権限が必要（LocationTrackingService用）
+- **実機でしか確かめられないもの**: DB マイグレーションの実データ移行、位置情報 OFF での記録開始、
+  サービスの異常終了からの復帰。エミュレータのグリーンだけでは足りない。
 
 ## 継続的インテグレーション
 
 ### GitHub Actions（実装済み）
 
 `.github/workflows/android-build.yml` が main への push / PR で動く。`./gradlew build` 一発で
-**ユニットテスト・lint・assemble(debug/release)** をまとめて実行し、debug APK と lint/test レポートを
-アーティファクトとして保存する（同一ブランチの新 push で進行中の実行はキャンセル）。
+**ユニットテスト・lint・spotless（ktlint）・assemble(debug/release)** をまとめて実行し、debug APK と
+lint/test レポートをアーティファクトとして保存する（同一ブランチの新 push で進行中の実行はキャンセル）。
 
 ```yaml
 # .github/workflows/android-build.yml（要点）
 - name: Build, test and lint
-  run: ./gradlew build # test + lint + assemble をまとめて実行
+  run: ./gradlew build # test + lint + spotlessCheck + assemble をまとめて実行
 ```
 
+> **push 前は `./gradlew build` を通すこと**。`test` だけ／`lint` だけを回すと、整形（`spotlessKotlinCheck`）や
+> 別のゲートを見逃して CI で落ちる。整形は `./gradlew spotlessApply` で直せる。
+
 > インストルメンテーションテスト（`connectedAndroidTest`）はエミュレータが要るため CI では回さず、
-> 実機／ローカルのエミュレータで確認する。
+> 実機／ローカルのエミュレータで確認する。Room のマイグレーションテスト（`MigrationTest`）もここに入る。
 
 ### テストカバレッジ目標
 

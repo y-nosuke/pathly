@@ -8,6 +8,8 @@ Android Room（SQLite）によるローカルデータモデル。GPS 軌跡の�
 ## ER 図（概念モデル）
 
 > 概念モデルのため、監査用の `createdAt` / `updatedAt` は省略している。
+> `gps_points` は `Location` の付随情報（各種精度・MSL 高度など）を全部持つが、図では代表的なものだけ挙げる
+> （全列は [../designs/gps-capture.md](../designs/gps-capture.md)）。
 
 ```mermaid
 erDiagram
@@ -25,6 +27,9 @@ erDiagram
     Date startTime
     Date endTime
     Boolean isActive
+    String name
+    Boolean isFavorite
+    Double totalDistanceMeters
   }
   gps_points {
     Long id PK
@@ -36,6 +41,10 @@ erDiagram
     Float speed
     Float bearing
     Date timestamp
+    String provider
+    Long elapsedRealtimeNanos
+    Boolean isMock
+    String extrasJson
   }
   smoothed_points {
     Long id PK
@@ -52,6 +61,7 @@ erDiagram
     Double latitude
     Double longitude
     String note
+    String source
   }
   stops {
     Long id PK
@@ -82,16 +92,16 @@ erDiagram
 
 ## エンティティ一覧
 
-| エンティティ          | 役割                                                 | 主な関連                                               |
-| --------------------- | ---------------------------------------------------- | ------------------------------------------------------ |
-| **gps_tracks**        | お出掛け 1 回分の記録セッション                      | gps_points / smoothed_points / stops を従える          |
-| **gps_points**        | 原 GPS 座標（無改変で保持）                          | gps_tracks に属す                                      |
-| **smoothed_points**   | 補正（スムージング）後の点列。原データと併存         | gps_tracks に属す／sourcePointId で生点を辿れる        |
-| **places**            | 場所そのもの（ユーザー入力＝自分の名前・メモ・座標） | stops から参照される                                   |
-| **stops**             | 立ち寄り（訪問）。places と gps_tracks を結ぶ        | 経路削除で消える（場所は残す）／訪問メモ `note` を持つ |
-| **place_resolutions** | Google 問い合わせログ（行の有無＝問い合わせ済みか）  | places に 1:0..1                                       |
-| **google_places**     | Google 由来データ（place ID・名前・住所・カテゴリ）  | places に 1:0..1（行＝該当 POI あり）                  |
-| **wishlist**          | 行きたい場所（優先度・訪問済み。メモは places.note） | places に 1:0..1                                       |
+| エンティティ          | 役割                                                                                           | 主な関連                                               |
+| --------------------- | ---------------------------------------------------------------------------------------------- | ------------------------------------------------------ |
+| **gps_tracks**        | お出掛け 1 回分の記録セッション。名前・お気に入り・確定時に焼き込む総移動距離を持つ            | gps_points / smoothed_points / stops を従える          |
+| **gps_points**        | 原 GPS 座標（無改変で保持）                                                                    | gps_tracks に属す                                      |
+| **smoothed_points**   | 補正（スムージング）後の点列。原データと併存                                                   | gps_tracks に属す／sourcePointId で生点を辿れる        |
+| **places**            | 場所そのもの（ユーザー入力＝自分の名前・メモ・座標）。由来（`source`）で自動回収の対象を分ける | stops から参照される                                   |
+| **stops**             | 立ち寄り（訪問）。places と gps_tracks を結ぶ                                                  | 経路削除で消える（場所は残す）／訪問メモ `note` を持つ |
+| **place_resolutions** | Google 問い合わせログ（行の有無＝問い合わせ済みか）                                            | places に 1:0..1                                       |
+| **google_places**     | Google 由来データ（place ID・名前・住所・カテゴリ）                                            | places に 1:0..1（行＝該当 POI あり）                  |
+| **wishlist**          | 行きたい場所（優先度・訪問済み。メモは places.note）                                           | places に 1:0..1                                       |
 
 ### 関連と削除規則（要点）
 
@@ -102,8 +112,15 @@ erDiagram
 - `smoothed_points.sourcePointId` は由来の生点への参照（トレース用・任意）。DB 上の外部キー制約は張らない。
 - `wishlist` は `places` に従属し（1 place 1件・placeId は UNIQUE）、place の削除で一緒に消える。ただし place は通常消さない（再利用のため静的に保つ）。
 
+### 索引
+
+- `places(latitude, longitude)` … 近傍検索（同一場所の 30m 判定・近接確認の 50m）が全表走査に
+  ならないように張る。記録中は位置のバッチごとに引かれるため、場所が増えるほど効く。
+- 親子関係（`trackId` / `placeId` など）の索引は Room が外部キーに対して要求するぶんを持つ。
+
 ## データに関する方針
 
 - **原データ保持**: 生の GPS（`gps_points`）は無改変で残し、補正結果は `smoothed_points` に併存させる。
+  精度の丸めや間引きはしない（あとから補正・再解析するため）。
 - **位置情報保護**: 位置情報の削除はユーザーに委ね、自動削除はしない。
-- **暗号化**: 将来、機密データはアプリレベルでの暗号化を検討する。
+- **暗号化**: していない（平文）。現状と将来案は [../designs/security.md](../designs/security.md)。

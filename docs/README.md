@@ -30,18 +30,21 @@
 
 ### 設計（How）
 
-| ファイル                                                             | 内容                                   |
-| -------------------------------------------------------------------- | -------------------------------------- |
-| [designs/architecture.md](designs/architecture.md)                   | アーキテクチャ・プロジェクト構成       |
-| [designs/security.md](designs/security.md)                           | セキュリティ設計                       |
-| [designs/logging.md](designs/logging.md)                             | ログ方針・実装                         |
-| [designs/performance.md](designs/performance.md)                     | パフォーマンス設計（電力・メモリ・DB） |
-| [designs/gps-smoothing.md](designs/gps-smoothing.md)                 | GPS軌跡の補正（スムージング）設計      |
-| [designs/places-and-stops.md](designs/places-and-stops.md)           | 場所・立ち寄りの永続化と命名設計       |
-| [designs/wishlist.md](designs/wishlist.md)                           | 行きたい場所・「場所」タブの設計       |
-| [designs/place-info-enrichment.md](designs/place-info-enrichment.md) | 場所情報の拡充とデータ分離（v7）       |
-| [designs/testing.md](designs/testing.md)                             | テスト戦略                             |
-| [designs/cloud-database.md](designs/cloud-database.md)               | クラウドDB・同期設計（将来）           |
+| ファイル                                                             | 内容                                    |
+| -------------------------------------------------------------------- | --------------------------------------- |
+| [designs/architecture.md](designs/architecture.md)                   | アーキテクチャ・プロジェクト構成        |
+| [designs/security.md](designs/security.md)                           | セキュリティ・プライバシー設計          |
+| [designs/logging.md](designs/logging.md)                             | ログ方針・実装                          |
+| [designs/performance.md](designs/performance.md)                     | パフォーマンス設計（電力・メモリ・DB）  |
+| [designs/gps-capture.md](designs/gps-capture.md)                     | GPS点の取り込み（保存する情報・バッチ） |
+| [designs/gps-smoothing.md](designs/gps-smoothing.md)                 | GPS軌跡の補正（スムージング）設計       |
+| [designs/places-and-stops.md](designs/places-and-stops.md)           | 場所・立ち寄りの永続化と命名設計        |
+| [designs/wishlist.md](designs/wishlist.md)                           | 行きたい場所・「場所」タブの設計        |
+| [designs/place-info-enrichment.md](designs/place-info-enrichment.md) | 場所情報の拡充とデータ分離（v7）        |
+| [designs/map-tap-behavior.md](designs/map-tap-behavior.md)           | 地図タップの挙動（画面×モード×表示）    |
+| [designs/track-list.md](designs/track-list.md)                       | 経路一覧の名前・お気に入り・絞り込み    |
+| [designs/testing.md](designs/testing.md)                             | テスト戦略                              |
+| [designs/cloud-database.md](designs/cloud-database.md)               | クラウドDB・同期設計（将来）            |
 
 ### 決定（Why this way）
 

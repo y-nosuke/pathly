@@ -51,12 +51,16 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - ✅ GPSノイズ除去（位置補正・スムージング）
 - ✅ 立ち寄り場所の自動検出（50m圏内+3分滞在）・永続化・自動命名（Places）
 - ✅ 場所・行きたい（wishlist）管理（登録・優先度・メモ・訪問済み・キーワード検索・関連経路一覧）
+- ✅ 手動での場所記録（記録画面の「今ここ」・地図タップからの場所登録／立ち寄り追加）
+- ✅ 立ち寄りの手動追加・誤検知の付け替え・訪問メモ・再解析（追加提案）
+- ✅ 経路の名前・お気に入り・絞り込み／並べ替え
+- ✅ 登録済みの場所を地図に表示・近接確認
 
 **Phase 2以降に先送りされた機能：**
 
 - 外出の自動検知→記録開始
-- 手動での場所記録（ワンタップ）
 - 写真撮影機能
+- 記録の詳細編集（評価・コメント・費用・タグ）
 - クラウド同期（複数人での共有）
 
 ## データベース構造（PostgreSQL）
@@ -88,27 +92,35 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 app/src/main/java/com/pathly/
 ├── di/                     # 依存性注入（Hilt modules）
 ├── data/                   # データ層
-│   ├── local/             # Room database, DAOs, entities
-│   └── repository/        # Repository実装
+│   ├── local/             # Room database, DAOs, entities, migrations
+│   ├── repository/        # Repository実装
+│   ├── places/            # Google Places 連携（命名・テキスト検索）
+│   ├── settings/          # SharedPreferences（GPS間隔・地図の表示設定）
+│   ├── tracking/          # 記録サービスの制御・端末状態（TrackingController）
+│   └── work/              # WorkManager ジョブ（名前解決のキャッチアップ）
 ├── domain/                # ドメイン層
 │   ├── model/             # ドメインモデル
-│   └── repository/        # Repository interface
+│   ├── repository/        # Repository interface
+│   └── usecase/           # 複数画面で共有する手順（場所の登録・立ち寄りの手動追加）
 ├── presentation/          # プレゼンテーション層（画面別のViewModel, State, Screen）
 │   ├── tracking/          # 記録画面
 │   ├── history/           # 履歴・経路詳細
-│   ├── places/            # 場所・行きたい（wishlist）
+│   ├── places/            # 場所・行きたい（wishlist）・場所シート
+│   ├── stops/             # 立ち寄りの追加・付け替えUI（画面横断）
+│   ├── common/            # 画面横断の部品（FloatingSheet・地図描画・確認ダイアログ）
 │   ├── settings/          # 設定
 │   └── navigation/        # ボトムナビ・NavHost（Navigation-Compose）
 ├── service/               # Androidサービス（GPS追跡など）
+├── util/                  # Logger・権限判定・日時フォーマット
 └── ui/theme/             # Compose UIテーマ
 ```
 
 ### データフロー
 
 1. **UI (Compose Screen)** ← StateFlow ← **ViewModel**
-2. **ViewModel** → Repository Interface → **Repository Implementation**
+2. **ViewModel** → Repository Interface（複数画面で重複する手順は UseCase 経由）→ **Repository Implementation**
 3. **Repository** → Room DAO → **Local Database**
-4. **Service** → Repository → GPS位置データの永続化
+4. **Service** → Repository / DAO → GPS位置データの永続化。サービスの起動・バインドと端末状態（権限・位置情報ON/OFF）は `data/tracking/TrackingController` が持ち、ViewModel は Service を直接触らない
 
 ### 重要な実装パターン
 
@@ -129,8 +141,11 @@ app/src/main/java/com/pathly/
 ### 実装済みの主な機能（Phase 2・先行着手）
 
 - **立ち寄り判定** - 50m圏内+3分滞在の自動検出・永続化・自動命名（Places）
+- **立ち寄りの手動操作** - 手動追加（「立ち寄りを追加」）・誤検知の付け替え・再解析（追加提案）・訪問メモ
 - **場所・行きたいリスト** - 登録（地図/POI/キーワード検索）・優先度・メモ・訪問済み・関連経路一覧
-- **場所名の手動編集** - 未命名⇄命名
+- **場所名の手動編集** - 未命名⇄命名。名前欄は「自分で付けた名前」専用で、Google の名前は別列（v7）
+- **経路一覧** - 名前・お気に入り・絞り込み／並べ替え
+- **地図の上のUI** - 全画面の地図＋非モーダルのフローティングシートに統一（ADR-0010）
 
 ### 将来実装予定機能
 
@@ -181,10 +196,11 @@ app/src/main/java/com/pathly/
 
 ### セキュリティ
 
-- **認証：** Supabase Auth（ID+パスワード）
-- **データ暗号化：** Supabase自動暗号化 + 機密データはアプリレベル暗号化
+- **認証：** Supabase Auth（ID+パスワード）※ Phase 3・未着手
+- **データ暗号化：** Supabase自動暗号化 + 機密データはアプリレベル暗号化 ※ Phase 3・未着手
 - **通信：** HTTPS/TLS必須
 - **ローカル：** 暗号化なし。Room の DB は平文で、設定は SharedPreferences。将来 DB を暗号化するなら SQLCipher 等の導入が必要（Jetpack Security は Deprecated）
+- 現状どこまで守れているかは `docs/designs/security.md`（`allowBackup` が既定のままで DB が Auto Backup に乗る点も記載）
 
 ### パフォーマンス
 
@@ -235,8 +251,10 @@ app/src/main/java/com/pathly/
 - **バックグラウンド実行：** LocationTrackingService使用
 - **データベースバージョン：** Room v12（v2: places/stops、v3: smoothed_points、v4: place_resolutions、v5: wishlist、v6: stops.note＝立ち寄りメモ、v7: 場所データをGoogle由来[google_places]とユーザー入力[places]に分離・メモをplaces.noteへ一本化、v8: gps_tracksにname/isFavorite＝経路の名前・お気に入り、v9: gps_pointsにLocation付随情報＝provider/各種精度/MSL高度/elapsedRealtimeNanos/isMock/extrasJson、v10: placesにsource＝場所の由来[DETECTED/USER]・自動回収はDETECTEDのみ、v11: gps_tracksにtotalDistanceMeters＝確定時に焼き込む総移動距離[一覧が全点をロードして再平滑化しないため]・既存分は起動時にバックフィル、v12: placesの座標に索引＝近傍検索[同一場所30m判定・近接確認50m]が全表走査にならないように）。破壊的フォールバックは無効。スキーマ変更時は `DatabaseMigrations` に正式なマイグレーションを追加すること
 - **最小SDK：** API 34（Android 14）以上 / compileSdk 37・targetSdk 37（Android 17）
-- **ビルド環境：** AGP 9.2 / Gradle 9.6 / Kotlin 2.3（AGP内蔵Kotlin）。KotlinはAGPバンドル版に連動するため独立に最新化しないこと
-- **アノテーション処理：** KSP使用（Room/Hilt）。kaptは廃止
+- **ビルド環境：** AGP 9.3 / Gradle 9.7 / Kotlin 2.3（AGP内蔵Kotlin）。KotlinはAGPバンドル版に連動するため独立に最新化しないこと。正確な値は `gradle/libs.versions.toml` と `gradle-wrapper.properties` を見ること
+- **アノテーション処理：** KSP使用（Room/Hilt/WorkManager）。kaptは廃止
+- **バックグラウンドジョブ：** WorkManager（Hilt でワーカーを組み立てるため自動初期化はマニフェストで停止し、`PathlyApplication` が `Configuration.Provider` として担う）
+- **整形：** spotless（ktlint）。`./gradlew build` に含まれるので、push 前は build を通すこと。崩れは `./gradlew spotlessApply`
 - **アイコン：** Material Iconsは非推奨のため不使用。`res/drawable`のベクター + `painterResource`で追加する
 - **コルーチン：** すべての非同期処理でKotlin Coroutines使用
 

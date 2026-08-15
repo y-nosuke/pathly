@@ -97,17 +97,23 @@ erDiagram
 
 ## ドメインモデル
 
-- `WishlistItem` … 行きたい場所1件。`place: Place`（座標・名前・住所）＋計画情報（優先度・メモ・訪問済み）。
-  - 表示名は `place.name`（未命名は住所→座標の順でフォールバック）。
+- `PlaceListItem` … 一覧の1行。`place: Place` ＋ 行きたい登録（あれば）＋ 立ち寄り件数。
+  「行きたい」は任意の属性なので、**行きたい登録が無い場所も同じ型で並ぶ**（`wishlistId` が null）。
+  - 表示名は `places.name`（自分の名前）→ `google_places.name` → 住所 → 座標 の順でフォールバック
+    （[place-info-enrichment.md](./place-info-enrichment.md)）。
 - `Priority` … `LOW / MEDIUM / HIGH` の enum（DB では 0/1/2）。
 
 ```
-WishlistItem
- ├─ place: Place        （id・name?・lat・lng・address?）
- ├─ priority: Priority
- ├─ memo: String?
- └─ visitedAt: Date?    （null=未訪問）
+PlaceListItem
+ ├─ place: Place        （id・name?・lat・lng・note?・googleName?・googleAddress?・category?）
+ ├─ wishlistId: Long?   （null=行きたいに入っていない）
+ ├─ priority: Priority?
+ ├─ visitedAt: Date?    （null=未訪問）
+ └─ visitCount: Int     （立ち寄り記録の件数）
 ```
+
+> メモは v7 で `wishlist.memo` を廃し **`places.note`** に一本化した（行きたいに入れなくても
+> 場所にメモを残せる）。住所も `places.address` から `google_places.address` へ移した。
 
 ---
 
@@ -123,9 +129,11 @@ WishlistItem
 
 1. 検索欄にキーワード入力 → **候補（Autocomplete）** を表示。
 2. 候補を選択 → **`fetchPlace`** で `DISPLAY_NAME / FORMATTED_ADDRESS / LAT_LNG / ID` を取得。
-3. 座標で `findOrCreatePlace`（30m）→ place に name/address を保存。
-   `googlePlaceId` が取れているので **`place_resolutions` に解決済み行を記録**（Nearby を叩き直さない）。
-4. wishlist 行を作成（優先度・メモを任意入力）。
+3. `googlePlaceId` で `findOrCreateByGooglePlaceId`（施設の同一性で同定・[ADR-0006](../adr/0006-place-identity-by-googleplaceid.md)）
+   → **`google_places` に名前・住所・カテゴリを保存**（`places.name` には書かない）。
+   `place_resolutions` に解決済み行を記録して Nearby を叩き直さない。
+   検索時点で取れている情報は `knownDetails` としてそのまま渡し、**登録で Google を引き直さない**。
+4. wishlist 行を作成（優先度は任意・メモは `places.note`）。
 
 - **課金最小化**（[places-and-stops.md](./places-and-stops.md) と同じ思想）:
   - **Autocomplete はセッショントークン**でまとめ、確定した1件だけ `fetchPlace` する。
@@ -145,14 +153,19 @@ WishlistItem
 ### 2b. マップ上の POI タップから登録（アプリ共通）
 
 **地図はどこでも「場所を見つける面」**として扱い、施設アイコン（POI）をタップすると
-共通の登録ダイアログ（名前・行きたいトグル）を出す。シートや入力欄と干渉しないようモーダルにする。
+共通の**場所シート**（名前・メモ・行きたい・優先度）を出す。
 
-- 対応マップ: **記録画面／経路詳細（振り返り）／場所詳細**の3つ。
-- `onPOIClick` で POI（名前・座標）→ 共通ダイアログ → `registerPlace`（＝地図タップと同じ）。行きたい ON なら `addToWishlist`（優先度は既定 MEDIUM・メモは後で「場所」タブで編集）。
-- 記録中でも使える。空きタップは登録に使わない（地図操作と競合するため POI タップのみ）。
+- 対応マップ: **記録画面／経路詳細（振り返り）／場所詳細**、および場所タブの「地図で選ぶ」「検索して追加」。
+- `onPOIClick` で POI（名前・座標・`googlePlaceId`）→ 場所シート → `registerPlace`（＝地図タップと同じ）。
+  行きたい ON なら `addToWishlist`（優先度は既定 MEDIUM）。
+- 記録中でも使える。空きタップからも登録できる（画面 × モード別の一覧は
+  [map-tap-behavior.md](./map-tap-behavior.md)）。
+- シートは**非モーダル**（`FloatingSheet`）。スクリムを敷かないので出したまま地図を動かせる
+  → [ADR-0010](../adr/0010-non-modal-map-sheets.md)。
 
-対応実装: 共通 `presentation/places/RegisterPlaceFromPoiDialog.kt`。呼び出しは
-`TrackingScreen`（`TrackingViewModel.registerPlace`）／`TrackDetailScreen`（`TrackDetailViewModel.registerPlace`）／`PlacesScreen` 詳細（`PlacesViewModel.registerPlace`）。
+対応実装: 共通 `presentation/places/PlaceActionSheet.kt`（入力欄は `PlacesScreen.kt` の
+`PlaceFormBody` を共有）。登録の手順は `domain/usecase/PlaceEditUseCase` に集約し、
+`TrackingViewModel` / `TrackDetailViewModel` / `PlacesViewModel` の3つから呼ぶ。
 
 ### 3. 立ち寄り場所から登録（また行きたい）
 
@@ -211,12 +224,14 @@ WishlistItem
 **全画面マップを土台にし、タップして初めて入力欄を出す**（マップを広く使う）。
 
 1. 全画面マップ。未タップのうちは上部にヒントのみ（入力欄は出さない）。
-2. **アイコン（POI）をタップ** → 名前を自動入力＋ピン。**何もない場所をタップ** → 名前は空欄＋ピン。
-3. タップ後に下部フォームが出る: 名前（任意）・**「行きたい」トグル**（ON時のみ優先度・メモ）。
-4. **保存＝まず場所を登録**（find-or-create 30m）。行きたいトグルが ON のときだけ wishlist にも入れる。
-   「選び直す」でピンを解除して再タップできる。
+2. **アイコン（POI）をタップ** → 施設名を見出しに出してピン。**何もない場所をタップ** → 見出しなしでピン。
+3. タップ後に下部の**場所シート**が出る: 自分で付ける名前（任意）・メモ・**「行きたい」トグル**（ON時のみ優先度）。
+4. **保存＝まず場所を登録**。行きたいトグルが ON のときだけ wishlist にも入れる。
+   シートを閉じてタップし直せば選び直せる。
 
-> 名前・座標は place 側に持つ。POI 名は `onPOIClick` の `PointOfInterest.name` を使う（追加のオンライン取得はしない）。
+> 名前・座標は place 側に持つ。POI 名は `onPOIClick` の `PointOfInterest.name` を使い、
+> **`google_places.name` に入れる**（`places.name` は自分で付けた名前専用）。
+> 座標は経路によって出どころが違う → [ADR-0011](../adr/0011-place-coordinate-source.md)。
 
 ### 3. 場所詳細画面（map-first）
 
@@ -236,7 +251,13 @@ WishlistItem
 ```
 
 - 左上に戻るボタン（`FilledTonalIconButton`・マップ上でも見えるよう背景付き）。
-- 行きたいフラグの付け外し。ON のときだけ優先度・メモ・（立ち寄り記録が無ければ）訪問トグルを編集できる。立ち寄り記録がある場合は「訪問済み（立ち寄り記録 N 件）」と表示。
+- 下部は他の地図画面と同じ**非モーダルのフローティングシート**（`FloatingSheet`）。畳めば地図を全画面で
+  見られ、「▲ 詳細に戻る」で戻せる → [ADR-0010](../adr/0010-non-modal-map-sheets.md)。
+  地図で別の場所や POI をタップしたときは、詳細のシートを引っ込めて場所シートに差し替える。
+- 見出しには**表示名**（自分の名前 → Google 名 → 住所 → 座標）を出す。名前欄は自分で付ける名前専用で、
+  空のときだけ「この名前から書き換える」で Google 名を流し込める（[place-info-enrichment.md](./place-info-enrichment.md)）。
+- 行きたいフラグの付け外し。ON のときだけ優先度・（立ち寄り記録が無ければ）訪問トグルを編集できる。
+  メモは行きたいに関わらず常に編集できる（`places.note`）。立ち寄り記録がある場合は「訪問済み（立ち寄り記録 N 件）」と表示。
 - **削除**: 一覧の各行と詳細から。**立ち寄り記録（stops）がある場所は削除不可（ボタン非活性）＝記録を残す**。行きたい・座標だけが紐づく場所のみ削除でき、place を消す（wishlist・place_resolutions は CASCADE、stops は消さない）。**確認ダイアログは出さず即時削除**し、**一覧のスナックバー「取り消す」**（`undoLastPlaceDeletion`）で直近の削除を戻せる。削除前に place・wishlist・解決ログの実体を1件分控え、取り消し時に**元のIDのまま再挿入**して復元する（詳細から消した場合も一覧へ戻って取り消せる）。
 - 未命名（座標のみ）の place の命名（Nearby 取得）は**後段**で追加予定。
 - **将来**: 営業時間表示、地図アプリでナビ起動、計画（お出掛け）への割り当て。
@@ -252,10 +273,11 @@ Clean Architecture（[architecture.md](./architecture.md)）に沿う。既存�
 | Entity                 | `data/local/entity/WishlistEntity.kt` ／ `PlaceWithWishlist.kt`（place＋wishlist の JOIN）                                                                                                                     |
 | DAO                    | `data/local/dao/WishlistDao.kt` ／ `PlaceDao.getPlacesWithWishlist()`（一覧）                                                                                                                                  |
 | マイグレーション       | `DatabaseMigrations.kt` の v4→v5（`wishlist` 作成）                                                                                                                                                            |
-| ドメインモデル         | `domain/model/PlaceListItem.kt`（一覧行）, `Priority.kt`                                                                                                                                                       |
+| ドメインモデル         | `domain/model/PlaceListItem.kt`（一覧行）, `Priority.kt`, `PlaceRegistration.kt`                                                                                                                               |
 | リポジトリ             | `domain/repository/WishlistRepository.kt` ／ `data/repository/WishlistRepositoryImpl.kt`                                                                                                                       |
-| 場所同定（再利用）     | 既存 `findOrCreatePlace`（`PlaceRepository`）を共用                                                                                                                                                            |
-| ViewModel / 画面       | `presentation/places/PlacesViewModel.kt` ／ `PlacesScreen.kt`（一覧・追加・詳細のルート）                                                                                                                      |
+| 場所同定（再利用）     | 既存 `findOrCreatePlace` ／ `findOrCreateByGooglePlaceId`（`PlaceRepository`）を共用                                                                                                                           |
+| UseCase                | `domain/usecase/PlaceEditUseCase.kt`（登録・近接確認・紐付け・編集の差分適用。記録画面／経路詳細と共有）                                                                                                       |
+| ViewModel / 画面       | `presentation/places/PlacesViewModel.kt` ／ `PlacesScreen.kt`（一覧・追加・詳細のルート）／ `PlaceActionSheet.kt`（場所シート）                                                                                |
 | ナビ                   | Navigation-Compose。`presentation/navigation/PathlyNavHost.kt` の `places` ネストグラフ（`places_list`/`place_add`/`place_search`/`place_detail`）。VM は places グラフにスコープして共有。`ic_place` ベクター |
 | DI                     | `di/` に `WishlistRepository` のバインド追加                                                                                                                                                                   |
 | キーワード検索(後段)   | `data/places/PlacesTextSearcher.kt`（Autocomplete＋fetchPlace）                                                                                                                                                |
@@ -268,13 +290,25 @@ interface WishlistRepository {
   /** 全ての場所を、行きたい登録（あれば）付きでリアクティブに取得。 */
   fun getPlaces(): Flow<List<PlaceListItem>>
 
-  /** 座標から場所を登録（地図タップ）。find-or-create(30m)＋未命名なら命名。行きたいはしない。 */
-  suspend fun registerPlace(latitude: Double, longitude: Double, name: String?): Long
+  /**
+   * 座標から場所を登録。googlePlaceId があれば施設の同一性で、無ければ座標(30m)で同定する。
+   * name は「自分で付けた名前」（Google の名前は googleName / knownDetails 側で google_places へ）。
+   */
+  suspend fun registerPlace(
+    latitude: Double,
+    longitude: Double,
+    name: String?,
+    note: String? = null,
+    googlePlaceId: String? = null,
+    forceNewPlace: Boolean = false,        // 座標30m同定をせず必ず新規（近接確認の「新規」）
+    knownDetails: PlaceSearchResult? = null, // 取得済みの施設情報。Google を引き直さない
+    googleName: String? = null,            // 施設名（→ google_places.name）
+  ): PlaceRegistration
 
   /** その場所を行きたいに登録。既に有れば既存 id を返す（重複させない）。 */
-  suspend fun addToWishlist(placeId: Long, priority: Priority, memo: String?): Long
+  suspend fun addToWishlist(placeId: Long, priority: Priority): Long
 
-  suspend fun updateWishlist(id: Long, priority: Priority, memo: String?)
+  suspend fun updateWishlist(id: Long, priority: Priority)
   suspend fun setVisited(id: Long, visited: Boolean)
   /** 行きたいから外す（wishlist 行のみ削除。place は残す）。 */
   suspend fun removeFromWishlist(id: Long)
@@ -288,8 +322,10 @@ interface WishlistRepository {
 1. **DB＋ドメイン＋一覧（オフラインで完結）✅ 実装済**: `wishlist` テーブル・DAO・マイグレーション、`PlaceListItem`、
    「場所」タブ（全 places 一覧）、**地図タップ登録**（POI 名自動入力・タップ後にフォーム）、行きたいトグル・優先度/メモ/訪問トグル。**Google 不要で成立**。
 2. **命名（手動）✅ 実装済**: 詳細画面で名前を手動編集（要望「場所名を手動で入力・変更したい」）。空にすると未命名に戻る。`renamePlace`→`placeDao.updateName`。
-   - 補足（後段）: 座標のみの place を「場所を取得」（Nearby）で自動命名するボタンは未実装（既存 `PlacesNameResolver` を再利用予定）。
-3. **キーワード検索登録 ✅ 実装済**: `PlacesTextSearcher`（Autocomplete＋fetchPlace・セッショントークン・オンライン限定）。「追加」＞「検索して追加」で店名検索 → 候補選択 → 名前/住所/座標/googlePlaceId 取得 → `registerSearchedPlace`（place＋解決ログ）＋任意で行きたい。**Cloud で「Places API (New)」有効化＋課金が前提**。
+   - **Google から取る導線も実装済**: `googlePlaceId` を持たない場所には「Googleで情報を取得」、持つ場所には
+     「Google施設を選び直す」を出し、登録座標の近くの候補（`nearbyPois`）から選んで `linkPlaceToGoogle` で
+     紐付ける。周辺に出ない施設は名前検索でも探せる。選んだ施設は即保存せず「保存」で確定する。
+3. **キーワード検索登録 ✅ 実装済**: `PlacesTextSearcher`（Autocomplete＋fetchPlace・セッショントークン・オンライン限定）。「追加」＞「検索して追加」で店名検索 → 候補選択 → 名前/住所/座標/googlePlaceId 取得 → **地図＋場所シート**で確認して登録（`PlaceEditUseCase.registerWithNearbyCheck` に取得済みの施設情報を渡すので Google を二度叩かない）＋任意で行きたい。**Cloud で「Places API (New)」有効化＋課金が前提**。
 4. **立ち寄りから「また行きたい」**: 詳細画面に導線を追加。
 5. **タグ（複数）**: `tags` / `wishlist_tags` を追加し、一覧にタグ絞り込みを追加。記録側 `stop_tags` と共有する横断機能として設計。
 6. **場所から関連経路の一覧 ✅ 実装済**: 場所の詳細に「この場所を含むお出掛け（N件）」を表示（日付＋その場所での滞在時刻・滞在分）。タップで経路詳細（振り返り）を開く。`StopDao.getVisitsForPlace`（stops×gps_tracks JOIN）→ `WishlistRepository.getVisits`。遷移は Navigation-Compose で `track_detail/{trackId}` へ push（`track_detail` は trackId から自前でロード）。場所詳細はスタックに残るため、経路詳細から戻ると場所詳細に戻る。

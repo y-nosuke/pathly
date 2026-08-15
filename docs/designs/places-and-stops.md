@@ -61,10 +61,11 @@ gps_tracks 1 ──< stops >── 1 places
 検出した座標の**最寄りの施設名**を Google **Places API (New) の Nearby Search** で取得する。
 `local.properties` の `GOOGLE_MAPS_API_KEY`（地図と共用）を使う。
 
-- 取得できたら place の `name`・`address` に保存し、`place_resolutions` に解決記録（`resolvedAt`・`googlePlaceId`）を残す。
+- 取得できたら **`google_places`**（施設名・住所・カテゴリ）に保存し、`place_resolutions` に解決記録（`resolvedAt`）を残す。
+  **`places.name`＝ユーザーが自分で付けた名前には書かない**（v7 のデータ分離。[ADR-0001](../adr/0001-place-data-separation.md) / [place-info-enrichment.md](./place-info-enrichment.md)）。
 - **place 1件につき自動で叩くのは1回だけ**。「叩いたか」は `place_resolutions` の**行の有無**で判定する（`name IS NULL` では判定しない＝POIの無い場所を毎回叩かないため）。
 - POIが見つからないときも `resolvedAt` の行を残す（`googlePlaceId` は null）＝自動では二度と叩かない。**オフライン／通信エラーのときは行を作らず**、オンライン復帰後に自動でキャッチアップする。
-- **起動時キャッチアップ**: アプリ起動時（`PathlyApplication.onCreate`）に、全経路で `place_resolutions` を持たない立ち寄り場所（＝オフライン記録などで未解決）を `resolveAllUnresolvedNames()` でまとめて解決する。オフライン時は各 place で no-op（行を残さず次回起動で再度拾う）＝無駄な課金なし。
+- **キャッチアップ（WorkManager）**: 全経路で `place_resolutions` を持たない立ち寄り場所（＝オフライン記録などで未解決）を、`data/work/PlaceNameCatchUpWorker` がまとめて解決する。起動時に `PathlyApplication` から予約するだけで、**実行の条件はネットワーク接続**（`NetworkType.CONNECTED`）。そのとき圏外でも、通信が戻った時点で OS が走らせる。以前は起動時にその場で叩いていたため、起動時に圏外だと次の起動まで未解決のままだった。オフライン時は各 place で no-op（行を残さず次回に回す）＝無駄な課金なし。
 - **座標の採用**: 解決できたら place の座標を**施設の正確な座標（Places の LOCATION）へ置き換える**（暫定の GPS 座標より正確。地図ピン・30m 重複判定の精度が上がる）。
 - **課金**: Nearby Search は有料。**オンラインのときだけ・place 1件1回**に限定して最小化する。
   - places に「試行済み」等の動的状態は持たせない（places は静的に保つ）。解決状態は `place_resolutions` に**分離**する。
@@ -258,11 +259,12 @@ DB の最終 departure で種をまき直すため、その1件が再検出さ�
     終了済みの経路は境界エントリが無いので全点が対象）。境界は削除で下がらないので、消した過去は候補に残る。
   - 実装: `detectMissingStops(trackId)` で候補（`StopCandidate`＝検出＋表示名）を列挙（永続化しない）
     → `addStops(trackId, 選択分)` で保存。
-- **手動で追加（完全手動・非破壊）**: 検出に頼らず、地図の**通常タップ**で指した地点を立ち寄りとして足す。
-  到着/出発を軌跡から仮置きする都合上、経路が伸び続ける**記録中は出さず終了済みのみ**。
+- **立ち寄りを追加（完全手動・非破壊）**: 検出に頼らず、地図の**通常タップ**で指した地点を立ち寄りとして足す。
   最寄り軌跡点から到着/出発を仮置きし、**レンジスライダー**で滞在区間を調整（区間は地図に青くハイライト）。
   検出しきい値に満たない短い滞在など、**再解析でも救えない立ち寄り**を救済する。詳細は「将来の拡張 → 立ち寄りの完全手動追加」。
-  - 実装: `addManualStop(trackId, lat, lng, arrival, departure, name, googlePlaceId)`。
+  **記録中でも使える**（末尾が伸び続けるので、到着/出発の推定はその時点の軌跡で行う）。
+  - 実装: `addManualStop(trackId, lat, lng, arrival, departure, name, googlePlaceId, googleName)`。
+    近接確認の要否判断まで含めた手順は `domain/usecase/AddManualStopUseCase`（記録画面と共有）。
 - **場所を取得**: 検出はやり直さず、その track の**未取得（`googlePlaceId` が無い）place だけ**を Places で取得する。オフラインで命名できなかった分の手動再実行。**非破壊**（既存の立ち寄りには触れない）。
 
 > **なぜ「破壊的な再解析」をやめて「追加提案」にしたか。** 旧再解析は stops を全消しして作り直すため、
@@ -281,7 +283,7 @@ DB の最終 departure で種をまき直すため、その1件が再検出さ�
 「一度叩いたら二度と自動で叩かない」を `place_resolutions`（解決ログ）で管理する。
 
 - **自動命名の対象**: 対象 track の place のうち、`place_resolutions` に**行が無いもの**（＝まだ一度も叩いていない）。
-- **結果を記録**: 応答が返ったら（見つかっても見つからなくても）行を作る。`resolvedAt` に日時、見つかれば `googlePlaceId` を入れ、`places.name`/`address` を更新。
+- **結果を記録**: 応答が返ったら（見つかっても見つからなくても）`place_resolutions` に行を作る（`resolvedAt` に日時）。見つかれば `google_places` に施設名・住所・カテゴリと `googlePlaceId` を書く（`places.name` は触らない）。
 - **オフライン／通信エラー**: 行を作らない → 次に命名が走ったとき再挑戦（キャッチアップ）。
 - **手動「場所を取得」**: `googlePlaceId` が無い place（行が無い or null）を対象に、ユーザー操作でだけ再挑戦。
 
@@ -341,10 +343,12 @@ Android アプリ制限付きの API キー（地図と共用）を**そのま�
   （`PlacesNameResolver.searchNearbyCandidates` / `PlaceRepository.nearbyPois`）。
 - **手動追加した立ち寄りは自動命名しない**: `addManualStop` は常に `place_resolutions` 行を残すので、記録中の
   ライブ検出（未解決 place を自動命名）が手動追加の名前（またはユーザーが選んだ「名前なし」）を上書きしない。
-- **地図タップの役割**（記録画面）: **施設(POI)タップ**＝場所登録（`RegisterPlaceFromPoiDialog`、記録有無に依らず）。
-  **何もない地点タップ**＝**記録中は立ち寄り追加**、**記録していないときはその地点を場所として登録**
-  （`RegisterPlaceAtPointDialog`・立ち寄りは作らない・POI無しなので `googlePlaceId` なし）。空きスポットの純粋な
-  場所登録は場所タブの「地図で追加」にもある（そちらの地図には**現在地ボタン**を用意）。
+- **地図タップの役割**（記録画面）: **施設(POI)タップ**＝場所登録（記録有無に依らず）。
+  **何もない地点タップ**＝「立ち寄りを追加」モードが ON なら立ち寄り追加、OFF ならその地点を場所として登録
+  （立ち寄りは作らない・POI無しなので `googlePlaceId` なし）。UI はどちらも共通の場所シート
+  （`PlaceActionSheet`）／立ち寄りシート（`ManualStopSheet`）で、対象に応じて中身を出し分ける
+  （一覧は [map-tap-behavior.md](./map-tap-behavior.md)）。空きスポットの純粋な場所登録は
+  場所タブの「地図で選ぶ」にもある（そちらの地図には**現在地ボタン**を用意）。
 
 ### 登録済みの場所の地図表示（トグル）
 
@@ -357,9 +361,11 @@ Android アプリ制限付きの API キー（地図と共用）を**そのま�
 
 **マーカータップで既存 place に紐付け（手動追加時）**: 手動で立ち寄りを足すとき（記録中／履歴詳細の手動追加モード）、
 登録済みマーカーをタップすると、その**既存 place にこの訪問を紐付ける**（`addManualStopForPlace`）。新規 place を作らず
-重複を防ぐ。UI は**各画面の既存の手動追加ダイアログを流用**する（名前欄の代わりに場所名を出し、確定を紐付けに差し替える）。
-**滞在時間の調整**（スライダー＋到着/出発の ＋/− 微調整）は共通の `StopRangeEditor` に切り出し、
-記録中・履歴詳細の**両方の手動追加で使える**（軌跡点が2点未満のときだけ推定にフォールバック）。
+重複を防ぐ。UI は共通の立ち寄りシート（`presentation/stops/ManualStopSheet`）を流用する
+（名前欄の代わりに場所名を出し、確定を紐付けに差し替える）。
+**滞在時間の調整**（スライダー＋到着/出発の ＋/− 微調整）は共通の `StopRangeEditor`
+（`presentation/stops/ManualStopRange.kt`）に切り出し、記録中・履歴詳細の**両方の手動追加で使える**
+（軌跡点が2点未満のときだけ推定にフォールバック）。
 
 **近接確認（トグルOFF時のフォールバック）**: マーカーを出していない（トグルOFF）ときは②のマーカータップができないので、
 **ID 無しの手動追加**（POI 未選択＝`googlePlaceId` 無し。空タップ／手入力／名前なし）を確定した時点で、
@@ -384,7 +390,7 @@ Android アプリ制限付きの API キー（地図と共用）を**そのま�
 - シート: 立ち寄り一覧。各行に**場所名（未命名は座標）／到着–出発・滞在分**、タップで**名前編集ダイアログ**
 - 名前編集 → `updatePlaceName(placeId, name)` で places を更新。同じ場所の別訪問にも反映される
 - **再解析**ボタン: 経路（2点以上）で表示。**記録中も出す**（記録中は候補を境界以前＝確定済みの過去だけに絞る。上記「手動ボタン」参照）→ 押すと「一覧に無い立ち寄り」候補を**地図（オレンジのピン）＋下部オーバーレイ**（地図は常に表示・名前つき）で提示し、行タップで地図を寄せて名前と位置を確認しながらチェックした分だけ追加する（非破壊）。候補ゼロなら「見つかりませんでした」。誤って削除した立ち寄りの復旧・取りこぼしの追加に使う
-- **手動で追加**ボタンは終了済みのみ（記録中は非表示）
+- **立ち寄りを追加**ボタン: 手動追加モードに入る（記録中も使える）
 - **場所を取得**ボタン: `googlePlaceId` が無い place が残るとき表示 → その track の未取得 place を Places で取得（手動再取得）。ラベルは「未命名 N件」ではなく**未取得（`googlePlaceId` 無し）**を条件にする
 - **立ち寄りの削除**: 各行の「削除」で1件、行を**長押し**すると複数選択して一括削除できる（記録中に拾った誤検知の掃除を想定。誤って消しても**再解析**で戻せる）。削除は単体・複数とも同じロジック（`deleteStops(stopIds)`）で、常に**訪問（stop）を消す**動作。消した結果**どこからも参照されなくなった place だけ**を自動で場所ごと回収する（孤立 GC）。回収条件は「**残る stop がゼロ かつ wishlist 登録もゼロ**」。逆に、他に stop が残る（＝他の履歴でも使われている）place や、wishlist に登録がある place は残す。**wishlist は place を消すと CASCADE で消える**ため、行きたい登録のある place は履歴画面からは巻き込まず必ず残す。place ごと明示的に消したいときは場所タブ（[wishlist.md](./wishlist.md)）から。
   - **確認ダイアログは出さず即時削除**し、**スナックバーの「取り消す」**（`undoLastDeletion`）で直近の削除を戻せる。削除前に stop・回収する place・解決ログの実体を1件分だけ控えておき、取り消し時に**元の id のまま再挿入**して復元する（画面を離れると確定）。
@@ -420,7 +426,7 @@ Google Maps / iOS の訪問検出が精度良いのは、**位置以外の信号
 
 導線と仕様（詳細画面）:
 
-- 「**手動で追加**」ボタンで**追加モード**へ。地図の**通常タップ**で地点を指す（**POI はタップで施設名も入る**）。
+- 「**立ち寄りを追加**」ボタンで**追加モード**へ。地図の**通常タップ**で地点を指す（**POI はタップで施設名も入る**）。
   - モード中だけタップが有効なので誤爆せず、長押しより直感的。
 - 指した地点に**最寄りの軌跡点**を全自動で採用し、到着＝最寄り点の時刻、出発＝既定の滞在ぶん先で仮置きする。
   ユーザーは滞在区間（到着〜出発）を調整でき、その区間は**地図に青くハイライト**されて
@@ -452,21 +458,23 @@ places が track から独立し、解決状態も `place_resolutions` に分離
 
 ## 実装マップ
 
-| 要素               | ファイル                                                                                                                             |
-| ------------------ | ------------------------------------------------------------------------------------------------------------------------------------ |
-| 検出（既存）       | `domain/model/StopDetector.kt`（返り値は `DetectedStop`）                                                                            |
-| ドメイン           | `domain/model/Place.kt`, `Stop.kt`, `DetectedStop.kt`                                                                                |
-| Entity             | `data/local/entity/PlaceEntity.kt`, `StopEntity.kt`（`note` 含む）, `StopWithPlace.kt`                                               |
-| Entity             | `data/local/entity/PlaceResolutionEntity.kt`                                                                                         |
-| DAO                | `data/local/dao/PlaceDao.kt`, `StopDao.kt`, `PlaceResolutionDao.kt`                                                                  |
-| マイグレーション   | `DatabaseMigrations.kt`（1→6 を保持。v4: place_resolutions / v6: stops.note）                                                        |
-| Places 呼び出し    | `data/places/PlacesNameResolver.kt`（+ オンライン判定）                                                                              |
-| 記録中の検出・保存 | `service/LocationTrackingService.kt` → `PlaceRepository.updateStopsForTrack`（境界以降のみ検出＝`SmoothedPointDao.getByTrackAfter`） |
-| ライブ立ち寄り中   | 記録中サービスの `StateFlow`（非永続）→ `presentation/tracking/TrackingScreen.kt`                                                    |
-| 再解析（追加提案） | `detectMissingStops` / `addStops`（非破壊）＋ 詳細画面の選択ダイアログ                                                               |
-| 完全手動追加       | `addManualStop`（非破壊）＋ 詳細画面の追加モード（地図タップ＋区間レンジ調整）                                                       |
-| リポジトリ         | `domain/repository/PlaceRepository.kt` / `data/repository/PlaceRepositoryImpl.kt`                                                    |
-| 画面               | `presentation/history/TrackDetailScreen.kt`（+ 詳細用 ViewModel）                                                                    |
+| 要素                     | ファイル                                                                                                                                        |
+| ------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| 検出（既存）             | `domain/model/StopDetector.kt`（返り値は `DetectedStop`）                                                                                       |
+| ドメイン                 | `domain/model/Place.kt`, `Stop.kt`, `DetectedStop.kt`                                                                                           |
+| Entity                   | `data/local/entity/PlaceEntity.kt`, `StopEntity.kt`（`note` 含む）, `StopWithPlace.kt`                                                          |
+| Entity                   | `data/local/entity/PlaceResolutionEntity.kt`, `GooglePlaceEntity.kt`, `NamedPlaceRow.kt`（近傍1クエリ）                                         |
+| DAO                      | `data/local/dao/PlaceDao.kt`, `StopDao.kt`, `PlaceResolutionDao.kt`, `GooglePlaceDao.kt`                                                        |
+| マイグレーション         | `DatabaseMigrations.kt`（v4: place_resolutions / v6: stops.note / v10: places.source / v12: 座標の索引）                                        |
+| Places 呼び出し          | `data/places/PlacesNameResolver.kt`（+ オンライン判定）                                                                                         |
+| 記録中の検出・保存       | `service/LocationTrackingService.kt` → `PlaceRepository.updateStopsForTrack`（境界以降のみ検出＝`SmoothedPointDao.getByTrackAfter`）            |
+| 名前解決のキャッチアップ | `data/work/PlaceNameCatchUpWorker.kt`（WorkManager・ネットワーク接続を制約）                                                                    |
+| ライブ立ち寄り中         | 記録中サービスの `StateFlow`（非永続）→ `data/tracking/TrackingController` → `presentation/tracking/TrackingScreen.kt`                          |
+| 再解析（追加提案）       | `detectMissingStops` / `addStops`（非破壊）＋ 詳細画面の候補オーバーレイ                                                                        |
+| 完全手動追加             | `addManualStop`（非破壊）／`domain/usecase/AddManualStopUseCase.kt`（近接確認込み）＋ `presentation/stops/ManualStopSheet.kt`                   |
+| 地図の共通描画           | `presentation/common/RouteMap.kt`（`RouteMapContent` / `RegisteredPlaceMarkers`）, `FloatingSheet.kt`                                           |
+| リポジトリ               | `domain/repository/PlaceRepository.kt` / `data/repository/PlaceRepositoryImpl.kt`                                                               |
+| 画面                     | `presentation/history/`（`TrackDetailScreen` / `TrackDetailMap` / `TrackDetailSheet` / `TrackDetailDialogs` / `TrackTuningPanel` ＋ ViewModel） |
 
 ---
 

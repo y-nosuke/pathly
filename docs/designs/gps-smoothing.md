@@ -120,7 +120,7 @@ Room は v2→v3。破壊的フォールバックは無効なので `DatabaseMig
 
 ## 距離・指標
 
-- **距離**: `TrackSmoother.totalDistanceMeters(points)`。`GpsTrack.totalDistanceMeters` は**補正後の点列**で計算するため、ノイズによる膨張が抑えられる。
+- **距離**: `TrackSmoother.totalDistanceMeters(points)`。**補正後の点列**で計算するため、ノイズによる膨張が抑えられる。記録の確定時に一度だけ計算して `gps_tracks.totalDistanceMeters` へ焼き込み、一覧・詳細はその値を読む（→ [track-list.md](./track-list.md)）。
 - **ジャギーさ**: `TrackSmoother.totalTurningDegrees(points)`。連続区間の進行方向の変化量の合計（度）。ノイズでギザギザだと大きく、補正で下がる。「線の暴れ具合」を数値で比較する指標。
 
 ## 調整方法（客観化）
@@ -132,7 +132,7 @@ Room は v2→v3。破壊的フォールバックは無効なので `DatabaseMig
    - スライダー（速度上限・平滑窓）で地図が即更新
    - 「距離: 生→補正」「曲がり角合計: 生→補正」を数値表示
 
-   実装: `presentation/history/TrackDetailScreen.kt` の `tuningMode`（`BuildConfig.DEBUG` 限定）。
+   実装: `presentation/history/TrackDetailScreen.kt` の `tuningMode` ＋ `TrackTuningPanel.kt`（`BuildConfig.DEBUG` 限定）。
 
 2. **指標の「ひざ」を見る**: 窓を上げると曲がり角合計が下がる。**下げ止まる手前**が「ノイズは取れて実形は残る」塩梅。
 3. **正解経路でキャリブレーション（最も客観的）**: 距離が分かる経路を録り、**補正後距離が実測に一致**するよう合わせる。

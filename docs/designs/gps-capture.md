@@ -45,13 +45,14 @@
 これらは通常 UI には出さない（距離計算・表示に使わないため）。ドメインモデル `GpsPoint` には値を載せて
 おり（生点の変換 `GpsPointEntity.toGpsPoint` でのみ設定・補正後点では既定のまま）、確認用に経路詳細の
 **デバッグダイアログ**（デバッグビルドのみ・`GpsDebugDialog`）で集計＋点ごとに一覧できる。
+なお履歴の一覧はこれらの点を読まない（距離は経路に焼き込む → [track-list.md](./track-list.md)）。
 
 ## 実装マップ
 
-| 何を                 | どこで                                                                 |
-| -------------------- | ---------------------------------------------------------------------- |
-| バッチ全点保存       | `LocationTrackingService.onLocationResult` → `saveLocationsToDatabase` |
-| Location→Entity 変換 | `LocationTrackingService.Location.toGpsPointEntity`                    |
-| 確認用デバッグ表示   | `TrackDetailScreen.GpsDebugDialog`（BuildConfig.DEBUG のみ）           |
-| extras の JSON 化    | `LocationTrackingService.serializeExtras`（Bundle→JSON 文字列）        |
-| 列（付随情報）       | `GpsPointEntity` / `DatabaseMigrations.MIGRATION_8_9`（v9）            |
+| 何を                 | どこで                                                                                     |
+| -------------------- | ------------------------------------------------------------------------------------------ |
+| バッチ全点保存       | `LocationTrackingService.onLocationResult` → `saveLocationsToDatabase`                     |
+| Location→Entity 変換 | `LocationTrackingService.Location.toGpsPointEntity`                                        |
+| 確認用デバッグ表示   | `presentation/history/TrackDetailDialogs.kt` の `GpsDebugDialog`（BuildConfig.DEBUG のみ） |
+| extras の JSON 化    | `LocationTrackingService.serializeExtras`（Bundle→JSON 文字列）                            |
+| 列（付随情報）       | `GpsPointEntity` / `DatabaseMigrations.MIGRATION_8_9`（v9）                                |

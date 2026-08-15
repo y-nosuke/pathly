@@ -11,15 +11,16 @@
 
 位置に関するデータは、段階を追って「点の集まり」から「意味のある場所」へ変換される。
 
-| 日本語           | 英語（コード）      | 意味                                                         | 実体                                                             |
-| ---------------- | ------------------- | ------------------------------------------------------------ | ---------------------------------------------------------------- |
-| 軌跡（経路）     | track               | 1回の記録（GPSの点列＋期間）                                 | `GpsTrack` / `gps_tracks`                                        |
-| 生データ（生点） | raw point           | 端末が記録したそのままの座標。ノイズを含む                   | `GpsPoint` / `gps_points`                                        |
-| 補正後の点列     | smoothed point(s)   | 生データを補正した軌跡の点。「**どこを通ったか**」           | `SmoothedPoint` / `smoothed_points`（`GpsTrack.smoothedPoints`） |
-| 検出された滞在   | detected stop       | 補正後点列で「50m圏内に3分以上」の箇所。**一時結果・非永続** | `DetectedStop`                                                   |
-| 場所             | place               | 場所そのもの（座標・名前・住所）。経路から独立               | `Place` / `places`                                               |
-| 立ち寄り（訪問） | stop                | どの経路でどの場所にいつ居たか（place × track）              | `Stop` / `stops`                                                 |
-| 解決記録         | resolution (record) | 場所名を Google に問い合わせた記録（叩いたか・結果）         | `PlaceResolution` / `place_resolutions`                          |
+| 日本語           | 英語（コード）      | 意味                                                           | 実体                                                             |
+| ---------------- | ------------------- | -------------------------------------------------------------- | ---------------------------------------------------------------- |
+| 軌跡（経路）     | track               | 1回の記録（GPSの点列＋期間）                                   | `GpsTrack` / `gps_tracks`                                        |
+| 生データ（生点） | raw point           | 端末が記録したそのままの座標。ノイズを含む                     | `GpsPoint` / `gps_points`                                        |
+| 補正後の点列     | smoothed point(s)   | 生データを補正した軌跡の点。「**どこを通ったか**」             | `SmoothedPoint` / `smoothed_points`（`GpsTrack.smoothedPoints`） |
+| 検出された滞在   | detected stop       | 補正後点列で「50m圏内に3分以上」の箇所。**一時結果・非永続**   | `DetectedStop`                                                   |
+| 場所             | place               | 場所そのもの（座標＋**自分で付けた名前**・メモ）。経路から独立 | `Place` / `places`                                               |
+| 施設（Google）   | google place        | Google 由来の情報（施設名・住所・カテゴリ）。place に 1:0..1   | `google_places`（`Place.googleName` など）                       |
+| 立ち寄り（訪問） | stop                | どの経路でどの場所にいつ居たか（place × track）                | `Stop` / `stops`                                                 |
+| 解決記録         | resolution (record) | 場所名を Google に問い合わせた記録（叩いたか・結果）           | `PlaceResolution` / `place_resolutions`                          |
 
 データの流れ:
 
@@ -32,27 +33,50 @@
    ↓ 確定（commit）＋場所の同定（find-or-create）
 場所・立ち寄り（Place / Stop・永続化）
    ↓ 名前解決（resolve）
-場所名（places.name / place_resolutions）
+施設名（google_places・叩いた記録は place_resolutions）
 ```
+
+### 名前の2列（混ぜないこと）
+
+| 呼び名               | 実体                 | 誰が入れるか                                    |
+| -------------------- | -------------------- | ----------------------------------------------- |
+| **自分で付けた名前** | `places.name`        | ユーザーだけ。Google の名前は**絶対に入れない** |
+| **Google の名前**    | `google_places.name` | 自動命名・POI タップ・キーワード検索            |
+
+表示名は `places.name` → `google_places.name` → 住所 → 座標 の順にフォールバックする
+（[../designs/place-info-enrichment.md](../designs/place-info-enrichment.md)）。
+
+### 座標の2つの出どころ（混ぜないこと）
+
+| 呼び名             | 実体                                                 | 使う経路                                     |
+| ------------------ | ---------------------------------------------------- | -------------------------------------------- |
+| **施設の座標**     | `PlaceSearchResult.latitude/longitude`（Places API） | 自動命名・Google施設を選び直す・検索して追加 |
+| **アイコンの座標** | `PointOfInterest.latLng`（地図 SDK）                 | 地図の POI タップからの登録                  |
+
+同じ施設でも**値が違うことがある**（敷地のある神社・公園などで数十 m）。正としているのは施設の座標
+→ [ADR-0011](../adr/0011-place-coordinate-source.md)。この 2 つを「POI の座標」などと呼び分けずに
+議論すると必ず混乱するので、**この 2 語だけを使う**。
 
 ---
 
 ## 処理（動詞）
 
-| 日本語                       | 英語（コード）              | 意味                                                                            | 実体                                             |
-| ---------------------------- | --------------------------- | ------------------------------------------------------------------------------- | ------------------------------------------------ |
-| **解析**                     | analyze / analysis          | GPSデータから構造を導く**ローカル計算全体**（補正＋立ち寄り検出）。外部通信なし | 記録中に逐次で実施                               |
-| 　└ **補正**（スムージング） | smooth / smoothing          | 生データ → 補正後の点列                                                         | `TrackSmoother.smooth`                           |
-| 　　└ ジャンプ除外           | remove jumps                | 速度が非現実的な外れ値を除外                                                    | `removeJumps`                                    |
-| 　　└ 平滑化                 | accuracy-weighted smoothing | 精度重み付き移動平均でならす                                                    | `accuracyWeightedSmooth`                         |
-| 　└ **立ち寄り検出**         | detect / detection          | 補正後点列 → DetectedStop                                                       | `StopDetector.detect`                            |
-| **確定**                     | finalize / commit           | 暫定でなくすこと（下記補足）。立ち寄りは DetectedStop を Place+Stop として保存  | `updateSmoothedForTrack` / `updateStopsForTrack` |
-| 　└ 場所の同定（重複排除）   | find-or-create              | 30m以内の既存 place を再利用、無ければ新規作成                                  | `findOrCreatePlace`                              |
-| **名前解決**                 | resolve / resolution        | Google から場所名を**取得**（外部・オンライン・課金）。**自動**                 | `PlacesNameResolver.resolve`                     |
-| **命名**（手動）             | rename / edit name          | ユーザーが名前を付け替える                                                      | `updatePlaceName`                                |
-| **メモ**（訪問メモ）         | note / stop note            | ユーザーがその**訪問**にメモを付ける（stop 単位。空で null）                    | `updateStopNote`                                 |
-| **再解析**（追加提案）       | reanalyze                   | 検出し直して「一覧に無い候補」を挙げ、選択分だけ**追加**する（非破壊・opt-in）  | `detectMissingStops` / `addStops`                |
-| **手動追加**（完全手動）     | manual add                  | 検出に頼らず地図で指した地点を立ち寄りとして**追加**する（非破壊）              | `addManualStop`                                  |
+| 日本語                       | 英語（コード）              | 意味                                                                                                       | 実体                                             |
+| ---------------------------- | --------------------------- | ---------------------------------------------------------------------------------------------------------- | ------------------------------------------------ |
+| **解析**                     | analyze / analysis          | GPSデータから構造を導く**ローカル計算全体**（補正＋立ち寄り検出）。外部通信なし                            | 記録中に逐次で実施                               |
+| 　└ **補正**（スムージング） | smooth / smoothing          | 生データ → 補正後の点列                                                                                    | `TrackSmoother.smooth`                           |
+| 　　└ ジャンプ除外           | remove jumps                | 速度が非現実的な外れ値を除外                                                                               | `removeJumps`                                    |
+| 　　└ 平滑化                 | accuracy-weighted smoothing | 精度重み付き移動平均でならす                                                                               | `accuracyWeightedSmooth`                         |
+| 　└ **立ち寄り検出**         | detect / detection          | 補正後点列 → DetectedStop                                                                                  | `StopDetector.detect`                            |
+| **確定**                     | finalize / commit           | 暫定でなくすこと（下記補足）。立ち寄りは DetectedStop を Place+Stop として保存                             | `updateSmoothedForTrack` / `updateStopsForTrack` |
+| 　└ 場所の同定（重複排除）   | find-or-create              | 30m以内の既存 place を再利用、無ければ新規作成                                                             | `findOrCreatePlace`                              |
+| **名前解決**                 | resolve / resolution        | Google から場所名を**取得**（外部・オンライン・課金）。**自動**                                            | `PlacesNameResolver.resolve`                     |
+| **命名**（手動）             | rename / edit name          | ユーザーが名前を付け替える                                                                                 | `updatePlaceName`                                |
+| **メモ**（訪問メモ）         | note / stop note            | ユーザーがその**訪問**にメモを付ける（stop 単位。空で null）                                               | `updateStopNote`                                 |
+| **再解析**（追加提案）       | reanalyze                   | 検出し直して「一覧に無い候補」を挙げ、選択分だけ**追加**する（非破壊・opt-in）                             | `detectMissingStops` / `addStops`                |
+| **手動追加**（完全手動）     | manual add                  | 検出に頼らず地図で指した地点を立ち寄りとして**追加**する（非破壊）。UI のボタンは「立ち寄りを追加」        | `addManualStop` / `AddManualStopUseCase`         |
+| **紐付け**（Google 施設）    | link                        | 既存の場所を、選んだ Google 施設に結びつける（施設情報・座標を採用）                                       | `linkPlaceToGoogle`                              |
+| **付け替え**（この訪問だけ） | reassign                    | 誤検知の立ち寄りを、この訪問だけ別の場所へ移す（[ADR-0007](../adr/0007-reassign-stop-this-visit-only.md)） | `reassignStopPlace`                              |
 
 ---
 
