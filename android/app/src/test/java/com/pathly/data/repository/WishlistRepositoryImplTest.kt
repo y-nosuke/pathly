@@ -1,5 +1,6 @@
 package com.pathly.data.repository
 
+import com.pathly.data.local.dao.GooglePlaceCategoryDao
 import com.pathly.data.local.dao.GooglePlaceDao
 import com.pathly.data.local.dao.PlaceDao
 import com.pathly.data.local.dao.PlaceResolutionDao
@@ -10,6 +11,7 @@ import com.pathly.data.local.entity.PlaceEntity
 import com.pathly.data.local.entity.PlaceResolutionEntity
 import com.pathly.data.local.entity.WishlistEntity
 import com.pathly.data.places.PlacesTextSearcher
+import com.pathly.domain.model.PlaceCategory
 import com.pathly.domain.model.PlaceSearchResult
 import com.pathly.domain.repository.PlaceRepository
 import io.mockk.coEvery
@@ -27,6 +29,7 @@ class WishlistRepositoryImplTest {
   private val placeDao = mockk<PlaceDao>(relaxed = true)
   private val placeResolutionDao = mockk<PlaceResolutionDao>(relaxed = true)
   private val googlePlaceDao = mockk<GooglePlaceDao>(relaxed = true)
+  private val googlePlaceCategoryDao = mockk<GooglePlaceCategoryDao>(relaxed = true)
   private val stopDao = mockk<StopDao>(relaxed = true)
   private val placeRepository = mockk<PlaceRepository>(relaxed = true)
   private val placesTextSearcher = mockk<PlacesTextSearcher>(relaxed = true)
@@ -35,6 +38,7 @@ class WishlistRepositoryImplTest {
     placeDao,
     placeResolutionDao,
     googlePlaceDao,
+    googlePlaceCategoryDao,
     stopDao,
     placeRepository,
     placesTextSearcher,
@@ -102,10 +106,11 @@ class WishlistRepositoryImplTest {
       googlePlaceId = "gp-42",
       name = "清瀧神社",
       address = "千葉県浦安市…",
-      category = "神社",
+      category = PlaceCategory("shinto_shrine", "神社"),
       latitude = 35.65,
       longitude = 139.9,
     )
+    coEvery { googlePlaceCategoryDao.upsertAndGetId("shinto_shrine", "神社") } returns 5L
 
     repository.linkPlaceToGoogle(7L, result)
 
@@ -117,10 +122,12 @@ class WishlistRepositoryImplTest {
             it.googlePlaceId == "gp-42" &&
             it.name == "清瀧神社" &&
             it.address == "千葉県浦安市…" &&
-            it.category == "神社"
+            it.categoryId == 5L
         },
       )
     }
+    // 業種はマスタに確保してから参照する（表示名の重複を持たない）。
+    coVerify { googlePlaceCategoryDao.upsertAndGetId("shinto_shrine", "神社") }
     // 解決記録を残す（以後 Nearby を叩かない）。
     coVerify { placeResolutionDao.upsert(match { it.placeId == 7L }) }
     // 暫定座標を施設の正確な座標へ置き換える。
@@ -133,12 +140,13 @@ class WishlistRepositoryImplTest {
       googlePlaceId = "gp-42",
       name = "清瀧神社",
       address = "千葉県浦安市…",
-      category = "神社",
+      category = PlaceCategory("shinto_shrine", "神社"),
       latitude = 35.65,
       longitude = 139.9,
     )
     coEvery { placeRepository.findOrCreateByGooglePlaceId("gp-42", any(), any(), any()) } returns (7L to false)
     coEvery { googlePlaceDao.getByPlace(7L) } returns null
+    coEvery { googlePlaceCategoryDao.upsertAndGetId("shinto_shrine", "神社") } returns 5L
 
     repository.registerPlace(35.65, 139.9, name = null, googlePlaceId = "gp-42", knownDetails = known)
 
@@ -146,7 +154,7 @@ class WishlistRepositoryImplTest {
     coVerify(exactly = 0) { placesTextSearcher.fetch(any()) }
     coVerify {
       googlePlaceDao.upsert(
-        match { it.placeId == 7L && it.name == "清瀧神社" && it.category == "神社" },
+        match { it.placeId == 7L && it.name == "清瀧神社" && it.categoryId == 5L },
       )
     }
     coVerify { placeResolutionDao.upsert(match { it.placeId == 7L }) }

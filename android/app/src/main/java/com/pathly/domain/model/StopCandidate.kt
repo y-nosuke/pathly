@@ -10,6 +10,6 @@ data class StopCandidate(
   val detected: DetectedStop,
   val name: String? = null,
   val address: String? = null,
-  val category: String? = null,
+  val category: PlaceCategory? = null,
   val googlePlaceId: String? = null,
 )

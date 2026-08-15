@@ -50,7 +50,6 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.google.android.gms.location.LocationServices
 import com.google.android.gms.location.Priority
 import com.google.android.gms.maps.CameraUpdateFactory
-import com.google.android.gms.maps.model.BitmapDescriptorFactory
 import com.google.android.gms.maps.model.CameraPosition
 import com.google.android.gms.maps.model.LatLng
 import com.google.android.gms.maps.model.PointOfInterest
@@ -60,7 +59,7 @@ import com.google.maps.android.compose.GoogleMap
 import com.google.maps.android.compose.MapProperties
 import com.google.maps.android.compose.MapType
 import com.google.maps.android.compose.MapUiSettings
-import com.google.maps.android.compose.Marker
+import com.google.maps.android.compose.MarkerComposable
 import com.google.maps.android.compose.MarkerState
 import com.google.maps.android.compose.Polyline
 import com.google.maps.android.compose.rememberCameraPositionState
@@ -69,6 +68,8 @@ import com.pathly.domain.model.GpsPoint
 import com.pathly.domain.model.GpsTrack
 import com.pathly.domain.model.RegisteredPlace
 import com.pathly.domain.model.Stop
+import com.pathly.presentation.common.MapPinMarker
+import com.pathly.presentation.common.MarkerPickBlue
 import com.pathly.presentation.common.NearbyPlaceConfirmDialog
 import com.pathly.presentation.common.RegisteredPlaceMarkers
 import com.pathly.presentation.common.RouteMapContent
@@ -678,13 +679,18 @@ private fun TrackingMapView(
           width = 14f,
         )
       }
+      // 手動追加で指した地点（青いピン）。いま自分で置いている最中のもの。
       manualPickTarget?.let { pick ->
         val pickMarkerState = remember(pick) { MarkerState(position = pick) }
-        Marker(
+        MarkerComposable(
+          "manual-pick",
+          pick.latitude,
+          pick.longitude,
           state = pickMarkerState,
           title = "追加する地点",
-          icon = BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_AZURE),
-        )
+        ) {
+          MapPinMarker(bg = MarkerPickBlue, glyph = R.drawable.ic_add)
+        }
       }
       // 登録済みの場所（トグルON）。トラック未確定でも出せるよう、経路描画とは独立して描く。
       // ただし、この経路の立ち寄り（確定＝紫番号／滞在中＝ティール）と同じ場所は二重に出さない

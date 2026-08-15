@@ -1,5 +1,6 @@
 package com.pathly.data.local.entity
 
+import com.pathly.domain.model.PlaceCategory
 import java.util.Date
 
 /**
@@ -22,7 +23,9 @@ data class PlaceWithWishlist(
   val googlePlaceId: String?,
   val googleName: String?,
   val googleAddress: String?,
-  val category: String?,
+  // 業種はマスタ（google_place_categories）から結合して持つ。code が無ければ業種なし。
+  val categoryCode: String?,
+  val categoryDisplayName: String?,
   // wishlist（未登録なら null）
   val wishlistId: Long?,
   val priority: Int?,
@@ -31,4 +34,6 @@ data class PlaceWithWishlist(
   val visitCount: Int,
   // 直近の立ち寄り（arrivalTime の最大）。立ち寄りが無ければ null。訪問順の並べ替えに使う。
   val lastStopAt: Date?,
-)
+) {
+  val category: PlaceCategory? get() = categoryCode?.let { PlaceCategory(it, categoryDisplayName) }
+}

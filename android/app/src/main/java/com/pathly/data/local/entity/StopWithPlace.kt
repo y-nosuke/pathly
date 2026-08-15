@@ -12,6 +12,6 @@ data class StopWithPlace(
   @Embedded val stop: StopEntity,
   @Relation(parentColumn = "placeId", entityColumn = "id")
   val place: PlaceEntity,
-  @Relation(parentColumn = "placeId", entityColumn = "placeId")
-  val google: GooglePlaceEntity?,
+  @Relation(parentColumn = "placeId", entityColumn = "placeId", entity = GooglePlaceEntity::class)
+  val google: GooglePlaceWithCategory?,
 )

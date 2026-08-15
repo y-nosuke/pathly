@@ -13,7 +13,7 @@ import java.util.Locale
  * @property name 自分で付けた名前。null は未命名。
  * @property googleName Google の施設名（未解決・POIに名前無しは null）。
  * @property googleAddress Google の住所。
- * @property category Google のカテゴリ（業種）。
+ * @property category Google のカテゴリ（業種）。未解決・業種なしは null。
  */
 data class Place(
   val id: Long,
@@ -23,7 +23,7 @@ data class Place(
   val note: String?,
   val googleName: String?,
   val googleAddress: String?,
-  val category: String?,
+  val category: PlaceCategory?,
   /** Google の place ID（Google マップで施設ページを開く参照キー）。未解決は null。 */
   val googlePlaceId: String?,
   val createdAt: Date,

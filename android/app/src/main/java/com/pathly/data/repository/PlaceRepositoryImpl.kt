@@ -1,5 +1,6 @@
 package com.pathly.data.repository
 
+import com.pathly.data.local.dao.GooglePlaceCategoryDao
 import com.pathly.data.local.dao.GooglePlaceDao
 import com.pathly.data.local.dao.GpsPointDao
 import com.pathly.data.local.dao.PlaceDao
@@ -7,7 +8,9 @@ import com.pathly.data.local.dao.PlaceResolutionDao
 import com.pathly.data.local.dao.SmoothedPointDao
 import com.pathly.data.local.dao.StopDao
 import com.pathly.data.local.dao.WishlistDao
+import com.pathly.data.local.dao.idOf
 import com.pathly.data.local.entity.GooglePlaceEntity
+import com.pathly.data.local.entity.GooglePlaceWithCategory
 import com.pathly.data.local.entity.NamedPlaceRow
 import com.pathly.data.local.entity.PlaceEntity
 import com.pathly.data.local.entity.PlaceResolutionEntity
@@ -20,6 +23,7 @@ import com.pathly.domain.model.DetectedStop
 import com.pathly.domain.model.Geo
 import com.pathly.domain.model.GpsPoint
 import com.pathly.domain.model.Place
+import com.pathly.domain.model.PlaceCategory
 import com.pathly.domain.model.PlaceSearchResult
 import com.pathly.domain.model.PlaceSource
 import com.pathly.domain.model.RegisteredPlace
@@ -48,6 +52,7 @@ class PlaceRepositoryImpl @Inject constructor(
   private val gpsPointDao: GpsPointDao,
   private val placeResolutionDao: PlaceResolutionDao,
   private val googlePlaceDao: GooglePlaceDao,
+  private val googlePlaceCategoryDao: GooglePlaceCategoryDao,
   private val wishlistDao: WishlistDao,
   private val placesNameResolver: PlacesNameResolver,
 ) : PlaceRepository {
@@ -99,6 +104,7 @@ class PlaceRepositoryImpl @Inject constructor(
     isWishlisted = wishlistCount > 0,
     // 「場所」タブと同じ判定: 立ち寄り記録があるか、手動で訪問済みにしたら訪問済み。
     isVisited = visitCount > 0 || visitedAt != null,
+    categoryCode = categoryCode,
   )
 
   override fun unresolvedCountForTrack(trackId: Long): Flow<Int> = placeDao.countPlacesWithoutGoogleIdForTrack(trackId)
@@ -169,7 +175,13 @@ class PlaceRepositoryImpl @Inject constructor(
       if (placeResolutionDao.getByPlace(placeId) == null && candidate.googlePlaceId != null) {
         if (googlePlaceDao.getByPlace(placeId) == null) {
           googlePlaceDao.upsert(
-            GooglePlaceEntity(placeId, candidate.googlePlaceId, candidate.name, candidate.address, candidate.category),
+            GooglePlaceEntity(
+              placeId,
+              candidate.googlePlaceId,
+              candidate.name,
+              candidate.address,
+              categoryIdOf(candidate.category),
+            ),
           )
         }
         placeResolutionDao.upsert(PlaceResolutionEntity(placeId, Date()))
@@ -262,7 +274,7 @@ class PlaceRepositoryImpl @Inject constructor(
         val pid = findOrCreateByGooglePlaceId(chosen.googlePlaceId, chosen.latitude, chosen.longitude, PlaceSource.USER).first
         if (googlePlaceDao.getByPlace(pid) == null) {
           googlePlaceDao.upsert(
-            GooglePlaceEntity(pid, chosen.googlePlaceId, chosen.name, chosen.address, chosen.category),
+            GooglePlaceEntity(pid, chosen.googlePlaceId, chosen.name, chosen.address, categoryIdOf(chosen.category)),
           )
         }
         if (placeResolutionDao.getByPlace(pid) == null) placeResolutionDao.upsert(PlaceResolutionEntity(pid, Date()))
@@ -464,7 +476,7 @@ class PlaceRepositoryImpl @Inject constructor(
     if (placeResolutionDao.getByPlace(placeId) == null) {
       placeDao.getById(placeId)?.let { resolvePlace(it) }
     }
-    val place = placeDao.getById(placeId)!!.toPlace(googlePlaceDao.getByPlace(placeId))
+    val place = placeDao.getById(placeId)!!.toPlace(googlePlaceDao.getWithCategoryByPlace(placeId))
     return Stop(id = 0, place = place, trackId = trackId, arrivalTime = d.arrivalTime, departureTime = d.departureTime)
   }
 
@@ -476,7 +488,13 @@ class PlaceRepositoryImpl @Inject constructor(
     when (val outcome = placesNameResolver.resolve(place.latitude, place.longitude)) {
       is PlacesNameResolver.Outcome.Found -> {
         googlePlaceDao.upsert(
-          GooglePlaceEntity(place.id, outcome.googlePlaceId, outcome.name, outcome.address, outcome.category),
+          GooglePlaceEntity(
+            place.id,
+            outcome.googlePlaceId,
+            outcome.name,
+            outcome.address,
+            categoryIdOf(outcome.category),
+          ),
         )
         placeResolutionDao.upsert(PlaceResolutionEntity(place.id, Date()))
         // 暫定の GPS 座標を、解決した施設の正確な座標へ置き換える（取れたときだけ）。
@@ -537,19 +555,21 @@ class PlaceRepositoryImpl @Inject constructor(
     note = stop.note,
   )
 
-  private fun PlaceEntity.toPlace(google: GooglePlaceEntity?): Place = Place(
+  private fun PlaceEntity.toPlace(google: GooglePlaceWithCategory?): Place = Place(
     id = id,
     name = name,
     latitude = latitude,
     longitude = longitude,
     note = note,
-    googleName = google?.name,
-    googleAddress = google?.address,
-    category = google?.category,
-    googlePlaceId = google?.googlePlaceId,
+    googleName = google?.google?.name,
+    googleAddress = google?.google?.address,
+    category = google?.category?.let { PlaceCategory(it.code, it.displayName) },
+    googlePlaceId = google?.google?.googlePlaceId,
     createdAt = createdAt,
     updatedAt = updatedAt,
   )
+
+  private suspend fun categoryIdOf(category: PlaceCategory?): Long? = googlePlaceCategoryDao.idOf(category)
 
   private fun SmoothedPointEntity.toGpsPoint(): GpsPoint = GpsPoint(
     id = sourcePointId ?: 0L,

@@ -1,5 +1,6 @@
 package com.pathly.data.repository
 
+import com.pathly.data.local.dao.GooglePlaceCategoryDao
 import com.pathly.data.local.dao.GooglePlaceDao
 import com.pathly.data.local.dao.GpsPointDao
 import com.pathly.data.local.dao.PlaceDao
@@ -17,6 +18,7 @@ import com.pathly.data.local.entity.SmoothedPointEntity
 import com.pathly.data.local.entity.StopEntity
 import com.pathly.data.places.PlacesNameResolver
 import com.pathly.domain.model.DetectedStop
+import com.pathly.domain.model.PlaceCategory
 import com.pathly.domain.model.PlaceSearchResult
 import com.pathly.domain.model.StopCandidate
 import io.mockk.coEvery
@@ -40,6 +42,7 @@ class PlaceRepositoryImplTest {
   private val gpsPointDao = mockk<GpsPointDao>(relaxed = true)
   private val placeResolutionDao = mockk<PlaceResolutionDao>(relaxed = true)
   private val googlePlaceDao = mockk<GooglePlaceDao>(relaxed = true)
+  private val googlePlaceCategoryDao = mockk<GooglePlaceCategoryDao>(relaxed = true)
   private val wishlistDao = mockk<WishlistDao>(relaxed = true)
   private val resolver = mockk<PlacesNameResolver>(relaxed = true)
   private val repository = PlaceRepositoryImpl(
@@ -49,6 +52,7 @@ class PlaceRepositoryImplTest {
     gpsPointDao,
     placeResolutionDao,
     googlePlaceDao,
+    googlePlaceCategoryDao,
     wishlistDao,
     resolver,
   )
@@ -108,7 +112,7 @@ class PlaceRepositoryImplTest {
       PlaceEntity(id = 10L, latitude = 35.0, longitude = 139.0),
     )
     coEvery { resolver.resolve(any(), any()) } returns
-      PlacesNameResolver.Outcome.Found("カフェ", "住所", "カフェ・喫茶", "gp-1", 35.5, 139.5)
+      PlacesNameResolver.Outcome.Found("カフェ", "住所", PlaceCategory("cafe", "カフェ・喫茶"), "gp-1", 35.5, 139.5)
 
     repository.updateStopsForTrack(1L, isFinal = false)
 
@@ -139,7 +143,7 @@ class PlaceRepositoryImplTest {
     coEvery { placeDao.getUnresolvedPlacesForTrack(1L) } returns emptyList()
     coEvery { placeResolutionDao.getByPlace(20L) } returns null
     coEvery { resolver.resolve(any(), any()) } returns
-      PlacesNameResolver.Outcome.Found("カフェ", "住所", "カフェ・喫茶", "gp-2", 35.5, 139.5)
+      PlacesNameResolver.Outcome.Found("カフェ", "住所", PlaceCategory("cafe", "カフェ・喫茶"), "gp-2", 35.5, 139.5)
     // 生の現在地はまだ立ち寄りの中心にある＝滞在中。
     coEvery { gpsPointDao.getLatestPoint(1L) } returns gp(35.0, 139.0)
 
@@ -273,7 +277,7 @@ class PlaceRepositoryImplTest {
     coEvery { stopDao.getByTrack(1L) } returns emptyList()
     coEvery { placeDao.getInBounds(any(), any(), any(), any()) } returns emptyList()
     coEvery { resolver.resolve(any(), any()) } returns
-      PlacesNameResolver.Outcome.Found("カフェ", "住所", "カフェ・喫茶", "gp-1", 35.5, 139.5)
+      PlacesNameResolver.Outcome.Found("カフェ", "住所", PlaceCategory("cafe", "カフェ・喫茶"), "gp-1", 35.5, 139.5)
 
     val result = repository.detectMissingStops(1L)
 
@@ -298,7 +302,8 @@ class PlaceRepositoryImplTest {
         googlePlaceId = null,
         googleName = null,
         googleAddress = null,
-        category = null,
+        categoryCode = null,
+        categoryDisplayName = null,
       ),
     )
 
@@ -548,7 +553,7 @@ class PlaceRepositoryImplTest {
     coEvery { stopDao.countByPlace(10L) } returns 0
     coEvery { wishlistDao.countByPlace(10L) } returns 0
 
-    val chosen = PlaceSearchResult("gp-9", "日高屋", "住所", "中華", 35.02, 139.02)
+    val chosen = PlaceSearchResult("gp-9", "日高屋", "住所", PlaceCategory("chinese_restaurant", "中華料理"), 35.02, 139.02)
     repository.reassignStopPlace(100L, chosen, null)
 
     coVerify { stopDao.updatePlace(100L, 88L) } // この訪問だけ付け替え
@@ -713,7 +718,7 @@ class PlaceRepositoryImplTest {
       PlaceEntity(id = 30L, latitude = 35.0, longitude = 139.0),
     )
     coEvery { resolver.resolve(35.0, 139.0) } returns
-      PlacesNameResolver.Outcome.Found("神社", "住所", "神社", "gp-30", 35.7, 139.7)
+      PlacesNameResolver.Outcome.Found("神社", "住所", PlaceCategory("shinto_shrine", "神社"), "gp-30", 35.7, 139.7)
 
     repository.resolveAllUnresolvedNames()
 
@@ -728,8 +733,8 @@ class PlaceRepositoryImplTest {
   @Test
   fun findNearbyPlace_returnsNearestWithinDetectionRadius() = runTest {
     coEvery { placeDao.getRegisteredPlacesInBounds(any(), any(), any(), any()) } returns listOf(
-      RegisteredPlaceRow(1L, "同じ地点", 35.0, 139.0, 0, 0, null),
-      RegisteredPlaceRow(2L, "約1km先", 35.01, 139.0, 0, 0, null),
+      RegisteredPlaceRow(1L, "同じ地点", 35.0, 139.0, 0, 0, null, null),
+      RegisteredPlaceRow(2L, "約1km先", 35.01, 139.0, 0, 0, null, null),
     )
 
     val near = repository.findNearbyPlace(35.0, 139.0)
@@ -740,7 +745,7 @@ class PlaceRepositoryImplTest {
   @Test
   fun findNearbyPlace_noneWithinRadius_returnsNull() = runTest {
     coEvery { placeDao.getRegisteredPlacesInBounds(any(), any(), any(), any()) } returns listOf(
-      RegisteredPlaceRow(2L, "約1km先", 35.01, 139.0, 0, 0, null),
+      RegisteredPlaceRow(2L, "約1km先", 35.01, 139.0, 0, 0, null, null),
     )
 
     assertNull(repository.findNearbyPlace(35.0, 139.0))

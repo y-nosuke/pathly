@@ -74,12 +74,14 @@ import com.google.android.gms.maps.model.LatLng
 import com.google.android.gms.tasks.CancellationTokenSource
 import com.google.maps.android.compose.GoogleMap
 import com.google.maps.android.compose.MapUiSettings
-import com.google.maps.android.compose.Marker
+import com.google.maps.android.compose.MarkerComposable
 import com.google.maps.android.compose.MarkerState
 import com.google.maps.android.compose.rememberCameraPositionState
 import com.pathly.R
 import com.pathly.domain.model.NearbyRegisterPrompt
 import com.pathly.domain.model.Place
+import com.pathly.domain.model.PlaceCategory
+import com.pathly.domain.model.PlaceCategoryGroup
 import com.pathly.domain.model.PlaceListItem
 import com.pathly.domain.model.PlacePrediction
 import com.pathly.domain.model.PlaceSearchResult
@@ -87,9 +89,15 @@ import com.pathly.domain.model.PlaceVisit
 import com.pathly.domain.model.Priority
 import com.pathly.domain.model.RegisteredPlace
 import com.pathly.presentation.common.FloatingSheet
+import com.pathly.presentation.common.MapPinMarker
+import com.pathly.presentation.common.MarkerPickBlue
+import com.pathly.presentation.common.MarkerUnvisitedGray
+import com.pathly.presentation.common.MarkerVisitedGreen
 import com.pathly.presentation.common.NearbyCandidatePickerDialog
 import com.pathly.presentation.common.NearbyPlaceConfirmDialog
+import com.pathly.presentation.common.RegisteredPlaceMarker
 import com.pathly.presentation.common.RegisteredPlaceMarkers
+import com.pathly.presentation.common.categoryGlyph
 import com.pathly.presentation.common.heightOf
 import com.pathly.presentation.common.rememberFloatingSheetState
 import com.pathly.util.DateFormatters
@@ -492,10 +500,10 @@ private fun PlaceItemRow(
         )
 
         // カテゴリ（業種）。あれば名前の下に小さく出す（「どんな場所か」の手がかり）。
-        item.place.category?.takeIf { it.isNotBlank() }?.let { category ->
+        item.place.category?.let { category ->
           Spacer(modifier = Modifier.height(2.dp))
           Text(
-            text = category,
+            text = category.label,
             style = MaterialTheme.typography.labelMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             maxLines = 1,
@@ -667,9 +675,12 @@ private fun AddPlaceContent(
       onPOIClick = { poi -> target = PlaceSheetTarget.NewPoi(poi) },
       onMapClick = { latLng -> target = PlaceSheetTarget.NewPoint(latLng) },
     ) {
+      // 登録前に選んだ地点（青いピン）。まだ決めている最中なので丸バッジにはしない。
       picked?.let { p ->
         val markerState = remember(p) { MarkerState(position = p) }
-        Marker(state = markerState)
+        MarkerComposable("picked", p.latitude, p.longitude, state = markerState, title = "選んだ地点") {
+          MapPinMarker(bg = MarkerPickBlue, glyph = R.drawable.ic_add)
+        }
       }
     }
 
@@ -828,8 +839,25 @@ private fun PlaceDetailContent(
       // 何もない地点をタップ → 統一シート（その地点を場所として登録）。
       onMapClick = { placeSheetTarget = PlaceSheetTarget.NewPoint(it) },
     ) {
+      // この画面が主題にしている場所。登録済み＝確定しているので、地図の他の画面と同じ丸バッジ
+      // （色＝訪問状態／グリフ＝業種／右上＝行きたい）で描く。
       val markerState = remember(position) { MarkerState(position = position) }
-      Marker(state = markerState, title = item.displayName)
+      val group = PlaceCategoryGroup.of(item.place.category)
+      MarkerComposable(
+        "place-detail",
+        item.place.id,
+        item.isWishlisted,
+        item.isVisited,
+        group,
+        state = markerState,
+        title = item.displayName,
+      ) {
+        RegisteredPlaceMarker(
+          bg = if (item.isVisited) MarkerVisitedGreen else MarkerUnvisitedGray,
+          glyph = categoryGlyph(group),
+          wishlisted = item.isWishlisted,
+        )
+      }
       // 登録済みの場所（トグルON）。この場所自身は主マーカーと重なるので除外済みのリストを描く。
       // タップで統一シート（その場で編集／詳細を開く）。
       if (showRegisteredPlaces) {
@@ -1200,8 +1228,17 @@ private fun SearchResultForm(
         myLocationButtonEnabled = false,
       ),
     ) {
+      // 検索結果のプレビュー。まだ登録していない＝これから決めるものなのでピン。
       val markerState = remember(position) { MarkerState(position = position) }
-      Marker(state = markerState, title = result.name)
+      MarkerComposable(
+        "search-result",
+        position.latitude,
+        position.longitude,
+        state = markerState,
+        title = result.name,
+      ) {
+        MapPinMarker(bg = MarkerPickBlue, glyph = R.drawable.ic_add)
+      }
     }
 
     FilledTonalIconButton(
@@ -1274,7 +1311,7 @@ internal fun PlaceFormBody(
   name: String,
   onNameChange: (String) -> Unit,
   nameLabel: String,
-  category: String?,
+  category: PlaceCategory?,
   address: String?,
   onOpenInMaps: (() -> Unit)?,
   memo: String,
@@ -1327,9 +1364,9 @@ internal fun PlaceFormBody(
     }
 
     // Google 由来のカテゴリ・住所（あれば）。「どんな場所か」の手がかり。読取専用。
-    category?.takeIf { it.isNotBlank() }?.let { c ->
+    category?.let { c ->
       Spacer(modifier = Modifier.height(4.dp))
-      Text(text = c, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
+      Text(text = c.label, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
     }
     address?.takeIf { it.isNotBlank() }?.let { a ->
       Spacer(modifier = Modifier.height(4.dp))

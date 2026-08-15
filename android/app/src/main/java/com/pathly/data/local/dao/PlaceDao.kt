@@ -43,8 +43,10 @@ interface PlaceDao {
    */
   @Query(
     "SELECT p.id AS id, p.name AS name, p.latitude AS latitude, p.longitude AS longitude, " +
-      "g.googlePlaceId AS googlePlaceId, g.name AS googleName, g.address AS googleAddress, g.category AS category " +
+      "g.googlePlaceId AS googlePlaceId, g.name AS googleName, g.address AS googleAddress, " +
+      "c.code AS categoryCode, c.displayName AS categoryDisplayName " +
       "FROM places p LEFT JOIN google_places g ON g.placeId = p.id " +
+      "LEFT JOIN google_place_categories c ON c.id = g.categoryId " +
       "WHERE p.latitude BETWEEN :minLatitude AND :maxLatitude " +
       "AND p.longitude BETWEEN :minLongitude AND :maxLongitude " +
       "ORDER BY p.id",
@@ -63,12 +65,14 @@ interface PlaceDao {
   @Query(
     "SELECT p.id AS id, p.name AS name, p.latitude AS latitude, p.longitude AS longitude, " +
       "p.note AS note, p.createdAt AS createdAt, p.updatedAt AS updatedAt, " +
-      "g.googlePlaceId AS googlePlaceId, g.name AS googleName, g.address AS googleAddress, g.category AS category, " +
+      "g.googlePlaceId AS googlePlaceId, g.name AS googleName, g.address AS googleAddress, " +
+      "c.code AS categoryCode, c.displayName AS categoryDisplayName, " +
       "w.id AS wishlistId, w.priority AS priority, w.visitedAt AS visitedAt, " +
       "(SELECT COUNT(*) FROM stops s WHERE s.placeId = p.id) AS visitCount, " +
       "(SELECT MAX(s.arrivalTime) FROM stops s WHERE s.placeId = p.id) AS lastStopAt " +
       "FROM places p " +
       "LEFT JOIN google_places g ON g.placeId = p.id " +
+      "LEFT JOIN google_place_categories c ON c.id = g.categoryId " +
       "LEFT JOIN wishlist w ON w.placeId = p.id " +
       "ORDER BY p.createdAt DESC",
   )
@@ -78,12 +82,14 @@ interface PlaceDao {
   @Query(
     "SELECT p.id AS id, p.name AS name, p.latitude AS latitude, p.longitude AS longitude, " +
       "p.note AS note, p.createdAt AS createdAt, p.updatedAt AS updatedAt, " +
-      "g.googlePlaceId AS googlePlaceId, g.name AS googleName, g.address AS googleAddress, g.category AS category, " +
+      "g.googlePlaceId AS googlePlaceId, g.name AS googleName, g.address AS googleAddress, " +
+      "c.code AS categoryCode, c.displayName AS categoryDisplayName, " +
       "w.id AS wishlistId, w.priority AS priority, w.visitedAt AS visitedAt, " +
       "(SELECT COUNT(*) FROM stops s WHERE s.placeId = p.id) AS visitCount, " +
       "(SELECT MAX(s.arrivalTime) FROM stops s WHERE s.placeId = p.id) AS lastStopAt " +
       "FROM places p " +
       "LEFT JOIN google_places g ON g.placeId = p.id " +
+      "LEFT JOIN google_place_categories c ON c.id = g.categoryId " +
       "LEFT JOIN wishlist w ON w.placeId = p.id " +
       "WHERE p.id = :id",
   )
@@ -102,8 +108,10 @@ interface PlaceDao {
       "p.latitude AS latitude, p.longitude AS longitude, " +
       "(SELECT COUNT(*) FROM wishlist w WHERE w.placeId = p.id) AS wishlistCount, " +
       "(SELECT COUNT(*) FROM stops s WHERE s.placeId = p.id) AS visitCount, " +
-      "(SELECT w.visitedAt FROM wishlist w WHERE w.placeId = p.id LIMIT 1) AS visitedAt " +
-      "FROM places p LEFT JOIN google_places g ON g.placeId = p.id",
+      "(SELECT w.visitedAt FROM wishlist w WHERE w.placeId = p.id LIMIT 1) AS visitedAt, " +
+      "c.code AS categoryCode " +
+      "FROM places p LEFT JOIN google_places g ON g.placeId = p.id " +
+      "LEFT JOIN google_place_categories c ON c.id = g.categoryId",
   )
   fun observeRegisteredPlaces(): Flow<List<RegisteredPlaceRow>>
 
@@ -116,8 +124,10 @@ interface PlaceDao {
       "p.latitude AS latitude, p.longitude AS longitude, " +
       "(SELECT COUNT(*) FROM wishlist w WHERE w.placeId = p.id) AS wishlistCount, " +
       "(SELECT COUNT(*) FROM stops s WHERE s.placeId = p.id) AS visitCount, " +
-      "(SELECT w.visitedAt FROM wishlist w WHERE w.placeId = p.id LIMIT 1) AS visitedAt " +
+      "(SELECT w.visitedAt FROM wishlist w WHERE w.placeId = p.id LIMIT 1) AS visitedAt, " +
+      "c.code AS categoryCode " +
       "FROM places p LEFT JOIN google_places g ON g.placeId = p.id " +
+      "LEFT JOIN google_place_categories c ON c.id = g.categoryId " +
       "WHERE p.latitude BETWEEN :minLatitude AND :maxLatitude " +
       "AND p.longitude BETWEEN :minLongitude AND :maxLongitude",
   )

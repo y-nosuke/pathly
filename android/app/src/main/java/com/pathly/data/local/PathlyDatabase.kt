@@ -7,6 +7,7 @@ import androidx.room.RoomDatabase
 import androidx.room.TypeConverters
 import androidx.sqlite.db.SupportSQLiteDatabase
 import com.pathly.data.local.converter.DateConverter
+import com.pathly.data.local.dao.GooglePlaceCategoryDao
 import com.pathly.data.local.dao.GooglePlaceDao
 import com.pathly.data.local.dao.GpsPointDao
 import com.pathly.data.local.dao.GpsTrackDao
@@ -15,6 +16,7 @@ import com.pathly.data.local.dao.PlaceResolutionDao
 import com.pathly.data.local.dao.SmoothedPointDao
 import com.pathly.data.local.dao.StopDao
 import com.pathly.data.local.dao.WishlistDao
+import com.pathly.data.local.entity.GooglePlaceCategoryEntity
 import com.pathly.data.local.entity.GooglePlaceEntity
 import com.pathly.data.local.entity.GpsPointEntity
 import com.pathly.data.local.entity.GpsTrackEntity
@@ -35,9 +37,10 @@ import com.pathly.util.Logger
     SmoothedPointEntity::class,
     PlaceResolutionEntity::class,
     GooglePlaceEntity::class,
+    GooglePlaceCategoryEntity::class,
     WishlistEntity::class,
   ],
-  version = 12,
+  version = 13,
   exportSchema = true,
 )
 @TypeConverters(DateConverter::class)
@@ -50,6 +53,7 @@ abstract class PathlyDatabase : RoomDatabase() {
   abstract fun smoothedPointDao(): SmoothedPointDao
   abstract fun placeResolutionDao(): PlaceResolutionDao
   abstract fun googlePlaceDao(): GooglePlaceDao
+  abstract fun googlePlaceCategoryDao(): GooglePlaceCategoryDao
   abstract fun wishlistDao(): WishlistDao
 
   companion object {

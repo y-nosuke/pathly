@@ -1,5 +1,7 @@
 package com.pathly.data.local.entity
 
+import com.pathly.domain.model.PlaceCategory
+
 /**
  * 表示名の解決に必要な最小限の場所情報（ユーザー名と Google 由来の情報を1行で取る）。
  *
@@ -14,5 +16,9 @@ data class NamedPlaceRow(
   val googlePlaceId: String?,
   val googleName: String?,
   val googleAddress: String?,
-  val category: String?,
-)
+  // 業種はマスタ（google_place_categories）から結合して持つ。code が無ければ業種なし。
+  val categoryCode: String?,
+  val categoryDisplayName: String?,
+) {
+  val category: PlaceCategory? get() = categoryCode?.let { PlaceCategory(it, categoryDisplayName) }
+}

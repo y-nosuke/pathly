@@ -1,5 +1,7 @@
 package com.pathly.presentation.common
 
+import androidx.annotation.DrawableRes
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
@@ -14,7 +16,10 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -28,6 +33,7 @@ import com.google.maps.android.compose.Polyline
 import com.pathly.R
 import com.pathly.domain.model.GpsPoint
 import com.pathly.domain.model.GpsTrack
+import com.pathly.domain.model.PlaceCategoryGroup
 import com.pathly.domain.model.RegisteredPlace
 import com.pathly.domain.model.Stop
 import com.pathly.ui.theme.TrackLineOrange
@@ -37,6 +43,10 @@ import java.util.Date
 // 記録画面と履歴詳細で共通の「経路の地図描画」。カメラや周辺のUIは各画面が持ち、
 // GoogleMap の中身（帯・軌跡・マーカー）だけをここで一元化して見た目を揃える。
 
+// マーカーは形で「確定しているか、これから決めるものか」を表す（→ adr/0018）。
+// 丸バッジ＝確定（開始・終了・現在地・立ち寄り・登録済みの場所）／ピン＝これから決めるもの
+// （再解析の候補・手動追加で指した地点・登録前に選んだ地点）。色は種別ではなく状態を担当する。
+
 // マーカーのバッジ色（出発=緑/終了=赤/記録中の現在地=青/立ち寄り=紫/立ち寄り中=ティール）。
 internal val MarkerStartGreen = Color(0xFF2E9E5B)
 internal val MarkerEndRed = Color(0xFFD24B45)
@@ -45,9 +55,99 @@ internal val MarkerStopViolet = Color(0xFF6A4BBC)
 internal val MarkerCurrentStopTeal = Color(0xFF00BFA5)
 
 // 「登録済みの場所」マーカー（トグルON時）。色で訪問状態（訪問済み=グリーン／未訪問=グレー）を示し、
-// グリフで行きたい（旗）/それ以外（ピン）を示す。立ち寄り（紫）とは色・グリフで見分ける。
+// グリフで業種（カフェ・公園・駅…）を示す。立ち寄り（紫の番号）とは色・グリフで見分ける。
 internal val MarkerVisitedGreen = Color(0xFF2E7D32)
 internal val MarkerUnvisitedGray = Color(0xFF6B6B6B)
+
+// 「行きたい」を示す小さな旗のバッジ。訪問状態（緑/グレー）とは別の軸なので、色も別に取る。
+internal val MarkerWishlistAmber = Color(0xFFE08A00)
+
+/**
+ * 業種のグリフ。何の場所かを一目で分かるようにする（→ adr/0017）。
+ *
+ * 対応付けを DB ではなくここに置いているのは、`R.drawable` の ID は DB に入れられず、結局
+ * コードで分岐することになるため。テーブルにすると変えるたびにマイグレーションが要るだけになる。
+ */
+@DrawableRes
+internal fun categoryGlyph(group: PlaceCategoryGroup): Int = when (group) {
+  PlaceCategoryGroup.FOOD -> R.drawable.ic_category_food
+  PlaceCategoryGroup.CAFE -> R.drawable.ic_category_cafe
+  PlaceCategoryGroup.SHOPPING -> R.drawable.ic_category_shopping
+  PlaceCategoryGroup.PARK -> R.drawable.ic_category_park
+  PlaceCategoryGroup.CULTURE -> R.drawable.ic_category_culture
+  PlaceCategoryGroup.ENTERTAINMENT -> R.drawable.ic_category_entertainment
+  PlaceCategoryGroup.TRANSIT -> R.drawable.ic_category_transit
+  PlaceCategoryGroup.LODGING -> R.drawable.ic_category_lodging
+  PlaceCategoryGroup.SERVICE -> R.drawable.ic_category_service
+  // 業種が分からない場所は、これまでどおりの場所ピン。
+  PlaceCategoryGroup.OTHER -> R.drawable.ic_place
+}
+
+// これから決めるもののピン色。候補＝橙（提案）、指した地点＝青（自分で置いた）。
+internal val MarkerCandidateOrange = Color(0xFFF09A2B)
+internal val MarkerPickBlue = Color(0xFF2E86DE)
+
+// ピンの寸法。頭は丸バッジと同じ直径にして、並んだときに大きさが揃って見えるようにする。
+private val PinWidth = 38.dp
+private val PinHeight = 50.dp
+private val PinBorder = 2.dp
+
+/**
+ * 「これから決める地点」のピン。先端が座標を指す。
+ *
+ * マーカーの基準点は既定で下端中央なので、**先端をビットマップの下端中央に置く**ことで
+ * 指す座標がそのまま合う（丸バッジが下端＝円の底で合わせているのと同じ考え方）。
+ */
+@Composable
+internal fun MapPinMarker(bg: Color, @DrawableRes glyph: Int) {
+  Box(contentAlignment = Alignment.TopCenter) {
+    Canvas(modifier = Modifier.size(PinWidth, PinHeight)) {
+      val border = PinBorder.toPx()
+      val radius = (size.width - border * 2f) / 2f
+      val centerX = size.width / 2f
+      val centerY = border + radius
+      val tipY = size.height - border
+      val path = Path().apply {
+        moveTo(centerX, tipY)
+        // 先端から頭の左端へ。頭の輪郭に滑らかに繋がるよう制御点を取る。
+        cubicTo(
+          centerX - radius * 0.34f,
+          centerY + (tipY - centerY) * 0.58f,
+          centerX - radius,
+          centerY + radius * 0.60f,
+          centerX - radius,
+          centerY,
+        )
+        // 頭（左端から上を回って右端へ）。
+        arcTo(
+          rect = Rect(centerX - radius, centerY - radius, centerX + radius, centerY + radius),
+          startAngleDegrees = 180f,
+          sweepAngleDegrees = 180f,
+          forceMoveTo = false,
+        )
+        cubicTo(
+          centerX + radius,
+          centerY + radius * 0.60f,
+          centerX + radius * 0.34f,
+          centerY + (tipY - centerY) * 0.58f,
+          centerX,
+          tipY,
+        )
+        close()
+      }
+      // 白フチは輪郭の外側へ出す（線幅の半分が外に出るので 2 倍で描いてから塗りを重ねる）。
+      drawPath(path, color = Color.White, style = Stroke(width = border * 2f))
+      drawPath(path, color = bg)
+    }
+    // グリフは頭の中心に置く（先端側ではない）。
+    Box(
+      modifier = Modifier.size(PinWidth),
+      contentAlignment = Alignment.Center,
+    ) {
+      MarkerGlyph(glyph)
+    }
+  }
+}
 
 // 確定した立ち寄りの滞在区間ハイライト（濃い青の帯）。軌跡（オレンジ）の下に太く敷く。
 internal val StopSegmentColor = Color(0xF00D47A1)
@@ -59,8 +159,8 @@ internal val CurrentStopSegmentColor = Color(0xF000BFA5)
 internal fun stopSegmentPoints(points: List<GpsPoint>, arrival: Date, departure: Date): List<GpsPoint> = points.filter { !it.timestamp.before(arrival) && !it.timestamp.after(departure) }
 
 /**
- * 「登録済みの場所」マーカー群（アンバーのピン）。トラックの有無に依らず単独で描画できるよう
- * 切り出し、記録画面（トラック未確定でも表示）・場所詳細でも使い回す。GoogleMap の content 内で呼ぶ。
+ * 「登録済みの場所」マーカー群。トラックの有無に依らず単独で描画できるよう切り出し、
+ * 記録画面（トラック未確定でも表示）・経路詳細でも使い回す。GoogleMap の content 内で呼ぶ。
  */
 @Composable
 @GoogleMapComposable
@@ -73,14 +173,15 @@ internal fun RegisteredPlaceMarkers(
     val placeMarkerState = androidx.compose.runtime.remember(place.placeId, place.latitude, place.longitude) {
       MarkerState(position = LatLng(place.latitude, place.longitude))
     }
-    // 色＝訪問状態、グリフ＝行きたい（旗）/それ以外（ピン）。状態が変わったら描き直す。
+    // 色＝訪問状態、グリフ＝業種、右上の旗＝行きたい。状態が変わったら描き直す。
     val badgeColor = if (place.isVisited) MarkerVisitedGreen else MarkerUnvisitedGray
-    val glyph = if (place.isWishlisted) R.drawable.ic_flag_filled else R.drawable.ic_place
+    val group = place.categoryGroup
     MarkerComposable(
       "registered",
       place.placeId,
       place.isWishlisted,
       place.isVisited,
+      group,
       state = placeMarkerState,
       title = place.displayName,
       snippet = place.statusLabel,
@@ -89,16 +190,56 @@ internal fun RegisteredPlaceMarkers(
         false
       },
     ) {
-      RouteBadgeMarker(bg = badgeColor) {
-        Icon(
-          painter = painterResource(glyph),
-          contentDescription = null,
-          tint = Color.White,
-          modifier = Modifier.size(18.dp),
-        )
-      }
+      RegisteredPlaceMarker(bg = badgeColor, glyph = categoryGlyph(group), wishlisted = place.isWishlisted)
     }
   }
+}
+
+/**
+ * 登録済みの場所のマーカー。丸バッジ（色＝訪問状態／グリフ＝業種）に、行きたい登録があれば
+ * 右上へ小さな旗を重ねる。
+ *
+ * 業種をグリフに使うようになって、旗をグリフで示せなくなったため別の場所へ逃がした。
+ * 余白を左右対称に取り、下端をバッジの下端に揃えているのは、**マーカーの基準点（下端中央）を
+ * ずらさない**ため。ここを崩すとピンが指す座標が実際の場所からずれる。
+ */
+@Composable
+internal fun RegisteredPlaceMarker(bg: Color, @DrawableRes glyph: Int, wishlisted: Boolean) {
+  if (!wishlisted) {
+    RouteBadgeMarker(bg = bg) { MarkerGlyph(glyph) }
+    return
+  }
+  Box(contentAlignment = Alignment.TopEnd) {
+    Box(modifier = Modifier.padding(start = 8.dp, end = 8.dp, top = 8.dp)) {
+      RouteBadgeMarker(bg = bg) { MarkerGlyph(glyph) }
+    }
+    Box(
+      modifier = Modifier
+        .padding(end = 2.dp)
+        .size(16.dp)
+        .background(MarkerWishlistAmber, CircleShape)
+        .border(1.5.dp, Color.White, CircleShape),
+      contentAlignment = Alignment.Center,
+    ) {
+      Icon(
+        painter = painterResource(R.drawable.ic_flag_filled),
+        contentDescription = null,
+        tint = Color.White,
+        modifier = Modifier.size(9.dp),
+      )
+    }
+  }
+}
+
+/** バッジの中央に置くグリフ（白・18dp）。 */
+@Composable
+private fun MarkerGlyph(@DrawableRes glyph: Int) {
+  Icon(
+    painter = painterResource(glyph),
+    contentDescription = null,
+    tint = Color.White,
+    modifier = Modifier.size(18.dp),
+  )
 }
 
 /** 地図の丸バッジ型マーカー（白フチ＋中央にグリフ/番号）。出発・到着・立ち寄りで共用。 */
