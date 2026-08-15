@@ -80,6 +80,7 @@ import com.google.maps.android.compose.rememberCameraPositionState
 import com.pathly.R
 import com.pathly.domain.model.NearbyRegisterPrompt
 import com.pathly.domain.model.Place
+import com.pathly.domain.model.PlaceCategory
 import com.pathly.domain.model.PlaceListItem
 import com.pathly.domain.model.PlacePrediction
 import com.pathly.domain.model.PlaceSearchResult
@@ -492,10 +493,10 @@ private fun PlaceItemRow(
         )
 
         // カテゴリ（業種）。あれば名前の下に小さく出す（「どんな場所か」の手がかり）。
-        item.place.category?.takeIf { it.isNotBlank() }?.let { category ->
+        item.place.category?.let { category ->
           Spacer(modifier = Modifier.height(2.dp))
           Text(
-            text = category,
+            text = category.label,
             style = MaterialTheme.typography.labelMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             maxLines = 1,
@@ -1274,7 +1275,7 @@ internal fun PlaceFormBody(
   name: String,
   onNameChange: (String) -> Unit,
   nameLabel: String,
-  category: String?,
+  category: PlaceCategory?,
   address: String?,
   onOpenInMaps: (() -> Unit)?,
   memo: String,
@@ -1327,9 +1328,9 @@ internal fun PlaceFormBody(
     }
 
     // Google 由来のカテゴリ・住所（あれば）。「どんな場所か」の手がかり。読取専用。
-    category?.takeIf { it.isNotBlank() }?.let { c ->
+    category?.let { c ->
       Spacer(modifier = Modifier.height(4.dp))
-      Text(text = c, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
+      Text(text = c.label, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
     }
     address?.takeIf { it.isNotBlank() }?.let { a ->
       Spacer(modifier = Modifier.height(4.dp))

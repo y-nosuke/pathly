@@ -1,6 +1,7 @@
 package com.pathly.domain.usecase
 
 import com.pathly.domain.model.Place
+import com.pathly.domain.model.PlaceCategory
 import com.pathly.domain.model.PlaceListItem
 import com.pathly.domain.model.PlaceRegistration
 import com.pathly.domain.model.PlaceSearchResult
@@ -64,7 +65,7 @@ class PlaceEditUseCaseTest {
       googlePlaceId = "gp-1",
       name = "カフェ",
       address = "東京都…",
-      category = "カフェ",
+      category = PlaceCategory("cafe", "カフェ"),
       latitude = 35.0,
       longitude = 139.0,
     )
@@ -267,7 +268,7 @@ class PlaceEditUseCaseTest {
       googlePlaceId = "gp-9",
       name = "スターバックス",
       address = "東京都",
-      category = "cafe",
+      category = PlaceCategory("cafe", "カフェ"),
       latitude = 35.1,
       longitude = 139.1,
     )

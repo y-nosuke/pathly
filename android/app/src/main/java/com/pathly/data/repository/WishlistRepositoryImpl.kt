@@ -1,10 +1,12 @@
 package com.pathly.data.repository
 
+import com.pathly.data.local.dao.GooglePlaceCategoryDao
 import com.pathly.data.local.dao.GooglePlaceDao
 import com.pathly.data.local.dao.PlaceDao
 import com.pathly.data.local.dao.PlaceResolutionDao
 import com.pathly.data.local.dao.StopDao
 import com.pathly.data.local.dao.WishlistDao
+import com.pathly.data.local.dao.idOf
 import com.pathly.data.local.entity.GooglePlaceEntity
 import com.pathly.data.local.entity.PlaceEntity
 import com.pathly.data.local.entity.PlaceResolutionEntity
@@ -34,6 +36,7 @@ class WishlistRepositoryImpl @Inject constructor(
   private val placeDao: PlaceDao,
   private val placeResolutionDao: PlaceResolutionDao,
   private val googlePlaceDao: GooglePlaceDao,
+  private val googlePlaceCategoryDao: GooglePlaceCategoryDao,
   private val stopDao: StopDao,
   private val placeRepository: PlaceRepository,
   private val placesTextSearcher: PlacesTextSearcher,
@@ -92,7 +95,7 @@ class WishlistRepositoryImpl @Inject constructor(
       val result = knownDetails?.takeIf { it.googlePlaceId == googlePlaceId } ?: placesTextSearcher.fetch(googlePlaceId)
       googlePlaceDao.upsert(
         if (result != null) {
-          GooglePlaceEntity(placeId, result.googlePlaceId, result.name, result.address, result.category)
+          GooglePlaceEntity(placeId, result.googlePlaceId, result.name, result.address, googlePlaceCategoryDao.idOf(result.category))
         } else {
           // オフライン等で取れなくても、id とタップ時に分かっている施設名は控える
           // （住所・カテゴリは欠けるが、少なくとも未命名にはならない）。
@@ -107,7 +110,7 @@ class WishlistRepositoryImpl @Inject constructor(
   override suspend fun linkPlaceToGoogle(placeId: Long, result: PlaceSearchResult) {
     // 施設情報を上書き保存（名前・住所・カテゴリ・place ID）。places.name は触らない。
     googlePlaceDao.upsert(
-      GooglePlaceEntity(placeId, result.googlePlaceId, result.name, result.address, result.category),
+      GooglePlaceEntity(placeId, result.googlePlaceId, result.name, result.address, googlePlaceCategoryDao.idOf(result.category)),
     )
     // 解決記録を残す（以後は自動命名で Nearby を叩かない）。
     placeResolutionDao.upsert(PlaceResolutionEntity(placeId, Date()))

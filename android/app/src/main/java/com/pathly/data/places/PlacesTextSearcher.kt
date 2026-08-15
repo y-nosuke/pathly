@@ -10,6 +10,7 @@ import com.google.android.libraries.places.api.model.Place
 import com.google.android.libraries.places.api.net.FetchPlaceRequest
 import com.google.android.libraries.places.api.net.FindAutocompletePredictionsRequest
 import com.google.android.libraries.places.api.net.PlacesClient
+import com.pathly.domain.model.PlaceCategory
 import com.pathly.domain.model.PlacePrediction
 import com.pathly.domain.model.PlaceSearchResult
 import com.pathly.util.Logger
@@ -87,14 +88,7 @@ class PlacesTextSearcher @Inject constructor(
     val placesClient = client ?: return@withContext null
     val token = sessionToken
     try {
-      val fields = listOf(
-        Place.Field.ID,
-        Place.Field.DISPLAY_NAME,
-        Place.Field.FORMATTED_ADDRESS,
-        Place.Field.PRIMARY_TYPE_DISPLAY_NAME,
-        Place.Field.LOCATION,
-      )
-      val builder = FetchPlaceRequest.builder(placeId, fields)
+      val builder = FetchPlaceRequest.builder(placeId, PLACE_DETAIL_FIELDS)
       if (token != null) builder.setSessionToken(token)
       val response = Tasks.await(placesClient.fetchPlace(builder.build()))
       val place = response.place
@@ -103,7 +97,7 @@ class PlacesTextSearcher @Inject constructor(
         googlePlaceId = place.id?.takeIf { it.isNotBlank() } ?: placeId,
         name = place.displayName?.takeIf { it.isNotBlank() },
         address = place.formattedAddress?.takeIf { it.isNotBlank() },
-        category = place.primaryTypeDisplayName?.takeIf { it.isNotBlank() },
+        category = place.toPlaceCategory(),
         latitude = latLng.latitude,
         longitude = latLng.longitude,
       ).also { lastFetch = placeId to it }
@@ -113,6 +107,30 @@ class PlacesTextSearcher @Inject constructor(
     } finally {
       // セッション終了（次回は新しいトークン）。
       sessionToken = null
+    }
+  }
+
+  /**
+   * TODO(v13-backfill): DB v13 の移行用。流し終えたら [com.pathly.data.work.PlaceCategoryBackfillWorker]
+   * ごと削除する。
+   *
+   * 既知の [googlePlaceId] の**業種だけ**を引く。v13 より前に解決した場所は業種を持っていないが、
+   * 自動の再取得は「place 1 件 1 回」（adr/0014）で止まるため、移行時に一度だけここから埋める。
+   * 検索セッションの一部ではないのでトークンは付けず、[lastFetch] の控えも触らない。
+   *
+   * 「業種を持たない施設だった」（成功して null）と「引けなかった」（失敗）は呼び出し側で
+   * 区別する必要があるため [Result] で返す。前者を失敗と扱うと再試行が永久に止まらない。
+   */
+  suspend fun fetchCategoryOnly(googlePlaceId: String): Result<PlaceCategory?> = withContext(Dispatchers.IO) {
+    if (!isOnline()) return@withContext Result.failure(IllegalStateException("offline"))
+    val placesClient = client ?: return@withContext Result.failure(IllegalStateException("Places not initialized"))
+    try {
+      val fields = listOf(Place.Field.ID, Place.Field.PRIMARY_TYPE, Place.Field.PRIMARY_TYPE_DISPLAY_NAME)
+      val response = Tasks.await(placesClient.fetchPlace(FetchPlaceRequest.builder(googlePlaceId, fields).build()))
+      Result.success(response.place.toPlaceCategory())
+    } catch (e: Exception) {
+      logger.w("fetchPlace (category only) failed for $googlePlaceId", e)
+      Result.failure(e)
     }
   }
 

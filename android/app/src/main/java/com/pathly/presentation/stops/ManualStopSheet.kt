@@ -309,7 +309,7 @@ private fun CandidatePicker(
             Column(modifier = Modifier.padding(start = 4.dp)) {
               Text(poi.name ?: "（名称不明）", style = MaterialTheme.typography.bodyMedium)
               poi.category?.let {
-                Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(it.label, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
               }
             }
           }

@@ -7,6 +7,7 @@ import androidx.work.Configuration
 import com.google.android.gms.maps.MapsInitializer
 import com.google.android.gms.maps.OnMapsSdkInitializedCallback
 import com.google.android.libraries.places.api.Places
+import com.pathly.data.work.PlaceCategoryBackfillWorker
 import com.pathly.data.work.PlaceNameCatchUpWorker
 import com.pathly.domain.repository.GpsTrackRepository
 import com.pathly.util.Logger
@@ -56,6 +57,10 @@ class PathlyApplication :
     // オフライン記録で未解決のまま残った立ち寄り場所の名前解決を予約する。
     // ネットワーク接続を制約にしているので、いま繋がっていなくても復帰した時点で走る。
     PlaceNameCatchUpWorker.enqueue(this)
+
+    // TODO(v13-backfill): 移行が済んだら PlaceCategoryBackfillWorker ごとこの行も消す。
+    // v13 より前に解決した場所の業種を Google から引き直して埋める（一度きり）。
+    PlaceCategoryBackfillWorker.enqueue(this)
 
     // v11 より前に記録した経路の総移動距離を埋める（対象が無ければ即終了する一度きりの処理）。
     appScope.launch { gpsTrackRepository.backfillMissingDistances() }

@@ -8,7 +8,7 @@ data class PlaceSearchResult(
   val googlePlaceId: String,
   val name: String?,
   val address: String?,
-  val category: String?,
+  val category: PlaceCategory?,
   val latitude: Double,
   val longitude: Double,
 )
