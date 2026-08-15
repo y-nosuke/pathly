@@ -1,5 +1,6 @@
 package com.pathly.presentation.tracking
 
+import com.pathly.data.places.PlacesTextSearcher
 import com.pathly.data.settings.SettingsRepository
 import com.pathly.data.tracking.TrackingController
 import com.pathly.domain.model.GpsTrack
@@ -51,6 +52,7 @@ class TrackingViewModelTest {
   private val mockWishlistRepository = mockk<WishlistRepository>(relaxed = true)
   private val mockPlaceEditUseCase = mockk<PlaceEditUseCase>(relaxed = true)
   private val mockAddManualStopUseCase = mockk<AddManualStopUseCase>(relaxed = true)
+  private val mockPlacesTextSearcher = mockk<PlacesTextSearcher>(relaxed = true)
   private val mockSettingsRepository = mockk<SettingsRepository>(relaxed = true).also {
     every { it.showRegisteredPlaces(any()) } returns MutableStateFlow(false)
   }
@@ -84,6 +86,7 @@ class TrackingViewModelTest {
     mockSettingsRepository,
     mockPlaceEditUseCase,
     mockAddManualStopUseCase,
+    mockPlacesTextSearcher,
   ).also { testDispatcher.scheduler.advanceUntilIdle() }
 
   @Test

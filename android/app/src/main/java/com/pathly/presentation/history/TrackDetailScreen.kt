@@ -50,7 +50,9 @@ import com.pathly.domain.model.GpsTrack
 import com.pathly.domain.model.NearbyRegisterPrompt
 import com.pathly.domain.model.NearbyStopPrompt
 import com.pathly.domain.model.PlaceListItem
+import com.pathly.domain.model.PlacePrediction
 import com.pathly.domain.model.PlaceSearchResult
+import com.pathly.domain.model.PlaceVisit
 import com.pathly.domain.model.Priority
 import com.pathly.domain.model.RegisteredPlace
 import com.pathly.domain.model.SmoothingParams
@@ -64,11 +66,15 @@ import com.pathly.presentation.common.heightOf
 import com.pathly.presentation.common.rememberFloatingSheetState
 import com.pathly.presentation.common.stopSegmentPoints
 import com.pathly.presentation.places.PlaceActionSheet
+import com.pathly.presentation.places.PlaceDeleteUndo
+import com.pathly.presentation.places.PlaceDeleteUndoEffect
 import com.pathly.presentation.places.PlaceSheetTarget
 import com.pathly.presentation.stops.ManualStopOrigin
 import com.pathly.presentation.stops.ManualStopSheet
 import com.pathly.presentation.stops.ManualStopTarget
 import com.pathly.presentation.stops.StopReassignDialog
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.launch
 import java.util.Date
 
@@ -102,8 +108,6 @@ fun TrackDetailScreen(
   onConfirmNearbyStopLink: () -> Unit = {},
   onConfirmNearbyStopNew: () -> Unit = {},
   onDismissNearbyStopPrompt: () -> Unit = {},
-  // 登録済みマーカー（通常モード）タップ後、シートの「詳細を開く」でその場所の詳細を開く。
-  onOpenPlaceDetail: (placeId: Long) -> Unit = {},
   onMessageShown: () -> Unit = {},
   // 空き地点/POI の登録。近くに既存があるかの判断は ViewModel（PlaceEditUseCase）側で行う。
   onRegisterPlace: (lat: Double, lng: Double, name: String?, wishlist: Boolean, priority: Priority, memo: String?, googlePlaceId: String?, googleName: String?) -> Unit =
@@ -113,12 +117,22 @@ fun TrackDetailScreen(
   onConfirmNearbyLink: () -> Unit = {},
   onConfirmNearbyNew: () -> Unit = {},
   onDismissNearbyPrompt: () -> Unit = {},
-  // 統一シートで登録済みマーカーをその場で編集するため、単一 place を取得・保存する。
-  onLoadPlace: suspend (placeId: Long) -> PlaceListItem? = { null },
-  onSavePlaceEdits: (item: PlaceListItem, name: String, note: String, wishlist: Boolean, priority: Priority, visited: Boolean) -> Unit = { _, _, _, _, _, _ -> },
+  // 統一シートで登録済みマーカーをその場で編集するため、単一 place を購読・保存・削除する。
+  onObservePlace: (placeId: Long) -> Flow<PlaceListItem?> = { emptyFlow() },
+  onObserveVisits: (placeId: Long) -> Flow<List<PlaceVisit>> = { emptyFlow() },
+  onSavePlaceEdits: (item: PlaceListItem, name: String, note: String, wishlist: Boolean, priority: Priority, visited: Boolean, link: PlaceSearchResult?) -> Unit = { _, _, _, _, _, _, _ -> },
+  onDeletePlace: (placeId: Long) -> Unit = {},
+  // 場所を削除した直後の取り消し待ち（スナックバーで「取り消す」を出す）。
+  placeDeleteUndo: PlaceDeleteUndo = PlaceDeleteUndo(),
+  onUndoPlaceDelete: () -> Unit = {},
+  // 場所シートの訪問履歴から、その訪問のお出掛け（別の経路詳細）を開く。
+  onOpenTrack: (trackId: Long) -> Unit = {},
   onFetchPoiDetails: suspend (googlePlaceId: String) -> PlaceSearchResult? = { null },
-  // 誤検知の選び直し用: 座標の近くの POI 候補を取得／この訪問だけ付け替える。
+  // 誤検知の選び直し／Google 施設の紐付け用: 座標の近くの POI 候補を取得／この訪問だけ付け替える。
   onFetchNearbyPois: suspend (lat: Double, lng: Double) -> List<PlaceSearchResult> = { _, _ -> emptyList() },
+  // 座標がずれて周辺に出ない施設用: 名前で検索するフォールバック。
+  onSearchPredictions: suspend (query: String) -> List<PlacePrediction> = { emptyList() },
+  onFetchPrediction: suspend (placeId: String) -> PlaceSearchResult? = { null },
   onReassignStop: (stopId: Long, chosen: PlaceSearchResult?, customName: String?) -> Unit = { _, _, _ -> },
   // 登録済みの場所の地図表示（画面別トグル）。
   registeredPlaces: List<RegisteredPlace> = emptyList(),
@@ -176,6 +190,8 @@ fun TrackDetailScreen(
 
   // 削除は確認ダイアログを出さず即時実行し、スナックバーの「取り消す」で元に戻せる。
   val snackbarHostState = remember { SnackbarHostState() }
+  // 場所そのものの削除（場所シート）も同じスナックバーで取り消せるようにする。
+  PlaceDeleteUndoEffect(placeDeleteUndo, snackbarHostState, onUndoPlaceDelete)
   val deleteWithUndo: (List<Long>) -> Unit = { ids ->
     if (ids.isNotEmpty()) {
       onDeleteStops(ids)
@@ -600,10 +616,15 @@ fun TrackDetailScreen(
         target = target,
         onDismiss = { placeSheetTarget = null },
         onFetchPoiDetails = onFetchPoiDetails,
-        onLoadPlace = onLoadPlace,
+        onObservePlace = onObservePlace,
+        onObserveVisits = onObserveVisits,
         onRegisterNew = onRegisterPlace,
         onSaveExisting = onSavePlaceEdits,
-        onOpenDetail = onOpenPlaceDetail,
+        onDeletePlace = onDeletePlace,
+        onOpenTrack = onOpenTrack,
+        onFetchNearbyPois = onFetchNearbyPois,
+        onSearchPredictions = onSearchPredictions,
+        onFetchPrediction = onFetchPrediction,
         modifier = Modifier.align(Alignment.BottomCenter),
         sheetState = placeSheetState,
       )

@@ -44,7 +44,6 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
-import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -87,12 +86,13 @@ import com.pathly.domain.model.PlaceVisit
 import com.pathly.domain.model.Priority
 import com.pathly.domain.model.RegisteredPlace
 import com.pathly.presentation.common.FloatingSheet
-import com.pathly.presentation.common.NearbyCandidatePickerDialog
 import com.pathly.presentation.common.NearbyPlaceConfirmDialog
 import com.pathly.presentation.common.RegisteredPlaceMarkers
 import com.pathly.presentation.common.heightOf
 import com.pathly.presentation.common.rememberFloatingSheetState
 import com.pathly.util.DateFormatters
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.launch
 
 // 「場所」タブは Navigation-Compose の目的地に分割されている（一覧／地図で追加／検索で追加／詳細）。
@@ -115,15 +115,7 @@ fun PlacesListRoute(
   }
 
   // 削除（一覧・詳細どちらから消しても）を検知して取り消しスナックバーを出す。
-  LaunchedEffect(uiState.undoDeleteToken) {
-    if (uiState.undoDeleteToken == 0) return@LaunchedEffect
-    val result = snackbarHostState.showSnackbar(
-      message = "「${uiState.undoDeleteName ?: "場所"}」を削除しました",
-      actionLabel = "取り消す",
-      duration = SnackbarDuration.Short,
-    )
-    if (result == SnackbarResult.ActionPerformed) viewModel.undoDelete()
-  }
+  PlaceDeleteUndoEffect(uiState.deleteUndo, snackbarHostState, viewModel::undoDelete)
 
   // 登録（「登録しました」/「この場所は登録済みです」）を検知して、削除と同じ下部スナックバーで知らせる。
   LaunchedEffect(uiState.registerToken) {
@@ -227,7 +219,6 @@ fun PlaceDetailRoute(
   onBack: () -> Unit,
   onOpenTrack: (trackId: Long) -> Unit,
   modifier: Modifier = Modifier,
-  onOpenPlaceDetail: (placeId: Long) -> Unit = {},
 ) {
   val uiState by viewModel.uiState.collectAsStateWithLifecycle()
 
@@ -252,6 +243,8 @@ fun PlaceDetailRoute(
     onSave = { name, note, wishlist, priority, visited, link ->
       viewModel.savePlaceEdits(item, name, note, wishlist, priority, visited, link)
     },
+    onObservePlace = viewModel::observePlace,
+    onObserveVisits = viewModel::visitsFor,
     onFetchPoiDetails = viewModel::fetchPoiDetails,
     // 「Googleで情報を取得」: 登録座標の近くの候補から選ぶ（保存で確定・選び直しと同じ仕組み）。
     onFetchNearbyPois = viewModel::nearbyPois,
@@ -279,11 +272,10 @@ fun PlaceDetailRoute(
     onConfirmNearbyLink = viewModel::confirmNearbyLink,
     onConfirmNearbyNew = viewModel::confirmNearbyNew,
     onDismissNearbyPrompt = viewModel::dismissNearbyPrompt,
-    onLoadPlace = viewModel::loadPlace,
-    onSavePlaceEdits = { editItem, name, note, wishlist, priority, visited ->
-      viewModel.savePlaceEdits(editItem, name, note, wishlist, priority, visited)
+    onSavePlaceEdits = { editItem, name, note, wishlist, priority, visited, link ->
+      viewModel.savePlaceEdits(editItem, name, note, wishlist, priority, visited, link)
     },
-    onOpenPlaceDetail = onOpenPlaceDetail,
+    onDeletePlace = viewModel::deletePlace,
     // 確認ダイアログは出さず即時削除。items から消えると item == null になり一覧へ戻り、
     // 取り消しスナックバーは一覧側で出る。
     onDeleteRequest = { viewModel.deletePlace(item.place.id) },
@@ -773,34 +765,14 @@ private fun PlaceDetailContent(
   onConfirmNearbyLink: () -> Unit = {},
   onConfirmNearbyNew: () -> Unit = {},
   onDismissNearbyPrompt: () -> Unit = {},
-  // 統一シートで登録済みマーカーをその場で編集するため、単一 place を取得・保存する。
-  onLoadPlace: suspend (placeId: Long) -> PlaceListItem? = { null },
-  onSavePlaceEdits: (item: PlaceListItem, name: String, note: String, wishlist: Boolean, priority: Priority, visited: Boolean) -> Unit = { _, _, _, _, _, _ -> },
-  // 「詳細を開く」でその場所の詳細へ遷移する。
-  onOpenPlaceDetail: (placeId: Long) -> Unit = {},
+  // 統一シートで登録済みマーカーをその場で編集するため、単一 place を購読・保存する。
+  onObservePlace: (placeId: Long) -> Flow<PlaceListItem?> = { emptyFlow() },
+  onObserveVisits: (placeId: Long) -> Flow<List<PlaceVisit>> = { emptyFlow() },
+  onSavePlaceEdits: (item: PlaceListItem, name: String, note: String, wishlist: Boolean, priority: Priority, visited: Boolean, link: PlaceSearchResult?) -> Unit = { _, _, _, _, _, _, _ -> },
+  onDeletePlace: (placeId: Long) -> Unit = {},
 ) {
   // 地図の1点タップで開く統一の「場所シート」（未登録の空き地点/POI＝登録、登録済み＝その場で編集）。
   var placeSheetTarget by remember { mutableStateOf<PlaceSheetTarget?>(null) }
-  // 「Googleで情報を取得」ダイアログの開閉。
-  var linkDialogOpen by remember { mutableStateOf(false) }
-  val context = LocalContext.current
-  val savedName = item.place.name ?: ""
-  val savedPriority = item.priority ?: Priority.MEDIUM
-  val savedNote = item.note ?: ""
-  // 編集はすべてローカルに溜め、「保存」でまとめて確定する（何が未保存かを一目で分かるように）。
-  var name by remember(item.place.id) { mutableStateOf(savedName) }
-  var note by remember(item.place.id) { mutableStateOf(savedNote) }
-  var wishlist by remember(item.wishlistId) { mutableStateOf(item.isWishlisted) }
-  var priority by remember(item.wishlistId) { mutableStateOf(savedPriority) }
-  var visited by remember(item.wishlistId) { mutableStateOf(item.isManuallyVisited) }
-  // 「Googleで情報を取得」で選んだ施設は即保存せず、ここに溜めて「保存」で確定する。
-  var pendingLink by remember(item.place.id) { mutableStateOf<PlaceSearchResult?>(null) }
-  val hasChanges = name.trim() != savedName.trim() ||
-    note.trim() != savedNote.trim() ||
-    wishlist != item.isWishlisted ||
-    (wishlist && priority != savedPriority) ||
-    (wishlist && item.visitCount == 0 && visited != item.isManuallyVisited) ||
-    pendingLink != null
 
   // 地図タップ・地図で選ぶ・検索して追加と同じ非モーダルのシートで出す（ADR-0010）。
   // 畳めば地図を全画面で確認できる。
@@ -877,134 +849,17 @@ private fun PlaceDetailContent(
             .padding(horizontal = 20.dp)
             .padding(bottom = 24.dp),
         ) {
-          PlaceFormBody(
-            name = name,
-            onNameChange = { name = it },
-            nameLabel = "自分で付ける名前（任意）",
-            heading = item.displayName,
-            // 書き換えの元にできるのは Google 名だけ（住所・座標のフォールバックは元にしない）。
-            namePrefill = item.place.googleName,
-            category = item.place.category,
-            address = item.place.googleAddress,
-            onOpenInMaps = { openInGoogleMaps(context, item.place) },
-            memo = note,
-            onMemoChange = { note = it },
-            wishlist = wishlist,
-            onWishlistChange = { wishlist = it },
-            priority = priority,
-            onPriorityChange = { priority = it },
-            wishlistOffHint = "「行きたい」に登録すると、優先度を付けられます。",
-            // 立ち寄り記録がある場所は自動で訪問済み（切替不可・件数を表示）。無ければ手動トグル。
-            visitedContent = if (item.visitCount > 0) {
-              {
-                Text(
-                  text = "訪問済み（立ち寄り記録 ${item.visitCount} 件）",
-                  style = MaterialTheme.typography.bodyMedium,
-                  color = MaterialTheme.colorScheme.secondary,
-                )
-              }
-            } else {
-              {
-                Row(
-                  modifier = Modifier.fillMaxWidth(),
-                  horizontalArrangement = Arrangement.SpaceBetween,
-                  verticalAlignment = Alignment.CenterVertically,
-                ) {
-                  Text(text = if (visited) "訪問済み" else "未訪問")
-                  Switch(checked = visited, onCheckedChange = { visited = it })
-                }
-              }
-            },
+          // 地図のマーカーをタップして開くシートと同じ本体（入口が違うだけで中身は同じ）。
+          PlaceEditorBody(
+            item = item,
+            visits = visits,
+            onSave = onSave,
+            onDelete = onDeleteRequest,
+            onOpenTrack = onOpenTrack,
+            onFetchNearbyPois = onFetchNearbyPois,
+            onSearchPredictions = onSearchPredictions,
+            onFetchPrediction = onFetchPrediction,
           )
-
-          // Google 施設情報の取得・紐付け。ID の無い場所（オフライン記録・手動登録）に住所・カテゴリ・正確な座標を補える。
-          Spacer(modifier = Modifier.height(8.dp))
-          TextButton(
-            onClick = { linkDialogOpen = true },
-            modifier = Modifier.align(Alignment.End),
-          ) {
-            Icon(
-              painter = painterResource(R.drawable.ic_place),
-              contentDescription = null,
-              modifier = Modifier.size(18.dp),
-            )
-            Text(
-              text = if (item.place.googlePlaceId == null) " Googleで情報を取得" else " Google施設を選び直す",
-            )
-          }
-
-          // 選んだ施設は保存で確定する（即保存しない）。未保存の紐付け予定をここに見せる。
-          pendingLink?.let { link ->
-            Row(
-              modifier = Modifier
-                .fillMaxWidth()
-                .padding(vertical = 4.dp),
-              verticalAlignment = Alignment.CenterVertically,
-              horizontalArrangement = Arrangement.SpaceBetween,
-            ) {
-              Text(
-                text = "紐付け予定: ${link.name ?: "（名称不明）"}（保存で確定）",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.weight(1f),
-              )
-              TextButton(onClick = { pendingLink = null }) { Text("取消") }
-            }
-          }
-
-          Spacer(modifier = Modifier.height(4.dp))
-          Button(
-            onClick = {
-              onSave(name, note, wishlist, priority, visited, pendingLink)
-              // 保存したら紐付け予定は消化済み。残すとボタンが活性のまま・予定表示が残るため確実にクリアする。
-              pendingLink = null
-            },
-            enabled = hasChanges,
-            modifier = Modifier.fillMaxWidth(),
-          ) {
-            Text("保存")
-          }
-
-          if (visits.isNotEmpty()) {
-            Spacer(modifier = Modifier.height(16.dp))
-            Text(
-              text = "この場所を含むお出掛け（${visits.size}件）",
-              style = MaterialTheme.typography.titleSmall,
-              fontWeight = FontWeight.Bold,
-            )
-            Spacer(modifier = Modifier.height(4.dp))
-            visits.forEach { visit ->
-              VisitRow(visit = visit, onClick = { onOpenTrack(visit.trackId) })
-              HorizontalDivider()
-            }
-          }
-
-          Spacer(modifier = Modifier.height(8.dp))
-          val canDelete = item.visitCount == 0
-          val deleteColor = if (canDelete) {
-            MaterialTheme.colorScheme.error
-          } else {
-            MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
-          }
-          OutlinedButton(
-            onClick = onDeleteRequest,
-            enabled = canDelete,
-            modifier = Modifier.fillMaxWidth(),
-          ) {
-            Icon(
-              painter = painterResource(R.drawable.ic_delete),
-              contentDescription = null,
-              tint = deleteColor,
-            )
-            Text(text = " この場所を削除", color = deleteColor)
-          }
-          if (!canDelete) {
-            Text(
-              text = "立ち寄り記録があるため削除できません（記録を残します）",
-              style = MaterialTheme.typography.bodySmall,
-              color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-          }
         }
       }
     }
@@ -1015,36 +870,19 @@ private fun PlaceDetailContent(
         target = target,
         onDismiss = { placeSheetTarget = null },
         onFetchPoiDetails = onFetchPoiDetails,
-        onLoadPlace = onLoadPlace,
+        onObservePlace = onObservePlace,
+        onObserveVisits = onObserveVisits,
         // POI か空き地点か、近接確認が要るかの判断は ViewModel（PlaceEditUseCase）が持つ。
         onRegisterNew = onRegisterPlaceAtPoint,
         onSaveExisting = onSavePlaceEdits,
-        onOpenDetail = onOpenPlaceDetail,
+        onDeletePlace = onDeletePlace,
+        onOpenTrack = onOpenTrack,
+        onFetchNearbyPois = onFetchNearbyPois,
+        onSearchPredictions = onSearchPredictions,
+        onFetchPrediction = onFetchPrediction,
         modifier = Modifier.align(Alignment.BottomCenter),
       )
     }
-  }
-
-  if (linkDialogOpen) {
-    NearbyCandidatePickerDialog(
-      latitude = item.place.latitude,
-      longitude = item.place.longitude,
-      reloadKey = item.place.id,
-      title = "Googleで情報を取得",
-      currentLabel = "現在: ${item.displayName}",
-      description = "登録された座標の近くの施設から選んで、この場所に施設情報（住所・カテゴリ・座標）を紐付けます。あなたが付けた名前は変わりません。",
-      confirmLabel = "この施設を選ぶ",
-      allowCustomName = false,
-      onFetchCandidates = onFetchNearbyPois,
-      onConfirm = { chosen, _ ->
-        // 即保存せず、詳細の「保存」で確定するため溜めるだけ。
-        pendingLink = chosen
-        linkDialogOpen = false
-      },
-      onDismiss = { linkDialogOpen = false },
-      onSearchPredictions = onSearchPredictions,
-      onFetchPrediction = onFetchPrediction,
-    )
   }
 
   nearbyRegisterPrompt?.let { prompt ->
@@ -1226,8 +1064,9 @@ private fun SearchResultForm(
   }
 }
 
+/** 訪問1件の行（日付・滞在・その訪問のメモ）。共通の編集ボディ [PlaceEditorBody] からも使う。 */
 @Composable
-private fun VisitRow(
+internal fun VisitRow(
   visit: PlaceVisit,
   onClick: () -> Unit,
   modifier: Modifier = Modifier,

@@ -2,13 +2,16 @@ package com.pathly.presentation.history
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.pathly.data.places.PlacesTextSearcher
 import com.pathly.data.settings.MapSurface
 import com.pathly.data.settings.SettingsRepository
 import com.pathly.domain.model.GpsTrack
 import com.pathly.domain.model.NearbyRegisterPrompt
 import com.pathly.domain.model.NearbyStopPrompt
 import com.pathly.domain.model.PlaceListItem
+import com.pathly.domain.model.PlacePrediction
 import com.pathly.domain.model.PlaceSearchResult
+import com.pathly.domain.model.PlaceVisit
 import com.pathly.domain.model.Priority
 import com.pathly.domain.model.RegisteredPlace
 import com.pathly.domain.model.Stop
@@ -18,8 +21,10 @@ import com.pathly.domain.repository.PlaceRepository
 import com.pathly.domain.repository.WishlistRepository
 import com.pathly.domain.usecase.AddManualStopUseCase
 import com.pathly.domain.usecase.PlaceEditUseCase
+import com.pathly.presentation.places.PlaceDeleteUndo
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -46,6 +51,8 @@ class TrackDetailViewModel @Inject constructor(
   private val settingsRepository: SettingsRepository,
   private val placeEditUseCase: PlaceEditUseCase,
   private val addManualStopUseCase: AddManualStopUseCase,
+  // 「Googleで情報を取得」の名前検索フォールバック用（場所詳細と同じ編集機能を出すため）。
+  private val placesTextSearcher: PlacesTextSearcher,
 ) : ViewModel() {
 
   private val _stops = MutableStateFlow<List<Stop>>(emptyList())
@@ -70,6 +77,10 @@ class TrackDetailViewModel @Inject constructor(
   // 削除失敗などの一時メッセージ（表示したらクリアする）。
   private val _message = MutableStateFlow<String?>(null)
   val message: StateFlow<String?> = _message.asStateFlow()
+
+  // 場所を削除した直後の取り消し待ち（スナックバーで「取り消す」を出す）。
+  private val _deleteUndo = MutableStateFlow(PlaceDeleteUndo())
+  val deleteUndo: StateFlow<PlaceDeleteUndo> = _deleteUndo.asStateFlow()
 
   // 再解析の候補（一覧に無い立ち寄り＋表示名）。null=非表示、空リスト=「候補なし」を表示。
   private val _reanalyzeCandidates = MutableStateFlow<List<StopCandidate>?>(null)
@@ -257,10 +268,16 @@ class TrackDetailViewModel @Inject constructor(
     }
   }
 
-  /** 統一の場所シートで既存 place を編集するため、単一 place の現在値を取得する。 */
-  suspend fun loadPlace(placeId: Long): PlaceListItem? = wishlistRepository.getPlace(placeId)
+  /** 統一の場所シートで既存 place を編集するため、単一 place をリアクティブに購読する。 */
+  fun observePlace(placeId: Long): Flow<PlaceListItem?> = wishlistRepository.observePlace(placeId)
 
-  /** 経路詳細のまま既存 place を編集して保存する（名前・メモ・行きたい・優先度・訪問済みを差分適用）。 */
+  /** その場所を含むお出掛けの一覧（編集シートの訪問履歴）。 */
+  fun visitsFor(placeId: Long): Flow<List<PlaceVisit>> = wishlistRepository.getVisits(placeId)
+
+  /**
+   * 経路詳細のまま既存 place を編集して保存する（名前・メモ・行きたい・優先度・訪問済み・
+   * Google 施設の紐付けを差分適用）。場所詳細と同じ UseCase で同じことができるようにする。
+   */
   fun savePlaceEdits(
     item: PlaceListItem,
     name: String,
@@ -268,16 +285,50 @@ class TrackDetailViewModel @Inject constructor(
     wishlist: Boolean,
     priority: Priority,
     visited: Boolean,
+    link: PlaceSearchResult? = null,
   ) {
     viewModelScope.launch {
       try {
-        placeEditUseCase.saveEdits(item, name, note, wishlist, priority, visited)
+        placeEditUseCase.saveEdits(item, name, note, wishlist, priority, visited, link)
         _message.value = "保存しました"
       } catch (e: Exception) {
         _message.value = "保存に失敗しました: ${e.message}"
       }
     }
   }
+
+  /**
+   * 場所そのものを削除する。確認ダイアログは出さず即時削除し、スナックバーの「取り消す」
+   * （[undoDelete]）で戻せる（場所一覧・記録画面と同じ流儀）。
+   */
+  fun deletePlace(placeId: Long) {
+    viewModelScope.launch {
+      val name = registeredPlaces.value.firstOrNull { it.placeId == placeId }?.displayName
+      try {
+        wishlistRepository.deletePlace(placeId)
+        _deleteUndo.value = _deleteUndo.value.deleted(name)
+      } catch (e: Exception) {
+        _message.value = "削除に失敗しました: ${e.message}"
+      }
+    }
+  }
+
+  /** 直近の削除を取り消して元に戻す（スナックバーの「取り消す」）。 */
+  fun undoDelete() {
+    viewModelScope.launch {
+      try {
+        wishlistRepository.undoLastPlaceDeletion()
+      } catch (e: Exception) {
+        _message.value = "取り消しに失敗しました: ${e.message}"
+      }
+    }
+  }
+
+  /** 「Googleで情報を取得」の名前検索フォールバック: キーワード候補を返す。 */
+  suspend fun predictPlaces(query: String): List<PlacePrediction> = placesTextSearcher.predict(query)
+
+  /** 名前検索で選んだ候補を、座標つきの施設情報に確定する。 */
+  suspend fun fetchPlaceResult(placeId: String): PlaceSearchResult? = placesTextSearcher.fetch(placeId)
 
   /** 場所シートのプレビュー用: placeId から施設情報（カテゴリ等）を取得する。 */
   suspend fun fetchPoiDetails(googlePlaceId: String): PlaceSearchResult? = wishlistRepository.fetchPlaceDetails(googlePlaceId)

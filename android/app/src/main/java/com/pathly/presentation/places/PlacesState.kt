@@ -51,9 +51,7 @@ data class PlacesState(
   val errorMessage: String? = null,
   val search: SearchState = SearchState(),
   // 削除のたびに増やすワンショット通知。一覧側がこれを監視して取り消しスナックバーを出す。
-  val undoDeleteToken: Int = 0,
-  // 直近に削除した場所の表示名（スナックバー文言用）。
-  val undoDeleteName: String? = null,
+  val deleteUndo: PlaceDeleteUndo = PlaceDeleteUndo(),
   // 登録のたびに増やすワンショット通知。一覧側がこれを監視して登録スナックバーを出す（削除と統一）。
   // 空き地点の登録で近くに既存の場所が見つかったときの確認待ち（紐付け/新規をユーザーが選ぶ）。
   val nearbyRegisterPrompt: NearbyRegisterPrompt? = null,

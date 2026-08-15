@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
@@ -22,6 +23,8 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -76,6 +79,7 @@ import com.pathly.presentation.common.heightOf
 import com.pathly.presentation.common.rememberFloatingSheetState
 import com.pathly.presentation.common.stopSegmentPoints
 import com.pathly.presentation.places.PlaceActionSheet
+import com.pathly.presentation.places.PlaceDeleteUndoEffect
 import com.pathly.presentation.places.PlaceSheetTarget
 import com.pathly.presentation.stops.ManualStopOrigin
 import com.pathly.presentation.stops.ManualStopSheet
@@ -93,13 +97,18 @@ private val manualHighlightColor = Color(0xFF1E88E5)
 fun TrackingScreen(
   modifier: Modifier = Modifier,
   onRequestPermission: () -> Unit,
-  onOpenPlaceDetail: (placeId: Long) -> Unit = {},
+  // 場所シートの訪問履歴から、その訪問のお出掛け（経路詳細）を開く。
+  onOpenTrack: (trackId: Long) -> Unit = {},
   viewModel: TrackingViewModel = hiltViewModel(),
   // 地図スロット。null（既定）は実マップ（GoogleMap）を描画する。
   // テストは空スロット（{}）を渡し、GMS 依存の地図描画を避けてオーバーレイだけを検証する。
   mapContent: (@Composable () -> Unit)? = null,
 ) {
   val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+  val snackbarHostState = remember { SnackbarHostState() }
+
+  // 場所を削除したら「取り消す」を出す（場所一覧・経路詳細と同じ出し方）。
+  PlaceDeleteUndoEffect(uiState.deleteUndo, snackbarHostState, viewModel::undoDelete)
 
   // 復帰のたびに権限・電池最適化の状態を再確認（システム設定から戻ったときに反映するため）
   LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
@@ -410,12 +419,18 @@ fun TrackingScreen(
         target = target,
         onDismiss = { placeSheetTarget = null },
         onFetchPoiDetails = viewModel::fetchPoiDetails,
-        onLoadPlace = viewModel::loadPlace,
+        onObservePlace = viewModel::observePlace,
+        onObserveVisits = viewModel::visitsFor,
         // POI か空き地点か、近接確認が要るかの判断は ViewModel（PlaceEditUseCase）が持つ。
         onRegisterNew = viewModel::registerPlaceWithNearbyCheck,
-        onSaveExisting = { item, name, note, wishlist, priority, visited ->
-          viewModel.savePlaceEdits(item, name, note, wishlist, priority, visited)
+        onSaveExisting = { item, name, note, wishlist, priority, visited, link ->
+          viewModel.savePlaceEdits(item, name, note, wishlist, priority, visited, link)
         },
+        onDeletePlace = viewModel::deletePlace,
+        onOpenTrack = onOpenTrack,
+        onFetchNearbyPois = viewModel::nearbyPois,
+        onSearchPredictions = viewModel::predictPlaces,
+        onFetchPrediction = viewModel::fetchPlaceResult,
         // 記録中のみ「立ち寄りに追加」。この訪問を既存 place にひも付ける手動追加へ流す。
         onAddStop = if (uiState.isTracking) {
           { item ->
@@ -428,11 +443,18 @@ fun TrackingScreen(
         } else {
           null
         },
-        onOpenDetail = onOpenPlaceDetail,
         modifier = Modifier.align(Alignment.BottomCenter),
         sheetState = placeSheetState,
       )
     }
+
+    // 場所の削除を取り消すスナックバー（最前面）。シート・オーバーレイの上に出す。
+    SnackbarHost(
+      hostState = snackbarHostState,
+      modifier = Modifier
+        .align(Alignment.BottomCenter)
+        .navigationBarsPadding(),
+    )
 
     manualTarget?.let { target ->
       ManualStopSheet(

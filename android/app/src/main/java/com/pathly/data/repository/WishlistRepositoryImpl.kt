@@ -45,6 +45,10 @@ class WishlistRepositoryImpl @Inject constructor(
 
   override suspend fun getPlace(placeId: Long): PlaceListItem? = placeDao.getPlaceWithWishlist(placeId)?.toPlaceListItem()
 
+  // 一覧の Flow から絞る。場所は数百件の規模なので専用クエリを増やさず、
+  // 一覧と同じ1本の購読に相乗りさせる（更新の取りこぼしも起きない）。
+  override fun observePlace(placeId: Long): Flow<PlaceListItem?> = getPlaces().map { list -> list.firstOrNull { it.place.id == placeId } }
+
   override fun getVisits(placeId: Long): Flow<List<PlaceVisit>> = stopDao.getVisitsForPlace(placeId).map { list ->
     list.map {
       PlaceVisit(

@@ -127,7 +127,7 @@ fun PathlyNavHost(
       composable(Routes.TRACKING) {
         TrackingScreen(
           onRequestPermission = onRequestPermission,
-          onOpenPlaceDetail = { placeId -> navController.navigate(Routes.placeDetail(placeId)) },
+          onOpenTrack = { trackId -> navController.navigate(Routes.trackDetail(trackId)) },
           viewModel = trackingViewModel,
         )
       }
@@ -152,7 +152,7 @@ fun PathlyNavHost(
         TrackDetailRoute(
           trackId = trackId,
           onBack = { navController.popBackStack() },
-          onOpenPlaceDetail = { placeId -> navController.navigate(Routes.placeDetail(placeId)) },
+          onOpenTrack = { id -> navController.navigate(Routes.trackDetail(id)) },
         )
       }
     }
@@ -195,7 +195,6 @@ private fun NavGraphBuilder.placesGraph(navController: NavController) {
         placeId = placeId,
         onBack = { navController.popBackStack() },
         onOpenTrack = { trackId -> navController.navigate(Routes.trackDetail(trackId)) },
-        onOpenPlaceDetail = { pid -> navController.navigate(Routes.placeDetail(pid)) },
       )
     }
   }
@@ -213,7 +212,8 @@ private fun NavBackStackEntry.sharedPlacesViewModel(navController: NavController
 private fun TrackDetailRoute(
   trackId: Long,
   onBack: () -> Unit,
-  onOpenPlaceDetail: (placeId: Long) -> Unit = {},
+  // 場所シートの訪問履歴から、別のお出掛け（経路詳細）を開く。
+  onOpenTrack: (trackId: Long) -> Unit = {},
 ) {
   val viewModel: TrackDetailViewModel = hiltViewModel()
   LaunchedEffect(trackId) { viewModel.load(trackId) }
@@ -236,6 +236,7 @@ private fun TrackDetailRoute(
   val showRegisteredPlaces by viewModel.showRegisteredPlaces.collectAsStateWithLifecycle()
   val nearbyRegisterPrompt by viewModel.nearbyRegisterPrompt.collectAsStateWithLifecycle()
   val nearbyStopPrompt by viewModel.nearbyStopPrompt.collectAsStateWithLifecycle()
+  val placeDeleteUndo by viewModel.deleteUndo.collectAsStateWithLifecycle()
 
   TrackDetailScreen(
     track = track,
@@ -264,12 +265,19 @@ private fun TrackDetailRoute(
     onConfirmNearbyLink = viewModel::confirmNearbyLink,
     onConfirmNearbyNew = viewModel::confirmNearbyNew,
     onDismissNearbyPrompt = viewModel::dismissNearbyPrompt,
-    onLoadPlace = viewModel::loadPlace,
-    onSavePlaceEdits = { editItem, name, note, wishlist, priority, visited ->
-      viewModel.savePlaceEdits(editItem, name, note, wishlist, priority, visited)
+    onObservePlace = viewModel::observePlace,
+    onObserveVisits = viewModel::visitsFor,
+    onSavePlaceEdits = { editItem, name, note, wishlist, priority, visited, link ->
+      viewModel.savePlaceEdits(editItem, name, note, wishlist, priority, visited, link)
     },
+    onDeletePlace = viewModel::deletePlace,
+    placeDeleteUndo = placeDeleteUndo,
+    onUndoPlaceDelete = viewModel::undoDelete,
+    onOpenTrack = onOpenTrack,
     onFetchPoiDetails = viewModel::fetchPoiDetails,
     onFetchNearbyPois = viewModel::nearbyPois,
+    onSearchPredictions = viewModel::predictPlaces,
+    onFetchPrediction = viewModel::fetchPlaceResult,
     onReassignStop = { stopId, chosen, customName -> viewModel.reassignStop(stopId, chosen, customName) },
     registeredPlaces = registeredPlaces,
     showRegisteredPlaces = showRegisteredPlaces,
@@ -277,6 +285,5 @@ private fun TrackDetailRoute(
     onAddManualStopForPlace = { placeId, arrival, departure ->
       viewModel.addManualStopForPlace(placeId, arrival, departure)
     },
-    onOpenPlaceDetail = onOpenPlaceDetail,
   )
 }
