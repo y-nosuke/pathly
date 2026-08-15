@@ -5,7 +5,8 @@ import java.util.Date
 /**
  * [com.pathly.data.local.dao.PlaceDao.observeRegisteredPlaces] の射影（地図マーカー用）。
  * 名前は places.name → google_places.name → google_places.address の順にフォールバック（COALESCE）。
- * 状態（行きたい／訪問済み）を色・グリフで描き分けるため、wishlist 有無・立ち寄り件数・手動訪問日時も持つ。
+ * 状態（行きたい／訪問済み）と業種で描き分けるため、wishlist 有無・立ち寄り件数・手動訪問日時に加え、
+ * 業種の code も持つ。
  */
 data class RegisteredPlaceRow(
   val placeId: Long,
@@ -18,4 +19,9 @@ data class RegisteredPlaceRow(
   val visitCount: Int,
   /** 手動で「訪問済み」にした日時（無ければ null）。 */
   val visitedAt: Date?,
+  /**
+   * Google の業種（[com.pathly.data.local.entity.GooglePlaceCategoryEntity.code]）。
+   * マーカーのグリフを業種で出し分けるために引く。表示名は要らない（地図に文字は出さない）ので取らない。
+   */
+  val categoryCode: String?,
 )

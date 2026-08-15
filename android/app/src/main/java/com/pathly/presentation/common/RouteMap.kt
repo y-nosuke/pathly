@@ -1,5 +1,6 @@
 package com.pathly.presentation.common
 
+import androidx.annotation.DrawableRes
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
@@ -28,6 +29,7 @@ import com.google.maps.android.compose.Polyline
 import com.pathly.R
 import com.pathly.domain.model.GpsPoint
 import com.pathly.domain.model.GpsTrack
+import com.pathly.domain.model.PlaceCategoryGroup
 import com.pathly.domain.model.RegisteredPlace
 import com.pathly.domain.model.Stop
 import com.pathly.ui.theme.TrackLineOrange
@@ -45,9 +47,33 @@ internal val MarkerStopViolet = Color(0xFF6A4BBC)
 internal val MarkerCurrentStopTeal = Color(0xFF00BFA5)
 
 // 「登録済みの場所」マーカー（トグルON時）。色で訪問状態（訪問済み=グリーン／未訪問=グレー）を示し、
-// グリフで行きたい（旗）/それ以外（ピン）を示す。立ち寄り（紫）とは色・グリフで見分ける。
+// グリフで業種（カフェ・公園・駅…）を示す。立ち寄り（紫の番号）とは色・グリフで見分ける。
 internal val MarkerVisitedGreen = Color(0xFF2E7D32)
 internal val MarkerUnvisitedGray = Color(0xFF6B6B6B)
+
+// 「行きたい」を示す小さな旗のバッジ。訪問状態（緑/グレー）とは別の軸なので、色も別に取る。
+internal val MarkerWishlistAmber = Color(0xFFE08A00)
+
+/**
+ * 業種のグリフ。何の場所かを一目で分かるようにする（→ adr/0017）。
+ *
+ * 対応付けを DB ではなくここに置いているのは、`R.drawable` の ID は DB に入れられず、結局
+ * コードで分岐することになるため。テーブルにすると変えるたびにマイグレーションが要るだけになる。
+ */
+@DrawableRes
+internal fun categoryGlyph(group: PlaceCategoryGroup): Int = when (group) {
+  PlaceCategoryGroup.FOOD -> R.drawable.ic_category_food
+  PlaceCategoryGroup.CAFE -> R.drawable.ic_category_cafe
+  PlaceCategoryGroup.SHOPPING -> R.drawable.ic_category_shopping
+  PlaceCategoryGroup.PARK -> R.drawable.ic_category_park
+  PlaceCategoryGroup.CULTURE -> R.drawable.ic_category_culture
+  PlaceCategoryGroup.ENTERTAINMENT -> R.drawable.ic_category_entertainment
+  PlaceCategoryGroup.TRANSIT -> R.drawable.ic_category_transit
+  PlaceCategoryGroup.LODGING -> R.drawable.ic_category_lodging
+  PlaceCategoryGroup.SERVICE -> R.drawable.ic_category_service
+  // 業種が分からない場所は、これまでどおりの場所ピン。
+  PlaceCategoryGroup.OTHER -> R.drawable.ic_place
+}
 
 // 確定した立ち寄りの滞在区間ハイライト（濃い青の帯）。軌跡（オレンジ）の下に太く敷く。
 internal val StopSegmentColor = Color(0xF00D47A1)
@@ -73,14 +99,15 @@ internal fun RegisteredPlaceMarkers(
     val placeMarkerState = androidx.compose.runtime.remember(place.placeId, place.latitude, place.longitude) {
       MarkerState(position = LatLng(place.latitude, place.longitude))
     }
-    // 色＝訪問状態、グリフ＝行きたい（旗）/それ以外（ピン）。状態が変わったら描き直す。
+    // 色＝訪問状態、グリフ＝業種、右上の旗＝行きたい。状態が変わったら描き直す。
     val badgeColor = if (place.isVisited) MarkerVisitedGreen else MarkerUnvisitedGray
-    val glyph = if (place.isWishlisted) R.drawable.ic_flag_filled else R.drawable.ic_place
+    val group = place.categoryGroup
     MarkerComposable(
       "registered",
       place.placeId,
       place.isWishlisted,
       place.isVisited,
+      group,
       state = placeMarkerState,
       title = place.displayName,
       snippet = place.statusLabel,
@@ -89,16 +116,56 @@ internal fun RegisteredPlaceMarkers(
         false
       },
     ) {
-      RouteBadgeMarker(bg = badgeColor) {
-        Icon(
-          painter = painterResource(glyph),
-          contentDescription = null,
-          tint = Color.White,
-          modifier = Modifier.size(18.dp),
-        )
-      }
+      RegisteredPlaceMarker(bg = badgeColor, glyph = categoryGlyph(group), wishlisted = place.isWishlisted)
     }
   }
+}
+
+/**
+ * 登録済みの場所のマーカー。丸バッジ（色＝訪問状態／グリフ＝業種）に、行きたい登録があれば
+ * 右上へ小さな旗を重ねる。
+ *
+ * 業種をグリフに使うようになって、旗をグリフで示せなくなったため別の場所へ逃がした。
+ * 余白を左右対称に取り、下端をバッジの下端に揃えているのは、**マーカーの基準点（下端中央）を
+ * ずらさない**ため。ここを崩すとピンが指す座標が実際の場所からずれる。
+ */
+@Composable
+internal fun RegisteredPlaceMarker(bg: Color, @DrawableRes glyph: Int, wishlisted: Boolean) {
+  if (!wishlisted) {
+    RouteBadgeMarker(bg = bg) { MarkerGlyph(glyph) }
+    return
+  }
+  Box(contentAlignment = Alignment.TopEnd) {
+    Box(modifier = Modifier.padding(start = 8.dp, end = 8.dp, top = 8.dp)) {
+      RouteBadgeMarker(bg = bg) { MarkerGlyph(glyph) }
+    }
+    Box(
+      modifier = Modifier
+        .padding(end = 2.dp)
+        .size(16.dp)
+        .background(MarkerWishlistAmber, CircleShape)
+        .border(1.5.dp, Color.White, CircleShape),
+      contentAlignment = Alignment.Center,
+    ) {
+      Icon(
+        painter = painterResource(R.drawable.ic_flag_filled),
+        contentDescription = null,
+        tint = Color.White,
+        modifier = Modifier.size(9.dp),
+      )
+    }
+  }
+}
+
+/** バッジの中央に置くグリフ（白・18dp）。 */
+@Composable
+private fun MarkerGlyph(@DrawableRes glyph: Int) {
+  Icon(
+    painter = painterResource(glyph),
+    contentDescription = null,
+    tint = Color.White,
+    modifier = Modifier.size(18.dp),
+  )
 }
 
 /** 地図の丸バッジ型マーカー（白フチ＋中央にグリフ/番号）。出発・到着・立ち寄りで共用。 */

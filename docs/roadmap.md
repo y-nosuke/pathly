@@ -140,6 +140,27 @@ Phase 3 の「行きたい場所リスト」を先行して着手する。既存
   実現できる。地図データか外部 API が要り、重い・コスト増。見た目の劇的改善が欲しくなった段階で検討。
 - より頑健な**スパイク検出** … 「速いが継続（乗り物）／1点だけ飛んで戻る（グリッチ）」を区別する。
 
+### 自分で編集できるカテゴリ（独自カテゴリ）
+
+いまのカテゴリは Google の業種をそのまま使っている（[ADR-0017](adr/0017-normalize-place-category.md)）。
+**自分で分類を作って割り当てたい**が、どう分類したいかは場所がある程度たまってからでないと出てこない。
+先にテーブルを作ると外すので、着手時に仕様から決める。
+
+やるとしたらこうする:
+
+- **`place_categories` を新設し、`places.categoryId` から参照する**。Google の業種は施設の属性なので
+  `google_places` 側に残し、**自分の分類は `places` 側**に置く（Google 由来とユーザー入力を分ける
+  [ADR-0001](adr/0001-place-data-separation.md) の構図をそのまま踏襲する）。テーブル名が
+  `google_place_categories` なのはこのため。`place_categories` は空けてある。
+- 読むときは **`places.categoryId` → 無ければ `google_places.categoryId`** のフォールバック。
+  表示名（`places.name → google_places.name → 住所 → 座標`）と同じ考え方で、新しい概念を持ち込まない。
+- 触る範囲は「新テーブル＋マイグレーション」「`PlaceDao` の射影に JOIN と解決」「`RegisteredPlace` の
+  `categoryGroup` の求め方」まで。**地図の描画（`RouteMap.kt`）とアイコンは無変更**で済む
+  （マーカーは解決済みの `categoryGroup` しか見ていない）。
+- そのとき `PlaceCategoryGroup` の役割が変わる。いまは「Google の型を意味で束ねた分類」だが、
+  ユーザーが自由に名前を付けてアイコンを選ぶ形にするなら、enum は分類ではなく
+  **アイコンの品揃え**になる。実質リネームで済むので、先回りして直さない。
+
 ### クラウド同期（Phase 3 の土台）
 
 Supabase（PostgreSQL）側は**まだ設計していない**。決めることの一覧:

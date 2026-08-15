@@ -68,5 +68,11 @@ Places SDK は同じ呼び出しで**機械可読な `primaryType`（`cafe`）**
   場所の数には比例しないので実害は小さい。
 - 移行時に**既存の場所の数だけ Place Details（Pro）を 1 回ずつ**呼ぶ。以後は増えない。
 - 業種を持たない POI（`primaryType` が無い地点）は、移行後もカテゴリ無しのまま残る。
+- **ユーザーが自分で編集できるカテゴリを、あとから並べて足せる**。この ADR の業種は「Google が
+  その施設をどう分類しているか」＝施設の属性なので `google_places` 側に置いた。自分の分類は
+  ユーザー入力なので `places` 側に `place_categories` を作って足す形になり、
+  [0001](0001-place-data-separation.md) の分け方をそのまま踏襲できる。テーブル名を
+  `google_place_categories` にして `place_categories` を空けてあるのはこのため。構想は
+  [roadmap](../roadmap.md) の「温めている案」。
 - **暫定コードが残る**。`PlaceCategoryBackfillWorker` と `fetchCategoryOnly` と
   `getWithoutCategory` は、移行後に消す前提で `TODO(v13-backfill)` の印を付けてある。

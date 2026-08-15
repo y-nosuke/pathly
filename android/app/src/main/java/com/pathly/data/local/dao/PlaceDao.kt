@@ -108,8 +108,10 @@ interface PlaceDao {
       "p.latitude AS latitude, p.longitude AS longitude, " +
       "(SELECT COUNT(*) FROM wishlist w WHERE w.placeId = p.id) AS wishlistCount, " +
       "(SELECT COUNT(*) FROM stops s WHERE s.placeId = p.id) AS visitCount, " +
-      "(SELECT w.visitedAt FROM wishlist w WHERE w.placeId = p.id LIMIT 1) AS visitedAt " +
-      "FROM places p LEFT JOIN google_places g ON g.placeId = p.id",
+      "(SELECT w.visitedAt FROM wishlist w WHERE w.placeId = p.id LIMIT 1) AS visitedAt, " +
+      "c.code AS categoryCode " +
+      "FROM places p LEFT JOIN google_places g ON g.placeId = p.id " +
+      "LEFT JOIN google_place_categories c ON c.id = g.categoryId",
   )
   fun observeRegisteredPlaces(): Flow<List<RegisteredPlaceRow>>
 
@@ -122,8 +124,10 @@ interface PlaceDao {
       "p.latitude AS latitude, p.longitude AS longitude, " +
       "(SELECT COUNT(*) FROM wishlist w WHERE w.placeId = p.id) AS wishlistCount, " +
       "(SELECT COUNT(*) FROM stops s WHERE s.placeId = p.id) AS visitCount, " +
-      "(SELECT w.visitedAt FROM wishlist w WHERE w.placeId = p.id LIMIT 1) AS visitedAt " +
+      "(SELECT w.visitedAt FROM wishlist w WHERE w.placeId = p.id LIMIT 1) AS visitedAt, " +
+      "c.code AS categoryCode " +
       "FROM places p LEFT JOIN google_places g ON g.placeId = p.id " +
+      "LEFT JOIN google_place_categories c ON c.id = g.categoryId " +
       "WHERE p.latitude BETWEEN :minLatitude AND :maxLatitude " +
       "AND p.longitude BETWEEN :minLongitude AND :maxLongitude",
   )

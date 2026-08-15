@@ -733,8 +733,8 @@ class PlaceRepositoryImplTest {
   @Test
   fun findNearbyPlace_returnsNearestWithinDetectionRadius() = runTest {
     coEvery { placeDao.getRegisteredPlacesInBounds(any(), any(), any(), any()) } returns listOf(
-      RegisteredPlaceRow(1L, "同じ地点", 35.0, 139.0, 0, 0, null),
-      RegisteredPlaceRow(2L, "約1km先", 35.01, 139.0, 0, 0, null),
+      RegisteredPlaceRow(1L, "同じ地点", 35.0, 139.0, 0, 0, null, null),
+      RegisteredPlaceRow(2L, "約1km先", 35.01, 139.0, 0, 0, null, null),
     )
 
     val near = repository.findNearbyPlace(35.0, 139.0)
@@ -745,7 +745,7 @@ class PlaceRepositoryImplTest {
   @Test
   fun findNearbyPlace_noneWithinRadius_returnsNull() = runTest {
     coEvery { placeDao.getRegisteredPlacesInBounds(any(), any(), any(), any()) } returns listOf(
-      RegisteredPlaceRow(2L, "約1km先", 35.01, 139.0, 0, 0, null),
+      RegisteredPlaceRow(2L, "約1km先", 35.01, 139.0, 0, 0, null, null),
     )
 
     assertNull(repository.findNearbyPlace(35.0, 139.0))
