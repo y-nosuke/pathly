@@ -18,34 +18,26 @@
 
 ## 方針
 
-### なぜ places とは別に wishlist テーブルを持つのか
+### wishlist は places と別テーブル
 
-[places-and-stops.md](./places-and-stops.md) の設計では **places を静的に保ち、動的な状態は別テーブルに分離**している
-（例: Google 解決の状態は `place_resolutions` に分離）。行きたい場所の「優先度・メモ・訪問済み状態」も
-**場所そのものではなく、ユーザーの計画に属する動的な情報**なので、`places` に列を足さず `wishlist` テーブルに分離する。
+「行きたい」は**場所そのものの性質ではなく、ユーザーの計画に属する状態**なので、`places` に列を足さず
+別テーブルに分離する（[ADR-0013](../adr/0013-separate-place-stop-wishlist-tables.md)）。
 
 ```
-places 1 ──< stops        （立ち寄り＝過去の訪問）
-       1 ──o wishlist      （行きたい＝これからの計画）  ← 本書が追加
+places 1 ──< stops             （立ち寄り＝過去の訪問）
+       1 ──o wishlist          （行きたい＝これからの計画）  ← 本書が扱う
        1 ──o place_resolutions （Google 解決ログ）
+       1 ──o google_places     （Google 由来の施設情報）
 ```
 
 - 1つの place は wishlist に **最大1件**（`placeId` に UNIQUE）。同じ場所を二重登録しない。
 - 立ち寄りで検出済みの place を「また行きたい」に足す場合も、既存 place を再利用して wishlist 行を足すだけ。
 
-### タグ（初回スコープ外・後回し）
+### タグは未実装
 
-要望（[requirements.md](../requirements.md)）にあるのは「**タグ付けで整理したい（複数・目的別）**」のみで、
-「カテゴリ」という別概念は存在しない。用語は **「タグ」に統一**する。
-
-初回スコープでは **タグを実装しない**。理由:
-
-- 要望は複数タグ（「グルメ」「観光」など目的別に絞り込む）で、1件だけ選べる単一値では要望を満たせない。
-- 複数タグは `tags` / `wishlist_tags`（多対多）を要し、記録側の `stop_tags`（[CLAUDE.md] の想定）とも
-  共有すべき横断機能。行きたい場所の登録を先行させる今回の主旨からは切り離し、**後段でまとめて実装**する。
-
-初回は優先度・メモ・訪問済み状態で計画用途は成立する。タグは段階リリースの後半（[段階リリース](#段階リリース)）で
-`tags` を共有する形で追加する。
+用語は **「タグ」に統一**する（要望にある「複数・目的別に整理したい」がそのまま名前）。
+複数タグは `tags` / `wishlist_tags`（多対多）を要し、記録側の `stop_tags` とも共有すべき横断機能なので、
+まとめて後段で実装する（[roadmap.md](../roadmap.md)）。優先度・メモ・訪問済み状態だけでも計画用途は成立する。
 
 ### 訪問済み状態
 
@@ -57,41 +49,15 @@ places 1 ──< stops        （立ち寄り＝過去の訪問）
 
 ## データモデル
 
-実装は Long 主キー（`autoGenerate`）。既存の `places` / `place_resolutions` に合わせる。
+**列の定義は [../specs/model.md](../specs/model.md) と Room エンティティを正とする。** 意図だけ書く。
 
-### wishlist テーブル
-
-| カラム    | 型      | 制約                            | 説明                               |
-| --------- | ------- | ------------------------------- | ---------------------------------- |
-| id        | INTEGER | PK AUTOINCREMENT                | 行きたい場所ID                     |
-| placeId   | INTEGER | NOT NULL, UNIQUE, FK→places(id) | どの場所か（1 place につき1件）    |
-| priority  | INTEGER | NOT NULL, DEFAULT 1             | 優先度（0=低 / 1=中 / 2=高）       |
-| memo      | TEXT    | NULL                            | メモ・コメント（なぜ行きたいか等） |
-| visitedAt | INTEGER | NULL                            | 訪問済み日時（NULL=未訪問）        |
-| createdAt | INTEGER | NOT NULL                        | 作成日時                           |
-| updatedAt | INTEGER | NOT NULL                        | 更新日時                           |
-
-- インデックス: `wishlist(placeId)` は UNIQUE（重複登録の防止＋find-or-add に使う）。
-- 外部キー: `wishlist.placeId → places.id ON DELETE CASCADE`（place を消したら wishlist 行も消える）。
-  - ただし通常フローで place を消すことはない（places は再利用のため静的に保つ）。
-- 名前・座標・住所は `places` 側に持つ（wishlist は持たない）。表示時に JOIN する。
-
-### ER 図（[../specs/model.md](../specs/model.md) への追加分）
-
-```mermaid
-erDiagram
-  places ||--o| wishlist : "行きたい"
-  places ||--o{ stops : "立ち寄り(既存)"
-  places ||--o| place_resolutions : "解決ログ(既存)"
-
-  wishlist {
-    Long id PK
-    Long placeId FK
-    Int priority
-    String memo
-    Date visitedAt
-  }
-```
+- `wishlist(placeId)` は **UNIQUE**。重複登録を防ぎ、find-or-add にも使う。
+- `wishlist.placeId → places.id ON DELETE CASCADE`。ただし通常フローで place は消さない
+  （places は再利用のため静的に保つ）。
+- **wishlist が持つのは優先度と訪問済みだけ**。名前・座標は `places`、メモは `places.note`、
+  住所・カテゴリは `google_places` にあり、表示時に JOIN する。
+  メモを wishlist から `places.note` へ移したのは v7（[ADR-0001](../adr/0001-place-data-separation.md)）。
+  行きたいに入れていない場所にもメモを残せるようにするため。
 
 ---
 
@@ -100,7 +66,7 @@ erDiagram
 - `PlaceListItem` … 一覧の1行。`place: Place` ＋ 行きたい登録（あれば）＋ 立ち寄り件数。
   「行きたい」は任意の属性なので、**行きたい登録が無い場所も同じ型で並ぶ**（`wishlistId` が null）。
   - 表示名は `places.name`（自分の名前）→ `google_places.name` → 住所 → 座標 の順でフォールバック
-    （[place-info-enrichment.md](./place-info-enrichment.md)）。
+    （[places-and-stops.md](./places-and-stops.md)）。
 - `Priority` … `LOW / MEDIUM / HIGH` の enum（DB では 0/1/2）。
 
 ```
@@ -111,9 +77,6 @@ PlaceListItem
  ├─ visitedAt: Date?    （null=未訪問）
  └─ visitCount: Int     （立ち寄り記録の件数）
 ```
-
-> メモは v7 で `wishlist.memo` を廃し **`places.note`** に一本化した（行きたいに入れなくても
-> 場所にメモを残せる）。住所も `places.address` から `google_places.address` へ移した。
 
 ---
 
@@ -138,8 +101,7 @@ PlaceListItem
 - **課金最小化**（[places-and-stops.md](./places-and-stops.md) と同じ思想）:
   - **Autocomplete はセッショントークン**でまとめ、確定した1件だけ `fetchPlace` する。
   - オフライン時は検索経路を無効化（手動入力・地図タップに誘導）。
-- 実装: 既存 `PlacesNameResolver`（Nearby 専用）とは別に、テキスト検索用の呼び出しを足す
-  （`PlacesTextSearcher` など。`AutocompleteSessionToken` ＋ `FindAutocompletePredictionsRequest` ＋ `FetchPlaceRequest`）。
+- 実装: `data/places/PlacesTextSearcher`（Nearby 専用の `PlacesNameResolver` とは別系統）。
 
 ### 2. 地図をタップして登録（オフライン可）
 
@@ -148,7 +110,7 @@ PlaceListItem
 1. 全画面マップで地点をタップ（またはロングプレス）→ ピンを置く。
 2. `findOrCreatePlace`（30m）→ place を作成（name は null）。
 3. wishlist 行を作成（優先度・メモを任意入力）。
-4. 名前は後で **手動入力**、またはオンライン時に **「場所を取得」**（座標中心の Nearby ＝ 既存 `PlacesNameResolver.resolve` を再利用）で命名。
+4. 名前は後で**手動入力**、またはオンライン時に**「Googleで情報を取得」**（座標の近くの候補から選ぶ）で命名。
 
 ### 2b. マップ上の POI タップから登録（アプリ共通）
 
@@ -169,8 +131,7 @@ PlaceListItem
 
 ### 3. 立ち寄り場所から登録（また行きたい）
 
-> [requirements.md](../requirements.md) に「訪れた場所を『また行きたい』としてワンタップで追加したい」を追記済み（2026-07-26）。
-> 振り返り（Phase 2）→計画の橋渡し。実装は段階リリースの後段（段階4）。
+> **未実装**。振り返り（Phase 2）→計画の橋渡しとして [roadmap.md](../roadmap.md) に積んである。
 
 1. 詳細画面（[../specs/screens.md](../specs/screens.md) の立ち寄り一覧）の各行に **「また行きたい」** を追加。
 2. その stop の place（既存）に対し wishlist 行を作成（無ければ）。既にあれば「登録済み」を示す。
@@ -255,7 +216,7 @@ PlaceListItem
   見られ、「▲ 詳細に戻る」で戻せる → [ADR-0010](../adr/0010-non-modal-map-sheets.md)。
   地図で別の場所や POI をタップしたときは、詳細のシートを引っ込めて場所シートに差し替える。
 - 見出しには**表示名**（自分の名前 → Google 名 → 住所 → 座標）を出す。名前欄は自分で付ける名前専用で、
-  空のときだけ「この名前から書き換える」で Google 名を流し込める（[place-info-enrichment.md](./place-info-enrichment.md)）。
+  空のときだけ「この名前から書き換える」で Google 名を流し込める（[places-and-stops.md](./places-and-stops.md)）。
 - 行きたいフラグの付け外し。ON のときだけ優先度・（立ち寄り記録が無ければ）訪問トグルを編集できる。
   メモは行きたいに関わらず常に編集できる（`places.note`）。立ち寄り記録がある場合は「訪問済み（立ち寄り記録 N 件）」と表示。
 - **削除**: 一覧の各行と詳細から。**立ち寄り記録（stops）がある場所は削除不可（ボタン非活性）＝記録を残す**。行きたい・座標だけが紐づく場所のみ削除でき、place を消す（wishlist・place_resolutions は CASCADE、stops は消さない）。**確認ダイアログは出さず即時削除**し、**一覧のスナックバー「取り消す」**（`undoLastPlaceDeletion`）で直近の削除を戻せる。削除前に place・wishlist・解決ログの実体を1件分控え、取り消し時に**元のIDのまま再挿入**して復元する（詳細から消した場合も一覧へ戻って取り消せる）。
@@ -285,60 +246,23 @@ Clean Architecture（[architecture.md](./architecture.md)）に沿う。既存�
 
 ### リポジトリ・インターフェース
 
-```kotlin
-interface WishlistRepository {
-  /** 全ての場所を、行きたい登録（あれば）付きでリアクティブに取得。 */
-  fun getPlaces(): Flow<List<PlaceListItem>>
+`WishlistRepository`（`domain/repository/`）が「場所」タブのデータを担う。**シグネチャは実コードを正とする**。
+設計上おさえる点だけ:
 
-  /**
-   * 座標から場所を登録。googlePlaceId があれば施設の同一性で、無ければ座標(30m)で同定する。
-   * name は「自分で付けた名前」（Google の名前は googleName / knownDetails 側で google_places へ）。
-   */
-  suspend fun registerPlace(
-    latitude: Double,
-    longitude: Double,
-    name: String?,
-    note: String? = null,
-    googlePlaceId: String? = null,
-    forceNewPlace: Boolean = false,        // 座標30m同定をせず必ず新規（近接確認の「新規」）
-    knownDetails: PlaceSearchResult? = null, // 取得済みの施設情報。Google を引き直さない
-    googleName: String? = null,            // 施設名（→ google_places.name）
-  ): PlaceRegistration
-
-  /** その場所を行きたいに登録。既に有れば既存 id を返す（重複させない）。 */
-  suspend fun addToWishlist(placeId: Long, priority: Priority): Long
-
-  suspend fun updateWishlist(id: Long, priority: Priority)
-  suspend fun setVisited(id: Long, visited: Boolean)
-  /** 行きたいから外す（wishlist 行のみ削除。place は残す）。 */
-  suspend fun removeFromWishlist(id: Long)
-}
-```
-
----
-
-## 段階リリース
-
-1. **DB＋ドメイン＋一覧（オフラインで完結）✅ 実装済**: `wishlist` テーブル・DAO・マイグレーション、`PlaceListItem`、
-   「場所」タブ（全 places 一覧）、**地図タップ登録**（POI 名自動入力・タップ後にフォーム）、行きたいトグル・優先度/メモ/訪問トグル。**Google 不要で成立**。
-2. **命名（手動）✅ 実装済**: 詳細画面で名前を手動編集（要望「場所名を手動で入力・変更したい」）。空にすると未命名に戻る。`renamePlace`→`placeDao.updateName`。
-   - **Google から取る導線も実装済**: `googlePlaceId` を持たない場所には「Googleで情報を取得」、持つ場所には
-     「Google施設を選び直す」を出し、登録座標の近くの候補（`nearbyPois`）から選んで `linkPlaceToGoogle` で
-     紐付ける。周辺に出ない施設は名前検索でも探せる。選んだ施設は即保存せず「保存」で確定する。
-3. **キーワード検索登録 ✅ 実装済**: `PlacesTextSearcher`（Autocomplete＋fetchPlace・セッショントークン・オンライン限定）。「追加」＞「検索して追加」で店名検索 → 候補選択 → 名前/住所/座標/googlePlaceId 取得 → **地図＋場所シート**で確認して登録（`PlaceEditUseCase.registerWithNearbyCheck` に取得済みの施設情報を渡すので Google を二度叩かない）＋任意で行きたい。**Cloud で「Places API (New)」有効化＋課金が前提**。
-4. **立ち寄りから「また行きたい」**: 詳細画面に導線を追加。
-5. **タグ（複数）**: `tags` / `wishlist_tags` を追加し、一覧にタグ絞り込みを追加。記録側 `stop_tags` と共有する横断機能として設計。
-6. **場所から関連経路の一覧 ✅ 実装済**: 場所の詳細に「この場所を含むお出掛け（N件）」を表示（日付＋その場所での滞在時刻・滞在分）。タップで経路詳細（振り返り）を開く。`StopDao.getVisitsForPlace`（stops×gps_tracks JOIN）→ `WishlistRepository.getVisits`。遷移は Navigation-Compose で `track_detail/{trackId}` へ push（`track_detail` は trackId から自前でロード）。場所詳細はスタックに残るため、経路詳細から戻ると場所詳細に戻る。
-7. **将来**: 営業時間、計画（お出掛け）への割り当て、Phase 3 の「計画」タブへ発展。
-
-いずれの段階でも、Google が使えなくても（地図タップで）アプリは成立する。
+- **登録は `registerPlace` の 1 本**。`googlePlaceId` があれば施設の同一性で、無ければ座標(30m)で同定する。
+  近接確認で「新規」を選んだときは `forceNewPlace` で座標同定をバイパスする。
+- `name` は**自分で付けた名前**専用（`places.name`）。Google の名前は `googleName` /
+  `knownDetails` として渡し、`google_places` に入れる。
+- 検索で施設情報が取れているときは `knownDetails` で渡し、**登録時に Google を引き直さない**。
+- 「行きたい」の付け外し（`addToWishlist` / `removeFromWishlist`）は place を消さない。
+  場所そのものの削除は `deletePlace` で、stops がある place には使わせない（UI で非活性）。
 
 ---
 
 ## 未確定・要検討
 
-- **タグの設計**: 初回スコープ外。実装時に `tags`（固定候補＋自由入力か）・`wishlist_tags`・記録側 `stop_tags` との共有範囲を検討する。
-- **優先度の表現**: 3段階（高/中/低）で確定。UI は ★3つ or 色。
-- **一覧のノイズ**: 全 places を出すため、立ち寄り検出の未命名の点が多数並ぶ可能性。実機で量を見て、必要なら「名前あり優先」等の見せ方を検討（現状は許容と判断）。
-- **削除の範囲**: 立ち寄り記録（stops）のある場所は削除不可（記録を残す）。削除できるのは行きたい・座標だけの場所で、place と CASCADE 対象（wishlist・解決ログ）のみを消す。
-- **タブ増設の影響**: 4 タブでの下部ナビのレイアウト（ラベル/アイコンの収まり）を実機で確認。
+- **タグの設計**: `tags`（固定候補か自由入力か）・`wishlist_tags`・記録側 `stop_tags` との共有範囲。
+- **「また行きたい／満足」の区別**: 訪問後に「また行きたい」と「もう満足」を分けたい。
+  `wishlist.status`（WANT / SATISFIED）を足す案があるが未決。
+- **一覧のノイズ**: 全 places を出すため、立ち寄り検出の未命名の点が多数並びうる。
+  実機で量を見て、必要なら「名前あり優先」等の見せ方を検討（現状は許容と判断）。

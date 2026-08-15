@@ -3,8 +3,10 @@
 - Status: Accepted
 - Date: 2026-08-05
 
-関連: 設計は [../designs/place-info-enrichment.md](../designs/place-info-enrichment.md)、
-既存の前提は [../designs/places-and-stops.md](../designs/places-and-stops.md) / [../designs/wishlist.md](../designs/wishlist.md)。
+関連: 設計は [../designs/places-and-stops.md](../designs/places-and-stops.md)（名前の2列と表示名）/
+[../designs/wishlist.md](../designs/wishlist.md)、データモデルは [../specs/model.md](../specs/model.md)。
+
+> v6→v7 の移行手順そのものは `DatabaseMigrations.MIGRATION_6_7` と `schemas/7.json` を正とする。
 
 ## Context（背景）
 

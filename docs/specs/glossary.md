@@ -44,7 +44,7 @@
 | **Google の名前**    | `google_places.name` | 自動命名・POI タップ・キーワード検索            |
 
 表示名は `places.name` → `google_places.name` → 住所 → 座標 の順にフォールバックする
-（[../designs/place-info-enrichment.md](../designs/place-info-enrichment.md)）。
+（[../designs/places-and-stops.md](../designs/places-and-stops.md)）。
 
 ### 座標の2つの出どころ（混ぜないこと）
 
@@ -100,14 +100,10 @@
   解析は**ローカル計算のみ**（補正＋検出）。名前解決は**外部通信**なので解析に含めない。
   解析は記録中に走り、名前解決だけを後から「場所を取得」で再実行できる。
 
-- **再解析（reanalyze）**  
-  かつては stops を全消しして作り直す**破壊的**操作だったが、削除した立ち寄りが復活する副作用のため
-  **追加提案型**に作り替えた。いまは「一覧に無い候補」を挙げて**選択分だけ追加**する非破壊操作
-  （既存 stop は消さない）。補正だけを作り直す旧 `recomputeSmoothed` は廃止。詳細は [places-and-stops.md](../designs/places-and-stops.md) 参照。
-
 - **再解析 vs 手動追加**  
   どちらも非破壊で立ち寄りを**足す**が、**再解析**は検出器が見つけた候補から選ぶ（＝検出できる立ち寄りの救済）。
   **手動追加**は検出に頼らず地図で指した地点を足す（＝しきい値に満たない等、検出に出ない立ち寄りの救済）。
+  どちらも既存の stop を消さない（[ADR-0012](../adr/0012-non-destructive-reanalysis.md)）。
 
 ---
 

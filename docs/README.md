@@ -23,28 +23,26 @@
 
 | ファイル                               | 内容                             |
 | -------------------------------------- | -------------------------------- |
-| [specs/features.md](specs/features.md) | GPS記録機能のユースケース仕様    |
 | [specs/screens.md](specs/screens.md)   | 画面仕様（UI・ナビゲーション）   |
 | [specs/model.md](specs/model.md)       | データモデル（概念モデル・ER図） |
 | [specs/glossary.md](specs/glossary.md) | 用語集（データ・処理の日英対応） |
 
 ### 設計（How）
 
-| ファイル                                                             | 内容                                    |
-| -------------------------------------------------------------------- | --------------------------------------- |
-| [designs/architecture.md](designs/architecture.md)                   | アーキテクチャ・プロジェクト構成        |
-| [designs/security.md](designs/security.md)                           | セキュリティ・プライバシー設計          |
-| [designs/logging.md](designs/logging.md)                             | ログ方針・実装                          |
-| [designs/performance.md](designs/performance.md)                     | パフォーマンス設計（電力・メモリ・DB）  |
-| [designs/gps-capture.md](designs/gps-capture.md)                     | GPS点の取り込み（保存する情報・バッチ） |
-| [designs/gps-smoothing.md](designs/gps-smoothing.md)                 | GPS軌跡の補正（スムージング）設計       |
-| [designs/places-and-stops.md](designs/places-and-stops.md)           | 場所・立ち寄りの永続化と命名設計        |
-| [designs/wishlist.md](designs/wishlist.md)                           | 行きたい場所・「場所」タブの設計        |
-| [designs/place-info-enrichment.md](designs/place-info-enrichment.md) | 場所情報の拡充とデータ分離（v7）        |
-| [designs/map-tap-behavior.md](designs/map-tap-behavior.md)           | 地図タップの挙動（画面×モード×表示）    |
-| [designs/track-list.md](designs/track-list.md)                       | 経路一覧の名前・お気に入り・絞り込み    |
-| [designs/testing.md](designs/testing.md)                             | テスト戦略                              |
-| [designs/cloud-database.md](designs/cloud-database.md)               | クラウドDB・同期設計（将来）            |
+| ファイル                                                   | 内容                                    |
+| ---------------------------------------------------------- | --------------------------------------- |
+| [designs/architecture.md](designs/architecture.md)         | アーキテクチャ・プロジェクト構成        |
+| [designs/security.md](designs/security.md)                 | セキュリティ・プライバシー設計          |
+| [designs/logging.md](designs/logging.md)                   | ログ方針・実装                          |
+| [designs/performance.md](designs/performance.md)           | パフォーマンス設計（電力・メモリ・DB）  |
+| [designs/gps-capture.md](designs/gps-capture.md)           | GPS点の取り込み（保存する情報・バッチ） |
+| [designs/gps-smoothing.md](designs/gps-smoothing.md)       | GPS軌跡の補正（スムージング）設計       |
+| [designs/places-and-stops.md](designs/places-and-stops.md) | 場所・立ち寄りの永続化と命名設計        |
+| [designs/wishlist.md](designs/wishlist.md)                 | 行きたい場所・「場所」タブの設計        |
+| [designs/map-tap-behavior.md](designs/map-tap-behavior.md) | 地図タップの挙動（画面×モード×表示）    |
+| [designs/track-list.md](designs/track-list.md)             | 経路一覧の名前・お気に入り・絞り込み    |
+| [designs/testing.md](designs/testing.md)                   | テスト戦略                              |
+| [designs/cloud-database.md](designs/cloud-database.md)     | クラウドDB・同期設計（将来）            |
 
 ### 決定（Why this way）
 
@@ -66,3 +64,6 @@
 - **依存は一方向（specs は designs に依存しない）** → 参照リンクは `designs → specs`（要望・仕様）に向ける。`specs → designs` のリンクは張らない（仕様は実現方法を知らずに成立させる）。
 - **コードを見れば分かることは書かない** → 現行コードの写し（クラス本体・ディレクトリツリー・依存バージョンのピン留めなど）は、いずれ実装とズレて誤情報になるため docs に置かない。docs に書くのは**コードからは読み取れないもの**＝「何をしたいか（仕様・要望）」「今どうなっているか（設計）」「未実装の設計案・ポリシー」。具体値（バージョン・シグネチャ等）は実コード／Gradle 定義を正とし、docs からは参照に留める。
 - **設計判断（なぜ・没案）は ADR に、設計書には現状の概略を** → 設計書は「今どうなっているか」を読むためのもの。決定の背景・却下した案は [adr/](adr/) に 1 決定 1 ファイルで残し、設計書からは参照リンクに留める（設計書が経緯で薄まらないように）。
+  - 線引きの目安: **一文で足りる「なぜ」は設計書に残してよい**（読むのに要る前提）。「かつては〜だった」「旧〜は廃止した」のように**過去の姿を説明し始めたら ADR へ移す**。ADR は実装より**あとから書いてもよい**。
+- **終わった作業の記録を設計書に残さない** → 「段階リリース 1〜7（済）」のような進捗・移行手順は、完了した時点で消す。進捗は [roadmap.md](roadmap.md)、マイグレーションの手順は `DatabaseMigrations` と `schemas/*.json` が正。
+- **テーブルの列定義を設計書に写さない** → 概念モデルは [specs/model.md](specs/model.md)、実体は Room エンティティ。設計書には「なぜその形か」（外部キーを CASCADE にする/しない、行の有無に意味がある、など）だけ書く。二重管理すると必ず片方が腐る。

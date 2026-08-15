@@ -21,7 +21,7 @@
 1. **GPSの生データ（`gps_points`）** … 端末が記録したそのままの座標。ノイズを含む。
 2. **補正後の位置情報（`smoothedPoints`）** … 生データを補正した**軌跡の点の集まり**（たくさんの点）。「**どこを通ったか**」。原データは変更せず読み込み時に計算する（[gps-smoothing.md](./gps-smoothing.md)）。
 3. **`DetectedStop`** … 補正後の点列の中で「50m圏内に3分以上とどまった」箇所を1つにまとめたもの。「**どこに滞在したか**」。座標は滞在中の点の重心。検出の一時結果で永続化しない。
-4. **`Place` / `Stop`** … `DetectedStop` を保存したもの。`Place`＝場所そのもの（名前・座標・住所）、`Stop`＝その場所への訪問（place × track × 時刻）。本書が扱う範囲。
+4. **`Place` / `Stop`** … `DetectedStop` を保存したもの。`Place`＝場所そのもの（座標・自分で付けた名前・メモ）、`Stop`＝その場所への訪問（place × track × 時刻）。本書が扱う範囲。
 
 ```
 gps_points（生データ・どんな座標を拾ったか）
@@ -37,24 +37,20 @@ Place / Stop（場所と訪問・永続化）
 
 ## 方針
 
-### なぜ「場所」と「立ち寄り」を分けるのか
+### 場所と立ち寄りを分ける
 
-検出できるのは「ある経路の途中で、ここに◯分いた」という**訪問イベント**。
-一方で「行きたい場所リスト」や「同じカフェに2回行った」を表現するには、
-**場所そのもの**を訪問から独立して持てる必要がある。
-
-そこで:
-
-- **places（場所）** … 場所そのもの。緯度経度・名前・住所を持つ。経路とは独立。
-  立ち寄りで検出した場所・手動で追加した場所・将来の行きたい場所、すべてここに入る。
-- **stops（立ち寄り）** … 「どの経路で・どの場所に・いつからいつまで」いたかを表す**関連（訪問）**。
-  places と gps_tracks を結ぶ中間テーブル。
+- **places（場所）** … 場所そのもの。座標と、ユーザーが自分で付けた名前・メモを持つ。経路とは独立。
+  立ち寄りで検出した場所・手動で追加した場所・行きたい場所、すべてここに入る。
+- **stops（立ち寄り）** … 「どの経路で・どの場所に・いつからいつまで」いたかを表す**訪問**。
+  places と gps_tracks を結ぶ。
 
 ```
 gps_tracks 1 ──< stops >── 1 places
                 (訪問)        (場所そのもの)
-                              └─ 将来: 行きたい場所リストも places を参照
+                              └─ wishlist（行きたい）も places を参照
 ```
+
+分けた理由・没案は [ADR-0013](../adr/0013-separate-place-stop-wishlist-tables.md)。
 
 ### 命名の由来（自動）
 
@@ -62,76 +58,86 @@ gps_tracks 1 ──< stops >── 1 places
 `local.properties` の `GOOGLE_MAPS_API_KEY`（地図と共用）を使う。
 
 - 取得できたら **`google_places`**（施設名・住所・カテゴリ）に保存し、`place_resolutions` に解決記録（`resolvedAt`）を残す。
-  **`places.name`＝ユーザーが自分で付けた名前には書かない**（v7 のデータ分離。[ADR-0001](../adr/0001-place-data-separation.md) / [place-info-enrichment.md](./place-info-enrichment.md)）。
-- **place 1件につき自動で叩くのは1回だけ**。「叩いたか」は `place_resolutions` の**行の有無**で判定する（`name IS NULL` では判定しない＝POIの無い場所を毎回叩かないため）。
-- POIが見つからないときも `resolvedAt` の行を残す（`googlePlaceId` は null）＝自動では二度と叩かない。**オフライン／通信エラーのときは行を作らず**、オンライン復帰後に自動でキャッチアップする。
-- **キャッチアップ（WorkManager）**: 全経路で `place_resolutions` を持たない立ち寄り場所（＝オフライン記録などで未解決）を、`data/work/PlaceNameCatchUpWorker` がまとめて解決する。起動時に `PathlyApplication` から予約するだけで、**実行の条件はネットワーク接続**（`NetworkType.CONNECTED`）。そのとき圏外でも、通信が戻った時点で OS が走らせる。以前は起動時にその場で叩いていたため、起動時に圏外だと次の起動まで未解決のままだった。オフライン時は各 place で no-op（行を残さず次回に回す）＝無駄な課金なし。
-- **座標の採用**: 解決できたら place の座標を**施設の正確な座標（Places の LOCATION）へ置き換える**（暫定の GPS 座標より正確。地図ピン・30m 重複判定の精度が上がる）。
-- **課金**: Nearby Search は有料。**オンラインのときだけ・place 1件1回**に限定して最小化する。
-  - places に「試行済み」等の動的状態は持たせない（places は静的に保つ）。解決状態は `place_resolutions` に**分離**する。
-- **手動再取得**: `googlePlaceId` が無い place（未取得・過去失敗・POI無し）を、詳細画面のボタンでユーザー操作でだけ取り直せる。二度と命名できない状態にはしない導線。
-- **手動で Google 施設に紐付け（②）**: 場所の詳細から「Googleで情報を取得（施設を検索して紐付け）」で、キーワード検索して選んだ施設を**この場所に**紐付けられる（`linkPlaceToGoogle`）。`google_places`・`place_resolutions` を上書きし座標も採用する。座標・DB 状態に依存せず確実に補完でき、手動登録・オフライン未解決の穴埋めや、`googlePlaceId` を持たない場所が重複登録された際の是正に使う（`places.name`＝ユーザー名は変えない）。
+  **`places.name`＝ユーザーが自分で付けた名前には書かない**（[ADR-0001](../adr/0001-place-data-separation.md)）。
+- **place 1件につき自動で叩くのは1回だけ**。「叩いたか」は `place_resolutions` の**行の有無**で判定する。
+  POI が見つからなくても行を残す＝自動では二度と叩かない。**オフライン／通信エラーのときだけ行を作らず**、
+  次の機会に持ち越す。課金の考え方と没案は [ADR-0014](../adr/0014-place-naming-cost-policy.md)。
+- **キャッチアップ（WorkManager）**: `place_resolutions` を持たない場所を `data/work/PlaceNameCatchUpWorker` が
+  まとめて解決する。起動時に `PathlyApplication` から予約するだけで、**実行の条件はネットワーク接続**
+  （`NetworkType.CONNECTED`）。いま圏外でも通信が戻った時点で OS が走らせる。
+- **座標の採用**: 解決できたら place の座標を**施設の座標（Places の LOCATION）へ置き換える**
+  （暫定の GPS 座標より正確）。出どころの違いは [ADR-0011](../adr/0011-place-coordinate-source.md)。
+- **手動再取得**: `googlePlaceId` が無い place（未取得・過去失敗・POI無し）を、詳細画面のボタンで
+  ユーザー操作でだけ取り直せる。二度と命名できない状態にはしない導線。
+- **手動で Google 施設に紐付け**: 場所の詳細の「Googleで情報を取得」／「Google施設を選び直す」で、
+  近くの候補（またはキーワード検索）から選んだ施設を**この場所に**紐付ける（`linkPlaceToGoogle`）。
+  `google_places`・`place_resolutions` を上書きし座標も採用する（`places.name` は変えない）。
 
-> Geocoder（無料・住所のみ）ではなく Places（有料・施設名）を選んだ理由:
-> 「スターバックス」「◯◯公園」のような**人が分かる名前**が欲しいため。住所だけでは振り返りに使いにくい。
+### 名前の2列と表示名
+
+名前を入れる列は 2 つあり、**出どころで使い分ける**（[ADR-0001](../adr/0001-place-data-separation.md)）。
+
+| 列                   | 誰が入れるか                                          |
+| -------------------- | ----------------------------------------------------- |
+| `places.name`        | **ユーザーだけ**。Google が付けた名前は絶対に入れない |
+| `google_places.name` | 自動命名・POI タップ・キーワード検索                  |
+
+場所名を出す**すべての読み取り**を、次の優先で解決する:
+
+```
+表示名 = places.name（自分の名前）
+       ?: google_places.name（Google の名前）
+       ?: google_places.address（住所）
+       ?: 座標
+```
+
+- 一覧・詳細（`PlaceDao` の射影）に加え、**履歴の立ち寄り表示・関連経路一覧**（`StopDao` の射影）も
+  `google_places` を LEFT JOIN して同じフォールバックを適用する。カテゴリ・住所も同じ JOIN で取る。
+- フォールバックの計算は 1 か所（表示名ヘルパ）に集約し、各射影から使う。
+
+### 名前欄の入力ルール
+
+場所シートの名前欄は **`places.name`（自分で付けた名前）専用**。Google 由来の名前は初期値に入れない。
+欄が埋まっているかどうかが、そのまま「自分で名前を付けたか、Google の名前で表示されているか」を表す。
+
+- Google の名前は**シートの見出し**に出す（プレースホルダには入れない。名前に関する場所が縦に 2 つ
+  並んで場所を食い、どちらが表示名なのか分かりにくくなるため）。
+- 施設名を少し変えたいときのために、欄が空のときだけ名前欄の下に「この名前から書き換える」を出して
+  見出しの名前を流し込む（打ち直しを強いない）。書き換えずに確定したら Google の名前と同じなので
+  ユーザー名としては保存しない。
+- **名前を変えても `googlePlaceId` は外さない**。列が分かれているので「スタバだけど自分は休憩と呼ぶ」が
+  そのまま表現でき、カテゴリ・住所も残る。施設ごと取り違えたときは「Google施設を選び直す」で付け替える。
+- 名前を空にして保存すると `places.name` は null に戻り、表示は Google 名へフォールバックする。
+
+### Google マップで開く
+
+詳細・シートから Intent で Google アプリ／Web に切り替え、写真・口コミ・営業時間・経路案内を委ねる
+（API 呼び出しではない＝課金ゼロ）。`googlePlaceId` があればその施設のページ、無ければ `geo:` で座標を開く。
+`googlePlaceId` が無い空タップの地点では出さない。
+
+### 既知の限界
+
+- **既存の解決済み場所は、自動ではカテゴリが埋まらない**（自動命名は place 1 件 1 回なので対象外）。
+  手で埋めるなら「Google施設を選び直す」で同じ施設を選び直す。ただしそのとき**座標も施設の座標へ
+  置き換わる**ので、地図上のピンが動いて見えることがある（[ADR-0011](../adr/0011-place-coordinate-source.md)）。
+- `google_places.googlePlaceId` は NOT NULL（行がある＝マッチした）。「叩いたが該当なし」は
+  `place_resolutions` に行だけ残る。
+- 削除・取り消し（Undo）のスナップショットは `google_places` の行も含める。
 
 ---
 
 ## データモデル
 
-実装は Long 主キー（`autoGenerate`）。既存の `gps_tracks` / `gps_points` に合わせる。
+**列の定義は [../specs/model.md](../specs/model.md)（概念モデル・ER 図）と Room エンティティを正とする。**
+ここには設計上の意図だけ書く。
 
-### places テーブル
-
-| カラム    | 型      | 制約             | 説明                                          |
-| --------- | ------- | ---------------- | --------------------------------------------- |
-| id        | INTEGER | PK AUTOINCREMENT | 場所ID                                        |
-| name      | TEXT    | NULL             | 表示名（null=未命名。Places解決 or 手動入力） |
-| latitude  | REAL    | NOT NULL         | 緯度                                          |
-| longitude | REAL    | NOT NULL         | 経度                                          |
-| address   | TEXT    | NULL             | 住所（Places の formattedAddress）            |
-| createdAt | INTEGER | NOT NULL         | 作成日時                                      |
-| updatedAt | INTEGER | NOT NULL         | 更新日時                                      |
-
-### stops テーブル（立ち寄り＝訪問）
-
-| カラム        | 型      | 制約                        | 説明               |
-| ------------- | ------- | --------------------------- | ------------------ |
-| id            | INTEGER | PK AUTOINCREMENT            | 立ち寄りID         |
-| placeId       | INTEGER | NOT NULL, FK→places(id)     | どの場所か         |
-| trackId       | INTEGER | NOT NULL, FK→gps_tracks(id) | どの経路での訪問か |
-| arrivalTime   | INTEGER | NOT NULL                    | 到着時刻           |
-| departureTime | INTEGER | NOT NULL                    | 出発時刻           |
-| note          | TEXT    | NULL                        | 訪問メモ（v6追加） |
-| createdAt     | INTEGER | NOT NULL                    | 作成日時           |
-
-- インデックス: `stops(placeId)`, `stops(trackId)`
-- 外部キー:
-  - `stops.trackId → gps_tracks.id ON DELETE CASCADE`（経路を消したら立ち寄りも消える）
-  - `stops.placeId → places.id`（**場所は消さない**。訪問が消えても場所は残す＝再利用・行きたい場所のため）
-
-> `stops` は「経路と場所の関連（訪問）」テーブルでもある。命名対象を track で絞るときは
-> `stops` を JOIN して `trackId` で絞る（グローバルに全 place を叩かない）。
-
-> **メモ（note）は stop 単位・場所名は place 単位。** メモはその**訪問**に紐づく（同じ場所でも
-> お出掛けごとに別のメモを持てる）。場所名は place を共有する全訪問で同じ。編集は履歴詳細の立ち寄り行の
-> 「メモ」ボタンから（`updateStopNote`。空で保存すると null に戻す）。場所詳細の訪問一覧では**表示のみ**。
-> 空文字は保存せず null にそろえる（未入力＝null の一貫性）。
-
-### place_resolutions テーブル（Google解決ログ）
-
-Google Places を「叩いたか」を place 単位で記録する。places を静的に保つため、動的な解決状態はここに分離する。
-
-| カラム        | 型      | 制約              | 説明                                            |
-| ------------- | ------- | ----------------- | ----------------------------------------------- |
-| placeId       | INTEGER | PK, FK→places(id) | 対象の場所（1行/place）                         |
-| resolvedAt    | INTEGER | NOT NULL          | Googleに問い合わせた日時（＝「叩いた」印）      |
-| googlePlaceId | TEXT    | NULL              | 見つかった Google の place ID（POI無しは null） |
-
-- **行がある＝問い合わせ済み**（結果の有無を問わず）。無ければ未実施。
-- 主役は `resolvedAt`（叩いた事実）。`googlePlaceId` は結果で、POIが無ければ null。
-- 外部キー: `placeId → places.id ON DELETE CASCADE`（place は通常消さないが整合のため）。
-- 将来 Place Details（写真・営業時間等）を足すときの参照キーにもなる。
+- **`stops` の外部キーは非対称**。`trackId → gps_tracks` は CASCADE（経路を消せば訪問も消える）だが、
+  `placeId → places` は CASCADE にしない。**訪問が消えても場所は残す**（再利用・行きたい場所のため）。
+- **`place_resolutions` は「行の有無」が意味を持つ**ログ。主役は `resolvedAt`（叩いた事実）で、
+  結果そのものは `google_places` に入る（[ADR-0001](../adr/0001-place-data-separation.md)）。
+- **メモ（`stops.note`）は訪問単位、名前（`places.name`）は場所単位**。同じ場所でもお出掛けごとに
+  別のメモを持てるが、名前は place を共有する全訪問で同じ。空文字は保存せず null にそろえる。
+- 命名対象を経路で絞るときは `stops` を JOIN して `trackId` で絞る（グローバルに全 place を叩かない）。
 
 ### 場所の重複排除（find-or-create）
 
@@ -167,17 +173,14 @@ POI タップで既に登録済みだったら「この場所は登録済みで�
   USER 場所を作る（座標同定せず分離）。**他の経路・訪問は不変**。
 - 付け替えで参照が無くなった元の場所が**検出由来（DETECTED）なら自動回収**する（[0005](../adr/0005-place-source-and-lifecycle.md)）。
 
-> 検討中（後続）: 記録・履歴・場所詳細の地図に「登録済みの場所」を表示して**マーカータップで紐付け**できる
-> ようにし、表示 OFF のときは ID 無し手動追加で「近くに既存あり→紐付け/新規」の確認ダイアログを出す。
-
 ---
 
 ## ドメインモデル
 
 - `DetectedStop` … `StopDetector` の**検出結果（幾何のみ）**。緯度経度・到着/出発・点数。永続化しない。
-  （旧 `Stop` をリネーム。永続化する `Stop` と区別するため）
-- `Place` … 永続化された場所（id・name?・緯度経度・address?）。
-- `Stop` … 永続化された立ち寄り（id・`place: Place`・trackId・到着/出発）。滞在時間は計算。
+- `Place` … 永続化された場所。座標＋自分で付けた名前・メモに加え、`google_places` から JOIN した
+  施設名・住所・カテゴリを載せる（表示名のフォールバックは下記「表示名」）。
+- `Stop` … 永続化された立ち寄り（id・`place: Place`・trackId・到着/出発・訪問メモ）。滞在時間は計算。
 
 ---
 
@@ -186,9 +189,9 @@ POI タップで既に登録済みだったら「この場所は登録済みで�
 **立ち寄りの検出は「記録中（自動）」が基本**で、取りこぼし・誤削除の救済として詳細画面の
 **「再解析」（追加提案・非破壊）**を用意する。命名は記録中（オンライン時・自動）に加え、
 未取得分を「場所を取得」で手動再実行できる。**詳細画面を開いても自動検出はしない**
-（「stops が0件」では“本当に立ち寄りが無い”のか“取りこぼした”のか区別できず、勝手に叩くのは筋が悪いため）。
-旧 `ensureStopsDetected`（開いたら冪等検出）は廃止した。また、かつての**破壊的な再解析**
-（stops を全消し→作り直し）も廃止し、下記の**追加提案型**に作り替えた。
+（「stops が0件」では“本当に立ち寄りが無い”のか“取りこぼした”のか区別できないため）。
+
+やり直し系の操作が**すべて非破壊**なのは意図的な設計 → [ADR-0012](../adr/0012-non-destructive-reanalysis.md)。
 
 ### 1. 記録中（自動・ライブ）
 
@@ -267,16 +270,9 @@ DB の最終 departure で種をまき直すため、その1件が再検出さ�
     近接確認の要否判断まで含めた手順は `domain/usecase/AddManualStopUseCase`（記録画面と共有）。
 - **場所を取得**: 検出はやり直さず、その track の**未取得（`googlePlaceId` が無い）place だけ**を Places で取得する。オフラインで命名できなかった分の手動再実行。**非破壊**（既存の立ち寄りには触れない）。
 
-> **なぜ「破壊的な再解析」をやめて「追加提案」にしたか。** 旧再解析は stops を全消しして作り直すため、
-> 誤検知として**手で削除した立ち寄りが復活**していた（生データには滞在の痕跡が残るため）。
-> 追加提案型は **opt-in（選択式）** なので、削除した誤検知は候補に出ても**チェックしなければ復活しない**、
-> 削除した本物は**チェックすれば戻せる** ——「復活させるか」を1件ずつユーザーが決められる。
-> 既存の立ち寄りを消さないので、命名・編集などのキュレーションも保たれる。
->
-> **限界（既知）**: (1) しきい値を厳しくして「もう立ち寄りでない」既存 stop は追加専用では消えない（手で削除する）。
-> (2) 却下した候補は記憶しないので、再解析のたび候補に再掲される（チェックしなければ無害）。煩わしくなれば「却下の記憶」を後で足す。
-> (3) 補正パラメータ自体を変えたときの反映は、保存済み補正点列を使うため対象外（開発時のデバッグ調整で対応）。
-> (4) 判断用の名前を出すため、**再解析を押すと候補ぶんの Places 呼び出しが発生する**（近くの命名済み place の再利用で無料化、追加時は焼き込みで二度叩かない、が、追加しない候補ぶんは払い切り／再解析ごとに再取得）。候補は通常少数なので実害は小さいが、命名の「place 1件1回」原則の外側にある点は留意する。
+> 追加専用なので、**しきい値を厳しくしても既存の stop は消えない**（手で削除する）。また
+> **却下した候補は記憶しない**ので毎回再掲される（チェックしなければ無害）。
+> この割り切りの理由は [ADR-0012](../adr/0012-non-destructive-reanalysis.md)。
 
 ### 命名の管理（place_resolutions・place 1件1回）
 
@@ -293,8 +289,7 @@ DB の最終 departure で種をまき直すため、その1件が再検出さ�
 | POI無し         | 行・ID null | しない       | できる     |
 | オフライン/失敗 | 行なし      | する(復帰時) | できる     |
 
-> 命名を「オンライン時・place 1件1回」に閉じ込めるのは、(1) 課金を最小化するため、(2) POIの無い場所を毎回叩き直さないため。
-> `name IS NULL` を条件にしないのは、POI無しの場所が永遠に未命名のまま毎回叩かれてしまうため。判定は `place_resolutions` の行の有無で行う。
+判定に `name IS NULL` を使わない理由と課金の考え方は [ADR-0014](../adr/0014-place-naming-cost-policy.md)。
 
 ---
 
@@ -303,16 +298,15 @@ DB の最終 departure で種をまき直すため、その1件が再検出さ�
 Web API 直叩きではなく **Places SDK for Android（New）** を使う。
 Android アプリ制限付きの API キー（地図と共用）を**そのまま安全に**使えるため。
 
-- 依存: Places SDK for Android（New）（`com.google.android.libraries.places`。バージョンは Gradle 定義を正とする）
-- 初期化: `PathlyApplication.onCreate` で **`Places.initializeWithNewPlacesApiEnabled(context, BuildConfig.GOOGLE_MAPS_API_KEY)`**
-  - New API 面（`searchNearby`）を使うため、旧 `Places.initialize(...)` ではなくこちらを呼ぶ
-- 呼び出し: `PlacesClient.searchNearby(SearchNearbyRequest)`
-  - `CircularBounds.newInstance(LatLng(lat, lng), 50.0)` で立ち寄り座標中心・半径 50m
-  - `setMaxResultCount(1)`, `setRankPreference(RankPreference.DISTANCE)`
-  - `setPlaceFields(listOf(Place.Field.ID, Place.Field.DISPLAY_NAME, Place.Field.FORMATTED_ADDRESS))`
-  - 返り値の先頭 `place.id` を `googlePlaceId`、`place.displayName` を name、`place.formattedAddress` を address に
-- Cloud 側は **「Places API (New)」** を有効化＋請求先リンク済みが前提
-- ラッパー `PlacesNameResolver` に閉じ込め、**呼び出し前にオンライン判定**（`ConnectivityManager`）し、オフラインなら叩かない。0件は「叩いたがPOI無し」（`resolvedAt` の行を残す）、例外は「未実施」（行を作らない）として区別する
+- 初期化は **New API 面を有効にして行う**（`initializeWithNewPlacesApiEnabled`）。旧 `Places.initialize(...)` では
+  `searchNearby` が使えない。Cloud 側は「Places API (New)」の有効化＋請求先リンクが前提。
+- 呼び出しは **Nearby Search を半径 50m・最も近い 1 件**（立ち寄りの検出半径と揃える）。
+  リクエストの組み立てとフィールド指定は `data/places/PlacesNameResolver` を正とする。
+- **ラッパー 1 か所（`PlacesNameResolver`）に閉じ込める。** 呼び出し前に `ConnectivityManager` で
+  オンライン判定し、オフラインなら叩かない。**0 件と例外を区別する**のが要点で、
+  0 件＝「叩いたが POI 無し」（`resolvedAt` の行を残す）、例外＝「未実施」（行を作らない）。
+- 最寄り 1 件は隣の別施設に化けやすいので、**ユーザーが選ぶ場面では候補を複数返す**
+  （`searchNearbyCandidates`）。自動命名だけが 1 件で妥協している。
 
 ---
 
@@ -417,43 +411,6 @@ Google Maps / iOS の訪問検出が精度良いのは、**位置以外の信号
 6. **機械学習** … ラベル付きデータで学習したモデル。
 
 まずは 1（アクティビティ認識でゲート）だけでも体感がかなり変わる。実装時にあらためて仕様検討する。
-
-### 立ち寄りの完全手動追加（実装済み）
-
-**再解析（追加提案）**は "検出器が見つけられる" 立ち寄りの取りこぼし・誤削除を救済する。
-一方、**検出しきい値に満たない立ち寄り**（例: 3分未満の短い滞在、電波が悪くて点が飛んだ区間）は
-再解析の候補にも出ない。これを救うため、**地図から完全に手で足す**導線を用意した（`addManualStop`）。
-
-導線と仕様（詳細画面）:
-
-- 「**立ち寄りを追加**」ボタンで**追加モード**へ。地図の**通常タップ**で地点を指す（**POI はタップで施設名も入る**）。
-  - モード中だけタップが有効なので誤爆せず、長押しより直感的。
-- 指した地点に**最寄りの軌跡点**を全自動で採用し、到着＝最寄り点の時刻、出発＝既定の滞在ぶん先で仮置きする。
-  ユーザーは滞在区間（到着〜出発）を調整でき、その区間は**地図に青くハイライト**されて
-  「経路のどこに対応するか」が見える。調整は**スライダー（粗）＋ ＋/−（1軌跡点ずつの微調整）**の2段構え
-  （長い経路だとスライダーだけでは1pxで大きく動くため）。名前は任意入力（POI 名で初期化）。
-- 保存は `addManualStop`：place は既存の重複排除（30m の `findOrCreatePlace`）に乗せ、手動登録した place（POI 登録）や
-  他の履歴の place とも共有する。名前は**未命名の place にだけ**焼き込み（共有 place の既存名は上書きしない）、
-  POI 由来の `googlePlaceId` があれば解決記録に控えて Places を叩き直さない。名前無しなら place は未取得のまま
-  （あとで「場所を取得」で命名できる）。**既存の立ち寄りには触れない**（非破壊）。
-
-> **`addStops` に相乗りしなかった理由。** 再解析の `addStops` は「検出結果（`DetectedStop`）＋事前解決した名前」を
-> 前提にする。手動追加は検出に由来せず、座標・任意名・到着/出発・POIの `googlePlaceId` を直接扱うので、
-> 別メソッド `addManualStop` にした（重複排除・名前焼き込みの下請けは共有）。
-
-### 行きたい場所リスト
-
-places は経路と独立しているので、行きたい場所は「stops を持たない place」として登録できる。
-必要になったら `places` に `wantToVisit`（フラグ）や優先度・営業時間などの列を足す、
-あるいは `wishlist` テーブルから places を参照する。本設計はどちらにも拡張できる。
-
-### 場所一覧からの直接検索（Google）
-
-将来「場所一覧」画面を作る場合、**経路と関係なく** place を Google で検索・命名できると良い。
-places が track から独立し、解決状態も `place_resolutions` に分離されているため、
-「一覧上の未取得 place を検索」「キーワードから place を新規登録」も同じ土台に乗る
-（`stops` を介した track 絞りをしないだけ）。`googlePlaceId` は Place Details 取得の参照にも使える。
-
 ---
 
 ## 実装マップ
@@ -477,22 +434,3 @@ places が track から独立し、解決状態も `place_resolutions` に分離
 | 画面                     | `presentation/history/`（`TrackDetailScreen` / `TrackDetailMap` / `TrackDetailSheet` / `TrackDetailDialogs` / `TrackTuningPanel` ＋ ViewModel） |
 
 ---
-
-## 段階リリース
-
-済:
-
-1. DB（places/stops・マイグレーション・DAO）＋ドメイン＋検出結果の保存（**オフラインで完結**）
-2. Places 命名（解決・キャッシュ）
-3. UI（一覧の名前表示・編集ダイアログ）
-
-本設計（記録中の検出・命名）で追加する分:
-
-4. `place_resolutions` テーブル＋DAO（解決ログ・マイグレーション）
-5. 記録中の増分検出・保存（`updateStopsForTrack`、stop は確定＝案A）
-6. 命名を `place_resolutions` 基準に変更（place 1件1回・オンライン判定・キャッチアップ）
-7. `ensureStopsDetected`（開いたら検出）を廃止し、詳細画面に**場所を取得**ボタンを用意
-8. ライブ「立ち寄り中」（3分超で place 先行確定＋名前解決、`StateFlow` で記録画面に表示）
-9. **再解析を追加提案・非破壊に作り替え**（旧: 全消し→作り直しで削除が復活していた → 新: `detectMissingStops` で「一覧に無い候補」を挙げ、`addStops` で選択分だけ追加）
-
-いずれの段階でも、Places が使えなくてもアプリは動く（座標表示＋手動取得で成立）。
