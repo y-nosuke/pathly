@@ -31,3 +31,4 @@
 | [0013](0013-separate-place-stop-wishlist-tables.md) | 場所・立ち寄り・行きたいを別テーブルに分け、places を静的に保つ           | Accepted |
 | [0014](0014-place-naming-cost-policy.md)            | 自動命名は Places を使い、オンライン時・place 1 件 1 回に限る             | Accepted |
 | [0015](0015-bake-track-distance.md)                 | 経路の総移動距離は確定時に焼き込み、一覧では点をロードしない（v11）       | Accepted |
+| [0016](0016-allow-device-backup.md)                 | 端末の自動バックアップは既定のまま許容する                                | Accepted |

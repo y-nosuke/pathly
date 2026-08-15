@@ -18,16 +18,15 @@ Room の DB は平文で置いている。理由は 2 つ。
 - 鍵の生成・保管（Android Keystore）と、**鍵を失ったときの扱い**（＝復旧不能を受け入れるか）
 - 既存の平文 DB からの移行
 
-## 端末バックアップへの対処案
+## 端末バックアップ
 
-`android:allowBackup="true"` かつ `backup_rules.xml` / `data_extraction_rules.xml` が
-**テンプレートのまま（中身が空）**なので、Auto Backup が DB ごと持っていく。
+`android:allowBackup="true"` かつ `backup_rules.xml` / `data_extraction_rules.xml` は
+**テンプレートのまま（中身が空）**にしてある。Auto Backup が DB ごと持っていくのは
+**意図した状態**（→ [ADR-0016](../adr/0016-allow-device-backup.md)）。
 
-対処するなら次のどれか。**まだ決めていない**。
-
-- `allowBackup="false"` … 確実だが、機種変更でデータを引き継げなくなる
-- 抽出ルールで **DB だけ `<exclude>`** … 設定は引き継ぎ、位置情報は上げない（折衷案）
-- **現状のまま許容** … Drive も本人のアカウントなので、本人の管理下ではある
+締めるなら `allowBackup="false"` か、抽出ルールで DB だけ `<exclude>` する。どちらも
+機種変更で引き継げなくなるため採らなかった。**ローカル DB を暗号化するときは、この設定も
+一緒に見直すこと**（暗号化した DB を上げても、鍵が Keystore にあるため復元先で読めない）。
 
 ## 権限と端末状態の持ち場
 
