@@ -3,7 +3,7 @@
 - Status: Accepted
 - Date: 2026-08-08
 
-関連: 現状の設計は [../designs/places-and-stops.md](../designs/places-and-stops.md) の「誤検知の選び直し」。[ADR-0005](0005-place-source-and-lifecycle.md) の「今後の方針 3」を実装したもの。
+関連: 現状の設計は [../designs/stops.md](../designs/stops.md) の「手で足す・直す」。[ADR-0005](0005-place-source-and-lifecycle.md) の「今後の方針 3」を実装したもの。
 
 ## Context（背景）
 

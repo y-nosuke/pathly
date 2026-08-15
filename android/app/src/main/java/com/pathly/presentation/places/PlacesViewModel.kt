@@ -113,7 +113,7 @@ class PlacesViewModel @Inject constructor(
   /** 統一の場所シートで既存 place を編集するため、単一 place の現在値を取得する。 */
   suspend fun loadPlace(placeId: Long): PlaceListItem? = wishlistRepository.getPlace(placeId)
 
-  /** POI 登録ダイアログのプレビュー用: placeId から施設情報（カテゴリ等）を取得する。 */
+  /** 場所シートのプレビュー用: placeId から施設情報（カテゴリ等）を取得する。 */
   suspend fun fetchPoiDetails(googlePlaceId: String): PlaceSearchResult? = wishlistRepository.fetchPlaceDetails(googlePlaceId)
 
   /** 近接確認で「この場所に紐付け」を選んだとき: 既存 place に行きたい/メモを反映する（新規は作らない）。 */

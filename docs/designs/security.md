@@ -1,450 +1,62 @@
-# Pathly セキュリティ設計
+# セキュリティ設計
 
-## 概要
-
-Pathlyは位置情報を扱うアプリとして、ユーザーの個人情報保護とプライバシー確保を最優先とする。
-本文書では、MVP実装で必要最小限のセキュリティ対策を定義する。
-
-## 🔒 セキュリティ要件
-
-### 法的要件
-
-- **個人情報保護法**：位置情報は個人情報として適切に管理
-- **Androidプライバシーポリシー**：Google Playストア要件準拠
-- **データ最小化原則**：必要最小限の情報のみ取得・保存
-
-### セキュリティ目標
-
-1. **機密性**：位置情報の暗号化保存
-2. **完全性**：データ改ざんの防止
-3. **可用性**：ユーザーによるデータ制御
-4. **透明性**：データ利用目的の明確化
-
-## 📱 ローカルデータ保護
-
-### 1. データベース暗号化
-
-#### Room データベース暗号化
-
-```kotlin
-// SQLCipher使用によるRoom暗号化（バージョンは Gradle 定義を正とする）
-implementation("net.zetetic:android-database-sqlcipher")
-
-// 暗号化データベース初期化
-val passphrase = generateSecurePassphrase()
-val factory = SupportFactory(SQLiteDatabase.getBytes(passphrase.toCharArray()))
-
-Room.databaseBuilder(context, PathlyDatabase::class.java, "pathly_database")
-    .openHelperFactory(factory)
-    .build()
-```
-
-#### 暗号化対象データ
-
-- **GPS座標**：緯度・経度の暗号化
-- **タイムスタンプ**：記録日時の保護
-- **移動距離**：計算結果の保護
-
-### 2. 暗号化キー管理
-
-#### Android Keystore使用
-
-```kotlin
-// セキュアなキー生成・保存
-class SecureKeyManager {
-    private val keyAlias = "pathly_db_key"
-
-    fun generateOrGetKey(): SecretKey {
-        val keyGenerator = KeyGenerator.getInstance(KeyProperties.KEY_ALGORITHM_AES, "AndroidKeyStore")
-        val keyGenParameterSpec = KeyGenParameterSpec.Builder(
-            keyAlias,
-            KeyProperties.PURPOSE_ENCRYPT or KeyProperties.PURPOSE_DECRYPT
-        )
-        .setBlockModes(KeyProperties.BLOCK_MODE_GCM)
-        .setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE)
-        .setUserAuthenticationRequired(false)
-        .build()
-
-        keyGenerator.init(keyGenParameterSpec)
-        return keyGenerator.generateKey()
-    }
-}
-```
-
-#### キー保護方針
-
-- **Android Keystore**：暗号化キーのハードウェア保護
-- **キーローテーション**：定期的なキー更新（将来実装）
-- **バックアップ除外**：キーのクラウドバックアップ防止
-
-### 3. 機密データ削除
-
-#### セキュア削除実装
-
-```kotlin
-class SecureDataDeletion {
-    // 機密データの完全削除
-    fun securelyDeleteTrack(trackId: String) {
-        // 1. データベースからの削除
-        trackDao.deleteTrack(trackId)
-
-        // 2. メモリからのクリア
-        Runtime.getRuntime().gc()
-
-        // 3. 一時ファイルの削除
-        clearTempFiles()
-    }
-
-    // ユーザーによる全データ削除
-    fun deleteAllUserData() {
-        // データベース完全削除
-        context.deleteDatabase("pathly_database")
-
-        // 設定データ削除
-        PreferenceManager.getDefaultSharedPreferences(context)
-            .edit()
-            .clear()
-            .apply()
-    }
-}
-```
-
-## 🛡️ 権限管理
-
-### 1. 位置情報権限
-
-#### 段階的権限要求
-
-```kotlin
-class LocationPermissionManager {
-    // 1. 基本的な位置情報権限
-    private val fineLocationPermission = Manifest.permission.ACCESS_FINE_LOCATION
-    private val coarseLocationPermission = Manifest.permission.ACCESS_COARSE_LOCATION
-
-    // 2. バックグラウンド位置情報権限（API 29+）
-    private val backgroundLocationPermission = Manifest.permission.ACCESS_BACKGROUND_LOCATION
-
-    suspend fun requestLocationPermissions(activity: ComponentActivity): PermissionResult {
-        // Step 1: 基本権限要求
-        val basicResult = requestBasicLocationPermission(activity)
-        if (basicResult != PermissionResult.GRANTED) {
-            return basicResult
-        }
-
-        // Step 2: バックグラウンド権限要求（必要時のみ）
-        return requestBackgroundLocationPermission(activity)
-    }
-}
-```
-
-#### 権限要求タイミング
-
-- **アプリ起動時**：基本的な位置情報権限
-- **記録開始時**：バックグラウンド位置情報権限
-- **権限説明**：なぜ必要かを明確に説明
-
-### 2. 最小権限原則
-
-#### 必要最小限の権限
-
-```xml
-<!-- 必要な権限のみ宣言 -->
-<uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
-<uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
-<uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION" />
-<uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
-
-<!-- 不要な権限は宣言しない -->
-<!-- <uses-permission android:name="android.permission.CAMERA" /> -->
-<!-- <uses-permission android:name="android.permission.READ_CONTACTS" /> -->
-```
-
-#### 精度・省電力の管理
-
-精度を最優先にせず、`PRIORITY_BALANCED_POWER_ACCURACY` を用いて過剰な精度・電力消費を避ける。
-取得間隔はユーザー設定（5/10/30/60 秒・既定 10 秒）に従い、バッチ許容で省電力化する。
-
-```kotlin
-// LocationTrackingService.startLocationUpdates()
-val intervalMs = settingsRepository.currentGpsIntervalSeconds() * 1000L
-val locationRequest = LocationRequest.Builder(
-    Priority.PRIORITY_BALANCED_POWER_ACCURACY,
-    intervalMs,
-)
-    .setMinUpdateIntervalMillis(intervalMs / 2)      // 早すぎる更新は間引く
-    .setMaxUpdateDelayMillis(intervalMs + intervalMs / 2) // バッチ配信を許容
-    .build()
-```
-
-## 🔐 プライバシー保護
-
-### 1. データ最小化
-
-#### 収集データの制限
-
-```kotlin
-data class GpsPoint(
-    val id: String,
-    val trackId: String,
-
-    // 必要最小限の位置情報
-    val latitude: Double,
-    val longitude: Double,
-    val accuracy: Float? = null,
-    val timestamp: Long,
-
-    // 収集しない情報
-    // - 詳細な住所情報
-    // - デバイス固有ID
-    // - 他のアプリ情報
-    // - 連絡先情報
-)
-```
-
-#### 精度制限
-
-```kotlin
-class LocationPrivacyFilter {
-    // 精度を制限して保存
-    fun filterLocation(location: Location): Location {
-        return Location(location).apply {
-            // 精度を100m以内に制限
-            if (accuracy > 100f) {
-                accuracy = 100f
-            }
-
-            // 不要な詳細情報を削除
-            extras = null
-            provider = null
-        }
-    }
-}
-```
-
-### 2. データ保持期間
-
-#### 自動削除機能
-
-```kotlin
-class DataRetentionManager {
-    // デフォルト保持期間：1年
-    private val defaultRetentionDays = 365L
-
-    suspend fun cleanupOldData() {
-        val cutoffTime = System.currentTimeMillis() - (defaultRetentionDays * 24 * 60 * 60 * 1000)
-
-        // 古いトラッキングデータを削除
-        trackDao.deleteTracksOlderThan(cutoffTime)
-        gpsPointDao.deletePointsOlderThan(cutoffTime)
-    }
-
-    // ユーザー設定による保持期間変更
-    fun setRetentionPeriod(days: Long) {
-        preferences.edit()
-            .putLong("data_retention_days", days)
-            .apply()
-    }
-}
-```
-
-### 3. ユーザー制御
-
-#### データ削除機能
-
-```kotlin
-class UserDataControl {
-    // 個別記録の削除
-    suspend fun deleteTrack(trackId: String) {
-        secureDataDeletion.securelyDeleteTrack(trackId)
-    }
-
-    // 期間指定削除
-    suspend fun deleteDataByDateRange(startDate: Long, endDate: Long) {
-        trackDao.deleteTracksByDateRange(startDate, endDate)
-    }
-
-    // 全データ削除
-    suspend fun deleteAllData() {
-        secureDataDeletion.deleteAllUserData()
-    }
-
-    // データエクスポート（ユーザーの権利）
-    suspend fun exportUserData(): String {
-        val tracks = trackDao.getAllTracks()
-        val gpsPoints = gpsPointDao.getAllPoints()
-        return JsonExporter.exportToJson(tracks, gpsPoints)
-    }
-}
-```
-
-## 🚨 セキュリティ監視
-
-### 1. 異常検知
-
-#### 異常アクセス監視
-
-```kotlin
-class SecurityMonitor {
-    // 異常な位置情報アクセス検知
-    fun monitorLocationAccess() {
-        val accessCount = getLocationAccessCount()
-        val timeWindow = 3600_000L // 1時間
-
-        if (accessCount > 1000) { // 1時間に1000回以上のアクセス
-            logSecurityEvent("Abnormal location access detected")
-            // 必要に応じてアクセス制限
-        }
-    }
-
-    // 権限変更監視
-    fun monitorPermissionChanges() {
-        if (!hasLocationPermission()) {
-            stopLocationTracking()
-            notifyUserPermissionRequired()
-        }
-    }
-}
-```
-
-### 2. セキュリティログ
-
-#### ログ管理
-
-```kotlin
-class SecurityLogger {
-    // セキュリティイベントのログ記録
-    fun logSecurityEvent(event: String, details: Map<String, String> = emptyMap()) {
-        val logEntry = SecurityLogEntry(
-            timestamp = System.currentTimeMillis(),
-            event = event,
-            details = details.filterKeys { !isSensitiveKey(it) } // 機密情報除外
-        )
-
-        // ローカルログに記録（個人情報は含めない）
-        localLogger.log(logEntry)
-    }
-
-    private fun isSensitiveKey(key: String): Boolean {
-        val sensitiveKeys = setOf("latitude", "longitude", "address", "user_id")
-        return sensitiveKeys.contains(key.lowercase())
-    }
-}
-```
-
-## ⚙️ セキュリティ設定
-
-### 1. ユーザー設定項目
-
-#### セキュリティ設定UI
-
-```kotlin
-// 設定画面でのセキュリティオプション
-data class SecuritySettings(
-    val locationAccuracy: AccuracyLevel = AccuracyLevel.BALANCED,
-    val dataRetentionDays: Long = 365L,
-    val autoDeleteEnabled: Boolean = true,
-    val encryptionEnabled: Boolean = true, // 常にtrue（変更不可）
-    val backgroundLocationEnabled: Boolean = true
-)
-```
-
-#### 設定項目説明
-
-- **位置精度**：バッテリー消費と精度のバランス選択
-- **データ保持期間**：自動削除までの期間設定
-- **自動削除**：古いデータの自動削除有効/無効
-- **バックグラウンド記録**：バックグラウンド位置情報の使用許可
-
-### 2. プライバシーポリシー
-
-#### 必須記載事項
-
-```markdown
-## プライバシーポリシー必須項目
-
-### 収集する情報
-
-- GPS位置情報（緯度・経度・精度・タイムスタンプ）
-- アプリ使用統計（クラッシュレポート等）
-
-### 利用目的
-
-- お出掛け記録の作成・表示
-- 移動軌跡の地図表示
-- アプリ機能の改善
-
-### 第三者提供
-
-- 原則として第三者に提供しない
-- Google Maps APIでの地図表示のみ
-
-### データ保持期間
-
-- デフォルト：1年間
-- ユーザー設定により変更可能
-- ユーザーによる削除可能
-
-### 問い合わせ先
-
-- データ削除・修正の要求受付
-```
-
-## 🔧 実装チェックリスト
-
-### MVP実装必須項目
-
-#### データ保護
-
-- [ ] Room データベースの暗号化実装
-- [ ] Android Keystoreによるキー管理
-- [ ] 機密データのセキュア削除機能
-
-#### 権限管理
-
-- [ ] 段階的な位置情報権限要求
-- [ ] 権限拒否時の適切な処理
-- [ ] 最小権限原則の実装
-
-#### プライバシー
-
-- [ ] データ最小化の実装
-- [ ] ユーザーによるデータ削除機能
-- [ ] プライバシーポリシーの作成
-
-#### 監視・設定
-
-- [ ] 基本的なセキュリティ監視
-- [ ] ユーザーセキュリティ設定項目
-- [ ] 異常時の適切な処理
-
-### 将来実装項目
-
-- [ ] キーローテーション機能
-- [ ] より詳細な異常検知
-- [ ] セキュリティ監査ログ
-- [ ] データ匿名化機能
-
-## 🚀 実装優先順位
-
-### Phase 1: 基本セキュリティ（MVP必須）
-
-1. Room データベース暗号化
-2. 位置情報権限の適切な管理
-3. ユーザーデータ削除機能
-
-### Phase 2: 強化セキュリティ
-
-4. セキュリティ監視機能
-5. データ保持期間管理
-6. 詳細プライバシー設定
-
-### Phase 3: 高度セキュリティ（将来）
-
-7. キーローテーション
-8. データ匿名化
-9. セキュリティ監査
+**何を守り、何を守っていないか**は [../specs/security.md](../specs/security.md) を正とする。
+ここには**その実現方法**と、変えるときに必要になるものだけを書く。
 
 ---
 
-このセキュリティ設計により、位置情報を安全に管理し、ユーザーのプライバシーを適切に保護できます。
-MVP実装では Phase 1 の基本セキュリティ項目を優先して実装してください。
+## 暗号化していない理由と、やるなら何が要るか
+
+Room の DB は平文で置いている。理由は 2 つ。
+
+1. 端末内で完結していて他人に渡らない。
+2. 一人で使うアプリで鍵管理まで抱えると、**壊したときの被害（記録が読めなくなる）の方が大きい**。
+
+将来暗号化するなら **SQLCipher** 等の導入が要る。`androidx.security:security-crypto`
+（Jetpack Security）は **Deprecated** なのでその路線は取らない。導入時に決めることは:
+
+- 鍵の生成・保管（Android Keystore）と、**鍵を失ったときの扱い**（＝復旧不能を受け入れるか）
+- 既存の平文 DB からの移行
+
+## 端末バックアップ
+
+`android:allowBackup="true"` かつ `backup_rules.xml` / `data_extraction_rules.xml` は
+**テンプレートのまま（中身が空）**にしてある。Auto Backup が DB ごと持っていくのは
+**意図した状態**（→ [ADR-0016](../adr/0016-allow-device-backup.md)）。
+
+締めるなら `allowBackup="false"` か、抽出ルールで DB だけ `<exclude>` する。どちらも
+機種変更で引き継げなくなるため採らなかった。**ローカル DB を暗号化するときは、この設定も
+一緒に見直すこと**（暗号化した DB を上げても、鍵が Keystore にあるため復元先で読めない）。
+
+## 権限と端末状態の持ち場
+
+- 権限の有無の判定は `util/PermissionUtils` に集約する。
+- 権限・位置情報サービスの ON/OFF・電池の最適化といった**端末側の状態**は
+  `data/tracking/TrackingController`（アプリスコープ）が持ち、画面はそれを購読する。
+  ViewModel から Android framework を直接触らないための置き場所（[architecture.md](architecture.md)）。
+- 権限ダイアログの起動は Activity のランチャー経由。前景の位置が許可されたら、
+  そのコールバックから続けてバックグラウンド位置を要求する（別々に要求する必要があるため）。
+
+## API キー
+
+Google Maps / Places の API キーは `local.properties` の `GOOGLE_MAPS_API_KEY` から
+マニフェストと `BuildConfig` に注入する（**リポジトリには含めない**）。
+
+APK に埋まる以上キー自体は秘匿できない。守りは **Cloud Console 側のアプリ制限**
+（パッケージ名＋署名証明書のフィンガープリント）と API 制限で行う。
+
+デバッグ用の keystore は**リポジトリに含めている**。パスワードが公知（`android`）で秘密情報ではなく、
+CI とローカルで署名を揃えないと更新インストールできないため。**リリース鍵は含めない**。
+
+## 座標をログに出さない
+
+リリースビルドで R8 を有効にしていない（`isMinifyEnabled = false`）ため、出力した文字列は
+そのまま logcat に残る。**座標・住所・施設名はログに載せない**（詳細は [logging.md](logging.md)）。
+
+---
+
+## 関連
+
+- データモデル・削除規則: [../specs/model.md](../specs/model.md)
+- ログ: [logging.md](logging.md)
+- 将来のクラウド構成: [../roadmap.md](../roadmap.md) の「温めている案」

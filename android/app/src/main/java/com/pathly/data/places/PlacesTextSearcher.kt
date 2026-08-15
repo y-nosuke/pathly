@@ -45,7 +45,7 @@ class PlacesTextSearcher @Inject constructor(
   @Volatile
   private var sessionToken: AutocompleteSessionToken? = null
 
-  // 直近の fetch 結果を1件だけ控える。同じ placeId を続けて引くとき（POIダイアログの表示 →
+  // 直近の fetch 結果を1件だけ控える。同じ placeId を続けて引くとき（場所シートのプレビュー表示 →
   // 同じ場所の登録）に Places を二度叩かないための最小キャッシュ。
   @Volatile
   private var lastFetch: Pair<String, PlaceSearchResult>? = null

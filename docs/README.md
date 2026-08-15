@@ -19,29 +19,32 @@
 | [requirements.md](requirements.md) | 要望書（実現したいこと）★肝 |
 | [roadmap.md](roadmap.md)           | フェーズ・優先度・進捗      |
 
-### 仕様（What）
+### 仕様（What）— 概要。これだけ読めば「何が起きるか」が分かる
 
-| ファイル                               | 内容                             |
-| -------------------------------------- | -------------------------------- |
-| [specs/features.md](specs/features.md) | GPS記録機能のユースケース仕様    |
-| [specs/screens.md](specs/screens.md)   | 画面仕様（UI・ナビゲーション）   |
-| [specs/model.md](specs/model.md)       | データモデル（概念モデル・ER図） |
-| [specs/glossary.md](specs/glossary.md) | 用語集（データ・処理の日英対応） |
+| ファイル                                 | 内容                                         |
+| ---------------------------------------- | -------------------------------------------- |
+| [specs/recording.md](specs/recording.md) | 記録（開始・継続・間隔・保存するもの・補正） |
+| [specs/stops.md](specs/stops.md)         | 立ち寄り（判定・手直し・削除）               |
+| [specs/places.md](specs/places.md)       | 場所（名前・登録・行きたい・一覧・削除）     |
+| [specs/tracks.md](specs/tracks.md)       | 経路（名前・お気に入り・絞り込み・並べ替え） |
+| [specs/map.md](specs/map.md)             | 地図タップ（画面 × モード × 表示）           |
+| [specs/security.md](specs/security.md)   | データの扱いとプライバシー                   |
+| [specs/screens.md](specs/screens.md)     | 画面と遷移                                   |
+| [specs/model.md](specs/model.md)         | データモデル（概念モデル・ER図）             |
+| [specs/glossary.md](specs/glossary.md)   | 用語集（データ・処理の日英対応）             |
 
-### 設計（How）
+### 設計（How）— 詳細。**同名の仕様があれば、その作り方**
 
-| ファイル                                                             | 内容                                   |
-| -------------------------------------------------------------------- | -------------------------------------- |
-| [designs/architecture.md](designs/architecture.md)                   | アーキテクチャ・プロジェクト構成       |
-| [designs/security.md](designs/security.md)                           | セキュリティ設計                       |
-| [designs/logging.md](designs/logging.md)                             | ログ方針・実装                         |
-| [designs/performance.md](designs/performance.md)                     | パフォーマンス設計（電力・メモリ・DB） |
-| [designs/gps-smoothing.md](designs/gps-smoothing.md)                 | GPS軌跡の補正（スムージング）設計      |
-| [designs/places-and-stops.md](designs/places-and-stops.md)           | 場所・立ち寄りの永続化と命名設計       |
-| [designs/wishlist.md](designs/wishlist.md)                           | 行きたい場所・「場所」タブの設計       |
-| [designs/place-info-enrichment.md](designs/place-info-enrichment.md) | 場所情報の拡充とデータ分離（v7）       |
-| [designs/testing.md](designs/testing.md)                             | テスト戦略                             |
-| [designs/cloud-database.md](designs/cloud-database.md)               | クラウドDB・同期設計（将来）           |
+| ファイル                                           | 対応する仕様  | 内容                                     |
+| -------------------------------------------------- | ------------- | ---------------------------------------- |
+| [designs/smoothing.md](designs/smoothing.md)       | recording     | 補正のアルゴリズム・増分確定・調整       |
+| [designs/stops.md](designs/stops.md)               | stops         | 増分検出と境界・手直しの実装・孤立回収   |
+| [designs/places.md](designs/places.md)             | places        | 同定・由来・命名（Places API）・表示名   |
+| [designs/ui.md](designs/ui.md)                     | map / screens | 地図描画の共通化・非モーダルシート       |
+| [designs/architecture.md](designs/architecture.md) | —             | レイヤーと依存の向き・構成の判断         |
+| [designs/security.md](designs/security.md)         | security      | 暗号化の可否・鍵・API キー・権限の持ち場 |
+| [designs/logging.md](designs/logging.md)           | —             | ログの規約                               |
+| [designs/testing.md](designs/testing.md)           | —             | テスト戦略                               |
 
 ### 決定（Why this way）
 
@@ -56,10 +59,40 @@
 - **新しい要望が出たら** → まず `requirements.md` に「〜したい」を追記（日付付き）
 - **作り方を決めたら** → `specs/`（何を）と `designs/`（どう）に落とす
 - **設計上の分かれ道を決めたら** → `adr/` に決定を1枚（なぜ・没案）。設計書には現状だけ残す
+- **将来やりたい技術的な構想** → `roadmap.md` の「温めている案」（設計書には置かない）
 - **進捗** → `roadmap.md` で管理（要望書には進捗を書かない）
+
+### 概要（specs）と詳細（designs）の線引き
+
+**ざっくり知りたいときに specs だけ読めば済む**ようにするのが目的。判断に迷ったらこれで決める。
+
+> **実装を全部書き直しても、この記述は残るか？**
+> 残る → **仕様（specs）**。外から見える約束・決めた値。
+> 変わる → **設計（designs）**。どう実現するか。
+
+| 仕様（specs）                                 | 設計（designs）                            |
+| --------------------------------------------- | ------------------------------------------ |
+| 50m 圏内に 3 分いたら立ち寄りとする           | 境界以降だけをインクリメンタルに検出する   |
+| 表示名は 自分の名前 → Google 名 → 住所 → 座標 | 表示名は射影で LEFT JOIN して解決する      |
+| 一度名前を引いた場所は自動で引き直さない      | 「引いたか」は解決ログの行の有無で判定する |
+| 削除は即時実行し、スナックバーで取り消せる    | 実体を 1 件控えて元の ID のまま再挿入する  |
+| 絞り込みは 3 軸独立、並べ替えは軸＋昇降       | 純関数で適用し、ViewModel は状態だけ持つ   |
+
+- **同じ事実を両方に書かない。** 「50m/3分」を specs にも designs にも書けば、必ず片方が腐る。
+  designs は「仕様は specs にある」を前提に、How だけを書く。
+- **クラス名・パッケージ名・ファイルパスは specs に書かない。** それは実装を差し替えれば変わるもの。
 
 ### 書くときの原則
 
-- **依存は一方向（specs は designs に依存しない）** → 参照リンクは `designs → specs`（要望・仕様）に向ける。`specs → designs` のリンクは張らない（仕様は実現方法を知らずに成立させる）。
+- **specs から designs へリンクを張らない** → 仕様は実現方法を知らずに成立させる。詳細は
+  「対応する designs を見る」で辿れれば十分で、そのための**対応はファイル名と章立てで表す**
+  （リンクで繋がない）。画面仕様の詳細が知りたければ画面設計を見る、で成立させる。
+  逆向き（`designs → specs`・`designs → requirements`）は張ってよい。
+- **設計書は「無いと困る」ときだけ置く** → 仕様を読めばそのまま実装できるなら、設計書は要らない。
+  コードを読めば分かることしか書いていない設計書も置かない。**残す価値があるのは、
+  コードからは意図が読み取れないもの**（なぜその境界か、なぜそこに置いたか、何と何を揃えているか）。
 - **コードを見れば分かることは書かない** → 現行コードの写し（クラス本体・ディレクトリツリー・依存バージョンのピン留めなど）は、いずれ実装とズレて誤情報になるため docs に置かない。docs に書くのは**コードからは読み取れないもの**＝「何をしたいか（仕様・要望）」「今どうなっているか（設計）」「未実装の設計案・ポリシー」。具体値（バージョン・シグネチャ等）は実コード／Gradle 定義を正とし、docs からは参照に留める。
 - **設計判断（なぜ・没案）は ADR に、設計書には現状の概略を** → 設計書は「今どうなっているか」を読むためのもの。決定の背景・却下した案は [adr/](adr/) に 1 決定 1 ファイルで残し、設計書からは参照リンクに留める（設計書が経緯で薄まらないように）。
+  - 線引きの目安: **一文で足りる「なぜ」は設計書に残してよい**（読むのに要る前提）。「かつては〜だった」「旧〜は廃止した」のように**過去の姿を説明し始めたら ADR へ移す**。ADR は実装より**あとから書いてもよい**。
+- **終わった作業の記録を設計書に残さない** → 「段階リリース 1〜7（済）」のような進捗・移行手順は、完了した時点で消す。進捗は [roadmap.md](roadmap.md)、マイグレーションの手順は `DatabaseMigrations` と `schemas/*.json` が正。
+- **テーブルの列定義を設計書に写さない** → 概念モデルは [specs/model.md](specs/model.md)、実体は Room エンティティ。設計書には「なぜその形か」（外部キーを CASCADE にする/しない、行の有無に意味がある、など）だけ書く。二重管理すると必ず片方が腐る。

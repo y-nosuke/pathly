@@ -3,7 +3,7 @@
 - Status: Accepted
 - Date: 2026-08-07
 
-関連: 現状の設計は [../designs/gps-capture.md](../designs/gps-capture.md)。
+関連: 現状の仕様は [../specs/recording.md](../specs/recording.md)（保存するもの）。列は `GpsPointEntity` を正とする。
 
 ## Context（背景）
 

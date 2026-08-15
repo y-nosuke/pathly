@@ -3,7 +3,7 @@
 - Status: Accepted
 - Date: 2026-08-07
 
-関連: 現状の設計は [../designs/track-list.md](../designs/track-list.md)。
+関連: 現状の仕様は [../specs/tracks.md](../specs/tracks.md)。距離だけ扱いが違う理由は [0015](0015-bake-track-distance.md)。
 
 ## Context（背景）
 

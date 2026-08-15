@@ -3,7 +3,7 @@
 - Status: Accepted
 - Date: 2026-08-13
 
-関連: 地図タップの挙動は [0009](0009-map-tap-behavior.md) / [../designs/map-tap-behavior.md](../designs/map-tap-behavior.md)。
+関連: 地図タップの挙動は [0009](0009-map-tap-behavior.md) / [../specs/map.md](../specs/map.md)。
 
 ## Context（背景）
 

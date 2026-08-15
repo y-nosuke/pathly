@@ -641,7 +641,7 @@ private fun TrackingMapView(
         mapToolbarEnabled = false,
         compassEnabled = false,
       ),
-      // 施設アイコン（POI）をタップしたら場所登録ダイアログを開く
+      // 施設アイコン（POI）をタップしたら場所シートを開く
       onPOIClick = onPoiClick,
       // 空きスペースのタップは手動立ち寄り追加に使う（呼び出し側で記録中のみ受ける）
       onMapClick = onMapClick,

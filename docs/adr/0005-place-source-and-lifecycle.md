@@ -3,7 +3,7 @@
 - Status: Accepted
 - Date: 2026-08-08
 
-関連: 現状の設計は [../designs/places-and-stops.md](../designs/places-and-stops.md) の「場所の由来（source）と自動回収」。
+関連: 現状の設計は [../designs/places.md](../designs/places.md) の「由来（source）と自動回収」。
 
 ## Context（背景）
 

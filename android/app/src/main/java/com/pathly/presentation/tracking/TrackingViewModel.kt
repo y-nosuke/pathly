@@ -405,7 +405,7 @@ class TrackingViewModel @Inject constructor(
     }
   }
 
-  /** POI 登録ダイアログのプレビュー用: placeId から施設情報（カテゴリ等）を取得する。 */
+  /** 場所シートのプレビュー用: placeId から施設情報（カテゴリ等）を取得する。 */
   suspend fun fetchPoiDetails(googlePlaceId: String): PlaceSearchResult? = wishlistRepository.fetchPlaceDetails(googlePlaceId)
 
   /** 手動追加の確認ダイアログ用: 座標の近くの POI 候補を複数取得する（取り違え回避）。 */

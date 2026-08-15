@@ -279,7 +279,7 @@ class TrackDetailViewModel @Inject constructor(
     }
   }
 
-  /** POI 登録ダイアログのプレビュー用: placeId から施設情報（カテゴリ等）を取得する。 */
+  /** 場所シートのプレビュー用: placeId から施設情報（カテゴリ等）を取得する。 */
   suspend fun fetchPoiDetails(googlePlaceId: String): PlaceSearchResult? = wishlistRepository.fetchPlaceDetails(googlePlaceId)
 
   /** 誤検知の選び直し用: 座標の近くの POI 候補を取得する。 */
@@ -301,7 +301,7 @@ class TrackDetailViewModel @Inject constructor(
   }
 
   /**
-   * 再解析: その経路を検出し直し、**既存の立ち寄りに無い候補**を選択ダイアログに出す（非破壊）。
+   * 再解析: その経路を検出し直し、**既存の立ち寄りに無い候補**を地図のピンと候補オーバーレイに出す（非破壊）。
    * 実際の追加は [addStops] でユーザーが選んだ分だけ行う。
    */
   fun reanalyze() {
@@ -319,7 +319,7 @@ class TrackDetailViewModel @Inject constructor(
     viewModelScope.launch { placeRepository.addStops(trackId, candidates) }
   }
 
-  /** 再解析の候補ダイアログを閉じる（追加しない）。 */
+  /** 再解析の候補表示を閉じる（追加しない）。 */
   fun dismissReanalyze() {
     _reanalyzeCandidates.value = null
   }

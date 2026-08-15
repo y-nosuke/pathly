@@ -1,486 +1,94 @@
-# Androidテスト戦略
+# テスト戦略
 
-## Androidテストの基礎知識
+**Pathly で何をどう守るか**を書く。JUnit・MockK・Compose Testing の一般的な書き方は
+公式ドキュメントに譲り、ここには**このプロジェクト固有の判断と、実際に踏んだ落とし穴**だけ残す。
 
-### Androidテストの種類
+## 置き場所と使い分け
 
-Androidアプリケーションには主に**2種類のテスト**があります：
+| 種類                     | 場所                   | 実行                | 対象                                     |
+| ------------------------ | ---------------------- | ------------------- | ---------------------------------------- |
+| ユニットテスト           | `app/src/test/`        | JVM（数秒）         | ドメイン・UseCase・Repository・ViewModel |
+| インストルメンテーション | `app/src/androidTest/` | 実機/エミュ（数分） | DAO・マイグレーション・Compose UI        |
 
-#### 1. ユニットテスト（Unit Tests）
+**判断基準は「実際の Android が要るか」だけ**。Room の SQL とマイグレーションは実際の SQLite が要るので
+androidTest、それ以外はモックで JVM に寄せる。
 
-- **実行環境**: 開発用PC上のJVM
-- **場所**: `app/src/test/`
-- **特徴**:
-  - 非常に高速（数秒で数百テスト実行可能）
-  - Android端末やエミュレーターが不要
-  - Androidフレームワークに依存しない純粋なJavaKotlinコード
-- **テスト対象**: ビジネスロジック、計算処理、データ変換など
-- **例**: 距離計算、日付フォーマット、バリデーション処理
-
-#### 2. インストルメンテーションテスト（Instrumentation Tests）
+## 層ごとの方針
 
-- **実行環境**: Android端末またはエミュレーター
-- **場所**: `app/src/androidTest/`
-- **特徴**:
-  - 実行に時間がかかる（数分）
-  - 実際のAndroidシステム上で動作
-  - Androidフレームワーク、データベース、UI部品にアクセス可能
-- **テスト対象**: UI操作、データベース、センサー、権限システムなど
-- **例**: 画面タップ、データベース保存、GPS機能、カメラ機能
-
-### テストピラミッド（推奨構成）
-
-```text
-        /\
-       /UI\     ← 少数の重要なUIテスト
-      /____\      （インストルメンテーションテスト）
-     /      \
-    /統合テスト\   ← 各レイヤー間の連携テスト
-   /________\      （一部インストルメンテーション）
-  /          \
- /ユニットテスト\  ← 大多数のテスト
-/__________\       （JVMで高速実行）
-```
+### ドメイン・UseCase（ここを厚く守る）
 
-**理想的な割合**:
-
-- ユニットテスト: 70%（高速、安定、保守しやすい）
-- 統合テスト: 20%（レイヤー間の動作確認）
-- UIテスト: 10%（ユーザー体験の重要部分のみ）
-
-### どちらを選ぶべきか？
-
-| テスト対象       | テストの種類             | 理由                         |
-| ---------------- | ------------------------ | ---------------------------- |
-| 計算・ロジック   | ユニットテスト           | Androidに依存しない、高速    |
-| ViewModel        | ユニットテスト           | MockでRepository等を代替可能 |
-| データベース操作 | インストルメンテーション | 実際のSQLiteが必要           |
-| UI操作・表示     | インストルメンテーション | 実際の画面描画が必要         |
-| センサー・権限   | インストルメンテーション | Androidシステムが必要        |
-
-## テスト方針概要
-
-Pathlyプロジェクトでは、Clean Architecture構成に基づき、層ごとに適切なテストアプローチを採用します。テストの安定性と実行速度を両立し、継続的なリファクタリングをサポートする包括的なテスト戦略を実装しています。
-
-## テスト構成
-
-### テスト分類と実行環境
+`domain/model/`（`Geo` / `TrackSmoother` / `StopDetector` / `GpsTrack`）は依存が無いので素直に書ける。
 
-```text
-android/app/src/
-├── test/                   # ユニットテスト（JVMで実行）
-│   └── java/com/pathly/    # 高速、ビジネスロジック中心
-└── androidTest/            # インストルメンテーションテスト（Android端末で実行）
-    └── java/com/pathly/    # UI、データベース、統合テスト
-```
-
-### 各レイヤーのテスト戦略
-
-#### 1. ドメイン層テスト（ユニットテスト）
-
-- **場所**: `app/src/test/java/com/pathly/domain/`
-- **目的**: ビジネスロジックの検証
-- **特徴**: 依存なし、高速実行
-
-```kotlin
-// 例: GpsTrackTest.kt
-@Test
-fun calculateDistance_twoPoints_returnsCorrectDistance() {
-    // ドメインモデルの距離計算ロジックをテスト
-}
-```
-
-#### 2. データ層テスト
-
-##### ユニットテスト
-
-- **場所**: `app/src/test/java/com/pathly/data/`
-- **対象**: Repository実装、コンバーター、エンティティ変換
-- **特徴**: DAOをモック化、高速実行
-
-##### インストルメンテーションテスト
-
-- **場所**: `app/src/androidTest/java/com/pathly/data/`
-- **対象**: DAO、データベース統合、Repository統合テスト
-- **特徴**: 実際のSQLite使用、Roomの動作検証
-
-```kotlin
-// 例: GpsTrackDaoTest.kt（Android Test）
-@Before
-fun setup() {
-    database = Room.inMemoryDatabaseBuilder(
-        ApplicationProvider.getApplicationContext(),
-        PathlyDatabase::class.java
-    ).allowMainThreadQueries().build()
-}
-```
-
-#### 3. プレゼンテーション層テスト
-
-##### ViewModelテスト（ユニットテスト）
-
-- **場所**: `app/src/test/java/com/pathly/presentation/`
-- **対象**: ViewModel、状態管理ロジック
-- **特徴**: Repository、Contextをモック化
-
-```kotlin
-// 例: TrackingViewModelTest.kt
-@OptIn(ExperimentalCoroutinesApi::class)
-class TrackingViewModelTest {
-    @get:Rule
-    val instantTaskExecutorRule = InstantTaskExecutorRule()
-
-    private val testDispatcher = StandardTestDispatcher()
-    private val mockRepository = mockk<GpsTrackRepository>(relaxed = true)
-}
-```
-
-##### UIテスト（インストルメンテーションテスト）
-
-- **場所**: `app/src/androidTest/java/com/pathly/presentation/`
-- **対象**: Compose UI、ユーザーインタラクション
-- **特徴**: 実際のコンポーネント描画とインタラクション
-
-```kotlin
-// 例: HistoryScreenTest.kt
-@get:Rule
-val composeTestRule = createComposeRule()
-
-@Test
-fun historyScreen_initialState_showsTitle() {
-    composeTestRule.setContent {
-        PathlyAndroidTheme {
-            HistoryScreen(viewModel = mockViewModel)
-        }
-    }
-    composeTestRule.onNodeWithText("外出履歴").assertIsDisplayed()
-}
-```
-
-## テクニカルガイドライン
-
-### 1. 依存関係とツール
-
-#### テストライブラリ構成
-
-バージョンは Gradle（`gradle/libs.versions.toml` / `build.gradle.kts`）を正とする。ここでは役割で挙げる。
-
-```kotlin
-// ユニットテスト
-testImplementation("junit:junit")                              // JUnit4
-testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test") // コルーチン
-testImplementation("androidx.arch.core:core-testing")          // LiveData/Arch 同期実行
-testImplementation("io.mockk:mockk")                           // モック
-testImplementation("app.cash.turbine:turbine")                 // Flow/StateFlow のテスト
-
-// インストルメンテーションテスト
-androidTestImplementation("androidx.test.ext:junit")
-androidTestImplementation("androidx.test.espresso:espresso-core")
-androidTestImplementation("androidx.compose.ui:ui-test-junit4") // Compose UIテスト
-androidTestImplementation("androidx.room:room-testing")         // Room マイグレーション
-androidTestImplementation("io.mockk:mockk-android")
-```
-
-#### Gradle設定（重要）
-
-```kotlin
-// build.gradle.kts - ライセンスファイル重複エラーの回避
-packaging {
-    resources {
-        excludes += "META-INF/LICENSE.md"
-        excludes += "META-INF/LICENSE-notice.md"
-    }
-}
-```
-
-### 2. コルーチンテストパターン
-
-#### StandardTestDispatcher使用
-
-```kotlin
-@OptIn(ExperimentalCoroutinesApi::class)
-class ViewModelTest {
-    private val testDispatcher = StandardTestDispatcher()
-
-    @Before
-    fun setup() {
-        Dispatchers.setMain(testDispatcher)
-    }
-
-    @After
-    fun tearDown() {
-        Dispatchers.resetMain()
-    }
-
-    @Test
-    fun someAsyncFunction() = runTest {
-        // コルーチンを使ったテスト
-    }
-}
-```
-
-### 3. モッキング戦略
-
-#### MockKを使用したモック
-
-```kotlin
-// Repository のモック
-private val mockRepository = mockk<GpsTrackRepository>(relaxed = true)
-
-// 戻り値を設定
-coEvery { mockRepository.getAllTracks() } returns flowOf(tracks)
-
-// 関数呼び出しの検証
-coVerify { mockRepository.saveTrack(any()) }
-```
-
-#### Androidコンポーネントのモック
-
-```kotlin
-// Context、Applicationのモック
-private val mockApplication = mockk<Application>(relaxed = true)
-
-// 権限チェックのモック
-mockkStatic("androidx.core.content.ContextCompat")
-every {
-    androidx.core.content.ContextCompat.checkSelfPermission(any(), any())
-} returns PackageManager.PERMISSION_GRANTED
-```
-
-### 4. データベーステストパターン
-
-#### In-Memoryデータベース使用
-
-```kotlin
-@Before
-fun setup() {
-    database = Room.inMemoryDatabaseBuilder(
-        ApplicationProvider.getApplicationContext(),
-        PathlyDatabase::class.java
-    )
-        .allowMainThreadQueries()  // テスト用の設定
-        .build()
-}
-
-@After
-fun tearDown() {
-    database.close()
-}
-```
-
-### 5. Compose UIテストパターン
-
-#### 基本的なテスト構造
-
-```kotlin
-@get:Rule
-val composeTestRule = createComposeRule()
-
-@Test
-fun screenTest() {
-    // Given - テストデータ準備
-    val testData = createTestData()
-
-    // When - UIをセットアップ
-    composeTestRule.setContent {
-        PathlyAndroidTheme {
-            TestScreen(data = testData)
-        }
-    }
-
-    // Then - UI要素を検証
-    composeTestRule
-        .onNodeWithText("期待されるテキスト")
-        .assertIsDisplayed()
-}
-```
-
-#### 複数要素の検証
-
-```kotlin
-// 同じContentDescriptionが複数ある場合
-composeTestRule
-    .onAllNodesWithContentDescription("削除")
-    .assertCountEquals(3)  // 3つの削除ボタンが存在することを確認
-
-// 最初の要素のみテスト
-composeTestRule
-    .onAllNodesWithContentDescription("削除")[0]
-    .performClick()
-```
-
-#### State変更のテスト
-
-```kotlin
-@Test
-fun stateChangeTest() {
-    // UIの状態変更をテスト
-    composeTestRule.runOnUiThread {
-        uiStateFlow.value = newState
-    }
-
-    // 変更後のUIを検証
-    composeTestRule
-        .onNodeWithText("新しい状態")
-        .assertIsDisplayed()
-}
-```
-
-## テスト実行コマンド
-
-### Gradleコマンド
+**`domain/usecase/` は特に厚く守る。** `PlaceEditUseCase` / `AddManualStopUseCase` は記録画面・経路詳細・
+場所タブの 3 画面で共有していて、切り出す前は**近接確認の分岐が Composable 側にあってテストできなかった**。
+Repository をモックすれば 3 画面ぶんの挙動をまとめて検証できるので、**画面から UseCase へ移したロジックには
+必ずテストを付ける**。
+
+### Repository
+
+DAO をモックして JVM で回す。守りたいのは SQL ではなく**書き込み先の判断**で、たとえば
+「Google の名前を `places.name` に書いていないか」「取得済みの施設情報があるとき Places を叩き直さないか」
+といった、間違えても動いてしまう種類のバグを狙う。
+
+### ViewModel
+
+Repository をモックし、`StateFlow` の遷移を見る。**Android framework に触る部分は ViewModel に置かない**
+（`data/tracking/TrackingController` に寄せてある）。そうしないとテストが書けないので、
+書きにくいと感じたら設計側を疑う。
+
+### DAO・マイグレーション（androidTest）
+
+- DAO はインメモリ DB（`Room.inMemoryDatabaseBuilder`）。`@After` で必ず `close()`。
+- **マイグレーションは `MigrationTest` で全バージョン連鎖を検証する**（`room-testing` の `MigrationTestHelper`）。
+  破壊的フォールバックを無効にしているので、これが落ちるとユーザーの手元でアプリが起動しなくなる。
+
+### Compose UI（androidTest）
+
+画面が壊れていないかの薄い確認に留める。地図は差し替え可能なスロットにしてあり、テストでは実地図を出さない
+（実機の Google Play services に依存させないため）。
+
+## CI と push 前のゲート
+
+`.github/workflows/android-build.yml` が main への push / PR で動き、**`./gradlew build` 一発**で
+ユニットテスト・lint・spotless（ktlint）・assemble(debug/release) をまとめて実行する。
+debug APK と lint/test レポートをアーティファクトに残す（同一ブランチの新 push で進行中の実行はキャンセル）。
+
+> **push 前は `./gradlew build` を通すこと。** `test` だけ／`lint` だけを回すと、整形
+> （`spotlessKotlinCheck`）や別のゲートを見逃して CI で落ちる。実際に両方で落としたことがある。
+> 整形の崩れは `./gradlew spotlessApply` で直る。
+
+インストルメンテーションテストはエミュレータが要るため **CI では回さない**。実機／ローカルのエミュレータで確認する。
+
+## 実機でしか確かめられないもの
+
+エミュレータのグリーンでは足りない項目。リリース前に手で確認する。
+
+- **DB マイグレーションの実データ移行**（`MigrationTest` は空に近いデータでしか回らない）
+- **位置情報サービスが OFF の状態での記録開始**
+- **サービスの異常終了からの復帰**（START_STICKY での再開）
+- バックグラウンドでの長時間記録・電池の最適化の影響
+
+## 踏んだ落とし穴
+
+- **ライセンスファイルの重複**（`6 files found with path 'META-INF/LICENSE.md'`）
+  → `build.gradle.kts` の `packaging { resources { excludes += ... } }` で回避済み。
+- **依存の版ずれ**（kotlinx-serialization の BOM 不整合）で androidTest だけが落ちた。
+  ユニットテストが通っても androidTest が通るとは限らない。
+- **腐ったテスト**は落ちるまで気づけない。UI を作り替えたら、そのテストも同時に直す
+  （`TrackDetailScreen` の分割時に実際に取り残した）。
+
+## テスト実行
 
 ```bash
-# すべてのユニットテスト実行
-./gradlew test
+./gradlew build
+```
 
-# すべてのインストルメンテーションテスト実行
+```bash
 ./gradlew connectedAndroidTest
-
-# 特定のテストクラス実行
-./gradlew test --tests "com.pathly.presentation.tracking.TrackingViewModelTest"
-
-# テストレポート生成
-./gradlew testDebugUnitTest
-# レポート: app/build/reports/tests/testDebugUnitTest/index.html
 ```
-
-### Android Studioでの実行
-
-- 個別テスト: テストメソッド左の緑矢印をクリック
-- クラス単位: テストクラス名を右クリック → "Run"
-- パッケージ単位: テストパッケージを右クリック → "Run tests"
-
-## 品質保証とベストプラクティス
-
-### 1. テストの命名規則
-
-```kotlin
-// パターン: [MethodName]_[Scenario]_[ExpectedResult]
-fun startTracking_withValidPermissions_updatesStateToActive()
-fun calculateDistance_twoPointsSameLocation_returnsZero()
-fun historyScreen_emptyTracks_showsEmptyMessage()
-```
-
-### 2. Given-When-Thenパターンの徹底
-
-```kotlin
-@Test
-fun someTest() {
-    // Given - テストの前提条件
-    val inputData = createTestData()
-    val mockBehavior = setupMockBehavior()
-
-    // When - テスト対象の実行
-    val result = targetFunction(inputData)
-
-    // Then - 結果の検証
-    assertEquals(expectedResult, result)
-    verify { mockObject.expectedCall() }
-}
-```
-
-### 3. テストデータの管理
-
-```kotlin
-// テストヘルパー関数を作成
-private fun createSampleTrack(
-    id: Long = 1L,
-    pointsCount: Int = 2
-): GpsTrack {
-    return GpsTrack(
-        id = id,
-        startTime = Date(),
-        // ... 他のプロパティ
-        points = createSamplePoints(pointsCount)
-    )
-}
-```
-
-### 4. 非同期処理のテスト
-
-```kotlin
-@Test
-fun asyncTest() = runTest {
-    // StateFlowのテスト
-    val stateValues = mutableListOf<State>()
-    val job = launch {
-        viewModel.uiState.collect { stateValues.add(it) }
-    }
-
-    // 処理実行
-    viewModel.performAction()
-
-    // 状態変更を検証
-    assertEquals(expectedState, stateValues.last())
-    job.cancel()
-}
-```
-
-## エラー対応とトラブルシューティング
-
-### よくあるエラーと解決策
-
-#### 1. ライセンスファイル重複エラー
 
 ```bash
-6 files found with path 'META-INF/LICENSE.md'
+./gradlew test --tests "com.pathly.domain.usecase.PlaceEditUseCaseTest"
 ```
 
-**解決**: `build.gradle.kts`に`packaging`ブロックを追加
-
-#### 2. Compose UI複数要素エラー
-
-```bash
-Expected at most 1 node but found 3 nodes
-```
-
-**解決**: `onNodeWithX` → `onAllNodesWithX().assertCountEquals(n)`に変更
-
-#### 3. コルーチンテストのタイムアウト
-
-**解決**: `StandardTestDispatcher`使用、適切な`runTest`適用
-
-#### 4. データベースのリークエラー
-
-**解決**: `@After`で必ず`database.close()`実行
-
-### テスト実行環境
-
-#### Android Emulator設定（推奨）
-
-- **API Level**: 36 (Android 16+)
-- **Device**: Medium Phone API 36
-- **特徴**: Compose UI、Room、権限システムの完全サポート
-
-#### 実機テスト
-
-- **最小要件**: API 34 (Android 14) 以上
-- **権限**: 位置情報権限が必要（LocationTrackingService用）
-
-## 継続的インテグレーション
-
-### GitHub Actions（実装済み）
-
-`.github/workflows/android-build.yml` が main への push / PR で動く。`./gradlew build` 一発で
-**ユニットテスト・lint・assemble(debug/release)** をまとめて実行し、debug APK と lint/test レポートを
-アーティファクトとして保存する（同一ブランチの新 push で進行中の実行はキャンセル）。
-
-```yaml
-# .github/workflows/android-build.yml（要点）
-- name: Build, test and lint
-  run: ./gradlew build # test + lint + assemble をまとめて実行
-```
-
-> インストルメンテーションテスト（`connectedAndroidTest`）はエミュレータが要るため CI では回さず、
-> 実機／ローカルのエミュレータで確認する。
-
-### テストカバレッジ目標
-
-- **ユニットテスト**: 80%以上（ビジネスロジック）
-- **統合テスト**: 主要フロー100%カバー
-- **UIテスト**: クリティカルパス100%カバー
-
-## まとめ
-
-このテスト戦略により、Pathlyアプリケーションの品質と安定性を確保し、リファクタリング時の安全性を提供します。Clean Architectureの各層に適したテストアプローチを採用することで、効率的で保守可能なテストスイートを構築しています。
+レポート: `app/build/reports/tests/testDebugUnitTest/index.html`
