@@ -33,3 +33,4 @@
 | [0015](0015-bake-track-distance.md)                 | 経路の総移動距離は確定時に焼き込み、一覧では点をロードしない（v11）       | Accepted |
 | [0016](0016-allow-device-backup.md)                 | 端末の自動バックアップは既定のまま許容する                                | Accepted |
 | [0017](0017-normalize-place-category.md)            | 場所の業種は機械可読な code を正としてマスタに正規化する（v13）           | Accepted |
+| [0018](0018-marker-shape-conveys-certainty.md)      | 地図マーカーは「確定＝丸／これから決める＝ピン」を形で表す                | Accepted |
