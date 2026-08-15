@@ -6,7 +6,6 @@ import android.net.NetworkCapabilities
 import com.google.android.gms.tasks.Tasks
 import com.google.android.libraries.places.api.Places
 import com.google.android.libraries.places.api.model.AutocompleteSessionToken
-import com.google.android.libraries.places.api.model.Place
 import com.google.android.libraries.places.api.net.FetchPlaceRequest
 import com.google.android.libraries.places.api.net.FindAutocompletePredictionsRequest
 import com.google.android.libraries.places.api.net.PlacesClient
@@ -87,14 +86,7 @@ class PlacesTextSearcher @Inject constructor(
     val placesClient = client ?: return@withContext null
     val token = sessionToken
     try {
-      val fields = listOf(
-        Place.Field.ID,
-        Place.Field.DISPLAY_NAME,
-        Place.Field.FORMATTED_ADDRESS,
-        Place.Field.PRIMARY_TYPE_DISPLAY_NAME,
-        Place.Field.LOCATION,
-      )
-      val builder = FetchPlaceRequest.builder(placeId, fields)
+      val builder = FetchPlaceRequest.builder(placeId, PLACE_DETAIL_FIELDS)
       if (token != null) builder.setSessionToken(token)
       val response = Tasks.await(placesClient.fetchPlace(builder.build()))
       val place = response.place
@@ -103,7 +95,7 @@ class PlacesTextSearcher @Inject constructor(
         googlePlaceId = place.id?.takeIf { it.isNotBlank() } ?: placeId,
         name = place.displayName?.takeIf { it.isNotBlank() },
         address = place.formattedAddress?.takeIf { it.isNotBlank() },
-        category = place.primaryTypeDisplayName?.takeIf { it.isNotBlank() },
+        category = place.toPlaceCategory(),
         latitude = latLng.latitude,
         longitude = latLng.longitude,
       ).also { lastFetch = placeId to it }

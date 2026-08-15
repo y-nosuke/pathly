@@ -212,6 +212,52 @@ class MigrationTest {
     db.close()
   }
 
+  @Test
+  fun migrate12To13_normalizesCategoryIntoMasterTable() {
+    // v12 のスキーマで DB を作成し、旧形式（表示名を直接持つ）の Google データを1件入れておく。
+    helper.createDatabase(TEST_DB, 12).apply {
+      execSQL(
+        "INSERT INTO places (id, name, latitude, longitude, note, source, createdAt, updatedAt) " +
+          "VALUES (1, 'テスト場所', 35.0, 139.0, NULL, 'USER', 0, 0)",
+      )
+      execSQL(
+        "INSERT INTO google_places (placeId, googlePlaceId, name, address, category) " +
+          "VALUES (1, 'gp-1', 'テストカフェ', '東京都1-1', 'カフェ')",
+      )
+      close()
+    }
+
+    // 12→13 を適用。作り直した google_places の DDL が Room の生成物とずれていればここで失敗する。
+    val db = helper.runMigrationsAndValidate(
+      TEST_DB,
+      13,
+      true,
+      DatabaseMigrations.MIGRATION_12_13,
+    )
+
+    // 名前・住所・googlePlaceId は作り直しをまたいで保持される。業種は引き直すので未設定。
+    db.query("SELECT googlePlaceId, name, address, categoryId FROM google_places WHERE placeId = 1").use { cursor ->
+      assertTrue(cursor.moveToFirst())
+      assertEquals("gp-1", cursor.getString(0))
+      assertEquals("テストカフェ", cursor.getString(1))
+      assertEquals("東京都1-1", cursor.getString(2))
+      assertTrue("業種は引き直すので null", cursor.isNull(3))
+    }
+
+    // マスタに業種を入れて参照できる（外部キーが張れている＝参照先が正しい）。
+    db.execSQL("INSERT INTO google_place_categories (id, code, displayName) VALUES (1, 'cafe', 'カフェ')")
+    db.execSQL("UPDATE google_places SET categoryId = 1 WHERE placeId = 1")
+    db.query(
+      "SELECT c.code, c.displayName FROM google_places g " +
+        "JOIN google_place_categories c ON c.id = g.categoryId WHERE g.placeId = 1",
+    ).use { cursor ->
+      assertTrue(cursor.moveToFirst())
+      assertEquals("cafe", cursor.getString(0))
+      assertEquals("カフェ", cursor.getString(1))
+    }
+    db.close()
+  }
+
   companion object {
     private const val TEST_DB = "migration-test"
   }

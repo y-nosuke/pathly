@@ -362,6 +362,68 @@ object DatabaseMigrations {
   }
 
   /**
+   * v12 → v13: Google のカテゴリ（業種）をマスタに正規化する。
+   *
+   * これまでは表示名（「カフェ」）を `google_places.category` に直接持っていた。同じ業種の場所の数だけ
+   * 同じ文字列が重複するうえ、表示名はロケール依存なので、これを手掛かりに地図のアイコンを出し分けると
+   * 言語設定で壊れる。**機械可読な primaryType（`cafe`）** を正とする `google_place_categories` を
+   * 新設し、`google_places` はその id を参照する形にする。
+   *
+   * 既存行の `category` は表示名しか無く、対応する code を後から復元できない（「カフェ」から `cafe` を
+   * 引き当てるのは推測になる）。そのため列ごと落とし、**業種は Google から引き直して埋めた**
+   * （一度きりのバックフィルを流したうえで、その処理は削除済み。以後この経路で埋まる場所は無い）。
+   *
+   * 外部キーを増やすので `google_places` は作り直す。DDL は Room がエンティティから生成するものと
+   * 一致させること（起動時のスキーマ検証を通すため）。
+   */
+  val MIGRATION_12_13 = object : Migration(12, 13) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+      try {
+        logger.i("Starting migration from version 12 to 13")
+
+        // 1. 業種のマスタ。id はサロゲートで、業種の同一性は code の UNIQUE 索引が担保する。
+        db.execSQL(
+          "CREATE TABLE IF NOT EXISTS `google_place_categories` (" +
+            "`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+            "`code` TEXT NOT NULL, " +
+            "`displayName` TEXT)",
+        )
+        db.execSQL(
+          "CREATE UNIQUE INDEX IF NOT EXISTS `index_google_place_categories_code` " +
+            "ON `google_place_categories` (`code`)",
+        )
+
+        // 2. google_places を作り直す（category を落とし、categoryId の外部キーを足す）。
+        db.execSQL(
+          "CREATE TABLE IF NOT EXISTS `google_places_new` (" +
+            "`placeId` INTEGER NOT NULL, " +
+            "`googlePlaceId` TEXT NOT NULL, " +
+            "`name` TEXT, " +
+            "`address` TEXT, " +
+            "`categoryId` INTEGER, " +
+            "PRIMARY KEY(`placeId`), " +
+            "FOREIGN KEY(`placeId`) REFERENCES `places`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE , " +
+            "FOREIGN KEY(`categoryId`) REFERENCES `google_place_categories`(`id`) " +
+            "ON UPDATE NO ACTION ON DELETE NO ACTION )",
+        )
+        // 業種は引き直すので categoryId は NULL で入れる（旧 category は捨てる）。
+        db.execSQL(
+          "INSERT INTO `google_places_new` (`placeId`, `googlePlaceId`, `name`, `address`, `categoryId`) " +
+            "SELECT `placeId`, `googlePlaceId`, `name`, `address`, NULL FROM `google_places`",
+        )
+        db.execSQL("DROP TABLE `google_places`")
+        db.execSQL("ALTER TABLE `google_places_new` RENAME TO `google_places`")
+        db.execSQL("CREATE INDEX IF NOT EXISTS `index_google_places_categoryId` ON `google_places` (`categoryId`)")
+
+        logger.i("Migration from version 12 to 13 completed successfully")
+      } catch (e: Exception) {
+        logger.e("Migration from version 12 to 13 failed", e)
+        throw e
+      }
+    }
+  }
+
+  /**
    * 現在利用可能な全てのマイグレーション
    */
   val ALL_MIGRATIONS = arrayOf(
@@ -376,6 +438,7 @@ object DatabaseMigrations {
     MIGRATION_9_10,
     MIGRATION_10_11,
     MIGRATION_11_12,
+    MIGRATION_12_13,
     // 将来のマイグレーションをここに追加
   )
 

@@ -7,9 +7,9 @@ import com.google.android.gms.maps.model.LatLng
 import com.google.android.gms.tasks.Tasks
 import com.google.android.libraries.places.api.Places
 import com.google.android.libraries.places.api.model.CircularBounds
-import com.google.android.libraries.places.api.model.Place
 import com.google.android.libraries.places.api.net.PlacesClient
 import com.google.android.libraries.places.api.net.SearchNearbyRequest
+import com.pathly.domain.model.PlaceCategory
 import com.pathly.domain.model.PlaceSearchResult
 import com.pathly.util.Logger
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -37,7 +37,7 @@ class PlacesNameResolver @Inject constructor(
     data class Found(
       val name: String?,
       val address: String?,
-      val category: String?,
+      val category: PlaceCategory?,
       val googlePlaceId: String,
       // 施設の正確な座標（LOCATION）。暫定 GPS 座標を置き換えるために使う。取れなければ null。
       val latitude: Double?,
@@ -63,14 +63,7 @@ class PlacesNameResolver @Inject constructor(
     val placesClient = client ?: return@withContext Outcome.NotAttempted
     try {
       val circle = CircularBounds.newInstance(LatLng(latitude, longitude), SEARCH_RADIUS_METERS)
-      val fields = listOf(
-        Place.Field.ID,
-        Place.Field.DISPLAY_NAME,
-        Place.Field.FORMATTED_ADDRESS,
-        Place.Field.PRIMARY_TYPE_DISPLAY_NAME,
-        Place.Field.LOCATION,
-      )
-      val request = SearchNearbyRequest.builder(circle, fields)
+      val request = SearchNearbyRequest.builder(circle, PLACE_DETAIL_FIELDS)
         .setMaxResultCount(1)
         .setRankPreference(SearchNearbyRequest.RankPreference.DISTANCE)
         .build()
@@ -80,7 +73,7 @@ class PlacesNameResolver @Inject constructor(
       val googlePlaceId = place.id?.takeIf { it.isNotBlank() } ?: return@withContext Outcome.NoMatch
       val name = place.displayName?.takeIf { it.isNotBlank() }
       val address = place.formattedAddress?.takeIf { it.isNotBlank() }
-      val category = place.primaryTypeDisplayName?.takeIf { it.isNotBlank() }
+      val category = place.toPlaceCategory()
       val loc = place.location
       Outcome.Found(name, address, category, googlePlaceId, loc?.latitude, loc?.longitude)
     } catch (e: Exception) {
@@ -103,14 +96,7 @@ class PlacesNameResolver @Inject constructor(
     val placesClient = client ?: return@withContext emptyList()
     try {
       val circle = CircularBounds.newInstance(LatLng(latitude, longitude), CANDIDATE_RADIUS_METERS)
-      val fields = listOf(
-        Place.Field.ID,
-        Place.Field.DISPLAY_NAME,
-        Place.Field.FORMATTED_ADDRESS,
-        Place.Field.PRIMARY_TYPE_DISPLAY_NAME,
-        Place.Field.LOCATION,
-      )
-      val request = SearchNearbyRequest.builder(circle, fields)
+      val request = SearchNearbyRequest.builder(circle, PLACE_DETAIL_FIELDS)
         .setMaxResultCount(maxResults.coerceIn(1, 20))
         .setRankPreference(SearchNearbyRequest.RankPreference.DISTANCE)
         .build()
@@ -123,7 +109,7 @@ class PlacesNameResolver @Inject constructor(
           googlePlaceId = id,
           name = place.displayName?.takeIf { it.isNotBlank() },
           address = place.formattedAddress?.takeIf { it.isNotBlank() },
-          category = place.primaryTypeDisplayName?.takeIf { it.isNotBlank() },
+          category = place.toPlaceCategory(),
           latitude = loc?.latitude ?: latitude,
           longitude = loc?.longitude ?: longitude,
         )

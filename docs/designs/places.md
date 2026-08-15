@@ -18,12 +18,18 @@ Google 由来データを別テーブルにした判断は [ADR-0001](../adr/000
   結果そのものは `google_places` に入る。
 - `wishlist(placeId)` は **UNIQUE**（重複登録の防止と find-or-add に使う）。`places` に従属し CASCADE。
 - **メモ（`stops.note`）は訪問単位、名前（`places.name`）は場所単位。** 空文字は保存せず null にそろえる。
+- **業種は `google_place_categories` に正規化**し、`google_places.categoryId` から参照する
+  （→ [ADR-0017](../adr/0017-normalize-place-category.md)）。正は機械可読な `code`（Places の
+  `primaryType`＝`cafe`）で、`displayName`（「カフェ」）は表示専用。**判定に表示名を使わない**
+  （ロケールで変わる）。行は事前にシードせず、応答で出会った業種だけ都度 upsert して育てる。
 - 近傍検索が全表走査にならないよう `places(latitude, longitude)` に索引を張る。記録中は位置のバッチごとに
   引かれるため、場所が増えるほど効く。
 
 ## ドメインモデル
 
 - `Place` … 座標＋自分で付けた名前・メモに加え、`google_places` から JOIN した施設名・住所・カテゴリ。
+- `PlaceCategory` … 業種。`code`（判定に使う）と `displayName`（表示に使う）の対。業種が取れなければ
+  `Place.category` ごと null で、**表示名だけ持つ状態は作らない**。
 - `PlaceListItem` … 一覧の 1 行。`Place` ＋ 行きたい登録（あれば）＋ 立ち寄り件数。
   **行きたい登録が無い場所も同じ型で並ぶ**（`wishlistId` が null）。
 
@@ -90,7 +96,9 @@ API キー（地図と共用）を**そのまま安全に**使えるため。
 `places.name → google_places.name → 住所 → 座標` のフォールバックを、**すべての読み取りで揃える**。
 
 - 一覧・詳細（`PlaceDao` の射影）に加え、履歴の立ち寄り表示・関連経路一覧（`StopDao` の射影）も
-  `google_places` を LEFT JOIN する。カテゴリ・住所も同じ JOIN で取る。
+  `google_places` を LEFT JOIN する。住所も同じ JOIN で取る。カテゴリはさらに
+  `google_place_categories` を LEFT JOIN して `code` / `displayName` を引く
+  （`@Relation` 側は `GooglePlaceWithCategory` が担う）。
 - 計算は 1 か所（表示名ヘルパ）に集約し、各射影から使う。
 - 地図のマーカー用には最小情報だけ返す射影を別に持つ（`observeRegisteredPlaces`・`NamedPlaceRow`）。
   以前は「全 place を読む → 近いものを探す → place ごとに `google_places` を引く」で N+1 になっていた。

@@ -32,4 +32,6 @@
 | [0014](0014-place-naming-cost-policy.md)            | 自動命名は Places を使い、オンライン時・place 1 件 1 回に限る             | Accepted |
 | [0015](0015-bake-track-distance.md)                 | 経路の総移動距離は確定時に焼き込み、一覧では点をロードしない（v11）       | Accepted |
 | [0016](0016-allow-device-backup.md)                 | 端末の自動バックアップは既定のまま許容する                                | Accepted |
-| [0017](0017-single-place-editor.md)                 | 登録済みの場所の編集画面を1つに統一する（入口だけを変える）               | Accepted |
+| [0017](0017-normalize-place-category.md)            | 場所の業種は機械可読な code を正としてマスタに正規化する（v13）           | Accepted |
+| [0018](0018-marker-shape-conveys-certainty.md)      | 地図マーカーは「確定＝丸／これから決める＝ピン」を形で表す                | Accepted |
+| [0019](0019-single-place-editor.md)                 | 登録済みの場所の編集画面を1つに統一する（入口だけを変える）               | Accepted |

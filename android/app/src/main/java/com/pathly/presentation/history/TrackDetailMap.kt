@@ -12,7 +12,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import com.google.android.gms.maps.CameraUpdateFactory
-import com.google.android.gms.maps.model.BitmapDescriptorFactory
 import com.google.android.gms.maps.model.CameraPosition
 import com.google.android.gms.maps.model.LatLng
 import com.google.android.gms.maps.model.LatLngBounds
@@ -22,15 +21,19 @@ import com.google.maps.android.compose.MapProperties
 import com.google.maps.android.compose.MapType
 import com.google.maps.android.compose.MapUiSettings
 import com.google.maps.android.compose.MapsComposeExperimentalApi
-import com.google.maps.android.compose.Marker
+import com.google.maps.android.compose.MarkerComposable
 import com.google.maps.android.compose.MarkerState
 import com.google.maps.android.compose.Polyline
 import com.google.maps.android.compose.rememberCameraPositionState
+import com.pathly.R
 import com.pathly.domain.model.GpsPoint
 import com.pathly.domain.model.GpsTrack
 import com.pathly.domain.model.RegisteredPlace
 import com.pathly.domain.model.Stop
 import com.pathly.domain.model.StopCandidate
+import com.pathly.presentation.common.MapPinMarker
+import com.pathly.presentation.common.MarkerCandidateOrange
+import com.pathly.presentation.common.MarkerPickBlue
 import com.pathly.presentation.common.RouteMapContent
 import com.pathly.util.DateFormatters
 
@@ -132,18 +135,24 @@ internal fun TrackMapView(
       onRegisteredPlaceClick = onRegisteredPlaceClick,
     )
 
-    // 再解析の候補（オレンジのピン）。既存（紫）と見分けられるようにする。
+    // 再解析の候補（橙のピン）。まだ追加していない＝これから決めるものなので、確定した立ち寄り
+    // （紫の丸）とは形で見分ける。
     candidates.forEachIndexed { index, candidate ->
       val d = candidate.detected
       val candidateMarkerState = remember(index, d.latitude, d.longitude) {
         MarkerState(position = LatLng(d.latitude, d.longitude))
       }
-      Marker(
+      MarkerComposable(
+        "candidate",
+        index,
+        d.latitude,
+        d.longitude,
         state = candidateMarkerState,
         title = candidate.name ?: "候補（名称未取得）",
         snippet = "${DateFormatters.shortTime(d.arrivalTime)} ・ 滞在${d.durationMinutes}分",
-        icon = BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_ORANGE),
-      )
+      ) {
+        MapPinMarker(bg = MarkerCandidateOrange, glyph = R.drawable.ic_help)
+      }
     }
 
     // 手動追加: 選んだ滞在区間を青い太線でハイライトし、経路のどこかを見せる。
@@ -155,14 +164,18 @@ internal fun TrackMapView(
       )
     }
 
-    // 手動追加で指した地点（青いピン）。
+    // 手動追加で指した地点（青いピン）。いま自分で置いている最中のもの。
     manualPickTarget?.let { target ->
       val pickMarkerState = remember(target) { MarkerState(position = target) }
-      Marker(
+      MarkerComposable(
+        "manual-pick",
+        target.latitude,
+        target.longitude,
         state = pickMarkerState,
         title = "追加する地点",
-        icon = BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_AZURE),
-      )
+      ) {
+        MapPinMarker(bg = MarkerPickBlue, glyph = R.drawable.ic_add)
+      }
     }
   }
 }
