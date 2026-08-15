@@ -3,8 +3,6 @@
 位置情報の処理で使う用語を、**日本語（議論用）**と**英語（コードの識別子）**で対応させる。
 変数名・関数名・テーブル名をブレさせないための共通辞書。
 
-関連設計: [gps-smoothing.md](../designs/gps-smoothing.md)（補正）／[places-and-stops.md](../designs/places-and-stops.md)（場所・立ち寄り）
-
 ---
 
 ## データ（名詞）
@@ -24,7 +22,7 @@
 
 データの流れ:
 
-```
+```text
 生データ（gps_points・どんな座標を拾ったか）
    ↓ 補正（smoothing）
 補正後の点列（smoothed_points・どこを通ったか）
@@ -43,8 +41,7 @@
 | **自分で付けた名前** | `places.name`        | ユーザーだけ。Google の名前は**絶対に入れない** |
 | **Google の名前**    | `google_places.name` | 自動命名・POI タップ・キーワード検索            |
 
-表示名は `places.name` → `google_places.name` → 住所 → 座標 の順にフォールバックする
-（[../designs/places-and-stops.md](../designs/places-and-stops.md)）。
+表示名は `places.name` → `google_places.name` → 住所 → 座標 の順にフォールバックする。
 
 ### 座標の2つの出どころ（混ぜないこと）
 

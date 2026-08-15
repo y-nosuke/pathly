@@ -23,7 +23,7 @@
 「行きたい」は**場所そのものの性質ではなく、ユーザーの計画に属する状態**なので、`places` に列を足さず
 別テーブルに分離する（[ADR-0013](../adr/0013-separate-place-stop-wishlist-tables.md)）。
 
-```
+```text
 places 1 ──< stops             （立ち寄り＝過去の訪問）
        1 ──o wishlist          （行きたい＝これからの計画）  ← 本書が扱う
        1 ──o place_resolutions （Google 解決ログ）
@@ -69,7 +69,7 @@ places 1 ──< stops             （立ち寄り＝過去の訪問）
     （[places-and-stops.md](./places-and-stops.md)）。
 - `Priority` … `LOW / MEDIUM / HIGH` の enum（DB では 0/1/2）。
 
-```
+```text
 PlaceListItem
  ├─ place: Place        （id・name?・lat・lng・note?・googleName?・googleAddress?・category?）
  ├─ wishlistId: Long?   （null=行きたいに入っていない）

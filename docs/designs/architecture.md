@@ -19,7 +19,7 @@ Pathly Android の構成方針と、その背景にある設計判断をまと�
 
 ## レイヤーと依存の向き
 
-```
+```text
 presentation ──▶ domain ◀── data
    (UI/VM)    (interface/UseCase)  (impl/Room/Places/Work)
                     ▲

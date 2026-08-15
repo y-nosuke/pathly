@@ -23,7 +23,7 @@
 3. **`DetectedStop`** … 補正後の点列の中で「50m圏内に3分以上とどまった」箇所を1つにまとめたもの。「**どこに滞在したか**」。座標は滞在中の点の重心。検出の一時結果で永続化しない。
 4. **`Place` / `Stop`** … `DetectedStop` を保存したもの。`Place`＝場所そのもの（座標・自分で付けた名前・メモ）、`Stop`＝その場所への訪問（place × track × 時刻）。本書が扱う範囲。
 
-```
+```text
 gps_points（生データ・どんな座標を拾ったか）
    ↓ TrackSmoother.smooth（補正）
 smoothedPoints（補正後の軌跡・どこを通ったか）
@@ -44,7 +44,7 @@ Place / Stop（場所と訪問・永続化）
 - **stops（立ち寄り）** … 「どの経路で・どの場所に・いつからいつまで」いたかを表す**訪問**。
   places と gps_tracks を結ぶ。
 
-```
+```text
 gps_tracks 1 ──< stops >── 1 places
                 (訪問)        (場所そのもの)
                               └─ wishlist（行きたい）も places を参照
@@ -84,7 +84,7 @@ gps_tracks 1 ──< stops >── 1 places
 
 場所名を出す**すべての読み取り**を、次の優先で解決する:
 
-```
+```text
 表示名 = places.name（自分の名前）
        ?: google_places.name（Google の名前）
        ?: google_places.address（住所）
@@ -225,7 +225,7 @@ DB の最終 departure で種をまき直すため、その1件が再検出さ�
    - **stop を保存**（place は既にあるので stop を作るだけ・名前解決は再実行しない）。
    - ライブ表示から消え、保存済み立ち寄り一覧に移る。
 
-```
+```text
 新しい点が保存・補正される
   └─ updateStopsForTrack(trackId, isFinal)
        - 境界 = メモリの高水位 ?: 保存済み立ち寄りの最終 departure ?: なし（＝全点）
@@ -411,6 +411,7 @@ Google Maps / iOS の訪問検出が精度良いのは、**位置以外の信号
 6. **機械学習** … ラベル付きデータで学習したモデル。
 
 まずは 1（アクティビティ認識でゲート）だけでも体感がかなり変わる。実装時にあらためて仕様検討する。
+
 ---
 
 ## 実装マップ

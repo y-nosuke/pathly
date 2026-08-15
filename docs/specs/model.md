@@ -8,8 +8,8 @@ Android Room（SQLite）によるローカルデータモデル。GPS 軌跡の�
 ## ER 図（概念モデル）
 
 > 概念モデルのため、監査用の `createdAt` / `updatedAt` は省略している。
-> `gps_points` は `Location` の付随情報（各種精度・MSL 高度など）を全部持つが、図では代表的なものだけ挙げる
-> （全列は [../designs/gps-capture.md](../designs/gps-capture.md)）。
+> `gps_points` は端末が返す付随情報（各種精度・MSL 高度・provider など）を**取れるだけ全部**持つ。
+> 図では代表的なものだけ挙げる。
 
 ```mermaid
 erDiagram
@@ -123,4 +123,4 @@ erDiagram
 - **原データ保持**: 生の GPS（`gps_points`）は無改変で残し、補正結果は `smoothed_points` に併存させる。
   精度の丸めや間引きはしない（あとから補正・再解析するため）。
 - **位置情報保護**: 位置情報の削除はユーザーに委ね、自動削除はしない。
-- **暗号化**: していない（平文）。現状と将来案は [../designs/security.md](../designs/security.md)。
+- **暗号化**: していない（平文）。端末内で完結し、サーバーへは送らない。
