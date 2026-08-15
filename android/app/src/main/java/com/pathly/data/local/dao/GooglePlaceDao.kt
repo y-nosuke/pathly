@@ -23,17 +23,6 @@ interface GooglePlaceDao {
   @Query("SELECT * FROM google_places WHERE placeId = :placeId")
   suspend fun getWithCategoryByPlace(placeId: Long): GooglePlaceWithCategory?
 
-  /**
-   * TODO(v13-backfill): 移行用。業種がまだ入っていない行（v13 より前に解決した場所）。
-   * 流し終えたら [com.pathly.data.work.PlaceCategoryBackfillWorker] ごと削除する。
-   */
-  @Query("SELECT * FROM google_places WHERE categoryId IS NULL")
-  suspend fun getWithoutCategory(): List<GooglePlaceEntity>
-
-  /** 業種だけを差し替える（名前・住所は触らない）。 */
-  @Query("UPDATE google_places SET categoryId = :categoryId WHERE placeId = :placeId")
-  suspend fun updateCategory(placeId: Long, categoryId: Long?)
-
   /** その googlePlaceId を持つ place の id（施設の同一性での同定に使う）。無ければ null。 */
   @Query("SELECT placeId FROM google_places WHERE googlePlaceId = :googlePlaceId LIMIT 1")
   suspend fun getPlaceIdByGoogleId(googlePlaceId: String): Long?

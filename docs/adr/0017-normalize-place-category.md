@@ -39,10 +39,12 @@ Places SDK は同じ呼び出しで**機械可読な `primaryType`（`cafe`）**
 ### 既存データの移行
 
 既存行は表示名しか持たず、「カフェ」から `cafe` を復元するのは推測になる。よって
-**マイグレーションでは列ごと捨て、Google から業種を引き直して埋める**
-（`PlaceCategoryBackfillWorker`）。これは [0014](0014-place-naming-cost-policy.md) の
+**マイグレーションでは列ごと捨て、Google から業種を引き直して埋めた**
+（一度きりの Worker）。これは [0014](0014-place-naming-cost-policy.md) の
 「place 1 件 1 回」に対する**一度きりの例外**であり、恒久的な仕組みではない。
-**移行が済んだら Worker ごと削除する**（利用者が 1 人なので、流し切ったことを確認してから消せる）。
+
+利用者が 1 人なので、**流し切ったことを確認してから Worker ごと削除した**（実施・削除とも 2026-08-16）。
+以後この経路で業種が埋まることはなく、v13 より後に解決した場所だけが業種を持つ。
 
 ## Alternatives（検討した没案）
 
@@ -67,12 +69,14 @@ Places SDK は同じ呼び出しで**機械可読な `primaryType`（`cafe`）**
 - 読み取りに**結合が 1 つ増える**（`google_places → google_place_categories`）。件数は業種の種類数で、
   場所の数には比例しないので実害は小さい。
 - 移行時に**既存の場所の数だけ Place Details（Pro）を 1 回ずつ**呼ぶ。以後は増えない。
-- 業種を持たない POI（`primaryType` が無い地点）は、移行後もカテゴリ無しのまま残る。
+- 業種を持たない POI（`primaryType` が無い地点）は、移行後もカテゴリ無しのまま残る。バックフィルは
+  済んで削除したので、**この先カテゴリが埋まるのは新しく解決した場所と、手動で取り直した場所だけ**。
 - **ユーザーが自分で編集できるカテゴリを、あとから並べて足せる**。この ADR の業種は「Google が
   その施設をどう分類しているか」＝施設の属性なので `google_places` 側に置いた。自分の分類は
   ユーザー入力なので `places` 側に `place_categories` を作って足す形になり、
   [0001](0001-place-data-separation.md) の分け方をそのまま踏襲できる。テーブル名を
   `google_place_categories` にして `place_categories` を空けてあるのはこのため。構想は
   [roadmap](../roadmap.md) の「温めている案」。
-- **暫定コードが残る**。`PlaceCategoryBackfillWorker` と `fetchCategoryOnly` と
-  `getWithoutCategory` は、移行後に消す前提で `TODO(v13-backfill)` の印を付けてある。
+- 移行のための暫定コードは**残っていない**（Worker・`fetchCategoryOnly`・`getWithoutCategory`・
+  起動時の予約を削除済み）。同じことをもう一度やるなら書き直しになるが、一度きりの処理を
+  残し続けるより、必要になったときに書く方を選んだ。
