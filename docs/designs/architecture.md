@@ -4,7 +4,8 @@ Pathly Android の構成方針と、その背景にある設計判断をまと�
 **「どのパッケージに何があるか」「実装規約」は [CLAUDE.md](../../CLAUDE.md) が持つ**。本書は重複を避け、
 **「なぜこの構成にしたか（How の根拠）」**に絞る。具体的なクラス・シグネチャは実コードを正とする。
 
-> 対応する要望: [requirements.md](../requirements.md)（学習目標＝Kotlinコルーチンの習得、一人開発・段階的開発）。
+> 前提: 一人開発・段階的開発（[../roadmap.md](../roadmap.md)）と、学習目標＝Kotlin コルーチンの習得
+> （[CLAUDE.md](../../CLAUDE.md)）。要望書に対応する項目がある機能設計とは違い、本書は開発体制側の都合で決まっている。
 
 ---
 
@@ -46,7 +47,7 @@ presentation ──▶ domain ◀── data
 
 - **表示系**: Room（DAO）→ Repository → ViewModel（`StateFlow`）→ Compose（`collectAsState`）。
 - **記録系**: `LocationTrackingService` が GPS 点を取得 → Repository → Room に永続化。
-  補正・立ち寄り検出も記録中にこの流れへ相乗りする（[gps-smoothing.md](./gps-smoothing.md) / [places-and-stops.md](./places-and-stops.md)）。
+  補正・立ち寄り検出も記録中にこの流れへ相乗りする（[smoothing.md](smoothing.md) / [stops.md](stops.md)）。
 
 UI とサービスの**唯一の合流点が Repository** で、記録中の書き込みと画面のリアクティブ更新がここで噛み合う。
 
@@ -100,7 +101,7 @@ ViewModel は `TrackingController` が公開する Flow と suspend 関数だけ
 
 Room の Entity（永続化の都合）とドメインモデル（画面・ロジックの都合）を分け、境界で変換する。
 DB スキーマの都合が presentation に漏れないようにするため。物理スキーマの詳細は
-[model.md](../specs/model.md)（概念）／[places-and-stops.md](./places-and-stops.md)・[gps-smoothing.md](./gps-smoothing.md)（物理）。
+[model.md](../specs/model.md)（概念）／[places.md](places.md)・[smoothing.md](smoothing.md)（物理）。
 
 ### StateFlow に統一（LiveData 不使用）
 
@@ -125,5 +126,5 @@ Navigation-Compose（`presentation/navigation/`）でボトムナビ4タブ＋�
 - 実装規約・パッケージツリー・ビルド制約: [CLAUDE.md](../../CLAUDE.md)
 - 画面仕様: [screens.md](../specs/screens.md)
 - データモデル（概念）: [model.md](../specs/model.md)
-- 補正・立ち寄りの設計: [gps-smoothing.md](./gps-smoothing.md) / [places-and-stops.md](./places-and-stops.md)
-- ログ / テスト / セキュリティ / パフォーマンス: [logging.md](./logging.md) / [testing.md](./testing.md) / [security.md](./security.md) / [performance.md](./performance.md)
+- 補正・立ち寄り・場所の設計: [smoothing.md](smoothing.md) / [stops.md](stops.md) / [places.md](places.md)
+- ログ / テスト / セキュリティ: [logging.md](logging.md) / [testing.md](testing.md) / [security.md](security.md)

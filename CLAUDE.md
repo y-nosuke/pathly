@@ -200,7 +200,7 @@ app/src/main/java/com/pathly/
 - **データ暗号化：** Supabase自動暗号化 + 機密データはアプリレベル暗号化 ※ Phase 3・未着手
 - **通信：** HTTPS/TLS必須
 - **ローカル：** 暗号化なし。Room の DB は平文で、設定は SharedPreferences。将来 DB を暗号化するなら SQLCipher 等の導入が必要（Jetpack Security は Deprecated）
-- 現状どこまで守れているかは `docs/designs/security.md`（`allowBackup` が既定のままで DB が Auto Backup に乗る点も記載）
+- 何を持ち何を持たないかの約束は `docs/specs/security.md`、その実現方法は `docs/designs/security.md`（`allowBackup` が既定のままで DB が Auto Backup に乗る点も記載）
 
 ### パフォーマンス
 

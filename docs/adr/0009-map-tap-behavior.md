@@ -3,7 +3,7 @@
 - Status: Accepted
 - Date: 2026-08-09
 
-関連: 確定版マトリクスは [../designs/map-tap-behavior.md](../designs/map-tap-behavior.md)。前提は [ADR-0006](0006-place-identity-by-googleplaceid.md) / [ADR-0008](0008-registered-places-on-map.md)。
+関連: 確定版マトリクスは [../specs/map.md](../specs/map.md)。前提は [ADR-0006](0006-place-identity-by-googleplaceid.md) / [ADR-0008](0008-registered-places-on-map.md)。
 
 ## Context（背景）
 

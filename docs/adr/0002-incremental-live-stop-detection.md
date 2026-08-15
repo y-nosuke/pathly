@@ -3,7 +3,7 @@
 - Status: Accepted
 - Date: 2026-08-07
 
-関連: 現状の設計は [../designs/places-and-stops.md](../designs/places-and-stops.md) の「保存・命名のトリガー → 記録中（自動・ライブ）」。
+関連: 現状の設計は [../designs/stops.md](../designs/stops.md) の「記録中の検出」。
 
 ## Context（背景）
 

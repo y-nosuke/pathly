@@ -3,8 +3,7 @@
 - Status: Accepted
 - Date: 2026-08-05
 
-関連: 設計は [../designs/places-and-stops.md](../designs/places-and-stops.md)（名前の2列と表示名）/
-[../designs/wishlist.md](../designs/wishlist.md)、データモデルは [../specs/model.md](../specs/model.md)。
+関連: 設計は [../designs/places.md](../designs/places.md)、仕様は [../specs/places.md](../specs/places.md)、データモデルは [../specs/model.md](../specs/model.md)。
 
 > v6→v7 の移行手順そのものは `DatabaseMigrations.MIGRATION_6_7` と `schemas/7.json` を正とする。
 

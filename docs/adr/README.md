@@ -30,3 +30,4 @@
 | [0012](0012-non-destructive-reanalysis.md)          | 再解析・再補正は破壊的にやり直さず、追加提案（非破壊・opt-in）にする      | Accepted |
 | [0013](0013-separate-place-stop-wishlist-tables.md) | 場所・立ち寄り・行きたいを別テーブルに分け、places を静的に保つ           | Accepted |
 | [0014](0014-place-naming-cost-policy.md)            | 自動命名は Places を使い、オンライン時・place 1 件 1 回に限る             | Accepted |
+| [0015](0015-bake-track-distance.md)                 | 経路の総移動距離は確定時に焼き込み、一覧では点をロードしない（v11）       | Accepted |

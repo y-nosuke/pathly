@@ -3,14 +3,14 @@
 - Status: Accepted
 - Date: 2026-08-08
 
-関連: 現状の設計は [../designs/places-and-stops.md](../designs/places-and-stops.md) の「登録済みの場所の地図表示」ほか。
+関連: 現状の設計は [../designs/ui.md](../designs/ui.md) / [../designs/places.md](../designs/places.md)。
 [ADR-0005](0005-place-source-and-lifecycle.md) の「今後の方針 2」を実装したもの。タップ挙動の全体像は [ADR-0009](0009-map-tap-behavior.md)。
 
 > **追記（2026-08-15）**: 下記「起動時に未解決 place を一括解決」の**やり方だけ**その後変えた。
 > 起動時にその場で叩くと、そのとき圏外なら次の起動まで解決されないため、**WorkManager
 > （ネットワーク接続を制約とするジョブ）**に載せ替えた。「未解決を後からまとめて拾う」という
 > 決定そのものは変わっていないので Superseded にはしない。現状は
-> [../designs/places-and-stops.md](../designs/places-and-stops.md) の「キャッチアップ（WorkManager）」。
+> [../designs/places.md](../designs/places.md) の「一度だけ」の管理。
 
 ## Context（背景）
 

@@ -3,7 +3,7 @@
 - Status: Accepted
 - Date: 2026-08-08
 
-関連: 現状の設計は [../designs/places-and-stops.md](../designs/places-and-stops.md) の「施設の同一性（googlePlaceId）での同定」。[ADR-0005](0005-place-source-and-lifecycle.md) の「今後の方針 1」を実装したもの。
+関連: 現状の設計は [../designs/places.md](../designs/places.md) の「同定」。[ADR-0005](0005-place-source-and-lifecycle.md) の「今後の方針 1」を実装したもの。
 
 ## Context（背景）
 
