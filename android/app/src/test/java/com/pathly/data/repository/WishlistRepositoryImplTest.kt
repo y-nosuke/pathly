@@ -126,4 +126,63 @@ class WishlistRepositoryImplTest {
     // 暫定座標を施設の正確な座標へ置き換える。
     coVerify { placeDao.updateCoordinates(7L, 35.65, 139.9, any()) }
   }
+
+  @Test
+  fun registerPlace_withKnownDetails_savesThemWithoutRefetching() = runTest {
+    val known = PlaceSearchResult(
+      googlePlaceId = "gp-42",
+      name = "清瀧神社",
+      address = "千葉県浦安市…",
+      category = "神社",
+      latitude = 35.65,
+      longitude = 139.9,
+    )
+    coEvery { placeRepository.findOrCreateByGooglePlaceId("gp-42", any(), any(), any()) } returns (7L to false)
+    coEvery { googlePlaceDao.getByPlace(7L) } returns null
+
+    repository.registerPlace(35.65, 139.9, name = null, googlePlaceId = "gp-42", knownDetails = known)
+
+    // 取得済みなので Google を引き直さない（オフラインでも施設情報が欠けない）。
+    coVerify(exactly = 0) { placesTextSearcher.fetch(any()) }
+    coVerify {
+      googlePlaceDao.upsert(
+        match { it.placeId == 7L && it.name == "清瀧神社" && it.category == "神社" },
+      )
+    }
+    coVerify { placeResolutionDao.upsert(match { it.placeId == 7L }) }
+  }
+
+  @Test
+  fun registerPlace_whenFetchFails_keepsPoiNameAsGoogleName() = runTest {
+    coEvery { placeRepository.findOrCreateByGooglePlaceId("gp-9", any(), any(), any()) } returns (7L to false)
+    coEvery { googlePlaceDao.getByPlace(7L) } returns null
+    // オフライン等で施設情報が取れない。
+    coEvery { placesTextSearcher.fetch("gp-9") } returns null
+
+    repository.registerPlace(35.0, 139.0, name = null, googlePlaceId = "gp-9", googleName = "スタバ")
+
+    // 住所・カテゴリは欠けても、タップ時に分かっている名前は残す（未命名にしない）。
+    coVerify { googlePlaceDao.upsert(match { it.placeId == 7L && it.googlePlaceId == "gp-9" && it.name == "スタバ" }) }
+    // Google が付けた名前を places.name（自分で付けた名前）には書かない。
+    coVerify(exactly = 0) { placeDao.updateName(any(), any(), any()) }
+  }
+
+  @Test
+  fun registerPlace_withKnownDetailsOfAnotherFacility_refetches() = runTest {
+    val other = PlaceSearchResult(
+      googlePlaceId = "gp-other",
+      name = "別の店",
+      address = null,
+      category = null,
+      latitude = 35.0,
+      longitude = 139.0,
+    )
+    coEvery { placeRepository.findOrCreateByGooglePlaceId("gp-42", any(), any(), any()) } returns (7L to false)
+    coEvery { googlePlaceDao.getByPlace(7L) } returns null
+
+    repository.registerPlace(35.65, 139.9, name = null, googlePlaceId = "gp-42", knownDetails = other)
+
+    // 別施設の情報を取り違えて焼き込まない。
+    coVerify { placesTextSearcher.fetch("gp-42") }
+  }
 }

@@ -10,7 +10,6 @@ import com.pathly.data.local.dao.PlaceResolutionDao
 import com.pathly.data.local.dao.SmoothedPointDao
 import com.pathly.data.local.dao.StopDao
 import com.pathly.data.local.dao.WishlistDao
-import com.pathly.util.EncryptionHelper
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -25,10 +24,6 @@ object DatabaseModule {
   @Provides
   @Singleton
   fun providePathlyDatabase(@ApplicationContext context: Context): PathlyDatabase = PathlyDatabase.getInstance(context)
-
-  @Provides
-  @Singleton
-  fun provideEncryptionHelper(@ApplicationContext context: Context): EncryptionHelper = EncryptionHelper(context)
 
   @Provides
   fun provideGpsTrackDao(database: PathlyDatabase): GpsTrackDao = database.gpsTrackDao()

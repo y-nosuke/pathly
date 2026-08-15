@@ -24,7 +24,6 @@ import com.pathly.data.local.entity.SmoothedPointEntity
 import com.pathly.data.local.entity.StopEntity
 import com.pathly.data.local.entity.WishlistEntity
 import com.pathly.data.local.migration.DatabaseMigrations
-import com.pathly.util.EncryptionHelper
 import com.pathly.util.Logger
 
 @Database(
@@ -38,7 +37,7 @@ import com.pathly.util.Logger
     GooglePlaceEntity::class,
     WishlistEntity::class,
   ],
-  version = 10,
+  version = 12,
   exportSchema = true,
 )
 @TypeConverters(DateConverter::class)
@@ -70,13 +69,6 @@ abstract class PathlyDatabase : RoomDatabase() {
     private fun createDatabase(context: Context): PathlyDatabase {
       logger.i("Creating PathlyDatabase instance")
 
-      val encryptionHelper = EncryptionHelper(context)
-
-      // 暗号化の健全性をチェック
-      if (!encryptionHelper.verifyEncryptionIntegrity()) {
-        logger.w("Encryption integrity check failed, continuing without encryption")
-      }
-
       return Room.databaseBuilder(
         context.applicationContext,
         PathlyDatabase::class.java,
@@ -90,9 +82,6 @@ abstract class PathlyDatabase : RoomDatabase() {
           override fun onCreate(db: SupportSQLiteDatabase) {
             super.onCreate(db)
             logger.i("Database created successfully")
-
-            // 初期化時のインデックス作成
-            createOptimalIndexes(db)
           }
 
           override fun onOpen(db: SupportSQLiteDatabase) {
@@ -118,33 +107,6 @@ abstract class PathlyDatabase : RoomDatabase() {
           }
         })
         .build()
-    }
-
-    /**
-     * パフォーマンス最適化のためのインデックス作成
-     */
-    private fun createOptimalIndexes(db: SupportSQLiteDatabase) {
-      try {
-        // GPS軌跡用インデックス
-        db.execSQL(
-          "CREATE INDEX IF NOT EXISTS index_gps_tracks_created_at ON gps_tracks(created_at DESC)",
-        )
-        db.execSQL(
-          "CREATE INDEX IF NOT EXISTS index_gps_tracks_is_active ON gps_tracks(is_active)",
-        )
-
-        // GPS座標用インデックス
-        db.execSQL(
-          "CREATE INDEX IF NOT EXISTS index_gps_points_track_id_timestamp ON gps_points(track_id, timestamp)",
-        )
-        db.execSQL(
-          "CREATE INDEX IF NOT EXISTS index_gps_points_location ON gps_points(latitude, longitude)",
-        )
-
-        logger.i("Optimal indexes created successfully")
-      } catch (e: Exception) {
-        logger.e("Failed to create optimal indexes", e)
-      }
     }
 
     /**

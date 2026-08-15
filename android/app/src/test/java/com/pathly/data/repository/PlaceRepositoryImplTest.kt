@@ -9,6 +9,7 @@ import com.pathly.data.local.dao.StopDao
 import com.pathly.data.local.dao.WishlistDao
 import com.pathly.data.local.entity.GooglePlaceEntity
 import com.pathly.data.local.entity.GpsPointEntity
+import com.pathly.data.local.entity.NamedPlaceRow
 import com.pathly.data.local.entity.PlaceEntity
 import com.pathly.data.local.entity.PlaceResolutionEntity
 import com.pathly.data.local.entity.RegisteredPlaceRow
@@ -100,7 +101,7 @@ class PlaceRepositoryImplTest {
   fun updateStops_finalizedVisit_persistsStopAndResolvesName() = runTest {
     coEvery { smoothedPointDao.getByTrackAfter(1L, any()) } returns finishedVisitPoints()
     coEvery { stopDao.getByTrack(1L) } returns emptyList()
-    coEvery { placeDao.getAll() } returns emptyList()
+    coEvery { placeDao.getInBounds(any(), any(), any(), any()) } returns emptyList()
     coEvery { placeDao.insert(any()) } returns 10L
     coEvery { stopDao.insert(any()) } returns 100L
     coEvery { placeDao.getUnresolvedPlacesForTrack(1L) } returns listOf(
@@ -131,7 +132,7 @@ class PlaceRepositoryImplTest {
   fun updateStops_dwelling_setsCurrentStopWithoutPersistingStop() = runTest {
     coEvery { smoothedPointDao.getByTrackAfter(1L, any()) } returns dwellingPoints()
     coEvery { stopDao.getByTrack(1L) } returns emptyList()
-    coEvery { placeDao.getAll() } returns emptyList()
+    coEvery { placeDao.getInBounds(any(), any(), any(), any()) } returns emptyList()
     coEvery { placeDao.insert(any()) } returns 20L
     coEvery { placeDao.getById(20L) } returns
       PlaceEntity(id = 20L, name = "カフェ", latitude = 35.0, longitude = 139.0)
@@ -159,7 +160,7 @@ class PlaceRepositoryImplTest {
   fun updateStops_whenLiveLocationLeftRadius_clearsCurrentStopDespiteLaggingSmoothed() = runTest {
     coEvery { smoothedPointDao.getByTrackAfter(1L, any()) } returns dwellingPoints()
     coEvery { stopDao.getByTrack(1L) } returns emptyList()
-    coEvery { placeDao.getAll() } returns emptyList()
+    coEvery { placeDao.getInBounds(any(), any(), any(), any()) } returns emptyList()
     coEvery { placeDao.insert(any()) } returns 20L
     coEvery { placeDao.getById(20L) } returns
       PlaceEntity(id = 20L, name = "カフェ", latitude = 35.0, longitude = 139.0)
@@ -179,7 +180,7 @@ class PlaceRepositoryImplTest {
   fun updateStops_finalizesDwellingWhenIsFinal() = runTest {
     coEvery { smoothedPointDao.getByTrackAfter(1L, any()) } returns dwellingPoints()
     coEvery { stopDao.getByTrack(1L) } returns emptyList()
-    coEvery { placeDao.getAll() } returns emptyList()
+    coEvery { placeDao.getInBounds(any(), any(), any(), any()) } returns emptyList()
     coEvery { placeDao.insert(any()) } returns 30L
     coEvery { stopDao.insert(any()) } returns 300L
     coEvery { placeDao.getUnresolvedPlacesForTrack(1L) } returns emptyList()
@@ -201,7 +202,7 @@ class PlaceRepositoryImplTest {
       finishedVisitPoints().filter { it.timestamp.time > afterMillis }
     }
     coEvery { stopDao.getByTrack(1L) } returns emptyList()
-    coEvery { placeDao.getAll() } returns emptyList()
+    coEvery { placeDao.getInBounds(any(), any(), any(), any()) } returns emptyList()
     coEvery { placeDao.insert(any()) } returns 40L
     coEvery { stopDao.insert(any()) } returns 400L
     coEvery { placeDao.getUnresolvedPlacesForTrack(1L) } returns emptyList()
@@ -227,7 +228,7 @@ class PlaceRepositoryImplTest {
     }
     coEvery { smoothedPointDao.getByTrack(1L) } returns points
     coEvery { stopDao.getByTrack(1L) } returns emptyList()
-    coEvery { placeDao.getAll() } returns emptyList()
+    coEvery { placeDao.getInBounds(any(), any(), any(), any()) } returns emptyList()
     coEvery { placeDao.insert(any()) } returns 50L
     coEvery { placeDao.getById(50L) } returns
       PlaceEntity(id = 50L, latitude = 35.01, longitude = 139.01)
@@ -256,7 +257,7 @@ class PlaceRepositoryImplTest {
   fun detectMissingStops_noExisting_returnsAllDetected() = runTest {
     coEvery { smoothedPointDao.getByTrack(1L) } returns finishedVisitPoints()
     coEvery { stopDao.getByTrack(1L) } returns emptyList()
-    coEvery { placeDao.getAll() } returns emptyList()
+    coEvery { placeDao.getInBounds(any(), any(), any(), any()) } returns emptyList()
     coEvery { resolver.resolve(any(), any()) } returns PlacesNameResolver.Outcome.NotAttempted
 
     val result = repository.detectMissingStops(1L)
@@ -270,7 +271,7 @@ class PlaceRepositoryImplTest {
   fun detectMissingStops_addsDisplayName_fromPlaces() = runTest {
     coEvery { smoothedPointDao.getByTrack(1L) } returns finishedVisitPoints()
     coEvery { stopDao.getByTrack(1L) } returns emptyList()
-    coEvery { placeDao.getAll() } returns emptyList()
+    coEvery { placeDao.getInBounds(any(), any(), any(), any()) } returns emptyList()
     coEvery { resolver.resolve(any(), any()) } returns
       PlacesNameResolver.Outcome.Found("カフェ", "住所", "カフェ・喫茶", "gp-1", 35.5, 139.5)
 
@@ -288,10 +289,18 @@ class PlaceRepositoryImplTest {
     coEvery { smoothedPointDao.getByTrack(1L) } returns finishedVisitPoints()
     coEvery { stopDao.getByTrack(1L) } returns emptyList()
     // 候補座標のすぐ近くに命名済みの place がある → それを再利用し Places は叩かない。
-    coEvery { placeDao.getAll() } returns listOf(
-      PlaceEntity(id = 7L, name = "自宅", latitude = 35.0, longitude = 139.0),
+    coEvery { placeDao.getNamedPlacesInBounds(any(), any(), any(), any()) } returns listOf(
+      NamedPlaceRow(
+        id = 7L,
+        name = "自宅",
+        latitude = 35.0,
+        longitude = 139.0,
+        googlePlaceId = null,
+        googleName = null,
+        googleAddress = null,
+        category = null,
+      ),
     )
-    coEvery { googlePlaceDao.getByPlace(7L) } returns null
 
     val result = repository.detectMissingStops(1L)
 
@@ -318,7 +327,7 @@ class PlaceRepositoryImplTest {
     coEvery { stopDao.getByTrack(1L) } returns listOf(
       StopEntity(id = 1L, placeId = 10L, trackId = 1L, arrivalTime = Date(10_000_000), departureTime = Date(10_100_000)),
     )
-    coEvery { placeDao.getAll() } returns emptyList()
+    coEvery { placeDao.getInBounds(any(), any(), any(), any()) } returns emptyList()
     coEvery { resolver.resolve(any(), any()) } returns PlacesNameResolver.Outcome.NotAttempted
 
     val result = repository.detectMissingStops(1L)
@@ -329,7 +338,7 @@ class PlaceRepositoryImplTest {
 
   @Test
   fun addStops_persistsSelectedAndBakesInName() = runTest {
-    coEvery { placeDao.getAll() } returns emptyList()
+    coEvery { placeDao.getInBounds(any(), any(), any(), any()) } returns emptyList()
     coEvery { placeDao.insert(any()) } returns 10L
     coEvery { stopDao.insert(any()) } returns 100L
     coEvery { placeResolutionDao.getByPlace(10L) } returns null
@@ -368,7 +377,7 @@ class PlaceRepositoryImplTest {
 
   @Test
   fun addManualStop_typedName_setsNameAndMarksResolved() = runTest {
-    coEvery { placeDao.getAll() } returns emptyList() // findOrCreatePlace で新規作成
+    coEvery { placeDao.getInBounds(any(), any(), any(), any()) } returns emptyList() // findOrCreatePlace で新規作成
     coEvery { placeDao.insert(any()) } returns 10L
     coEvery { stopDao.insert(any()) } returns 100L
     coEvery { placeDao.getById(10L) } returns PlaceEntity(id = 10L, latitude = 35.0, longitude = 139.0)
@@ -388,7 +397,7 @@ class PlaceRepositoryImplTest {
 
   @Test
   fun addManualStop_poi_bakesInNameAndGooglePlaceId() = runTest {
-    coEvery { placeDao.getAll() } returns emptyList()
+    coEvery { placeDao.getInBounds(any(), any(), any(), any()) } returns emptyList()
     coEvery { placeDao.insert(any()) } returns 10L
     coEvery { stopDao.insert(any()) } returns 100L
     coEvery { placeDao.getById(10L) } returns PlaceEntity(id = 10L, latitude = 35.0, longitude = 139.0)
@@ -404,6 +413,42 @@ class PlaceRepositoryImplTest {
     coVerify { googlePlaceDao.upsert(match { it.placeId == 10L && it.googlePlaceId == "gp-9" }) }
     coVerify { placeResolutionDao.upsert(match { it.placeId == 10L }) }
     coVerify(exactly = 0) { resolver.resolve(any(), any()) }
+  }
+
+  @Test
+  fun addManualStop_poiName_goesToGooglePlacesNotPlaceName() = runTest {
+    coEvery { placeDao.getInBounds(any(), any(), any(), any()) } returns emptyList()
+    coEvery { placeDao.insert(any()) } returns 10L
+    coEvery { stopDao.insert(any()) } returns 100L
+    coEvery { placeDao.getById(10L) } returns PlaceEntity(id = 10L, latitude = 35.0, longitude = 139.0)
+    coEvery { placeResolutionDao.getByPlace(10L) } returns null
+    coEvery { googlePlaceDao.getByPlace(10L) } returns null
+    coEvery { googlePlaceDao.getPlaceIdByGoogleId("gp-9") } returns null
+
+    // POI の名前をそのまま使った（自分では入力していない）ケース。
+    repository.addManualStop(1L, 35.0, 139.0, Date(0), Date(180_000), null, "gp-9", googleName = "スタバ")
+
+    // Google が付けた名前は google_places.name へ。places.name（自分で付けた名前）は空のまま。
+    coVerify { googlePlaceDao.upsert(match { it.placeId == 10L && it.googlePlaceId == "gp-9" && it.name == "スタバ" }) }
+    coVerify(exactly = 0) { placeDao.updateName(any(), any(), any()) }
+  }
+
+  @Test
+  fun addManualStop_ownNameOnFacility_keepsBothNamesAndTheLink() = runTest {
+    coEvery { placeDao.getInBounds(any(), any(), any(), any()) } returns emptyList()
+    coEvery { placeDao.insert(any()) } returns 10L
+    coEvery { stopDao.insert(any()) } returns 100L
+    coEvery { placeDao.getById(10L) } returns PlaceEntity(id = 10L, latitude = 35.0, longitude = 139.0)
+    coEvery { placeResolutionDao.getByPlace(10L) } returns null
+    coEvery { googlePlaceDao.getByPlace(10L) } returns null
+    coEvery { googlePlaceDao.getPlaceIdByGoogleId("gp-9") } returns null
+
+    // 「スタバだけど自分は休憩と呼ぶ」。列が分かれているので両立する。
+    repository.addManualStop(1L, 35.0, 139.0, Date(0), Date(180_000), "休憩", "gp-9", googleName = "スタバ")
+
+    coVerify { placeDao.updateName(10L, "休憩", any()) }
+    // 名前を変えても施設との紐付けは外さない（カテゴリ・住所・施設ページが残る）。
+    coVerify { googlePlaceDao.upsert(match { it.placeId == 10L && it.googlePlaceId == "gp-9" && it.name == "スタバ" }) }
   }
 
   @Test
@@ -423,7 +468,7 @@ class PlaceRepositoryImplTest {
 
   @Test
   fun addManualStop_noName_leavesUnnamedButMarksResolved() = runTest {
-    coEvery { placeDao.getAll() } returns emptyList()
+    coEvery { placeDao.getInBounds(any(), any(), any(), any()) } returns emptyList()
     coEvery { placeDao.insert(any()) } returns 10L
     coEvery { stopDao.insert(any()) } returns 100L
     coEvery { placeDao.getById(10L) } returns PlaceEntity(id = 10L, latitude = 35.0, longitude = 139.0)
@@ -442,7 +487,7 @@ class PlaceRepositoryImplTest {
   @Test
   fun addManualStop_reusesNearbyPlace_doesNotOverwriteExistingName() = runTest {
     // すぐ近く（同座標）に命名済みの place がある → 再利用し、名前は上書きしない。
-    coEvery { placeDao.getAll() } returns listOf(
+    coEvery { placeDao.getInBounds(any(), any(), any(), any()) } returns listOf(
       PlaceEntity(id = 7L, name = "自宅", latitude = 35.0, longitude = 139.0),
     )
     coEvery { stopDao.insert(any()) } returns 100L
@@ -640,6 +685,29 @@ class PlaceRepositoryImplTest {
   }
 
   @Test
+  fun resolveAllUnresolvedNames_propagatesFailure_soCallerCanRetry() = runTest {
+    // ここで例外を握り潰すと、WorkManager は「成功」と受け取って再試行しない。
+    // オンライン復帰後のキャッチアップが目的なので、失敗は呼び出し元まで伝える必要がある。
+    coEvery { placeDao.getUnresolvedPlaces() } throws IllegalStateException("db down")
+
+    val thrown = runCatching { repository.resolveAllUnresolvedNames() }.exceptionOrNull()
+
+    assertTrue("呼び出し元へ例外が伝わる（実際は $thrown）", thrown is IllegalStateException)
+  }
+
+  @Test
+  fun resolveAllUnresolvedNames_whenResolverFails_propagates() = runTest {
+    coEvery { placeDao.getUnresolvedPlaces() } returns listOf(
+      PlaceEntity(id = 30L, latitude = 35.0, longitude = 139.0),
+    )
+    coEvery { resolver.resolve(any(), any()) } throws IllegalStateException("network down")
+
+    val thrown = runCatching { repository.resolveAllUnresolvedNames() }.exceptionOrNull()
+
+    assertTrue("解決中の失敗も伝わる（実際は $thrown）", thrown is IllegalStateException)
+  }
+
+  @Test
   fun resolveAllUnresolvedNames_resolvesEachUnresolvedPlaceAndAdoptsCoordinates() = runTest {
     coEvery { placeDao.getUnresolvedPlaces() } returns listOf(
       PlaceEntity(id = 30L, latitude = 35.0, longitude = 139.0),
@@ -659,7 +727,7 @@ class PlaceRepositoryImplTest {
 
   @Test
   fun findNearbyPlace_returnsNearestWithinDetectionRadius() = runTest {
-    coEvery { placeDao.getRegisteredPlacesOnce() } returns listOf(
+    coEvery { placeDao.getRegisteredPlacesInBounds(any(), any(), any(), any()) } returns listOf(
       RegisteredPlaceRow(1L, "同じ地点", 35.0, 139.0, 0, 0, null),
       RegisteredPlaceRow(2L, "約1km先", 35.01, 139.0, 0, 0, null),
     )
@@ -671,7 +739,7 @@ class PlaceRepositoryImplTest {
 
   @Test
   fun findNearbyPlace_noneWithinRadius_returnsNull() = runTest {
-    coEvery { placeDao.getRegisteredPlacesOnce() } returns listOf(
+    coEvery { placeDao.getRegisteredPlacesInBounds(any(), any(), any(), any()) } returns listOf(
       RegisteredPlaceRow(2L, "約1km先", 35.01, 139.0, 0, 0, null),
     )
 
@@ -685,9 +753,9 @@ class PlaceRepositoryImplTest {
 
     repository.addManualStop(1L, 35.0, 139.0, Date(), Date(), null, null, forceNewPlace = true)
 
-    // 座標同定（getAll による30m再利用）を通らず、新しい place を挿入する。
+    // 座標同定（近傍30mの再利用）を通らず、新しい place を挿入する。
     coVerify { placeDao.insert(match { it.latitude == 35.0 && it.longitude == 139.0 }) }
-    coVerify(exactly = 0) { placeDao.getAll() }
+    coVerify(exactly = 0) { placeDao.getInBounds(any(), any(), any(), any()) }
     coVerify { stopDao.insert(match { it.placeId == 42L }) }
   }
 }

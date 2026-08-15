@@ -1,5 +1,6 @@
 package com.pathly.presentation.places
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -10,13 +11,12 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
@@ -25,18 +25,21 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.google.android.gms.maps.model.LatLng
 import com.google.android.gms.maps.model.PointOfInterest
 import com.pathly.domain.model.PlaceListItem
 import com.pathly.domain.model.PlaceSearchResult
 import com.pathly.domain.model.Priority
+import com.pathly.presentation.common.FloatingSheet
+import com.pathly.presentation.common.FloatingSheetState
+import com.pathly.presentation.common.SheetDetent
+import com.pathly.presentation.common.rememberFloatingSheetState
 
 /**
- * 地図上の1点をタップしたときに出す**統一の「場所シート」**（ModalBottomSheet）。
- * タップ対象（未登録の空き地点 / 未登録 POI / 登録済みの場所）に応じて中身と操作を出し分ける。
- * 本体は追加・検索・編集と同じ [PlaceFormBody] を共有する。詳細は docs/designs/map-tap-behavior.md を参照。
+ * 地図の上に出す**統一の「場所シート」**。対象（未登録の空き地点 / 未登録 POI / 検索で選んだ施設 /
+ * 登録済みの場所）に応じて中身と操作を出し分ける。本体は追加・検索・編集と同じ [PlaceFormBody] を
+ * 共有する。詳細は docs/designs/map-tap-behavior.md を参照。
  */
 sealed interface PlaceSheetTarget {
   /** 施設ではない任意の地点。 */
@@ -44,6 +47,9 @@ sealed interface PlaceSheetTarget {
 
   /** 未登録の施設(POI)。 */
   data class NewPoi(val poi: PointOfInterest) : PlaceSheetTarget
+
+  /** キーワード検索で選んだ施設。詳細（カテゴリ・住所）は取得済みなので引き直さない。 */
+  data class NewSearchResult(val result: PlaceSearchResult) : PlaceSheetTarget
 
   /** 登録済みの場所（その場で編集する）。 */
   data class Existing(val placeId: Long) : PlaceSheetTarget
@@ -55,18 +61,31 @@ internal fun PlaceActionSheet(
   target: PlaceSheetTarget,
   onDismiss: () -> Unit,
   onFetchPoiDetails: suspend (googlePlaceId: String) -> PlaceSearchResult?,
-  onLoadPlace: suspend (placeId: Long) -> PlaceListItem?,
-  // 新規登録（空き地点/POI）を確定する。近接確認（表示ON=新規/OFF=確認）は呼び出し側に委ねる。
-  onRegisterNew: (lat: Double, lng: Double, name: String?, wishlist: Boolean, priority: Priority, memo: String?, googlePlaceId: String?) -> Unit,
-  // 既存 place の編集を保存する。
-  onSaveExisting: (item: PlaceListItem, name: String, note: String, wishlist: Boolean, priority: Priority, visited: Boolean) -> Unit,
+  // 新規登録（空き地点/POI/検索結果）を確定する。近接確認（表示ON=新規/OFF=確認）は呼び出し側に委ねる。
+  onRegisterNew: (lat: Double, lng: Double, name: String?, wishlist: Boolean, priority: Priority, memo: String?, googlePlaceId: String?, googleName: String?) -> Unit,
+  // 以下2つは [PlaceSheetTarget.Existing] を渡す画面だけが必要（新規登録専用の画面は既定のままでよい）。
+  onLoadPlace: suspend (placeId: Long) -> PlaceListItem? = { null },
+  onSaveExisting: (item: PlaceListItem, name: String, note: String, wishlist: Boolean, priority: Priority, visited: Boolean) -> Unit = { _, _, _, _, _, _ -> },
   // 既存 place に「立ち寄りに追加」（記録中のみ）。null なら出さない。
   onAddStop: ((item: PlaceListItem) -> Unit)? = null,
   // 既存 place の詳細画面を開く。
   onOpenDetail: (placeId: Long) -> Unit = {},
+  modifier: Modifier = Modifier,
+  // 地図を見ながら操作できるよう、スクリムを持たない自前のシートで出す。
+  // ModalBottomSheet はスクリムがタップを吸うため、色を透明にしても地図を動かせず、
+  // 触ると閉じてしまう。ここでは地図のパン・ズーム・タップをそのまま生かす（ADR-0010）。
+  // シートの下に隠れる地点があると困る画面（対象を地図で示す画面）は、地図の下パディングを
+  // 合わせるためにここへ自分で作った state を渡す。
+  sheetState: FloatingSheetState = rememberFloatingSheetState(),
 ) {
-  val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-  ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState) {
+  // 非モーダルなのでバックは自分で受ける（モーダルのときは自動で閉じていた）。
+  BackHandler { onDismiss() }
+
+  // 別の地点をタップし直したら、畳んでいても開き直す（変化が見えないと操作を見失う）。
+  LaunchedEffect(target) { sheetState.settleTo(SheetDetent.PEEK) }
+
+  // 畳んでいる間は地図が全面に見える。入力内容は保持したままなので、ここから戻せる。
+  FloatingSheet(state = sheetState, modifier = modifier, restoreLabel = "▲ 入力に戻る") {
     Column(
       modifier = Modifier
         .fillMaxWidth()
@@ -77,7 +96,9 @@ internal fun PlaceActionSheet(
       when (target) {
         is PlaceSheetTarget.NewPoint -> NewPlaceEditor(
           latLng = target.latLng,
-          poi = null,
+          googlePlaceId = null,
+          initialName = null,
+          knownDetails = null,
           onFetchPoiDetails = onFetchPoiDetails,
           onRegisterNew = onRegisterNew,
           onDismiss = onDismiss,
@@ -85,7 +106,19 @@ internal fun PlaceActionSheet(
 
         is PlaceSheetTarget.NewPoi -> NewPlaceEditor(
           latLng = target.poi.latLng,
-          poi = target.poi,
+          googlePlaceId = target.poi.placeId,
+          initialName = target.poi.name,
+          knownDetails = null,
+          onFetchPoiDetails = onFetchPoiDetails,
+          onRegisterNew = onRegisterNew,
+          onDismiss = onDismiss,
+        )
+
+        is PlaceSheetTarget.NewSearchResult -> NewPlaceEditor(
+          latLng = LatLng(target.result.latitude, target.result.longitude),
+          googlePlaceId = target.result.googlePlaceId,
+          initialName = target.result.name,
+          knownDetails = target.result,
           onFetchPoiDetails = onFetchPoiDetails,
           onRegisterNew = onRegisterNew,
           onDismiss = onDismiss,
@@ -104,40 +137,46 @@ internal fun PlaceActionSheet(
   }
 }
 
-/** 未登録の地点/POI を場所として登録する編集部。POI なら Google 情報（カテゴリ/住所）をプレビューする。 */
+/**
+ * 未登録の地点/施設を場所として登録する編集部。施設（POI・検索結果）なら Google 情報
+ * （カテゴリ/住所）をプレビューする。[knownDetails] があれば取得済みとしてそれを使い、
+ * 無ければ [googlePlaceId] から引く。
+ */
 @Composable
 private fun NewPlaceEditor(
   latLng: LatLng,
-  poi: PointOfInterest?,
+  googlePlaceId: String?,
+  initialName: String?,
+  knownDetails: PlaceSearchResult?,
   onFetchPoiDetails: suspend (googlePlaceId: String) -> PlaceSearchResult?,
-  onRegisterNew: (lat: Double, lng: Double, name: String?, wishlist: Boolean, priority: Priority, memo: String?, googlePlaceId: String?) -> Unit,
+  onRegisterNew: (lat: Double, lng: Double, name: String?, wishlist: Boolean, priority: Priority, memo: String?, googlePlaceId: String?, googleName: String?) -> Unit,
   onDismiss: () -> Unit,
 ) {
-  var name by remember(poi) { mutableStateOf(poi?.name ?: "") }
-  var memo by remember(poi) { mutableStateOf("") }
-  var wishlist by remember(poi) { mutableStateOf(false) }
-  var priority by remember(poi) { mutableStateOf(Priority.MEDIUM) }
+  // 名前欄は「自分で付けた名前」専用なので、施設名を初期値には入れない（薄字の候補として見せる）。
+  // 入っているかどうかで「自分で付けたのか、Google の名前なのか」が一目で分かる。
+  var name by remember(latLng, googlePlaceId) { mutableStateOf("") }
+  var memo by remember(latLng, googlePlaceId) { mutableStateOf("") }
+  var wishlist by remember(latLng, googlePlaceId) { mutableStateOf(false) }
+  var priority by remember(latLng, googlePlaceId) { mutableStateOf(Priority.MEDIUM) }
   val context = LocalContext.current
 
-  // POI は開いたら Google から施設情報（カテゴリ・住所）を取得してプレビューする（結果は登録時に使い回し）。
-  val details by produceState<PlaceSearchResult?>(null, poi) {
-    value = poi?.placeId?.let { onFetchPoiDetails(it) }
+  // 施設は開いたら Google から施設情報（カテゴリ・住所）を取得してプレビューする（結果は登録時に使い回し）。
+  val details by produceState(knownDetails, latLng, googlePlaceId) {
+    value = knownDetails ?: googlePlaceId?.let { onFetchPoiDetails(it) }
   }
 
-  Text(
-    text = if (poi != null) "この場所を登録" else "この地点を場所として登録",
-    style = androidx.compose.material3.MaterialTheme.typography.titleMedium,
-    fontWeight = FontWeight.Bold,
-    modifier = Modifier.padding(bottom = 12.dp),
-  )
   PlaceFormBody(
     name = name,
     onNameChange = { name = it },
-    nameLabel = if (poi != null) "名前" else "名前（任意）",
+    nameLabel = "自分で付ける名前（任意）",
+    // 施設なら名前を見出しに。名前を持たない地点は、何をしようとしているかを出す。
+    heading = initialName ?: "この地点を場所として登録",
+    namePrefill = initialName,
     category = details?.category,
     address = details?.address,
-    onOpenInMaps = poi?.let { p ->
-      { openPlaceInGoogleMaps(context, p.placeId, p.latLng.latitude, p.latLng.longitude, p.name) }
+    // 施設のときだけ。空き地点は Google に開く先（施設ページ）が無く、座標にピンが立つだけなので出さない。
+    onOpenInMaps = googlePlaceId?.let { id ->
+      { openPlaceInGoogleMaps(context, id, latLng.latitude, latLng.longitude, name.ifBlank { initialName ?: "選択した場所" }) }
     },
     memo = memo,
     onMemoChange = { memo = it },
@@ -149,7 +188,12 @@ private fun NewPlaceEditor(
   SheetActions {
     TextButton(onClick = onDismiss) { Text("キャンセル") }
     Button(onClick = {
-      onRegisterNew(latLng.latitude, latLng.longitude, name.ifBlank { null }, wishlist, priority, memo.ifBlank { null }, poi?.placeId)
+      // 名前欄は空で始まるので、入力があれば自分で付けた名前。ただし候補を書き換えずに
+      // そのまま確定したときは Google の名前と同じなので、ユーザー名としては残さない。
+      val typed = name.trim().ifBlank { null }
+      val googleName = initialName?.trim()?.ifBlank { null }
+      val userName = typed?.takeIf { it != googleName }
+      onRegisterNew(latLng.latitude, latLng.longitude, userName, wishlist, priority, memo.ifBlank { null }, googlePlaceId, googleName)
       onDismiss()
     }) { Text("登録") }
   }
@@ -181,16 +225,12 @@ private fun ExistingPlaceEditor(
   var visited by remember(loaded.wishlistId) { mutableStateOf(loaded.isManuallyVisited) }
   val context = LocalContext.current
 
-  Text(
-    text = "場所を編集",
-    style = androidx.compose.material3.MaterialTheme.typography.titleMedium,
-    fontWeight = FontWeight.Bold,
-    modifier = Modifier.padding(bottom = 12.dp),
-  )
   PlaceFormBody(
     name = name,
     onNameChange = { name = it },
-    nameLabel = "名前",
+    nameLabel = "自分で付ける名前（任意）",
+    heading = loaded.displayName,
+    namePrefill = loaded.place.googleName,
     category = loaded.place.category,
     address = loaded.place.googleAddress,
     onOpenInMaps = {

@@ -123,6 +123,11 @@ dependencies {
   implementation(libs.hilt.navigation.compose)
   ksp(libs.hilt.compiler)
 
+  // WorkManager（オンライン復帰後の名前解決キャッチアップ）
+  implementation(libs.androidx.work.runtime)
+  implementation(libs.androidx.hilt.work)
+  ksp(libs.androidx.hilt.compiler)
+
   // Location Services
   implementation(libs.play.services.location)
 
@@ -133,9 +138,6 @@ dependencies {
   // Places (立ち寄り場所の命名)
   implementation(libs.places)
 
-  // Permissions
-  implementation(libs.accompanist.permissions)
-
   // Coroutines
   implementation(libs.kotlinx.coroutines.android)
 
@@ -144,9 +146,6 @@ dependencies {
   // 1.7.3 に固定され、MigrationTestHelper のスキーマ読み込みが版ずれで落ちる。
   // BOM で core/json を 1.8.1 に揃える（androidTest 側も追従する）。
   implementation(platform(libs.kotlinx.serialization.bom))
-
-  // Security - Encrypted SharedPreferences
-  implementation(libs.androidx.security.crypto)
 
   testImplementation(libs.junit)
 

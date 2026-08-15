@@ -234,6 +234,8 @@ private fun TrackDetailRoute(
   val reanalyzeCandidates by viewModel.reanalyzeCandidates.collectAsStateWithLifecycle()
   val registeredPlaces by viewModel.registeredPlaces.collectAsStateWithLifecycle()
   val showRegisteredPlaces by viewModel.showRegisteredPlaces.collectAsStateWithLifecycle()
+  val nearbyRegisterPrompt by viewModel.nearbyRegisterPrompt.collectAsStateWithLifecycle()
+  val nearbyStopPrompt by viewModel.nearbyStopPrompt.collectAsStateWithLifecycle()
 
   TrackDetailScreen(
     track = track,
@@ -251,17 +253,17 @@ private fun TrackDetailRoute(
     onDismissReanalyze = { viewModel.dismissReanalyze() },
     onDeleteStops = { stopIds -> viewModel.deleteStops(stopIds) },
     onUndoDeletion = { viewModel.undoDeletion() },
-    onAddManualStop = { lat, lng, arrival, departure, name, googlePlaceId, forceNewPlace ->
-      viewModel.addManualStop(lat, lng, arrival, departure, name, googlePlaceId, forceNewPlace)
-    },
-    onFindNearbyPlace = viewModel::nearbyPlace,
+    onAddManualStop = viewModel::addManualStopWithNearbyCheck,
+    nearbyStopPrompt = nearbyStopPrompt,
+    onConfirmNearbyStopLink = viewModel::confirmNearbyStopLink,
+    onConfirmNearbyStopNew = viewModel::confirmNearbyStopNew,
+    onDismissNearbyStopPrompt = viewModel::dismissNearbyStopPrompt,
     onMessageShown = { viewModel.clearMessage() },
-    onRegisterPlace = { lat, lng, name, wishlist, priority, memo, googlePlaceId, forceNewPlace ->
-      viewModel.registerPlace(lat, lng, name, wishlist, priority, memo, googlePlaceId, forceNewPlace)
-    },
-    onLinkRegister = { placeId, wishlist, priority, memo ->
-      viewModel.linkRegisterToPlace(placeId, wishlist, priority, memo)
-    },
+    onRegisterPlace = viewModel::registerPlaceWithNearbyCheck,
+    nearbyRegisterPrompt = nearbyRegisterPrompt,
+    onConfirmNearbyLink = viewModel::confirmNearbyLink,
+    onConfirmNearbyNew = viewModel::confirmNearbyNew,
+    onDismissNearbyPrompt = viewModel::dismissNearbyPrompt,
     onLoadPlace = viewModel::loadPlace,
     onSavePlaceEdits = { editItem, name, note, wishlist, priority, visited ->
       viewModel.savePlaceEdits(editItem, name, note, wishlist, priority, visited)

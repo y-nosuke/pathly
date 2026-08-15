@@ -3,70 +3,45 @@ package com.pathly.util
 import android.util.Log
 import com.pathly.BuildConfig
 
-object Logger {
-  const val TAG_PREFIX = "Pathly"
+/**
+ * タグ付きのロガー。クラスごとに `private val logger = Logger("Xxx")` を持って使う。
+ *
+ * 以前は object・互換用クラス・object と同名のファクトリ関数の3層構造だったが、
+ * 「従来のクラススタイル」との互換を保つべき呼び出し元はもう無かったので1つにまとめた。
+ *
+ * `d` はデバッグビルドでのみ出力する。位置情報アプリなので、**座標そのものはログに
+ * 出さないこと**（リリースビルドでは R8 を有効にしていないため、出力すると logcat に残る）。
+ */
+class Logger(tag: String) {
 
-  fun d(tag: String, message: String) {
-    if (BuildConfig.DEBUG) {
-      Log.d("$TAG_PREFIX-$tag", message)
-    }
-  }
+  private val tag = "$TAG_PREFIX-$tag"
 
-  fun i(tag: String, message: String) {
-    Log.i("$TAG_PREFIX-$tag", message)
-  }
-
-  fun w(tag: String, message: String) {
-    Log.w("$TAG_PREFIX-$tag", message)
-  }
-
-  fun e(tag: String, message: String) {
-    Log.e("$TAG_PREFIX-$tag", message)
-  }
-
-  fun e(tag: String, message: String, throwable: Throwable) {
-    Log.e("$TAG_PREFIX-$tag", message, throwable)
-  }
-
-  fun e(tag: String, throwable: Throwable) {
-    Log.e("$TAG_PREFIX-$tag", throwable.message ?: "Unknown error", throwable)
-  }
-
-  // 詳細デバッグ用（デバッグビルドでのみ表示）
-  fun verbose(tag: String, message: String) {
-    if (BuildConfig.DEBUG) {
-      Log.v("$TAG_PREFIX-$tag", message)
-    }
-  }
-}
-
-// 従来のクラススタイルloggerとの互換性のために追加
-class InstanceLogger(private val tag: String) {
+  /** 詳細ログ。デバッグビルドでのみ出力する。 */
   fun d(message: String) {
-    Logger.d(tag, message)
+    if (BuildConfig.DEBUG) Log.d(tag, message)
   }
 
   fun i(message: String) {
-    Logger.i(tag, message)
+    Log.i(tag, message)
   }
 
   fun w(message: String) {
-    Logger.w(tag, message)
+    Log.w(tag, message)
   }
 
   fun w(message: String, throwable: Throwable) {
-    Log.w("${Logger.TAG_PREFIX}-$tag", message, throwable)
+    Log.w(tag, message, throwable)
   }
 
   fun e(message: String) {
-    Logger.e(tag, message)
+    Log.e(tag, message)
   }
 
   fun e(message: String, throwable: Throwable) {
-    Logger.e(tag, message, throwable)
+    Log.e(tag, message, throwable)
+  }
+
+  private companion object {
+    const val TAG_PREFIX = "Pathly"
   }
 }
-
-// 互換性のためのファクトリ関数
-@Suppress("ktlint:standard:function-naming")
-fun Logger(tag: String): InstanceLogger = InstanceLogger(tag)

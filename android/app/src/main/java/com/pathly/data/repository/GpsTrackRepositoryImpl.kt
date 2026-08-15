@@ -12,7 +12,6 @@ import com.pathly.domain.model.GpsTrack
 import com.pathly.domain.model.SmoothingParams
 import com.pathly.domain.model.TrackSmoother
 import com.pathly.domain.repository.GpsTrackRepository
-import com.pathly.util.EncryptionHelper
 import com.pathly.util.Logger
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.catch
@@ -30,7 +29,6 @@ class GpsTrackRepositoryImpl @Inject constructor(
   private val gpsPointDao: GpsPointDao,
   private val smoothedPointDao: SmoothedPointDao,
   private val stopDao: StopDao,
-  private val encryptionHelper: EncryptionHelper,
 ) : GpsTrackRepository {
 
   private val logger = Logger("GpsTrackRepositoryImpl")
@@ -38,16 +36,19 @@ class GpsTrackRepositoryImpl @Inject constructor(
   // 補正後の書き込みを直列化する（記録中の各点更新と詳細画面の再補正が競合しないように）。
   private val smoothingMutex = Mutex()
 
+  /**
+   * 履歴一覧。**GPS点はロードしない**（点数は集計、距離は gps_tracks の焼き込み値）。
+   * 以前は全経路の全点を読み込み、表示のたびに平滑化して距離を計算し直していた。
+   */
   override fun getAllTracks(): Flow<List<GpsTrack>> = combine(
-    gpsTrackDao.getAllTracksWithPoints(),
+    gpsTrackDao.getTrackListRows(),
     stopDao.observeStopCountsByTrack(),
-  ) { tracksWithPoints, stopCounts ->
+  ) { rows, stopCounts ->
     val countByTrack = stopCounts.associate { it.trackId to it.count }
-    tracksWithPoints.map { trackWithPoints ->
-      val points = trackWithPoints.points.map { it.toGpsPoint() }
-      trackWithPoints.track.toGpsTrack(
-        points = points,
-        stopCount = countByTrack[trackWithPoints.track.id] ?: 0,
+    rows.map { row ->
+      row.track.toGpsTrack(
+        stopCount = countByTrack[row.track.id] ?: 0,
+        pointCount = row.pointCount,
       )
     }
   }
@@ -132,9 +133,6 @@ class GpsTrackRepositoryImpl @Inject constructor(
       )
       gpsTrackDao.deleteTrack(entity)
       logger.i("Successfully deleted track ${track.id}")
-
-      // セキュリティ考慮: 削除された軌跡IDを暗号化保存
-      saveDeletedTrackId(track.id)
     } catch (e: Exception) {
       logger.e("Repository operation failed", e)
       throw e
@@ -187,9 +185,15 @@ class GpsTrackRepositoryImpl @Inject constructor(
    */
   private suspend fun persistSmoothed(trackId: Long, isFinal: Boolean) {
     val raw = gpsPointDao.getPointsByTrackIdSync(trackId).map { it.toGpsPoint() }
-    if (raw.size < 2) return
+    if (raw.size < 2) {
+      // 点が無い／1点だけの経路も距離を確定させる（一覧が未計算のまま残らないように）。
+      if (isFinal) gpsTrackDao.updateTotalDistance(trackId, 0.0)
+      return
+    }
 
     val smoothed = TrackSmoother.smooth(raw)
+    // 確定時に総移動距離を焼き込む。一覧はこの値だけを読み、点をロードしない。
+    if (isFinal) gpsTrackDao.updateTotalDistance(trackId, TrackSmoother.totalDistanceMeters(smoothed))
     val half = SmoothingParams().window / 2
     val finalizedCount = if (isFinal) smoothed.size else (smoothed.size - half).coerceAtLeast(0)
 
@@ -212,46 +216,23 @@ class GpsTrackRepositoryImpl @Inject constructor(
   }
 
   /**
-   * ローカルデータの暗号化バックアップを作成
+   * v11 以前に記録した経路は総移動距離を持たないので、初回起動時にまとめて計算して埋める。
+   * 保存済みの補正後点列があればそれを使い（再平滑化しない）、無ければ生点から計算する。
+   * 一度埋めれば二度と走らない。
    */
-  suspend fun createEncryptedBackup(): Boolean = try {
-    logger.i("Creating encrypted backup of local data")
-
-    val allTracks = gpsTrackDao.getAllTracksSync()
-    val allPoints = gpsPointDao.getAllPointsSync()
-
-    // バックアップデータを暗号化して保存
-    val backupData = createBackupData(allTracks, allPoints)
-    encryptionHelper.saveSecureString("backup_data", backupData)
-    encryptionHelper.saveSecureString("backup_timestamp", System.currentTimeMillis().toString())
-
-    logger.i("Encrypted backup created successfully")
-    true
-  } catch (e: Exception) {
-    logger.e("Repository operation failed", e)
-    false
-  }
-
-  /**
-   * 暗号化されたバックアップから復元
-   */
-  suspend fun restoreFromEncryptedBackup(): Boolean {
-    return try {
-      logger.i("Restoring from encrypted backup")
-
-      val backupData = encryptionHelper.getSecureString("backup_data") ?: run {
-        logger.w("No backup data found")
-        return false
+  override suspend fun backfillMissingDistances() {
+    try {
+      val ids = gpsTrackDao.getFinishedTrackIdsWithoutDistance()
+      if (ids.isEmpty()) return
+      logger.i("Backfilling total distance for ${ids.size} tracks")
+      for (trackId in ids) {
+        val smoothed = smoothedPointDao.getByTrack(trackId).map { it.toGpsPoint() }
+          .ifEmpty { TrackSmoother.smooth(gpsPointDao.getPointsByTrackIdSync(trackId).map { it.toGpsPoint() }) }
+        gpsTrackDao.updateTotalDistance(trackId, TrackSmoother.totalDistanceMeters(smoothed))
       }
-
-      // バックアップデータを復号化して復元
-      // 実装は将来的に追加
-
-      logger.i("Restored from encrypted backup successfully")
-      true
+      logger.i("Backfilled total distance for ${ids.size} tracks")
     } catch (e: Exception) {
-      logger.e("Repository operation failed", e)
-      false
+      logger.e("backfillMissingDistances failed", e)
     }
   }
 
@@ -296,25 +277,11 @@ class GpsTrackRepositoryImpl @Inject constructor(
     0
   }
 
-  private fun saveDeletedTrackId(trackId: Long) {
-    try {
-      val existingIds = encryptionHelper.getSecureString("deleted_track_ids", "")
-      val updatedIds = "$existingIds,$trackId"
-      encryptionHelper.saveSecureString("deleted_track_ids", updatedIds)
-    } catch (e: Exception) {
-      logger.e("Repository operation failed", e)
-    }
-  }
-
-  private fun createBackupData(tracks: List<GpsTrackEntity>, points: List<GpsPointEntity>): String {
-    // 簡単なJSON形式でバックアップデータを作成（実際の実装では適切なシリアライゼーション使用）
-    return "tracks:${tracks.size},points:${points.size},timestamp:${System.currentTimeMillis()}"
-  }
-
   private fun GpsTrackEntity.toGpsTrack(
     points: List<GpsPoint> = emptyList(),
     stopCount: Int = 0,
     smoothedOverride: List<GpsPoint>? = null,
+    pointCount: Int = points.size,
   ): GpsTrack = GpsTrack(
     id = this.id,
     startTime = this.startTime,
@@ -324,6 +291,8 @@ class GpsTrackRepositoryImpl @Inject constructor(
     isFavorite = this.isFavorite,
     stopCount = stopCount,
     points = points,
+    pointCount = pointCount,
+    storedDistanceMeters = this.totalDistanceMeters,
     createdAt = this.createdAt,
     updatedAt = this.updatedAt,
     smoothedOverride = smoothedOverride,

@@ -178,7 +178,7 @@ fun HistoryScreen(
 
   deleteTarget?.let { target ->
     val label = target.name?.takeIf { it.isNotBlank() }
-      ?: DateFormatters.SHORT_DATE_FORMAT.format(target.startTime)
+      ?: DateFormatters.shortDate(target.startTime)
     AlertDialog(
       onDismissRequest = { deleteTarget = null },
       title = { Text("記録を削除しますか？") },
@@ -349,7 +349,9 @@ private fun StatisticsSummaryCard(
         StatisticItem(
           icon = "📏",
           label = "総距離",
-          value = "${String.format("%.1f", totalDistance)}km",
+          // Composable 内で Locale を直接読むと再コンポーズに追随しないため、
+          // 一覧の各行と同じ「丸めて文字列化」に揃える。
+          value = "${(totalDistance * 10).roundToInt() / 10.0}km",
         )
         StatisticItem(
           icon = "⏱️",
@@ -435,7 +437,7 @@ private fun ActiveTrackItem(
         Spacer(modifier = Modifier.height(4.dp))
 
         Text(
-          text = "開始: ${DateFormatters.SHORT_TIME_FORMAT.format(track.startTime)}",
+          text = "開始: ${DateFormatters.shortTime(track.startTime)}",
           style = MaterialTheme.typography.bodyMedium,
           color = MaterialTheme.colorScheme.onPrimaryContainer,
         )
@@ -444,7 +446,7 @@ private fun ActiveTrackItem(
 
         val distanceKm = (track.totalDistanceMeters / 1000.0 * 100).roundToInt() / 100.0
         Text(
-          text = "移動距離: ${distanceKm}km (${track.points.size}点)",
+          text = "移動距離: ${distanceKm}km (${track.pointCount}点)",
           style = MaterialTheme.typography.bodyMedium,
           color = MaterialTheme.colorScheme.secondary,
           fontWeight = FontWeight.Medium,
@@ -496,13 +498,13 @@ private fun TrackItem(
             fontWeight = FontWeight.Bold,
           )
           Text(
-            text = DateFormatters.SHORT_DATE_FORMAT.format(track.startTime),
+            text = DateFormatters.shortDate(track.startTime),
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
           )
         } else {
           Text(
-            text = DateFormatters.SHORT_DATE_FORMAT.format(track.startTime),
+            text = DateFormatters.shortDate(track.startTime),
             style = MaterialTheme.typography.titleMedium,
             fontWeight = FontWeight.Bold,
           )
@@ -514,14 +516,14 @@ private fun TrackItem(
           horizontalArrangement = Arrangement.spacedBy(16.dp),
         ) {
           Text(
-            text = "開始: ${DateFormatters.SHORT_TIME_FORMAT.format(track.startTime)}",
+            text = "開始: ${DateFormatters.shortTime(track.startTime)}",
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
           )
 
           track.endTime?.let { endTime ->
             Text(
-              text = "終了: ${DateFormatters.SHORT_TIME_FORMAT.format(endTime)}",
+              text = "終了: ${DateFormatters.shortTime(endTime)}",
               style = MaterialTheme.typography.bodyMedium,
               color = MaterialTheme.colorScheme.onSurfaceVariant,
             )

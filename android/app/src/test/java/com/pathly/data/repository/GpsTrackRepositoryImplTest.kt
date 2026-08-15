@@ -7,11 +7,10 @@ import com.pathly.data.local.dao.SmoothedPointDao
 import com.pathly.data.local.dao.StopDao
 import com.pathly.data.local.entity.GpsPointEntity
 import com.pathly.data.local.entity.GpsTrackEntity
-import com.pathly.data.local.entity.GpsTrackWithPoints
+import com.pathly.data.local.entity.TrackListRow
 import com.pathly.data.local.entity.TrackStopCount
 import com.pathly.domain.model.GpsPoint
 import com.pathly.domain.model.GpsTrack
-import com.pathly.util.EncryptionHelper
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
@@ -45,7 +44,6 @@ class GpsTrackRepositoryImplTest {
   private val mockGpsPointDao = mockk<GpsPointDao>(relaxed = true)
   private val mockSmoothedPointDao = mockk<SmoothedPointDao>(relaxed = true)
   private val mockStopDao = mockk<StopDao>(relaxed = true)
-  private val mockEncryptionHelper = mockk<EncryptionHelper>(relaxed = true)
 
   private lateinit var repository: GpsTrackRepositoryImpl
 
@@ -60,7 +58,6 @@ class GpsTrackRepositoryImplTest {
       mockGpsPointDao,
       mockSmoothedPointDao,
       mockStopDao,
-      mockEncryptionHelper,
     )
   }
 
@@ -72,7 +69,7 @@ class GpsTrackRepositoryImplTest {
   @Test
   fun `getAllTracks_空のリスト_空のFlowを返す`() = runTest {
     // Given
-    coEvery { mockGpsTrackDao.getAllTracksWithPoints() } returns flowOf(emptyList())
+    coEvery { mockGpsTrackDao.getTrackListRows() } returns flowOf(emptyList())
 
     // When
     val result = repository.getAllTracks().first()
@@ -87,20 +84,13 @@ class GpsTrackRepositoryImplTest {
     val trackEntity1 = createGpsTrackEntity(id = 1L, isActive = false)
     val trackEntity2 = createGpsTrackEntity(id = 2L, isActive = true)
 
-    val pointEntities1 = listOf(
-      createGpsPointEntity(id = 1L, trackId = 1L, latitude = 35.6762, longitude = 139.6503),
-      createGpsPointEntity(id = 2L, trackId = 1L, latitude = 35.6896, longitude = 139.7006),
-    )
-    val pointEntities2 = listOf(
-      createGpsPointEntity(id = 3L, trackId = 2L, latitude = 35.7000, longitude = 139.8000),
+    // 一覧は点をロードせず、件数だけを集計で受け取る。
+    val rows = listOf(
+      TrackListRow(trackEntity1, pointCount = 2),
+      TrackListRow(trackEntity2, pointCount = 1),
     )
 
-    val tracksWithPoints = listOf(
-      GpsTrackWithPoints(trackEntity1, pointEntities1),
-      GpsTrackWithPoints(trackEntity2, pointEntities2),
-    )
-
-    coEvery { mockGpsTrackDao.getAllTracksWithPoints() } returns flowOf(tracksWithPoints)
+    coEvery { mockGpsTrackDao.getTrackListRows() } returns flowOf(rows)
 
     // When
     val result = repository.getAllTracks().first()
@@ -111,12 +101,13 @@ class GpsTrackRepositoryImplTest {
     val track1 = result[0]
     assertEquals("Track1のIDが正しい", 1L, track1.id)
     assertEquals("Track1がinactive", false, track1.isActive)
-    assertEquals("Track1のpoint数が正しい", 2, track1.points.size)
+    assertEquals("Track1のpoint数が正しい", 2, track1.pointCount)
+    assertTrue("一覧は点そのものをロードしない", track1.points.isEmpty())
 
     val track2 = result[1]
     assertEquals("Track2のIDが正しい", 2L, track2.id)
     assertEquals("Track2がactive", true, track2.isActive)
-    assertEquals("Track2のpoint数が正しい", 1, track2.points.size)
+    assertEquals("Track2のpoint数が正しい", 1, track2.pointCount)
   }
 
   @Test
@@ -232,11 +223,11 @@ class GpsTrackRepositoryImplTest {
     // Given
     val trackEntity1 = createGpsTrackEntity(id = 1L, isActive = false)
     val trackEntity2 = createGpsTrackEntity(id = 2L, isActive = false)
-    val tracksWithPoints = listOf(
-      GpsTrackWithPoints(trackEntity1, emptyList()),
-      GpsTrackWithPoints(trackEntity2, emptyList()),
+    val rows = listOf(
+      TrackListRow(trackEntity1, pointCount = 0),
+      TrackListRow(trackEntity2, pointCount = 0),
     )
-    coEvery { mockGpsTrackDao.getAllTracksWithPoints() } returns flowOf(tracksWithPoints)
+    coEvery { mockGpsTrackDao.getTrackListRows() } returns flowOf(rows)
     // track1 は 3件、track2 は集計に出てこない（=0件）。
     every { mockStopDao.observeStopCountsByTrack() } returns flowOf(
       listOf(TrackStopCount(trackId = 1L, count = 3)),

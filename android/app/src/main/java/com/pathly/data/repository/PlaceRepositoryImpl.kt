@@ -8,6 +8,7 @@ import com.pathly.data.local.dao.SmoothedPointDao
 import com.pathly.data.local.dao.StopDao
 import com.pathly.data.local.dao.WishlistDao
 import com.pathly.data.local.entity.GooglePlaceEntity
+import com.pathly.data.local.entity.NamedPlaceRow
 import com.pathly.data.local.entity.PlaceEntity
 import com.pathly.data.local.entity.PlaceResolutionEntity
 import com.pathly.data.local.entity.RegisteredPlaceRow
@@ -16,6 +17,7 @@ import com.pathly.data.local.entity.StopEntity
 import com.pathly.data.local.entity.StopWithPlace
 import com.pathly.data.places.PlacesNameResolver
 import com.pathly.domain.model.DetectedStop
+import com.pathly.domain.model.Geo
 import com.pathly.domain.model.GpsPoint
 import com.pathly.domain.model.Place
 import com.pathly.domain.model.PlaceSearchResult
@@ -37,10 +39,6 @@ import kotlinx.coroutines.sync.withLock
 import java.util.Date
 import javax.inject.Inject
 import javax.inject.Singleton
-import kotlin.math.atan2
-import kotlin.math.cos
-import kotlin.math.sin
-import kotlin.math.sqrt
 
 @Singleton
 class PlaceRepositoryImpl @Inject constructor(
@@ -78,11 +76,20 @@ class PlaceRepositoryImpl @Inject constructor(
     rows.map { it.toRegisteredPlace() }
   }
 
-  override suspend fun findNearbyPlace(latitude: Double, longitude: Double): RegisteredPlace? = placeDao.getRegisteredPlacesOnce()
-    .map { it.toRegisteredPlace() to distanceMeters(it.latitude, it.longitude, latitude, longitude) }
-    .filter { it.second <= StopDetector.RADIUS_METERS }
-    .minByOrNull { it.second }
-    ?.first
+  override suspend fun findNearbyPlace(latitude: Double, longitude: Double): RegisteredPlace? {
+    // まず矩形（座標索引が効く）で絞り、そのうえで正確な距離で判定する。
+    val bounds = Geo.boundsAround(latitude, longitude, StopDetector.RADIUS_METERS)
+    return placeDao.getRegisteredPlacesInBounds(
+      bounds.minLatitude,
+      bounds.maxLatitude,
+      bounds.minLongitude,
+      bounds.maxLongitude,
+    )
+      .map { it.toRegisteredPlace() to distanceMeters(it.latitude, it.longitude, latitude, longitude) }
+      .filter { it.second <= StopDetector.RADIUS_METERS }
+      .minByOrNull { it.second }
+      ?.first
+  }
 
   private fun RegisteredPlaceRow.toRegisteredPlace(): RegisteredPlace = RegisteredPlace(
     placeId = placeId,
@@ -128,12 +135,13 @@ class PlaceRepositoryImpl @Inject constructor(
    */
   private suspend fun resolveCandidate(d: DetectedStop): StopCandidate {
     // 近く（30m）に「名前のある」place（自分の名前 or Google 名）があれば無料で再利用する。
-    for (place in placeDao.getAll()) {
+    // 近傍だけを Google 情報つきの1クエリで取る（以前は全件を読み、place ごとに
+    // google_places を引き直す N+1 になっていた）。
+    for (place in namedPlacesNear(d.latitude, d.longitude)) {
       if (distanceMeters(place.latitude, place.longitude, d.latitude, d.longitude) > DEDUPE_RADIUS_METERS) continue
-      val google = googlePlaceDao.getByPlace(place.id)
-      val name = place.name ?: google?.name
+      val name = place.name ?: place.googleName
       if (name != null) {
-        return StopCandidate(d, name, google?.address, google?.category, google?.googlePlaceId)
+        return StopCandidate(d, name, place.googleAddress, place.category, place.googlePlaceId)
       }
     }
     return when (val outcome = placesNameResolver.resolve(d.latitude, d.longitude)) {
@@ -184,6 +192,7 @@ class PlaceRepositoryImpl @Inject constructor(
     name: String?,
     googlePlaceId: String?,
     forceNewPlace: Boolean,
+    googleName: String?,
   ): Long = mutex.withLock {
     // 手動追加はユーザーの明示操作なので USER 由来（自動回収から守る）。
     // POI 候補を選んだ（googlePlaceId あり）ときは施設の同一性で同定（隣接店を分離）。座標は Google 座標。
@@ -207,9 +216,10 @@ class PlaceRepositoryImpl @Inject constructor(
     if (trimmedName != null && placeDao.getById(placeId)?.name == null) {
       placeDao.updateName(placeId, trimmedName, Date())
     }
-    // POI 由来の googlePlaceId があれば google_places に控える。
-    if (googlePlaceId != null && googlePlaceDao.getByPlace(placeId) == null) {
-      googlePlaceDao.upsert(GooglePlaceEntity(placeId, googlePlaceId))
+    // POI 由来の googlePlaceId があれば google_places に控える。施設名も Google 由来なので
+    // ここに入れる（places.name はユーザーが付けた名前の列。表示は displayName が拾う）。
+    if (googlePlaceId != null && googlePlaceDao.getByPlace(placeId)?.name == null) {
+      googlePlaceDao.upsert(GooglePlaceEntity(placeId, googlePlaceId, googleName))
     }
     // 手動追加は「ユーザーが名前を決めた」印として解決ログを残し、以後の自動命名（記録中のライブ検出）で
     // 勝手に近くの別施設名に上書きされないようにする。名前なしで追加した場合も未命名のまま保つ。
@@ -305,18 +315,18 @@ class PlaceRepositoryImpl @Inject constructor(
     }
   }
 
+  /**
+   * 例外はここで握らず呼び出し元へ返す。再試行するかどうかは呼び出し元（WorkManager）の判断で、
+   * ここで飲んでしまうと「失敗したのに成功として扱われる」ため。
+   */
   override suspend fun resolveAllUnresolvedNames() {
-    try {
-      // 未解決（place_resolutions 行が無い）立ち寄り場所を全経路から拾い、オンライン時のみ解決する。
-      // resolvePlace はオフラインで NotAttempted（行を残さない）＝再訪時にまた拾えるので安全。
-      val unresolved = mutex.withLock { placeDao.getUnresolvedPlaces() }
-      if (unresolved.isEmpty()) return
-      logger.i("Catching up ${unresolved.size} unresolved places")
-      for (place in unresolved) {
-        mutex.withLock { resolvePlace(place) }
-      }
-    } catch (e: Exception) {
-      logger.e("resolveAllUnresolvedNames failed", e)
+    // 未解決（place_resolutions 行が無い）立ち寄り場所を全経路から拾い、オンライン時のみ解決する。
+    // resolvePlace はオフラインで NotAttempted（行を残さない）＝再訪時にまた拾えるので安全。
+    val unresolved = mutex.withLock { placeDao.getUnresolvedPlaces() }
+    if (unresolved.isEmpty()) return
+    logger.i("Catching up ${unresolved.size} unresolved places")
+    for (place in unresolved) {
+      mutex.withLock { resolvePlace(place) }
     }
   }
 
@@ -482,9 +492,14 @@ class PlaceRepositoryImpl @Inject constructor(
     }
   }
 
-  /** 近く（[DEDUPE_RADIUS_METERS] 以内）に既存の場所があれば再利用、無ければ新規作成する。 */
+  /**
+   * 近く（[DEDUPE_RADIUS_METERS] 以内）に既存の場所があれば再利用、無ければ新規作成する。
+   *
+   * 記録中は位置バッチごとに（滞在中は毎回）呼ばれるため、以前の「全 place を読んで
+   * 線形走査」は場所が増えるほど重くなっていた。矩形で絞ってから距離判定する。
+   */
   override suspend fun findOrCreatePlace(latitude: Double, longitude: Double, source: PlaceSource): Long {
-    val existing = placeDao.getAll().firstOrNull {
+    val existing = placesNear(latitude, longitude).firstOrNull {
       distanceMeters(it.latitude, it.longitude, latitude, longitude) <= DEDUPE_RADIUS_METERS
     }
     if (existing != null) {
@@ -560,18 +575,22 @@ class PlaceRepositoryImpl @Inject constructor(
   /** 検出候補と既存の立ち寄りの滞在時間帯が重なるか（重なれば同じ訪問とみなす）。 */
   private fun timeOverlaps(candidate: DetectedStop, existing: StopEntity): Boolean = candidate.arrivalTime.before(existing.departureTime) && existing.arrivalTime.before(candidate.departureTime)
 
-  private fun distanceMeters(lat1: Double, lon1: Double, lat2: Double, lon2: Double): Double {
-    val dLat = Math.toRadians(lat2 - lat1)
-    val dLon = Math.toRadians(lon2 - lon1)
-    val h = sin(dLat / 2) * sin(dLat / 2) +
-      cos(Math.toRadians(lat1)) * cos(Math.toRadians(lat2)) *
-      sin(dLon / 2) * sin(dLon / 2)
-    return EARTH_RADIUS_METERS * 2 * atan2(sqrt(h), sqrt(1 - h))
+  private fun distanceMeters(lat1: Double, lon1: Double, lat2: Double, lon2: Double): Double = Geo.distanceMeters(lat1, lon1, lat2, lon2)
+
+  /** 同一場所とみなす距離の矩形に入る場所（id 順）。正確な距離判定は呼び出し側で行う。 */
+  private suspend fun placesNear(latitude: Double, longitude: Double): List<PlaceEntity> {
+    val bounds = Geo.boundsAround(latitude, longitude, DEDUPE_RADIUS_METERS)
+    return placeDao.getInBounds(bounds.minLatitude, bounds.maxLatitude, bounds.minLongitude, bounds.maxLongitude)
+  }
+
+  /** [placesNear] の Google 情報つき版（表示名の解決用）。 */
+  private suspend fun namedPlacesNear(latitude: Double, longitude: Double): List<NamedPlaceRow> {
+    val bounds = Geo.boundsAround(latitude, longitude, DEDUPE_RADIUS_METERS)
+    return placeDao.getNamedPlacesInBounds(bounds.minLatitude, bounds.maxLatitude, bounds.minLongitude, bounds.maxLongitude)
   }
 
   companion object {
     /** 同一場所とみなす距離（重複排除）。 */
     private const val DEDUPE_RADIUS_METERS = 30.0
-    private const val EARTH_RADIUS_METERS = 6371000.0
   }
 }

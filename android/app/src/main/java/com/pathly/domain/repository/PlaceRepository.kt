@@ -57,8 +57,12 @@ interface PlaceRepository {
    * 手動追加: 検出に頼らず、ユーザーが地図で指した地点を立ち寄りとして追加する（完全手動）。
    * findOrCreatePlace で place を確保（30m以内の命名済み place は再利用）し、[name] があれば
    * 未命名の place にだけ焼き込む。POI 由来の [googlePlaceId] があれば解決記録に控えて
-   * Places を叩かないようにする（名前が無ければ place は未取得のまま。あとで「場所を取得」で命名可）。
+   * Places を叩かないようにする。
    * 到着 [arrivalTime]／出発 [departureTime] は呼び出し側が最寄り軌跡点から決める。作成した stop の id を返す。
+   *
+   * 名前は出どころで列を分ける（[com.pathly.domain.model.Place] の設計）。
+   * @param name ユーザーが自分で入力した名前 → `places.name`。
+   * @param googleName POI から取れた施設名 → `google_places.name`（ユーザー名を上書きしない）。
    */
   suspend fun addManualStop(
     trackId: Long,
@@ -70,6 +74,7 @@ interface PlaceRepository {
     googlePlaceId: String?,
     // true のとき座標30m同定をせず必ず新しい place を作る（近接確認で「新規」を選んだとき）。
     forceNewPlace: Boolean = false,
+    googleName: String? = null,
   ): Long
 
   /**
@@ -109,7 +114,9 @@ interface PlaceRepository {
 
   /**
    * 全経路で、まだ一度も解決していない立ち寄り場所をまとめて名前解決する（オンライン復帰後のキャッチアップ）。
-   * オフライン記録などで未解決のまま残った place をアプリ起動時に拾う。オフライン時は各 place で no-op（課金なし）。
+   * オフライン記録などで未解決のまま残った place を拾う。オフライン時は各 place で no-op（課金なし）。
+   *
+   * **失敗時は例外を投げる**（再試行するかは呼び出し元が決める）。
    */
   suspend fun resolveAllUnresolvedNames()
 

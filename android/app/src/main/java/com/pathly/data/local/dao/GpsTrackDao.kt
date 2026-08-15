@@ -8,6 +8,7 @@ import androidx.room.Transaction
 import androidx.room.Update
 import com.pathly.data.local.entity.GpsTrackEntity
 import com.pathly.data.local.entity.GpsTrackWithPoints
+import com.pathly.data.local.entity.TrackListRow
 import kotlinx.coroutines.flow.Flow
 
 @Dao
@@ -19,6 +20,25 @@ interface GpsTrackDao {
   @Transaction
   @Query("SELECT * FROM gps_tracks ORDER BY startTime DESC")
   fun getAllTracksWithPoints(): Flow<List<GpsTrackWithPoints>>
+
+  /**
+   * 履歴一覧用。点はロードせず件数だけを集計する（距離は gps_tracks の焼き込み値を使う）。
+   * 点の増減でも再発行されるが、完了済み経路の行は値が変わらないため、
+   * 上流の StateFlow が同値を弾いて再描画には至らない。
+   */
+  @Query(
+    "SELECT t.*, (SELECT COUNT(*) FROM gps_points p WHERE p.trackId = t.id) AS pointCount " +
+      "FROM gps_tracks t ORDER BY t.startTime DESC",
+  )
+  fun getTrackListRows(): Flow<List<TrackListRow>>
+
+  /** 確定した総移動距離（メートル）を焼き込む。 */
+  @Query("UPDATE gps_tracks SET totalDistanceMeters = :meters WHERE id = :trackId")
+  suspend fun updateTotalDistance(trackId: Long, meters: Double)
+
+  /** 距離が未計算の完了済み経路（v11 以前に記録した分のバックフィル対象）。 */
+  @Query("SELECT id FROM gps_tracks WHERE isActive = 0 AND totalDistanceMeters IS NULL")
+  suspend fun getFinishedTrackIdsWithoutDistance(): List<Long>
 
   @Query("SELECT * FROM gps_tracks WHERE id = :trackId")
   suspend fun getTrackById(trackId: Long): GpsTrackEntity?

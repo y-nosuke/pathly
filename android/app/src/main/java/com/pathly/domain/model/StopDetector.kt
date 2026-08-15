@@ -1,10 +1,5 @@
 package com.pathly.domain.model
 
-import kotlin.math.atan2
-import kotlin.math.cos
-import kotlin.math.sin
-import kotlin.math.sqrt
-
 /**
  * GPS軌跡から立ち寄り場所を検出する（非破壊・計算）。
  *
@@ -22,8 +17,6 @@ object StopDetector {
 
   /** 立ち寄りとみなす最小滞在時間。単位: ミリ秒（3分）。 */
   const val MIN_DURATION_MS = 3 * 60 * 1000L
-
-  private const val EARTH_RADIUS_METERS = 6371000.0
 
   fun detect(
     points: List<GpsPoint>,
@@ -43,7 +36,7 @@ object StopDetector {
       while (j < points.size) {
         val centroidLat = sumLat / count
         val centroidLon = sumLon / count
-        if (distanceMeters(centroidLat, centroidLon, points[j].latitude, points[j].longitude) <= radiusMeters) {
+        if (Geo.distanceMeters(centroidLat, centroidLon, points[j].latitude, points[j].longitude) <= radiusMeters) {
           sumLat += points[j].latitude
           sumLon += points[j].longitude
           count++
@@ -70,14 +63,5 @@ object StopDetector {
       }
     }
     return stops
-  }
-
-  private fun distanceMeters(lat1: Double, lon1: Double, lat2: Double, lon2: Double): Double {
-    val dLat = Math.toRadians(lat2 - lat1)
-    val dLon = Math.toRadians(lon2 - lon1)
-    val h = sin(dLat / 2) * sin(dLat / 2) +
-      cos(Math.toRadians(lat1)) * cos(Math.toRadians(lat2)) *
-      sin(dLon / 2) * sin(dLon / 2)
-    return EARTH_RADIUS_METERS * 2 * atan2(sqrt(h), sqrt(1 - h))
   }
 }

@@ -31,7 +31,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ### データ管理
 
 - **データベース：** PostgreSQL（Supabase）
-- **ローカル保存：** Android Encrypted SharedPreferences
+- **ローカル保存：** Room (SQLite)。端末内のみで完結し、暗号化はしていない（クラウド同期は Phase 3）
 - **同期：** リアルタイム同期（Supabase Realtime）
 
 ## 現在の開発フェーズ
@@ -184,7 +184,7 @@ app/src/main/java/com/pathly/
 - **認証：** Supabase Auth（ID+パスワード）
 - **データ暗号化：** Supabase自動暗号化 + 機密データはアプリレベル暗号化
 - **通信：** HTTPS/TLS必須
-- **ローカル：** Android Encrypted SharedPreferences
+- **ローカル：** 暗号化なし。Room の DB は平文で、設定は SharedPreferences。将来 DB を暗号化するなら SQLCipher 等の導入が必要（Jetpack Security は Deprecated）
 
 ### パフォーマンス
 
@@ -233,7 +233,7 @@ app/src/main/java/com/pathly/
 
 - **位置権限：** ACCESS_FINE_LOCATION + ACCESS_COARSE_LOCATION必須
 - **バックグラウンド実行：** LocationTrackingService使用
-- **データベースバージョン：** Room v9（v2: places/stops、v3: smoothed_points、v4: place_resolutions、v5: wishlist、v6: stops.note＝立ち寄りメモ、v7: 場所データをGoogle由来[google_places]とユーザー入力[places]に分離・メモをplaces.noteへ一本化、v8: gps_tracksにname/isFavorite＝経路の名前・お気に入り、v9: gps_pointsにLocation付随情報＝provider/各種精度/MSL高度/elapsedRealtimeNanos/isMock/extrasJson、v10: placesにsource＝場所の由来[DETECTED/USER]・自動回収はDETECTEDのみ）。破壊的フォールバックは無効。スキーマ変更時は `DatabaseMigrations` に正式なマイグレーションを追加すること
+- **データベースバージョン：** Room v12（v2: places/stops、v3: smoothed_points、v4: place_resolutions、v5: wishlist、v6: stops.note＝立ち寄りメモ、v7: 場所データをGoogle由来[google_places]とユーザー入力[places]に分離・メモをplaces.noteへ一本化、v8: gps_tracksにname/isFavorite＝経路の名前・お気に入り、v9: gps_pointsにLocation付随情報＝provider/各種精度/MSL高度/elapsedRealtimeNanos/isMock/extrasJson、v10: placesにsource＝場所の由来[DETECTED/USER]・自動回収はDETECTEDのみ、v11: gps_tracksにtotalDistanceMeters＝確定時に焼き込む総移動距離[一覧が全点をロードして再平滑化しないため]・既存分は起動時にバックフィル、v12: placesの座標に索引＝近傍検索[同一場所30m判定・近接確認50m]が全表走査にならないように）。破壊的フォールバックは無効。スキーマ変更時は `DatabaseMigrations` に正式なマイグレーションを追加すること
 - **最小SDK：** API 34（Android 14）以上 / compileSdk 37・targetSdk 37（Android 17）
 - **ビルド環境：** AGP 9.2 / Gradle 9.6 / Kotlin 2.3（AGP内蔵Kotlin）。KotlinはAGPバンドル版に連動するため独立に最新化しないこと
 - **アノテーション処理：** KSP使用（Room/Hilt）。kaptは廃止

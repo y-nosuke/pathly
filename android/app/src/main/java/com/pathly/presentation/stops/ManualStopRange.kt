@@ -1,4 +1,4 @@
-package com.pathly.presentation.common
+package com.pathly.presentation.stops
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -20,6 +20,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.pathly.domain.model.Geo
 import com.pathly.domain.model.GpsPoint
 import com.pathly.util.DateFormatters
 import java.util.Date
@@ -133,7 +134,7 @@ private fun StepperRow(
       color = MaterialTheme.colorScheme.onSurfaceVariant,
     )
     Text(
-      text = DateFormatters.TIME_FORMAT.format(time),
+      text = DateFormatters.time(time),
       style = MaterialTheme.typography.titleMedium,
       fontWeight = FontWeight.Medium,
       modifier = Modifier.padding(start = 12.dp),
@@ -155,4 +156,16 @@ private fun StepperRow(
       modifier = Modifier.size(40.dp),
     ) { Text("＋", style = MaterialTheme.typography.titleLarge) }
   }
+}
+
+/** 手動追加の到着/出発を、指した地点の近傍の軌跡点から推定する（両端の時刻）。近傍が無ければ最寄り点。 */
+fun deriveStopWindow(points: List<GpsPoint>, lat: Double, lng: Double): Pair<Date, Date> {
+  if (points.isEmpty()) return Date() to Date()
+  val near = points.filter { Geo.distanceMeters(it.latitude, it.longitude, lat, lng) <= 60.0 }
+  if (near.isNotEmpty()) {
+    val times = near.map { it.timestamp }
+    return times.min() to times.max()
+  }
+  val nearest = points.minByOrNull { Geo.distanceMeters(it.latitude, it.longitude, lat, lng) }!!
+  return nearest.timestamp to nearest.timestamp
 }

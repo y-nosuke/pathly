@@ -141,6 +141,77 @@ class MigrationTest {
     db.close()
   }
 
+  @Test
+  fun migrate10To11_addsTotalDistanceColumn() {
+    // v10 のスキーマで DB を作成し、既存の完了済み経路を1件入れておく。
+    helper.createDatabase(TEST_DB, 10).apply {
+      execSQL(
+        "INSERT INTO gps_tracks (id, startTime, endTime, isActive, name, isFavorite, createdAt, updatedAt) " +
+          "VALUES (1, 0, 100, 0, '散歩', 1, 0, 0)",
+      )
+      close()
+    }
+
+    // 10→11 を適用。生成スキーマが 11.json と一致しなければここで失敗する。
+    val db = helper.runMigrationsAndValidate(
+      TEST_DB,
+      11,
+      true,
+      DatabaseMigrations.MIGRATION_10_11,
+    )
+
+    // 既存行は距離が未計算（NULL）で残り、他の列は保持される。NULL は起動時のバックフィル対象。
+    db.query("SELECT name, isFavorite, totalDistanceMeters FROM gps_tracks WHERE id = 1").use { cursor ->
+      assertTrue(cursor.moveToFirst())
+      assertEquals("散歩", cursor.getString(0))
+      assertEquals(1, cursor.getInt(1))
+      assertTrue("既存経路の距離は未計算(NULL)", cursor.isNull(2))
+    }
+
+    // 新しい列に値を書ける。
+    db.execSQL("UPDATE gps_tracks SET totalDistanceMeters = 1234.5 WHERE id = 1")
+    db.query("SELECT totalDistanceMeters FROM gps_tracks WHERE id = 1").use { cursor ->
+      assertTrue(cursor.moveToFirst())
+      assertEquals(1234.5, cursor.getDouble(0), 0.001)
+    }
+    db.close()
+  }
+
+  @Test
+  fun migrate11To12_addsPlaceLocationIndex() {
+    // v11 のスキーマで DB を作成し、既存の場所を1件入れておく。
+    helper.createDatabase(TEST_DB, 11).apply {
+      execSQL(
+        "INSERT INTO places (id, name, latitude, longitude, note, source, createdAt, updatedAt) " +
+          "VALUES (1, 'テスト場所', 35.0, 139.0, NULL, 'USER', 0, 0)",
+      )
+      close()
+    }
+
+    // 11→12 を適用。索引名が Room の生成規約とずれていればここで失敗する。
+    val db = helper.runMigrationsAndValidate(
+      TEST_DB,
+      12,
+      true,
+      DatabaseMigrations.MIGRATION_11_12,
+    )
+
+    // 既存行は保持される。
+    db.query("SELECT name FROM places WHERE id = 1").use { cursor ->
+      assertTrue(cursor.moveToFirst())
+      assertEquals("テスト場所", cursor.getString(0))
+    }
+
+    // 座標の索引が作られている（近傍検索が全表走査にならない根拠）。
+    db.query("SELECT name FROM sqlite_master WHERE type = 'index' AND tbl_name = 'places'").use { cursor ->
+      val names = buildList {
+        while (cursor.moveToNext()) add(cursor.getString(0))
+      }
+      assertTrue("座標索引がある: $names", names.contains("index_places_latitude_longitude"))
+    }
+    db.close()
+  }
+
   companion object {
     private const val TEST_DB = "migration-test"
   }

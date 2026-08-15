@@ -5,13 +5,14 @@ import androidx.lifecycle.viewModelScope
 import com.pathly.data.places.PlacesTextSearcher
 import com.pathly.data.settings.MapSurface
 import com.pathly.data.settings.SettingsRepository
+import com.pathly.domain.model.NearbyRegisterPrompt
 import com.pathly.domain.model.PlaceListItem
 import com.pathly.domain.model.PlacePrediction
 import com.pathly.domain.model.PlaceSearchResult
 import com.pathly.domain.model.PlaceVisit
 import com.pathly.domain.model.Priority
-import com.pathly.domain.model.RegisteredPlace
 import com.pathly.domain.repository.WishlistRepository
+import com.pathly.domain.usecase.PlaceEditUseCase
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -19,6 +20,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
@@ -27,6 +29,7 @@ class PlacesViewModel @Inject constructor(
   private val wishlistRepository: WishlistRepository,
   private val placesTextSearcher: PlacesTextSearcher,
   private val settingsRepository: SettingsRepository,
+  private val placeEditUseCase: PlaceEditUseCase,
 ) : ViewModel() {
 
   private val _uiState = MutableStateFlow(PlacesState())
@@ -41,7 +44,7 @@ class PlacesViewModel @Inject constructor(
   private fun observeShowRegisteredPlaces() {
     viewModelScope.launch {
       settingsRepository.showRegisteredPlaces(MapSurface.PLACE_DETAIL).collect { show ->
-        _uiState.value = _uiState.value.copy(showRegisteredPlaces = show)
+        _uiState.update { it.copy(showRegisteredPlaces = show) }
       }
     }
   }
@@ -52,50 +55,56 @@ class PlacesViewModel @Inject constructor(
 
   private fun observePlaces() {
     viewModelScope.launch {
-      _uiState.value = _uiState.value.copy(isLoading = true)
+      _uiState.update { it.copy(isLoading = true) }
       try {
         wishlistRepository.getPlaces().collect { items ->
-          _uiState.value = _uiState.value.copy(
-            items = items,
-            isLoading = false,
-            errorMessage = null,
-          )
+          _uiState.update {
+            it.copy(
+              items = items,
+              isLoading = false,
+              errorMessage = null,
+            )
+          }
         }
       } catch (e: Exception) {
-        _uiState.value = _uiState.value.copy(
-          isLoading = false,
-          errorMessage = "場所の読み込みに失敗しました: ${e.message}",
-        )
+        _uiState.update {
+          it.copy(
+            isLoading = false,
+            errorMessage = "場所の読み込みに失敗しました: ${e.message}",
+          )
+        }
       }
     }
   }
 
   /** 行きたいの絞り込み（指定なし/行きたい/行きたい以外）。 */
   fun setWishlistFilter(filter: WishlistFilter) {
-    _uiState.value = _uiState.value.copy(wishlistFilter = filter)
+    _uiState.update { it.copy(wishlistFilter = filter) }
   }
 
   /** 訪問状況の絞り込み（指定なし/訪問済み/未訪問）。 */
   fun setVisitedFilter(filter: VisitedFilter) {
-    _uiState.value = _uiState.value.copy(visitedFilter = filter)
+    _uiState.update { it.copy(visitedFilter = filter) }
   }
 
   /** 絞り込みを全解除する（行きたい・訪問状況をまとめて指定なしに戻す）。並べ替えは保持。 */
   fun clearFilters() {
-    _uiState.value = _uiState.value.copy(
-      wishlistFilter = WishlistFilter.ANY,
-      visitedFilter = VisitedFilter.ANY,
-    )
+    _uiState.update {
+      it.copy(
+        wishlistFilter = WishlistFilter.ANY,
+        visitedFilter = VisitedFilter.ANY,
+      )
+    }
   }
 
   /** 並べ替え軸の変更。軸ごとの既定の向き（新しい/多い/高いが先）に合わせる。 */
   fun setSort(sort: PlaceSort) {
-    _uiState.value = _uiState.value.copy(sort = sort, sortDescending = sort.defaultDescending)
+    _uiState.update { it.copy(sort = sort, sortDescending = sort.defaultDescending) }
   }
 
   /** 並べ替えの昇順/降順を反転する。 */
   fun toggleSortDirection() {
-    _uiState.value = _uiState.value.copy(sortDescending = !_uiState.value.sortDescending)
+    _uiState.update { it.copy(sortDescending = !it.sortDescending) }
   }
 
   /** その場所を含むお出掛け（経路）の一覧。詳細画面で購読する。 */
@@ -107,18 +116,14 @@ class PlacesViewModel @Inject constructor(
   /** POI 登録ダイアログのプレビュー用: placeId から施設情報（カテゴリ等）を取得する。 */
   suspend fun fetchPoiDetails(googlePlaceId: String): PlaceSearchResult? = wishlistRepository.fetchPlaceDetails(googlePlaceId)
 
-  /** 手動追加の近接確認用: 近く（検出半径）に既存の場所があれば最寄り1件を返す。 */
-  suspend fun nearbyPlace(latitude: Double, longitude: Double): RegisteredPlace? = wishlistRepository.findNearbyPlace(latitude, longitude)
-
   /** 近接確認で「この場所に紐付け」を選んだとき: 既存 place に行きたい/メモを反映する（新規は作らない）。 */
   fun linkRegisterToPlace(placeId: Long, wishlist: Boolean, priority: Priority, memo: String?) {
     viewModelScope.launch {
       try {
-        if (!memo.isNullOrBlank()) wishlistRepository.updatePlaceNote(placeId, memo)
-        if (wishlist) wishlistRepository.addToWishlist(placeId, priority)
+        placeEditUseCase.linkToExisting(placeId, wishlist, priority, memo)
         notify("この場所に紐付けました")
       } catch (e: Exception) {
-        _uiState.value = _uiState.value.copy(errorMessage = "紐付けに失敗しました: ${e.message}")
+        _uiState.update { it.copy(errorMessage = "紐付けに失敗しました: ${e.message}") }
       }
     }
   }
@@ -136,15 +141,93 @@ class PlacesViewModel @Inject constructor(
   ) {
     viewModelScope.launch {
       try {
-        val reg = wishlistRepository.registerPlace(latitude, longitude, name, memo, googlePlaceId, forceNewPlace)
-        if (wishlist) {
-          wishlistRepository.addToWishlist(reg.placeId, priority)
-        }
+        val reg = placeEditUseCase.register(latitude, longitude, name, wishlist, priority, memo, googlePlaceId, forceNewPlace)
         notifyRegistered(reg.alreadyExisted)
       } catch (e: Exception) {
-        _uiState.value = _uiState.value.copy(errorMessage = "登録に失敗しました: ${e.message}")
+        _uiState.update { it.copy(errorMessage = "登録に失敗しました: ${e.message}") }
       }
     }
+  }
+
+  /**
+   * 地図タップ・検索からの場所登録。近くに既存の場所があれば登録せず確認待ちにする。
+   * 「登録済みの場所」を地図に表示中なら、ユーザーは既存を見たうえでの操作なので確認しない。
+   * [knownDetails] は検索結果のように施設情報を取得済みのとき（Google を引き直さない）。
+   */
+  fun registerPlaceWithNearbyCheck(
+    latitude: Double,
+    longitude: Double,
+    name: String?,
+    wishlist: Boolean,
+    priority: Priority,
+    memo: String?,
+    googlePlaceId: String?,
+    googleName: String? = null,
+    knownDetails: PlaceSearchResult? = null,
+  ) {
+    viewModelScope.launch {
+      try {
+        val result = placeEditUseCase.registerWithNearbyCheck(
+          latitude,
+          longitude,
+          name,
+          wishlist,
+          priority,
+          memo,
+          googlePlaceId,
+          nearbyAlreadyVisible = _uiState.value.showRegisteredPlaces,
+          knownDetails = knownDetails,
+          googleName = googleName,
+        )
+        when (result) {
+          is PlaceEditUseCase.RegisterResult.NearbyFound ->
+            _uiState.update {
+              it.copy(
+                nearbyRegisterPrompt = NearbyRegisterPrompt(
+                  result.nearby,
+                  latitude,
+                  longitude,
+                  name,
+                  wishlist,
+                  priority,
+                  memo,
+                ),
+              )
+            }
+
+          is PlaceEditUseCase.RegisterResult.Registered -> notifyRegistered(result.alreadyExisted)
+        }
+      } catch (e: Exception) {
+        _uiState.update { it.copy(errorMessage = "登録に失敗しました: ${e.message}") }
+      }
+    }
+  }
+
+  /** 近接確認で「この場所に紐付け」を選んだとき。 */
+  fun confirmNearbyLink() {
+    val prompt = _uiState.value.nearbyRegisterPrompt ?: return
+    _uiState.update { it.copy(nearbyRegisterPrompt = null) }
+    linkRegisterToPlace(prompt.nearby.placeId, prompt.wishlist, prompt.priority, prompt.memo)
+  }
+
+  /** 近接確認で「新規で登録」を選んだとき。座標同定せず必ず新しい場所を作る。 */
+  fun confirmNearbyNew() {
+    val prompt = _uiState.value.nearbyRegisterPrompt ?: return
+    _uiState.update { it.copy(nearbyRegisterPrompt = null) }
+    registerPlace(
+      prompt.latitude,
+      prompt.longitude,
+      prompt.name,
+      prompt.wishlist,
+      prompt.priority,
+      prompt.memo,
+      googlePlaceId = null,
+      forceNewPlace = true,
+    )
+  }
+
+  fun dismissNearbyPrompt() {
+    _uiState.update { it.copy(nearbyRegisterPrompt = null) }
   }
 
   /** 一覧の行や詳細から「行きたい」を付け外しする。 */
@@ -158,7 +241,7 @@ class PlacesViewModel @Inject constructor(
           wishlistRepository.addToWishlist(item.place.id, Priority.MEDIUM)
         }
       } catch (e: Exception) {
-        _uiState.value = _uiState.value.copy(errorMessage = "更新に失敗しました: ${e.message}")
+        _uiState.update { it.copy(errorMessage = "更新に失敗しました: ${e.message}") }
       }
     }
   }
@@ -169,7 +252,7 @@ class PlacesViewModel @Inject constructor(
       try {
         wishlistRepository.renamePlace(placeId, name)
       } catch (e: Exception) {
-        _uiState.value = _uiState.value.copy(errorMessage = "名前の変更に失敗しました: ${e.message}")
+        _uiState.update { it.copy(errorMessage = "名前の変更に失敗しました: ${e.message}") }
       }
     }
   }
@@ -180,7 +263,7 @@ class PlacesViewModel @Inject constructor(
       try {
         wishlistRepository.updatePlaceNote(placeId, note)
       } catch (e: Exception) {
-        _uiState.value = _uiState.value.copy(errorMessage = "更新に失敗しました: ${e.message}")
+        _uiState.update { it.copy(errorMessage = "更新に失敗しました: ${e.message}") }
       }
     }
   }
@@ -191,7 +274,7 @@ class PlacesViewModel @Inject constructor(
       try {
         wishlistRepository.updateWishlist(wishlistId, priority)
       } catch (e: Exception) {
-        _uiState.value = _uiState.value.copy(errorMessage = "更新に失敗しました: ${e.message}")
+        _uiState.update { it.copy(errorMessage = "更新に失敗しました: ${e.message}") }
       }
     }
   }
@@ -201,7 +284,7 @@ class PlacesViewModel @Inject constructor(
       try {
         wishlistRepository.setVisited(id, visited)
       } catch (e: Exception) {
-        _uiState.value = _uiState.value.copy(errorMessage = "更新に失敗しました: ${e.message}")
+        _uiState.update { it.copy(errorMessage = "更新に失敗しました: ${e.message}") }
       }
     }
   }
@@ -222,38 +305,9 @@ class PlacesViewModel @Inject constructor(
   ) {
     viewModelScope.launch {
       try {
-        // 「Googleで情報を取得」で選んだ施設があれば、保存時に紐付ける（google_places・座標を更新）。
-        if (link != null) {
-          wishlistRepository.linkPlaceToGoogle(item.place.id, link)
-        }
-        if (name.trim() != (item.place.name ?: "").trim()) {
-          wishlistRepository.renamePlace(item.place.id, name.trim())
-        }
-        val newNote = note.ifBlank { null }
-        if (newNote != item.note) {
-          wishlistRepository.updatePlaceNote(item.place.id, newNote)
-        }
-        val wishlistId = item.wishlistId
-        when {
-          // 新たに「行きたい」へ。付けた直後の id で訪問済みも反映する。
-          wishlist && wishlistId == null -> {
-            val newId = wishlistRepository.addToWishlist(item.place.id, priority)
-            if (visited && item.visitCount == 0) wishlistRepository.setVisited(newId, true)
-          }
-          // 既に「行きたい」。優先度・訪問済みの変更分だけ反映する。
-          wishlist && wishlistId != null -> {
-            if (priority != item.priority) wishlistRepository.updateWishlist(wishlistId, priority)
-            if (item.visitCount == 0 && visited != item.isManuallyVisited) {
-              wishlistRepository.setVisited(wishlistId, visited)
-            }
-          }
-          // 「行きたい」を外す（場所自体は残す）。
-          !wishlist && wishlistId != null -> {
-            wishlistRepository.removeFromWishlist(wishlistId)
-          }
-        }
+        placeEditUseCase.saveEdits(item, name, note, wishlist, priority, visited, link)
       } catch (e: Exception) {
-        _uiState.value = _uiState.value.copy(errorMessage = "保存に失敗しました: ${e.message}")
+        _uiState.update { it.copy(errorMessage = "保存に失敗しました: ${e.message}") }
       }
     }
   }
@@ -265,23 +319,25 @@ class PlacesViewModel @Inject constructor(
   /** 検索画面を開いたとき。セッション開始＋状態リセット。 */
   fun startSearch() {
     placesTextSearcher.startSession()
-    _uiState.value = _uiState.value.copy(search = SearchState())
+    _uiState.update { it.copy(search = SearchState()) }
   }
 
   fun onSearchQueryChange(query: String) {
-    _uiState.value = _uiState.value.copy(search = _uiState.value.search.copy(query = query))
+    _uiState.update { it.copy(search = it.search.copy(query = query)) }
     predictJob?.cancel()
     if (query.isBlank()) {
-      _uiState.value = _uiState.value.copy(search = _uiState.value.search.copy(predictions = emptyList(), isSearching = false))
+      _uiState.update { it.copy(search = it.search.copy(predictions = emptyList(), isSearching = false)) }
       return
     }
     predictJob = viewModelScope.launch {
       delay(300) // デバウンス（打鍵ごとに叩かない）
-      _uiState.value = _uiState.value.copy(search = _uiState.value.search.copy(isSearching = true))
+      _uiState.update { it.copy(search = it.search.copy(isSearching = true)) }
       val preds = placesTextSearcher.predict(query)
-      _uiState.value = _uiState.value.copy(
-        search = _uiState.value.search.copy(predictions = preds, isSearching = false),
-      )
+      _uiState.update {
+        it.copy(
+          search = it.search.copy(predictions = preds, isSearching = false),
+        )
+      }
     }
   }
 
@@ -290,42 +346,9 @@ class PlacesViewModel @Inject constructor(
     viewModelScope.launch {
       val result = placesTextSearcher.fetch(placeId)
       if (result == null) {
-        _uiState.value = _uiState.value.copy(errorMessage = "場所の取得に失敗しました（オフライン等）")
+        _uiState.update { it.copy(errorMessage = "場所の取得に失敗しました（オフライン等）") }
       } else {
-        _uiState.value = _uiState.value.copy(search = _uiState.value.search.copy(result = result))
-      }
-    }
-  }
-
-  /**
-   * 検索結果を登録する。[name] が Google 由来の名前と違えばユーザー名として設定する。
-   * 行きたい ON なら wishlist にも入れる。
-   */
-  fun registerSearchResult(
-    result: PlaceSearchResult,
-    name: String?,
-    wishlist: Boolean,
-    priority: Priority,
-    memo: String?,
-  ) {
-    viewModelScope.launch {
-      try {
-        val reg = wishlistRepository.registerSearchedPlace(result)
-        val placeId = reg.placeId
-        val trimmed = name?.trim().orEmpty()
-        if (trimmed.isNotEmpty() && trimmed != result.name?.trim()) {
-          wishlistRepository.renamePlace(placeId, trimmed)
-        }
-        if (!memo.isNullOrBlank()) {
-          wishlistRepository.updatePlaceNote(placeId, memo)
-        }
-        if (wishlist) {
-          wishlistRepository.addToWishlist(placeId, priority)
-        }
-        _uiState.value = _uiState.value.copy(search = SearchState())
-        notifyRegistered(reg.alreadyExisted)
-      } catch (e: Exception) {
-        _uiState.value = _uiState.value.copy(errorMessage = "登録に失敗しました: ${e.message}")
+        _uiState.update { it.copy(search = it.search.copy(result = result)) }
       }
     }
   }
@@ -344,15 +367,17 @@ class PlacesViewModel @Inject constructor(
 
   /** 一覧側スナックバーに出すワンショット通知。 */
   private fun notify(message: String) {
-    _uiState.value = _uiState.value.copy(
-      registerToken = _uiState.value.registerToken + 1,
-      registerMessage = message,
-    )
+    _uiState.update {
+      it.copy(
+        registerToken = it.registerToken + 1,
+        registerMessage = message,
+      )
+    }
   }
 
   /** 確定フォームから戻る（候補選び直し）。 */
   fun clearSearchResult() {
-    _uiState.value = _uiState.value.copy(search = _uiState.value.search.copy(result = null))
+    _uiState.update { it.copy(search = it.search.copy(result = null)) }
   }
 
   /**
@@ -364,12 +389,14 @@ class PlacesViewModel @Inject constructor(
       val name = _uiState.value.items.firstOrNull { it.place.id == placeId }?.displayName
       try {
         wishlistRepository.deletePlace(placeId)
-        _uiState.value = _uiState.value.copy(
-          undoDeleteToken = _uiState.value.undoDeleteToken + 1,
-          undoDeleteName = name,
-        )
+        _uiState.update {
+          it.copy(
+            undoDeleteToken = it.undoDeleteToken + 1,
+            undoDeleteName = name,
+          )
+        }
       } catch (e: Exception) {
-        _uiState.value = _uiState.value.copy(errorMessage = "削除に失敗しました: ${e.message}")
+        _uiState.update { it.copy(errorMessage = "削除に失敗しました: ${e.message}") }
       }
     }
   }
@@ -380,12 +407,12 @@ class PlacesViewModel @Inject constructor(
       try {
         wishlistRepository.undoLastPlaceDeletion()
       } catch (e: Exception) {
-        _uiState.value = _uiState.value.copy(errorMessage = "取り消しに失敗しました: ${e.message}")
+        _uiState.update { it.copy(errorMessage = "取り消しに失敗しました: ${e.message}") }
       }
     }
   }
 
   fun clearError() {
-    _uiState.value = _uiState.value.copy(errorMessage = null)
+    _uiState.update { it.copy(errorMessage = null) }
   }
 }

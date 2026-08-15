@@ -1,6 +1,7 @@
 package com.pathly.data.local.entity
 
 import androidx.room.Entity
+import androidx.room.Index
 import androidx.room.PrimaryKey
 import java.util.Date
 
@@ -9,7 +10,12 @@ import java.util.Date
  * ユーザー入力（自分で付けた名前・メモ）と座標だけを持つ。Google 由来の名前・住所・カテゴリは
  * google_places に分離する（docs/designs/place-info-enrichment.md / adr/0001）。
  */
-@Entity(tableName = "places")
+@Entity(
+  tableName = "places",
+  // 近傍検索（同一場所の判定・近接確認）が全表走査にならないよう座標に索引を張る。
+  // 記録中は位置バッチごとに引かれるため、場所が増えるほど効いてくる。
+  indices = [Index(value = ["latitude", "longitude"])],
+)
 data class PlaceEntity(
   @PrimaryKey(autoGenerate = true)
   val id: Long = 0,
