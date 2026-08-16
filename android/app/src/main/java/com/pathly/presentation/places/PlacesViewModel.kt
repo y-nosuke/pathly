@@ -113,6 +113,9 @@ class PlacesViewModel @Inject constructor(
   /** 統一の場所シートで既存 place を編集するため、単一 place の現在値を取得する。 */
   suspend fun loadPlace(placeId: Long): PlaceListItem? = wishlistRepository.getPlace(placeId)
 
+  /** 統一の編集ボディ用: 単一 place をリアクティブに購読する（保存しても値が古くならない）。 */
+  fun observePlace(placeId: Long): Flow<PlaceListItem?> = wishlistRepository.observePlace(placeId)
+
   /** 場所シートのプレビュー用: placeId から施設情報（カテゴリ等）を取得する。 */
   suspend fun fetchPoiDetails(googlePlaceId: String): PlaceSearchResult? = wishlistRepository.fetchPlaceDetails(googlePlaceId)
 
@@ -389,12 +392,7 @@ class PlacesViewModel @Inject constructor(
       val name = _uiState.value.items.firstOrNull { it.place.id == placeId }?.displayName
       try {
         wishlistRepository.deletePlace(placeId)
-        _uiState.update {
-          it.copy(
-            undoDeleteToken = it.undoDeleteToken + 1,
-            undoDeleteName = name,
-          )
-        }
+        _uiState.update { it.copy(deleteUndo = it.deleteUndo.deleted(name)) }
       } catch (e: Exception) {
         _uiState.update { it.copy(errorMessage = "削除に失敗しました: ${e.message}") }
       }

@@ -11,8 +11,6 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -26,15 +24,20 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.google.android.gms.maps.model.LatLng
 import com.google.android.gms.maps.model.PointOfInterest
 import com.pathly.domain.model.PlaceListItem
+import com.pathly.domain.model.PlacePrediction
 import com.pathly.domain.model.PlaceSearchResult
+import com.pathly.domain.model.PlaceVisit
 import com.pathly.domain.model.Priority
 import com.pathly.presentation.common.FloatingSheet
 import com.pathly.presentation.common.FloatingSheetState
 import com.pathly.presentation.common.SheetDetent
 import com.pathly.presentation.common.rememberFloatingSheetState
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.emptyFlow
 
 /**
  * 地図の上に出す**統一の「場所シート」**。対象（未登録の空き地点 / 未登録 POI / 検索で選んだ施設 /
@@ -63,13 +66,18 @@ internal fun PlaceActionSheet(
   onFetchPoiDetails: suspend (googlePlaceId: String) -> PlaceSearchResult?,
   // 新規登録（空き地点/POI/検索結果）を確定する。近接確認（表示ON=新規/OFF=確認）は呼び出し側に委ねる。
   onRegisterNew: (lat: Double, lng: Double, name: String?, wishlist: Boolean, priority: Priority, memo: String?, googlePlaceId: String?, googleName: String?) -> Unit,
-  // 以下2つは [PlaceSheetTarget.Existing] を渡す画面だけが必要（新規登録専用の画面は既定のままでよい）。
-  onLoadPlace: suspend (placeId: Long) -> PlaceListItem? = { null },
-  onSaveExisting: (item: PlaceListItem, name: String, note: String, wishlist: Boolean, priority: Priority, visited: Boolean) -> Unit = { _, _, _, _, _, _ -> },
+  // 以下は [PlaceSheetTarget.Existing] を渡す画面だけが必要（新規登録専用の画面は既定のままでよい）。
+  // 編集中に保存しても最新値を保てるよう、単一 place はリアクティブに購読する。
+  onObservePlace: (placeId: Long) -> Flow<PlaceListItem?> = { emptyFlow() },
+  onObserveVisits: (placeId: Long) -> Flow<List<PlaceVisit>> = { emptyFlow() },
+  onSaveExisting: (item: PlaceListItem, name: String, note: String, wishlist: Boolean, priority: Priority, visited: Boolean, link: PlaceSearchResult?) -> Unit = { _, _, _, _, _, _, _ -> },
+  onDeletePlace: (placeId: Long) -> Unit = {},
+  onOpenTrack: (trackId: Long) -> Unit = {},
+  onFetchNearbyPois: suspend (lat: Double, lng: Double) -> List<PlaceSearchResult> = { _, _ -> emptyList() },
+  onSearchPredictions: suspend (query: String) -> List<PlacePrediction> = { emptyList() },
+  onFetchPrediction: suspend (placeId: String) -> PlaceSearchResult? = { null },
   // 既存 place に「立ち寄りに追加」（記録中のみ）。null なら出さない。
   onAddStop: ((item: PlaceListItem) -> Unit)? = null,
-  // 既存 place の詳細画面を開く。
-  onOpenDetail: (placeId: Long) -> Unit = {},
   modifier: Modifier = Modifier,
   // 地図を見ながら操作できるよう、スクリムを持たない自前のシートで出す。
   // ModalBottomSheet はスクリムがタップを吸うため、色を透明にしても地図を動かせず、
@@ -126,10 +134,15 @@ internal fun PlaceActionSheet(
 
         is PlaceSheetTarget.Existing -> ExistingPlaceEditor(
           placeId = target.placeId,
-          onLoadPlace = onLoadPlace,
+          onObservePlace = onObservePlace,
+          onObserveVisits = onObserveVisits,
           onSaveExisting = onSaveExisting,
+          onDeletePlace = onDeletePlace,
+          onOpenTrack = onOpenTrack,
+          onFetchNearbyPois = onFetchNearbyPois,
+          onSearchPredictions = onSearchPredictions,
+          onFetchPrediction = onFetchPrediction,
           onAddStop = onAddStop,
-          onOpenDetail = onOpenDetail,
           onDismiss = onDismiss,
         )
       }
@@ -199,17 +212,41 @@ private fun NewPlaceEditor(
   }
 }
 
-/** 登録済みの場所を、その場で編集する編集部（記録画面のまま名前・行きたい・優先度・メモ・訪問済みを保存）。 */
+/**
+ * 登録済みの場所を、地図を見ながらその場で編集する編集部。中身は場所一覧から開く詳細と
+ * 同じ [PlaceEditorBody]（入口が違うだけで、できることは同じ）。
+ */
 @Composable
 private fun ExistingPlaceEditor(
   placeId: Long,
-  onLoadPlace: suspend (placeId: Long) -> PlaceListItem?,
-  onSaveExisting: (item: PlaceListItem, name: String, note: String, wishlist: Boolean, priority: Priority, visited: Boolean) -> Unit,
+  onObservePlace: (placeId: Long) -> Flow<PlaceListItem?>,
+  onObserveVisits: (placeId: Long) -> Flow<List<PlaceVisit>>,
+  onSaveExisting: (item: PlaceListItem, name: String, note: String, wishlist: Boolean, priority: Priority, visited: Boolean, link: PlaceSearchResult?) -> Unit,
+  onDeletePlace: (placeId: Long) -> Unit,
+  onOpenTrack: (trackId: Long) -> Unit,
+  onFetchNearbyPois: suspend (lat: Double, lng: Double) -> List<PlaceSearchResult>,
+  onSearchPredictions: suspend (query: String) -> List<PlacePrediction>,
+  onFetchPrediction: suspend (placeId: String) -> PlaceSearchResult?,
   onAddStop: ((item: PlaceListItem) -> Unit)?,
-  onOpenDetail: (placeId: Long) -> Unit,
   onDismiss: () -> Unit,
 ) {
-  val item by produceState<PlaceListItem?>(null, placeId) { value = onLoadPlace(placeId) }
+  // 購読なので、保存しても値が古くならない（＝詳細と同じく保存後もシートに留まれる）。
+  val placeFlow = remember(placeId) { onObservePlace(placeId) }
+  val item by placeFlow.collectAsStateWithLifecycle(null)
+  val visitsFlow = remember(placeId) { onObserveVisits(placeId) }
+  val visits by visitsFlow.collectAsStateWithLifecycle(emptyList())
+
+  // 削除されたら（自分で消したときも含め）閉じる。読み込み前の null と区別するため、
+  // 一度でも読めたかを覚えておく。
+  var everLoaded by remember(placeId) { mutableStateOf(false) }
+  LaunchedEffect(item) {
+    if (item != null) {
+      everLoaded = true
+    } else if (everLoaded) {
+      onDismiss()
+    }
+  }
+
   val loaded = item
   if (loaded == null) {
     Box(modifier = Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) {
@@ -218,72 +255,33 @@ private fun ExistingPlaceEditor(
     return
   }
 
-  var name by remember(loaded.place.id) { mutableStateOf(loaded.place.name ?: "") }
-  var memo by remember(loaded.place.id) { mutableStateOf(loaded.note ?: "") }
-  var wishlist by remember(loaded.wishlistId) { mutableStateOf(loaded.isWishlisted) }
-  var priority by remember(loaded.wishlistId) { mutableStateOf(loaded.priority ?: Priority.MEDIUM) }
-  var visited by remember(loaded.wishlistId) { mutableStateOf(loaded.isManuallyVisited) }
-  val context = LocalContext.current
-
-  PlaceFormBody(
-    name = name,
-    onNameChange = { name = it },
-    nameLabel = "自分で付ける名前（任意）",
-    heading = loaded.displayName,
-    namePrefill = loaded.place.googleName,
-    category = loaded.place.category,
-    address = loaded.place.googleAddress,
-    onOpenInMaps = {
-      openPlaceInGoogleMaps(context, loaded.place.googlePlaceId, loaded.place.latitude, loaded.place.longitude, loaded.displayName)
+  PlaceEditorBody(
+    item = loaded,
+    visits = visits,
+    onSave = { name, note, wishlist, priority, visited, link ->
+      onSaveExisting(loaded, name, note, wishlist, priority, visited, link)
     },
-    memo = memo,
-    onMemoChange = { memo = it },
-    wishlist = wishlist,
-    onWishlistChange = { wishlist = it },
-    priority = priority,
-    onPriorityChange = { priority = it },
-    // 実際の立ち寄り記録が無いときだけ手動の「訪問済み」を切り替えられる（記録があれば自動で訪問済み）。
-    visitedContent = if (loaded.visitCount == 0) {
+    // 消えると購読が null を流し、上の LaunchedEffect がシートを閉じる。
+    onDelete = { onDeletePlace(loaded.place.id) },
+    onOpenTrack = onOpenTrack,
+    onFetchNearbyPois = onFetchNearbyPois,
+    onSearchPredictions = onSearchPredictions,
+    onFetchPrediction = onFetchPrediction,
+    onAddStop = onAddStop?.let { add ->
       {
-        Column(modifier = Modifier.fillMaxWidth()) {
-          androidx.compose.foundation.layout.Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically,
-          ) {
-            Text("訪問済み")
-            Switch(checked = visited, onCheckedChange = { visited = it })
-          }
-        }
-      }
-    } else {
-      null
-    },
-  )
-  SheetActions {
-    TextButton(onClick = onDismiss) { Text("閉じる") }
-    Button(onClick = {
-      onSaveExisting(loaded, name, memo, wishlist, priority, visited)
-      onDismiss()
-    }) { Text("保存") }
-  }
-  // 記録中のみ「立ち寄りに追加」（この訪問を既存 place にひも付ける）。
-  onAddStop?.let { add ->
-    OutlinedButton(
-      onClick = {
         add(loaded)
         onDismiss()
-      },
-      modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
-    ) { Text("立ち寄りに追加") }
-  }
-  OutlinedButton(
-    onClick = {
-      onOpenDetail(loaded.place.id)
-      onDismiss()
+      }
     },
-    modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
-  ) { Text("詳細を開く") }
+    trailingActions = {
+      TextButton(
+        onClick = onDismiss,
+        modifier = Modifier.align(Alignment.End),
+      ) {
+        Text("閉じる")
+      }
+    },
+  )
 }
 
 /** シート下部のボタン行（右寄せ）。 */

@@ -5,6 +5,7 @@ import com.pathly.domain.model.NearbyRegisterPrompt
 import com.pathly.domain.model.NearbyStopPrompt
 import com.pathly.domain.model.RegisteredPlace
 import com.pathly.domain.model.Stop
+import com.pathly.presentation.places.PlaceDeleteUndo
 
 data class TrackingState(
   val isTracking: Boolean = false,
@@ -27,6 +28,8 @@ data class TrackingState(
   val isIgnoringBatteryOptimizations: Boolean = true,
   // マップ上の POI から場所を登録した直後の一時メッセージ（表示後クリア）
   val placeRegisteredMessage: String? = null,
+  // 場所を削除した直後の取り消し待ち（スナックバーで「取り消す」を出す）。場所一覧と同じ流儀。
+  val deleteUndo: PlaceDeleteUndo = PlaceDeleteUndo(),
   // 空き地点の登録で近くに既存の場所が見つかったときの確認待ち（紐付け/新規をユーザーが選ぶ）。
   val nearbyRegisterPrompt: NearbyRegisterPrompt? = null,
   // 手動の立ち寄り追加で近くに既存の場所が見つかったときの確認待ち。

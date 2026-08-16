@@ -2,13 +2,16 @@ package com.pathly.presentation.tracking
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.pathly.data.places.PlacesTextSearcher
 import com.pathly.data.settings.MapSurface
 import com.pathly.data.settings.SettingsRepository
 import com.pathly.data.tracking.TrackingController
 import com.pathly.domain.model.NearbyRegisterPrompt
 import com.pathly.domain.model.NearbyStopPrompt
 import com.pathly.domain.model.PlaceListItem
+import com.pathly.domain.model.PlacePrediction
 import com.pathly.domain.model.PlaceSearchResult
+import com.pathly.domain.model.PlaceVisit
 import com.pathly.domain.model.Priority
 import com.pathly.domain.repository.GpsTrackRepository
 import com.pathly.domain.repository.PlaceRepository
@@ -20,6 +23,7 @@ import com.pathly.util.Logger
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -42,6 +46,8 @@ class TrackingViewModel @Inject constructor(
   private val settingsRepository: SettingsRepository,
   private val placeEditUseCase: PlaceEditUseCase,
   private val addManualStopUseCase: AddManualStopUseCase,
+  // 「Googleで情報を取得」の名前検索フォールバック用（場所詳細と同じ編集機能を出すため）。
+  private val placesTextSearcher: PlacesTextSearcher,
 ) : ViewModel() {
 
   private val logger = Logger("TrackingViewModel")
@@ -380,12 +386,16 @@ class TrackingViewModel @Inject constructor(
     }
   }
 
-  /** 登録済みマーカーをタップして記録画面のまま編集するため、単一 place の現在値を取得する。 */
-  suspend fun loadPlace(placeId: Long): PlaceListItem? = wishlistRepository.getPlace(placeId)
+  /** 登録済みマーカーをタップして記録画面のまま編集するため、単一 place をリアクティブに購読する。 */
+  fun observePlace(placeId: Long): Flow<PlaceListItem?> = wishlistRepository.observePlace(placeId)
+
+  /** その場所を含むお出掛けの一覧（編集シートの訪問履歴）。 */
+  fun visitsFor(placeId: Long): Flow<List<PlaceVisit>> = wishlistRepository.getVisits(placeId)
 
   /**
-   * 記録画面のまま既存 place を編集して保存する（名前・メモ・行きたい・優先度・訪問済みを差分適用）。
-   * 場所詳細の [PlacesViewModel.savePlaceEdits] と同じ考え方（Google 紐付けはここでは扱わない）。
+   * 記録画面のまま既存 place を編集して保存する（名前・メモ・行きたい・優先度・訪問済み・
+   * Google 施設の紐付けを差分適用）。場所詳細の [PlacesViewModel.savePlaceEdits] と同じ処理を
+   * 同じ UseCase で行う（入口が違うだけで、できることを揃えるため）。
    */
   fun savePlaceEdits(
     item: PlaceListItem,
@@ -394,16 +404,50 @@ class TrackingViewModel @Inject constructor(
     wishlist: Boolean,
     priority: Priority,
     visited: Boolean,
+    link: PlaceSearchResult? = null,
   ) {
     viewModelScope.launch {
       try {
-        placeEditUseCase.saveEdits(item, name, note, wishlist, priority, visited)
+        placeEditUseCase.saveEdits(item, name, note, wishlist, priority, visited, link)
         _uiState.update { it.copy(placeRegisteredMessage = "保存しました") }
       } catch (e: Exception) {
         _uiState.update { it.copy(errorMessage = "保存に失敗しました: ${e.message}") }
       }
     }
   }
+
+  /**
+   * 場所そのものを削除する。確認ダイアログは出さず即時削除し、スナックバーの「取り消す」
+   * （[undoDelete]）で戻せる（場所一覧と同じ流儀）。
+   */
+  fun deletePlace(placeId: Long) {
+    viewModelScope.launch {
+      val name = _uiState.value.registeredPlaces.firstOrNull { it.placeId == placeId }?.displayName
+      try {
+        wishlistRepository.deletePlace(placeId)
+        _uiState.update { it.copy(deleteUndo = it.deleteUndo.deleted(name)) }
+      } catch (e: Exception) {
+        _uiState.update { it.copy(errorMessage = "削除に失敗しました: ${e.message}") }
+      }
+    }
+  }
+
+  /** 直近の削除を取り消して元に戻す（スナックバーの「取り消す」）。 */
+  fun undoDelete() {
+    viewModelScope.launch {
+      try {
+        wishlistRepository.undoLastPlaceDeletion()
+      } catch (e: Exception) {
+        _uiState.update { it.copy(errorMessage = "取り消しに失敗しました: ${e.message}") }
+      }
+    }
+  }
+
+  /** 「Googleで情報を取得」の名前検索フォールバック: キーワード候補を返す。 */
+  suspend fun predictPlaces(query: String): List<PlacePrediction> = placesTextSearcher.predict(query)
+
+  /** 名前検索で選んだ候補を、座標つきの施設情報に確定する。 */
+  suspend fun fetchPlaceResult(placeId: String): PlaceSearchResult? = placesTextSearcher.fetch(placeId)
 
   /** 場所シートのプレビュー用: placeId から施設情報（カテゴリ等）を取得する。 */
   suspend fun fetchPoiDetails(googlePlaceId: String): PlaceSearchResult? = wishlistRepository.fetchPlaceDetails(googlePlaceId)
