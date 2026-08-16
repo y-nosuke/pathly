@@ -21,6 +21,21 @@
 ピンは `MapPinMarker` が Canvas で描く（Google 標準ピンは使わない）。ピンの**先端**と丸バッジの
 **下端**が、そのままマーカーの基準点（既定で下端中央）に来るよう寸法を組んでいる。
 
+マーカーは `MarkerComposable` を直に呼ばず、**`MapMarker`（`presentation/common/MapInfoWindow.kt`）で置く**。
+タップで出る吹き出し（InfoWindow）は Compose ではなく地図が出しているのでシステムバックの対象にならず、
+そのままだと地図の別の場所をタップするまで消えない。`MapMarker` は開いた吹き出しを
+`MapInfoWindowState` に覚えさせ、**バックで閉じられるようにする**。状態は `rememberMapInfoWindowState()`
+で **GoogleMap 1 つにつき 1 つ**作り、その地図のマーカー全部に渡す（吹き出しは地図全体で同時に 1 つしか
+出ないので、覚えるのは 1 件でよい）。
+
+マーカーのタップはシートと吹き出しを**同時に**出すので、**バック 1 回で両方畳む**。バックは最後に
+登録されたハンドラ（＝シート）が受けるため、シート側で `CloseInfoWindowWithSheet` を呼び、
+シートが composition から外れるときに吹き出しも閉じる。これが無いと 2 度押しになる。
+シートの状態は画面が持ち、地図の composable には引数で渡す（`TrackingMapView` / `TrackMapView`）。
+
+例外は**場所詳細で最初から出している吹き出し**（`markerState.showInfoWindow()`）。自分で開いたもの
+ではなく画面の一部なので、`MapInfoWindowState` には覚えさせない＝**バックは画面を戻る**。
+
 登録済みの場所のマーカーは `RegisteredPlaceMarkers` に切り出し、**トラックが無くても**
 （記録開始前など）単独で描けるようにしている。**色＝訪問状態／グリフ＝業種／右上の旗＝行きたい**の
 3 軸で描き分け、訪問・行きたいの判定は「場所」タブの `PlaceListItem` と揃える。立ち寄りと重なった

@@ -29,11 +29,16 @@ data class RegisteredPlace(
     get() = name ?: String.format(Locale.US, "%.5f, %.5f", latitude, longitude)
 
   /** マーカーのスニペット等に出す状態文言（行きたい／訪問済み／未訪問の組み合わせ）。 */
-  val statusLabel: String
-    get() = when {
-      isWishlisted && isVisited -> "行きたい・訪問済み"
-      isWishlisted -> "行きたい・未訪問"
-      isVisited -> "訪問済み"
-      else -> "未訪問"
-    }
+  val statusLabel: String get() = placeStatusLabel(isWishlisted, isVisited)
+}
+
+/**
+ * 場所の状態文言。[RegisteredPlace] と [PlaceListItem] のどちらからも同じ文言を出すため、
+ * 判定の元になる 2 つの真偽値だけを受ける。
+ */
+fun placeStatusLabel(isWishlisted: Boolean, isVisited: Boolean): String = when {
+  isWishlisted && isVisited -> "行きたい・訪問済み"
+  isWishlisted -> "行きたい・未訪問"
+  isVisited -> "訪問済み"
+  else -> "未訪問"
 }

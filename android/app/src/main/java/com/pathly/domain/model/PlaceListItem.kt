@@ -37,4 +37,7 @@ data class PlaceListItem(
 
   /** 表示名（自分の名前 → Google 名 → 住所 → 座標）。 */
   val displayName: String get() = place.displayName
+
+  /** 地図の吹き出し等に出す状態文言。[RegisteredPlace] のマーカーと同じ文言にする。 */
+  val statusLabel: String get() = placeStatusLabel(isWishlisted, isVisited)
 }

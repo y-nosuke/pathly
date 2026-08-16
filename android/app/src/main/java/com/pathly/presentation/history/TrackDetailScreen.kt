@@ -59,11 +59,13 @@ import com.pathly.domain.model.SmoothingParams
 import com.pathly.domain.model.Stop
 import com.pathly.domain.model.StopCandidate
 import com.pathly.domain.model.TrackSmoother
+import com.pathly.presentation.common.CloseInfoWindowWithSheet
 import com.pathly.presentation.common.FloatingSheet
 import com.pathly.presentation.common.NearbyPlaceConfirmDialog
 import com.pathly.presentation.common.SheetDetent
 import com.pathly.presentation.common.heightOf
 import com.pathly.presentation.common.rememberFloatingSheetState
+import com.pathly.presentation.common.rememberMapInfoWindowState
 import com.pathly.presentation.common.stopSegmentPoints
 import com.pathly.presentation.places.PlaceActionSheet
 import com.pathly.presentation.places.PlaceDeleteUndo
@@ -224,6 +226,8 @@ fun TrackDetailScreen(
   // 手動追加モード。地図の通常タップ（POI はそのままタップ）で地点を指し、最寄り軌跡点から
   // 到着/出発を仮置きしてレンジで微調整する。滞在区間は地図に青くハイライトして見せる。
   val manualPoints = track.smoothedPoints
+  // マーカーの吹き出し。シートと同時に出るので、シート側から一緒に閉じられるよう画面で持つ。
+  val infoWindow = rememberMapInfoWindowState()
   var manualMode by remember { mutableStateOf(false) }
   var manualPick by remember { mutableStateOf<ManualStopTarget?>(null) }
   // 手動追加で選んでいる滞在区間（到着〜出発の点インデックス）。地図に青くハイライトする。
@@ -282,6 +286,7 @@ fun TrackDetailScreen(
         TrackMapView(
           track = track,
           displayPoints = displayPoints,
+          infoWindow = infoWindow,
           stops = stops,
           currentStop = liveCurrentStop,
           currentStopSegment = currentStopSegment,
@@ -572,6 +577,7 @@ fun TrackDetailScreen(
           onCancel = exitManual,
         )
       } else {
+        CloseInfoWindowWithSheet(infoWindow)
         ManualStopSheet(
           origin = pick.origin,
           latitude = pick.latitude,
@@ -612,6 +618,7 @@ fun TrackDetailScreen(
 
     // 通常モードの地図タップで開く統一の「場所シート」。立ち寄り追加は手動追加モード（到着/出発の調整あり）に任せるため出さない。
     placeSheetTarget?.let { target ->
+      CloseInfoWindowWithSheet(infoWindow)
       PlaceActionSheet(
         target = target,
         onDismiss = { placeSheetTarget = null },
@@ -654,6 +661,7 @@ fun TrackDetailScreen(
   }
 
   reassignTarget?.let { stop ->
+    CloseInfoWindowWithSheet(infoWindow)
     StopReassignDialog(
       stop = stop,
       onFetchCandidates = onFetchNearbyPois,

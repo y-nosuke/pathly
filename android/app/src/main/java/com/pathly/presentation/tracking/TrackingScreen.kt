@@ -62,7 +62,6 @@ import com.google.maps.android.compose.GoogleMap
 import com.google.maps.android.compose.MapProperties
 import com.google.maps.android.compose.MapType
 import com.google.maps.android.compose.MapUiSettings
-import com.google.maps.android.compose.MarkerComposable
 import com.google.maps.android.compose.MarkerState
 import com.google.maps.android.compose.Polyline
 import com.google.maps.android.compose.rememberCameraPositionState
@@ -71,6 +70,9 @@ import com.pathly.domain.model.GpsPoint
 import com.pathly.domain.model.GpsTrack
 import com.pathly.domain.model.RegisteredPlace
 import com.pathly.domain.model.Stop
+import com.pathly.presentation.common.CloseInfoWindowWithSheet
+import com.pathly.presentation.common.MapInfoWindowState
+import com.pathly.presentation.common.MapMarker
 import com.pathly.presentation.common.MapPinMarker
 import com.pathly.presentation.common.MarkerPickBlue
 import com.pathly.presentation.common.NearbyPlaceConfirmDialog
@@ -78,6 +80,7 @@ import com.pathly.presentation.common.RegisteredPlaceMarkers
 import com.pathly.presentation.common.RouteMapContent
 import com.pathly.presentation.common.heightOf
 import com.pathly.presentation.common.rememberFloatingSheetState
+import com.pathly.presentation.common.rememberMapInfoWindowState
 import com.pathly.presentation.common.stopSegmentPoints
 import com.pathly.presentation.places.PlaceActionSheet
 import com.pathly.presentation.places.PlaceDeleteUndoEffect
@@ -151,6 +154,8 @@ fun TrackingScreen(
   // シートの開き具合。地図の下パディングを合わせて、選んだ地点がシートの裏に来ないようにする。
   val placeSheetState = rememberFloatingSheetState()
   val manualSheetState = rememberFloatingSheetState(peekFraction = 0.5f)
+  // マーカーの吹き出し。シートと同時に出るので、シート側から一緒に閉じられるよう画面で持つ。
+  val infoWindow = rememberMapInfoWindowState()
   // 地図で選んだ地点。可視領域へ寄せる合図（同じ地点を選び直しても効くよう nonce で送る）。
   var focusTarget by remember { mutableStateOf<LatLng?>(null) }
   var focusNonce by remember { mutableIntStateOf(0) }
@@ -172,6 +177,7 @@ fun TrackingScreen(
         currentLocation = uiState.currentLocation,
         stops = uiState.stops,
         currentStop = uiState.currentStop,
+        infoWindow = infoWindow,
         // 手動追加モード（記録中のみ）: POIタップも立ち寄り追加に。通常は統一の場所シート（POI登録）。
         onPoiClick = { poi ->
           if (uiState.isTracking && manualMode) {
@@ -416,6 +422,7 @@ fun TrackingScreen(
 
     // 地図の1点タップで開く統一の「場所シート」。未登録の空き地点/POI＝登録、登録済み＝その場で編集。
     placeSheetTarget?.let { target ->
+      CloseInfoWindowWithSheet(infoWindow)
       PlaceActionSheet(
         target = target,
         onDismiss = { placeSheetTarget = null },
@@ -458,6 +465,7 @@ fun TrackingScreen(
     )
 
     manualTarget?.let { target ->
+      CloseInfoWindowWithSheet(infoWindow)
       ManualStopSheet(
         origin = target.origin,
         latitude = target.latitude,
@@ -530,6 +538,7 @@ fun TrackingScreen(
   }
 
   reassignTarget?.let { stop ->
+    CloseInfoWindowWithSheet(infoWindow)
     StopReassignDialog(
       stop = stop,
       onFetchCandidates = viewModel::nearbyPois,
@@ -549,6 +558,8 @@ private fun TrackingMapView(
   currentLocation: LocationInfo?,
   stops: List<Stop>,
   currentStop: Stop?,
+  // 吹き出しの開閉。シートと一緒に閉じられるよう、状態は画面側が持つ。
+  infoWindow: MapInfoWindowState,
   onPoiClick: (PointOfInterest) -> Unit,
   onMapClick: (LatLng) -> Unit,
   onStopClick: (Stop) -> Unit,
@@ -684,6 +695,7 @@ private fun TrackingMapView(
         RouteMapContent(
           track = track,
           displayPoints = displayPoints,
+          infoWindow = infoWindow,
           stops = stops,
           stopSegments = stopSegments,
           currentStop = currentStop,
@@ -704,10 +716,11 @@ private fun TrackingMapView(
       // 手動追加で指した地点（青いピン）。いま自分で置いている最中のもの。
       manualPickTarget?.let { pick ->
         val pickMarkerState = remember(pick) { MarkerState(position = pick) }
-        MarkerComposable(
+        MapMarker(
           "manual-pick",
           pick.latitude,
           pick.longitude,
+          infoWindow = infoWindow,
           state = pickMarkerState,
           title = "追加する地点",
         ) {
@@ -720,7 +733,7 @@ private fun TrackingMapView(
       val stopPlaceIds = remember(stops, currentStop) {
         (stops.map { it.place.id } + listOfNotNull(currentStop?.place?.id)).toSet()
       }
-      RegisteredPlaceMarkers(registeredPlaces.filter { it.placeId !in stopPlaceIds }, onRegisteredPlaceClick)
+      RegisteredPlaceMarkers(registeredPlaces.filter { it.placeId !in stopPlaceIds }, infoWindow, onRegisteredPlaceClick)
     }
 
     // 現在地ボタン：追従中は活性（色付き）、固定中は非活性（グレー）。タップで追従再開＆リセンター。

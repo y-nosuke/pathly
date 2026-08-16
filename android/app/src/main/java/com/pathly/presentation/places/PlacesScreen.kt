@@ -73,7 +73,6 @@ import com.google.android.gms.maps.model.LatLng
 import com.google.android.gms.tasks.CancellationTokenSource
 import com.google.maps.android.compose.GoogleMap
 import com.google.maps.android.compose.MapUiSettings
-import com.google.maps.android.compose.MarkerComposable
 import com.google.maps.android.compose.MarkerState
 import com.google.maps.android.compose.rememberCameraPositionState
 import com.pathly.R
@@ -87,7 +86,9 @@ import com.pathly.domain.model.PlaceSearchResult
 import com.pathly.domain.model.PlaceVisit
 import com.pathly.domain.model.Priority
 import com.pathly.domain.model.RegisteredPlace
+import com.pathly.presentation.common.CloseInfoWindowWithSheet
 import com.pathly.presentation.common.FloatingSheet
+import com.pathly.presentation.common.MapMarker
 import com.pathly.presentation.common.MapPinMarker
 import com.pathly.presentation.common.MarkerPickBlue
 import com.pathly.presentation.common.MarkerUnvisitedGray
@@ -98,6 +99,7 @@ import com.pathly.presentation.common.RegisteredPlaceMarkers
 import com.pathly.presentation.common.categoryGlyph
 import com.pathly.presentation.common.heightOf
 import com.pathly.presentation.common.rememberFloatingSheetState
+import com.pathly.presentation.common.rememberMapInfoWindowState
 import com.pathly.util.DateFormatters
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.emptyFlow
@@ -651,6 +653,9 @@ private fun AddPlaceContent(
     }
   }
 
+  // マーカーの吹き出しをシステムバックで閉じられるようにする。
+  val infoWindow = rememberMapInfoWindowState()
+
   Box(modifier = modifier.fillMaxSize()) {
     GoogleMap(
       modifier = Modifier.fillMaxSize(),
@@ -670,7 +675,7 @@ private fun AddPlaceContent(
       // 登録前に選んだ地点（青いピン）。まだ決めている最中なので丸バッジにはしない。
       picked?.let { p ->
         val markerState = remember(p) { MarkerState(position = p) }
-        MarkerComposable("picked", p.latitude, p.longitude, state = markerState, title = "選んだ地点") {
+        MapMarker("picked", p.latitude, p.longitude, infoWindow = infoWindow, state = markerState, title = "選んだ地点") {
           MapPinMarker(bg = MarkerPickBlue, glyph = R.drawable.ic_add)
         }
       }
@@ -722,6 +727,7 @@ private fun AddPlaceContent(
       // 地図タップと同じ「場所シート」。畳めば地図を全画面で確認でき、キャンセル（＝旧「選び直す」）
       // で選択を解除して地図に戻る。システムバックもシート側が受ける。
       target?.let { t ->
+        CloseInfoWindowWithSheet(infoWindow)
         PlaceActionSheet(
           target = t,
           onDismiss = { target = null },
@@ -795,6 +801,8 @@ private fun PlaceDetailContent(
   val cameraPositionState = rememberCameraPositionState {
     this.position = CameraPosition.fromLatLngZoom(position, 16f)
   }
+  // マーカーの吹き出しをシステムバックで閉じられるようにする。
+  val infoWindow = rememberMapInfoWindowState()
 
   Box(modifier = modifier.fillMaxSize()) {
     GoogleMap(
@@ -815,14 +823,16 @@ private fun PlaceDetailContent(
       // （色＝訪問状態／グリフ＝業種／右上＝行きたい）で描く。
       val markerState = remember(position) { MarkerState(position = position) }
       val group = PlaceCategoryGroup.of(item.place.category)
-      MarkerComposable(
+      MapMarker(
         "place-detail",
         item.place.id,
         item.isWishlisted,
         item.isVisited,
         group,
+        infoWindow = infoWindow,
         state = markerState,
         title = item.displayName,
+        snippet = item.statusLabel,
       ) {
         RegisteredPlaceMarker(
           bg = if (item.isVisited) MarkerVisitedGreen else MarkerUnvisitedGray,
@@ -830,10 +840,14 @@ private fun PlaceDetailContent(
           wishlisted = item.isWishlisted,
         )
       }
+      // この画面はこの場所が主題なので、他の画面でマーカーをタップしたときと同じく吹き出しも出す。
+      // 自分で開いたものではない（画面の一部）ので [infoWindow] には覚えさせない＝バックは画面を戻る。
+      // 地図の他所をタップすれば消え、マーカーをタップし直せば普通に開き直せる。
+      LaunchedEffect(markerState) { markerState.showInfoWindow() }
       // 登録済みの場所（トグルON）。この場所自身は主マーカーと重なるので除外済みのリストを描く。
       // タップで統一シート（この画面の詳細と同じ編集ができる）。
       if (showRegisteredPlaces) {
-        RegisteredPlaceMarkers(registeredPlaces) { placeSheetTarget = PlaceSheetTarget.Existing(it.placeId) }
+        RegisteredPlaceMarkers(registeredPlaces, infoWindow) { placeSheetTarget = PlaceSheetTarget.Existing(it.placeId) }
       }
     }
 
@@ -894,6 +908,7 @@ private fun PlaceDetailContent(
 
     // 地図の1点タップで開く統一の「場所シート」。記録画面と同じ挙動（この画面は記録中でないので立ち寄り追加は出さない）。
     placeSheetTarget?.let { target ->
+      CloseInfoWindowWithSheet(infoWindow)
       PlaceActionSheet(
         target = target,
         onDismiss = { placeSheetTarget = null },
@@ -1052,6 +1067,8 @@ private fun SearchResultForm(
     this.position = CameraPosition.fromLatLngZoom(position, 16f)
   }
   val sheetState = rememberFloatingSheetState()
+  // マーカーの吹き出しをシステムバックで閉じられるようにする。
+  val infoWindow = rememberMapInfoWindowState()
 
   Box(modifier = modifier.fillMaxSize()) {
     // 検索で選んだ場所を地図で示す（どこか視覚的に分かるように）。
@@ -1068,10 +1085,11 @@ private fun SearchResultForm(
     ) {
       // 検索結果のプレビュー。まだ登録していない＝これから決めるものなのでピン。
       val markerState = remember(position) { MarkerState(position = position) }
-      MarkerComposable(
+      MapMarker(
         "search-result",
         position.latitude,
         position.longitude,
+        infoWindow = infoWindow,
         state = markerState,
         title = result.name,
       ) {
