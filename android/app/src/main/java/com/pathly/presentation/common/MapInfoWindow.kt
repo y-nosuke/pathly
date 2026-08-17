@@ -20,8 +20,10 @@ import com.google.maps.android.compose.MarkerState
 /**
  * 地図の吹き出しの開閉状態。**GoogleMap 1 つにつき 1 つ**持つ。
  *
- * 覚えるのは 1 件でよい。GoogleMap は吹き出しを地図全体で同時に 1 つしか出さないので、
- * 「閉じた」通知が来た時点で開いているものは無い、と扱える。
+ * 覚えるのは 1 件でよい。GoogleMap は吹き出しを地図全体で同時に 1 つしか出さないため。
+ * ただし**どのマーカーの通知かは必ず見る**。別のマーカーをタップしたときの通知は
+ * 「B のタップ → B が開く → A が閉じる」の順で来るので、A の「閉じた」で無条件に忘れると
+ * 開いたばかりの B を取りこぼす。
  */
 @Stable
 internal class MapInfoWindowState {
@@ -35,8 +37,8 @@ internal class MapInfoWindowState {
   }
 
   /** 地図の他の場所をタップするなどして閉じたとき。 */
-  fun onInfoWindowClose() {
-    openMarker = null
+  fun onInfoWindowClose(state: MarkerState) {
+    if (openMarker === state) openMarker = null
   }
 
   /**
@@ -85,6 +87,10 @@ internal fun CloseInfoWindowWithSheet(infoWindow: MapInfoWindowState) {
 /**
  * 吹き出しの開閉を [infoWindow] に伝える [MarkerComposable]。**地図のマーカーはこれで置く**
  * （素の MarkerComposable を使うと、そのマーカーの吹き出しだけバックで閉じられなくなる）。
+ *
+ * @param dismissWithBack この吹き出しをバックで閉じる対象にするか。**その画面が主題にしている
+ *   場所のマーカー**（場所詳細）だけ false にする。吹き出しが画面の一部なので、バックは
+ *   吹き出しではなく画面を戻す。
  */
 @Composable
 @GoogleMapComposable
@@ -95,6 +101,7 @@ internal fun MapMarker(
   state: MarkerState,
   title: String? = null,
   snippet: String? = null,
+  dismissWithBack: Boolean = true,
   onClick: () -> Unit = {},
   // MarkerComposable と同じく、中身は地図ではなく通常の UI として描く（ビットマップに焼く）。
   content: @Composable @UiComposable () -> Unit,
@@ -108,12 +115,12 @@ internal fun MapMarker(
     title = title,
     snippet = snippet,
     onClick = {
-      infoWindow.onMarkerClick(state)
+      if (dismissWithBack) infoWindow.onMarkerClick(state)
       onClick()
       // false = 吹き出しを出す・カメラを寄せる、という地図の既定の挙動に任せる。
       false
     },
-    onInfoWindowClose = { infoWindow.onInfoWindowClose() },
+    onInfoWindowClose = { infoWindow.onInfoWindowClose(state) },
     content = content,
   )
 }

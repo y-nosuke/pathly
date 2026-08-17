@@ -833,6 +833,9 @@ private fun PlaceDetailContent(
         state = markerState,
         title = item.displayName,
         snippet = item.statusLabel,
+        // この吹き出しは画面の一部（下のシートと同じ場所を指している）。自分でタップして開き直しても
+        // 同じ扱いにして、バックは常に画面を戻す。
+        dismissWithBack = false,
       ) {
         RegisteredPlaceMarker(
           bg = if (item.isVisited) MarkerVisitedGreen else MarkerUnvisitedGray,
@@ -841,9 +844,10 @@ private fun PlaceDetailContent(
         )
       }
       // この画面はこの場所が主題なので、他の画面でマーカーをタップしたときと同じく吹き出しも出す。
-      // 自分で開いたものではない（画面の一部）ので [infoWindow] には覚えさせない＝バックは画面を戻る。
-      // 地図の他所をタップすれば消え、マーカーをタップし直せば普通に開き直せる。
-      LaunchedEffect(markerState) { markerState.showInfoWindow() }
+      // 別の場所のシートを開くと地図が勝手に閉じてしまうので、閉じてこの場所に戻ったら出し直す。
+      LaunchedEffect(markerState, placeSheetTarget) {
+        if (placeSheetTarget == null) markerState.showInfoWindow()
+      }
       // 登録済みの場所（トグルON）。この場所自身は主マーカーと重なるので除外済みのリストを描く。
       // タップで統一シート（この画面の詳細と同じ編集ができる）。
       if (showRegisteredPlaces) {
