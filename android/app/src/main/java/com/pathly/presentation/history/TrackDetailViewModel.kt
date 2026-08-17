@@ -156,13 +156,14 @@ class TrackDetailViewModel @Inject constructor(
     name: String?,
     wishlist: Boolean,
     priority: Priority,
+    visited: Boolean,
     memo: String?,
     googlePlaceId: String? = null,
     forceNewPlace: Boolean = false,
   ) {
     viewModelScope.launch {
       try {
-        val reg = placeEditUseCase.register(latitude, longitude, name, wishlist, priority, memo, googlePlaceId, forceNewPlace)
+        val reg = placeEditUseCase.register(latitude, longitude, name, wishlist, priority, visited, memo, googlePlaceId, forceNewPlace)
         _message.value = registeredMessage(reg.alreadyExisted, name)
       } catch (e: Exception) {
         _message.value = "場所の登録に失敗しました: ${e.message}"
@@ -185,6 +186,7 @@ class TrackDetailViewModel @Inject constructor(
     name: String?,
     wishlist: Boolean,
     priority: Priority,
+    visited: Boolean,
     memo: String?,
     googlePlaceId: String?,
     googleName: String? = null,
@@ -197,6 +199,7 @@ class TrackDetailViewModel @Inject constructor(
           name,
           wishlist,
           priority,
+          visited,
           memo,
           googlePlaceId,
           nearbyAlreadyVisible = showRegisteredPlaces.value,
@@ -211,6 +214,7 @@ class TrackDetailViewModel @Inject constructor(
               name,
               wishlist,
               priority,
+              visited,
               memo,
             )
 
@@ -227,7 +231,7 @@ class TrackDetailViewModel @Inject constructor(
   fun confirmNearbyLink() {
     val prompt = _nearbyRegisterPrompt.value ?: return
     _nearbyRegisterPrompt.value = null
-    linkRegisterToPlace(prompt.nearby.placeId, prompt.wishlist, prompt.priority, prompt.memo)
+    linkRegisterToPlace(prompt.nearby.placeId, prompt.wishlist, prompt.priority, prompt.visited, prompt.memo)
   }
 
   /** 近接確認で「新規で登録」を選んだとき。座標同定せず必ず新しい場所を作る。 */
@@ -240,6 +244,7 @@ class TrackDetailViewModel @Inject constructor(
       prompt.name,
       prompt.wishlist,
       prompt.priority,
+      prompt.visited,
       prompt.memo,
       googlePlaceId = null,
       forceNewPlace = true,
@@ -257,10 +262,10 @@ class TrackDetailViewModel @Inject constructor(
   }
 
   /** 近接確認で「この場所に紐付け」を選んだとき: 既存 place に行きたい/メモを反映する（新規は作らない）。 */
-  fun linkRegisterToPlace(placeId: Long, wishlist: Boolean, priority: Priority, memo: String?) {
+  fun linkRegisterToPlace(placeId: Long, wishlist: Boolean, priority: Priority, visited: Boolean, memo: String?) {
     viewModelScope.launch {
       try {
-        placeEditUseCase.linkToExisting(placeId, wishlist, priority, memo)
+        placeEditUseCase.linkToExisting(placeId, wishlist, priority, visited, memo)
         _message.value = "この場所に紐付けました"
       } catch (e: Exception) {
         _message.value = "紐付けに失敗しました: ${e.message}"

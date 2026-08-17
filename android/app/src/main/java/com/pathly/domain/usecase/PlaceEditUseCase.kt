@@ -53,6 +53,7 @@ class PlaceEditUseCase @Inject constructor(
     name: String?,
     wishlist: Boolean,
     priority: Priority,
+    visited: Boolean,
     memo: String?,
     googlePlaceId: String?,
     nearbyAlreadyVisible: Boolean,
@@ -67,6 +68,7 @@ class PlaceEditUseCase @Inject constructor(
         name,
         wishlist,
         priority,
+        visited,
         memo,
         googlePlaceId,
         forceNewPlace = false,
@@ -77,7 +79,7 @@ class PlaceEditUseCase @Inject constructor(
     if (!nearbyAlreadyVisible) {
       wishlistRepository.findNearbyPlace(latitude, longitude)?.let { return RegisterResult.NearbyFound(it) }
     }
-    return register(latitude, longitude, name, wishlist, priority, memo, googlePlaceId = null, forceNewPlace = true)
+    return register(latitude, longitude, name, wishlist, priority, visited, memo, googlePlaceId = null, forceNewPlace = true)
   }
 
   /**
@@ -91,6 +93,7 @@ class PlaceEditUseCase @Inject constructor(
     name: String?,
     wishlist: Boolean,
     priority: Priority,
+    visited: Boolean,
     memo: String?,
     googlePlaceId: String?,
     forceNewPlace: Boolean,
@@ -100,21 +103,24 @@ class PlaceEditUseCase @Inject constructor(
     val registration =
       wishlistRepository.registerPlace(latitude, longitude, name, memo, googlePlaceId, forceNewPlace, knownDetails, googleName)
     if (wishlist) wishlistRepository.addToWishlist(registration.placeId, priority)
+    // 行きたいとは独立の軸。「前に行ったことがある場所」を登録と同時に訪問済みにできる。
+    if (visited) wishlistRepository.setVisited(registration.placeId, true)
     return RegisterResult.Registered(registration.placeId, registration.alreadyExisted)
   }
 
-  /** 近接確認で「この場所に紐付け」を選んだとき。既存の場所に行きたい／メモを反映する（新規は作らない）。 */
-  suspend fun linkToExisting(placeId: Long, wishlist: Boolean, priority: Priority, memo: String?) {
+  /** 近接確認で「この場所に紐付け」を選んだとき。既存の場所に行きたい／訪問済み／メモを反映する（新規は作らない）。 */
+  suspend fun linkToExisting(placeId: Long, wishlist: Boolean, priority: Priority, visited: Boolean, memo: String?) {
     if (!memo.isNullOrBlank()) wishlistRepository.updatePlaceNote(placeId, memo)
     if (wishlist) wishlistRepository.addToWishlist(placeId, priority)
+    if (visited) wishlistRepository.setVisited(placeId, true)
   }
 
   /**
    * 場所の編集内容を差分適用する（名前・メモ・行きたい・優先度・訪問済み）。
    *
-   * 「行きたい」を今つけた場合は [WishlistRepository.addToWishlist] が返す id で訪問済みも
-   * 設定できるよう、ひと続きで処理する（個別に呼ぶと新規の wishlistId を掴めない）。
-   * 訪問済みの手動設定は立ち寄り記録が無いとき（visitCount == 0）だけ意味を持つ。
+   * 訪問済みは**行きたいとは独立**に付け外しする（adr/0020）。行きたいを外しても印は残る。
+   * 手動の印は立ち寄り記録が無いとき（visitCount == 0）だけ意味を持つ（記録があればそれ自体で
+   * 訪問済みなので、UI でも切替を出さない）。
    *
    * [link] が非 null なら、先に Google 施設への紐付け（座標・カテゴリ等の補完）も行う。
    */
@@ -139,22 +145,18 @@ class PlaceEditUseCase @Inject constructor(
     }
     val wishlistId = item.wishlistId
     when {
-      // 新たに「行きたい」へ。付けた直後の id で訪問済みも反映する。
-      wishlist && wishlistId == null -> {
-        val newId = wishlistRepository.addToWishlist(item.place.id, priority)
-        if (visited && item.visitCount == 0) wishlistRepository.setVisited(newId, true)
-      }
-      // 既に「行きたい」。優先度・訪問済みの変更分だけ反映する。
+      // 新たに「行きたい」へ。
+      wishlist && wishlistId == null -> wishlistRepository.addToWishlist(item.place.id, priority)
+      // 既に「行きたい」。優先度の変更分だけ反映する。
       wishlist && wishlistId != null -> {
         if (priority != item.priority) wishlistRepository.updateWishlist(wishlistId, priority)
-        if (item.visitCount == 0 && visited != item.isManuallyVisited) {
-          wishlistRepository.setVisited(wishlistId, visited)
-        }
       }
-      // 「行きたい」を外す（場所自体は残す）。
-      !wishlist && wishlistId != null -> {
-        wishlistRepository.removeFromWishlist(wishlistId)
-      }
+      // 「行きたい」を外す（場所自体も訪問済みの印も残す）。
+      !wishlist && wishlistId != null -> wishlistRepository.removeFromWishlist(wishlistId)
+    }
+    // 訪問済みは行きたいの有無に関わらず、変更分だけ反映する。
+    if (item.visitCount == 0 && visited != item.isManuallyVisited) {
+      wishlistRepository.setVisited(item.place.id, visited)
     }
   }
 }

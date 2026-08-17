@@ -15,5 +15,6 @@ data class NearbyRegisterPrompt(
   val name: String?,
   val wishlist: Boolean,
   val priority: Priority,
+  val visited: Boolean,
   val memo: String?,
 )

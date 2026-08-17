@@ -14,7 +14,6 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -77,7 +76,8 @@ internal fun PlaceEditorBody(
   var note by remember(item.place.id) { mutableStateOf(savedNote) }
   var wishlist by remember(item.wishlistId) { mutableStateOf(item.isWishlisted) }
   var priority by remember(item.wishlistId) { mutableStateOf(savedPriority) }
-  var visited by remember(item.wishlistId) { mutableStateOf(item.isManuallyVisited) }
+  // 訪問済みは行きたいとは別の軸なので、行きたい行の有無ではなく場所そのものに紐付けて覚える。
+  var visited by remember(item.place.id) { mutableStateOf(item.isManuallyVisited) }
   // 「Googleで情報を取得」で選んだ施設は即保存せず、ここに溜めて「保存」で確定する。
   var pendingLink by remember(item.place.id) { mutableStateOf<PlaceSearchResult?>(null) }
 
@@ -85,7 +85,7 @@ internal fun PlaceEditorBody(
     note.trim() != savedNote.trim() ||
     wishlist != item.isWishlisted ||
     (wishlist && priority != savedPriority) ||
-    (wishlist && item.visitCount == 0 && visited != item.isManuallyVisited) ||
+    (item.visitCount == 0 && visited != item.isManuallyVisited) ||
     pendingLink != null
 
   Column(modifier = modifier) {
@@ -118,16 +118,7 @@ internal fun PlaceEditorBody(
           )
         }
       } else {
-        {
-          Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically,
-          ) {
-            Text(text = if (visited) "訪問済み" else "未訪問")
-            Switch(checked = visited, onCheckedChange = { visited = it })
-          }
-        }
+        { VisitedToggle(visited) { visited = it } }
       },
     )
 

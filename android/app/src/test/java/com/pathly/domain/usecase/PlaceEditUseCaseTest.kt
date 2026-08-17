@@ -47,6 +47,7 @@ class PlaceEditUseCaseTest {
       name = "カフェ",
       wishlist = false,
       priority = Priority.MEDIUM,
+      visited = false,
       memo = null,
       googlePlaceId = "gp-1",
       nearbyAlreadyVisible = false,
@@ -76,6 +77,7 @@ class PlaceEditUseCaseTest {
       name = null,
       wishlist = false,
       priority = Priority.MEDIUM,
+      visited = false,
       memo = null,
       googlePlaceId = "gp-1",
       nearbyAlreadyVisible = false,
@@ -94,6 +96,7 @@ class PlaceEditUseCaseTest {
       name = null,
       wishlist = false,
       priority = Priority.MEDIUM,
+      visited = false,
       memo = null,
       googlePlaceId = null,
       nearbyAlreadyVisible = true,
@@ -115,6 +118,7 @@ class PlaceEditUseCaseTest {
       name = null,
       wishlist = false,
       priority = Priority.MEDIUM,
+      visited = false,
       memo = null,
       googlePlaceId = null,
       nearbyAlreadyVisible = false,
@@ -135,6 +139,7 @@ class PlaceEditUseCaseTest {
       name = null,
       wishlist = false,
       priority = Priority.MEDIUM,
+      visited = false,
       memo = null,
       googlePlaceId = null,
       nearbyAlreadyVisible = false,
@@ -146,10 +151,10 @@ class PlaceEditUseCaseTest {
 
   @Test
   fun `行きたいONのときだけ wishlist に入れる`() = runTest {
-    useCase.register(35.0, 139.0, null, wishlist = false, Priority.HIGH, null, null, forceNewPlace = true)
+    useCase.register(35.0, 139.0, null, wishlist = false, Priority.HIGH, visited = false, null, null, forceNewPlace = true)
     coVerify(exactly = 0) { wishlistRepository.addToWishlist(any(), any()) }
 
-    useCase.register(35.0, 139.0, null, wishlist = true, Priority.HIGH, null, null, forceNewPlace = true)
+    useCase.register(35.0, 139.0, null, wishlist = true, Priority.HIGH, visited = false, null, null, forceNewPlace = true)
     coVerify { wishlistRepository.addToWishlist(100L, Priority.HIGH) }
   }
 
@@ -157,7 +162,7 @@ class PlaceEditUseCaseTest {
 
   @Test
   fun `紐付けはメモが空なら書き込まない`() = runTest {
-    useCase.linkToExisting(placeId = 5L, wishlist = false, priority = Priority.MEDIUM, memo = "  ")
+    useCase.linkToExisting(placeId = 5L, wishlist = false, priority = Priority.MEDIUM, visited = false, memo = "  ")
 
     coVerify(exactly = 0) { wishlistRepository.updatePlaceNote(any(), any()) }
     coVerify(exactly = 0) { wishlistRepository.addToWishlist(any(), any()) }
@@ -165,7 +170,7 @@ class PlaceEditUseCaseTest {
 
   @Test
   fun `紐付けでメモと行きたいを反映する`() = runTest {
-    useCase.linkToExisting(placeId = 5L, wishlist = true, priority = Priority.LOW, memo = "また来たい")
+    useCase.linkToExisting(placeId = 5L, wishlist = true, priority = Priority.LOW, visited = false, memo = "また来たい")
 
     coVerify { wishlistRepository.updatePlaceNote(5L, "また来たい") }
     coVerify { wishlistRepository.addToWishlist(5L, Priority.LOW) }
@@ -178,7 +183,7 @@ class PlaceEditUseCaseTest {
     note: String? = null,
     wishlistId: Long? = null,
     priority: Priority? = null,
-    visitedAt: Date? = null,
+    markedVisitedAt: Date? = null,
     visitCount: Int = 0,
   ) = PlaceListItem(
     place = Place(
@@ -196,7 +201,7 @@ class PlaceEditUseCaseTest {
     ),
     wishlistId = wishlistId,
     priority = priority,
-    visitedAt = visitedAt,
+    markedVisitedAt = markedVisitedAt,
     visitCount = visitCount,
   )
 
@@ -211,12 +216,35 @@ class PlaceEditUseCaseTest {
   }
 
   @Test
-  fun `編集_行きたいを新規に付けたら返ったIDで訪問済みも設定する`() = runTest {
+  fun `編集_行きたいと訪問済みは同時に付けられる`() = runTest {
     useCase.saveEdits(item(), name = "元の名前", note = "", wishlist = true, priority = Priority.HIGH, visited = true)
 
     coVerify { wishlistRepository.addToWishlist(1L, Priority.HIGH) }
-    // 個別に呼ぶと新規の wishlistId を掴めないので、ひと続きで処理する必要がある。
-    coVerify { wishlistRepository.setVisited(200L, true) }
+    // 訪問済みは wishlist ではなく place に付く（行きたいの id を待つ必要が無い）。
+    coVerify { wishlistRepository.setVisited(1L, true) }
+  }
+
+  @Test
+  fun `編集_行きたいに入れなくても訪問済みにできる`() = runTest {
+    useCase.saveEdits(item(), name = "元の名前", note = "", wishlist = false, priority = Priority.MEDIUM, visited = true)
+
+    coVerify { wishlistRepository.setVisited(1L, true) }
+    coVerify(exactly = 0) { wishlistRepository.addToWishlist(any(), any()) }
+  }
+
+  @Test
+  fun `編集_行きたいを外しても訪問済みの印は消さない`() = runTest {
+    useCase.saveEdits(
+      item(wishlistId = 9L, priority = Priority.LOW, markedVisitedAt = Date()),
+      name = "元の名前",
+      note = "",
+      wishlist = false,
+      priority = Priority.LOW,
+      visited = true,
+    )
+
+    coVerify { wishlistRepository.removeFromWishlist(9L) }
+    coVerify(exactly = 0) { wishlistRepository.setVisited(any(), any()) }
   }
 
   @Test

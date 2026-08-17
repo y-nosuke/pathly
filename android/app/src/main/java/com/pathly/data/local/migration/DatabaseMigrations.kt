@@ -424,6 +424,65 @@ object DatabaseMigrations {
   }
 
   /**
+   * バージョン13から14へのマイグレーション。
+   * 手動の「訪問済み」を wishlist から visited_places に切り出す（adr/0020）。
+   *
+   * 訪問済みは行きたいとは別の軸なのに、wishlist の行に `visitedAt` として乗っていたため、
+   * 行きたいに入れないと訪問済みにできず、行きたいを外すと訪問済みも消えていた。
+   * 行の存在＝訪問済みにし、列名も `markedAt`（＝印を付けた日時。実際に訪れた日時ではない）に改める。
+   *
+   * 既存の印は移送する。wishlist からは列を落とすだけなので、優先度・登録日時はそのまま残る。
+   *
+   * DDL は Room がエンティティから生成するものと一致させること（起動時のスキーマ検証を通すため）。
+   */
+  val MIGRATION_13_14 = object : Migration(13, 14) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+      try {
+        logger.i("Starting migration from version 13 to 14")
+
+        db.execSQL(
+          "CREATE TABLE IF NOT EXISTS `visited_places` (" +
+            "`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+            "`placeId` INTEGER NOT NULL, " +
+            "`markedAt` INTEGER NOT NULL, " +
+            "FOREIGN KEY(`placeId`) REFERENCES `places`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+        )
+        db.execSQL(
+          "CREATE UNIQUE INDEX IF NOT EXISTS `index_visited_places_placeId` ON `visited_places` (`placeId`)",
+        )
+        // 既にある手動の印だけを移す（visitedAt が NULL の行は未訪問なので作らない）。
+        db.execSQL(
+          "INSERT INTO `visited_places` (`placeId`, `markedAt`) " +
+            "SELECT `placeId`, `visitedAt` FROM `wishlist` WHERE `visitedAt` IS NOT NULL",
+        )
+
+        // wishlist から visitedAt を落とす（SQLite は列削除ができないので作り直す）。
+        db.execSQL(
+          "CREATE TABLE IF NOT EXISTS `wishlist_new` (" +
+            "`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+            "`placeId` INTEGER NOT NULL, " +
+            "`priority` INTEGER NOT NULL, " +
+            "`createdAt` INTEGER NOT NULL, " +
+            "`updatedAt` INTEGER NOT NULL, " +
+            "FOREIGN KEY(`placeId`) REFERENCES `places`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+        )
+        db.execSQL(
+          "INSERT INTO `wishlist_new` (`id`, `placeId`, `priority`, `createdAt`, `updatedAt`) " +
+            "SELECT `id`, `placeId`, `priority`, `createdAt`, `updatedAt` FROM `wishlist`",
+        )
+        db.execSQL("DROP TABLE `wishlist`")
+        db.execSQL("ALTER TABLE `wishlist_new` RENAME TO `wishlist`")
+        db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS `index_wishlist_placeId` ON `wishlist` (`placeId`)")
+
+        logger.i("Migration from version 13 to 14 completed successfully")
+      } catch (e: Exception) {
+        logger.e("Migration from version 13 to 14 failed", e)
+        throw e
+      }
+    }
+  }
+
+  /**
    * 現在利用可能な全てのマイグレーション
    */
   val ALL_MIGRATIONS = arrayOf(
@@ -439,6 +498,7 @@ object DatabaseMigrations {
     MIGRATION_10_11,
     MIGRATION_11_12,
     MIGRATION_12_13,
+    MIGRATION_13_14,
     // 将来のマイグレーションをここに追加
   )
 

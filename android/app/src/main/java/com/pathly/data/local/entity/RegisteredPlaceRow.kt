@@ -17,8 +17,8 @@ data class RegisteredPlaceRow(
   val wishlistCount: Int,
   /** この場所への立ち寄り（訪問）件数。 */
   val visitCount: Int,
-  /** 手動で「訪問済み」にした日時（無ければ null）。 */
-  val visitedAt: Date?,
+  /** 手動で「訪問済み」にした日時（無ければ null）。実際に訪れた日時ではない。 */
+  val markedVisitedAt: Date?,
   /**
    * Google の業種（[com.pathly.data.local.entity.GooglePlaceCategoryEntity.code]）。
    * マーカーのグリフを業種で出し分けるために引く。表示名は要らない（地図に文字は出さない）ので取らない。

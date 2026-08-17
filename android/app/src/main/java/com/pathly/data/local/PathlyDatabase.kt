@@ -15,6 +15,7 @@ import com.pathly.data.local.dao.PlaceDao
 import com.pathly.data.local.dao.PlaceResolutionDao
 import com.pathly.data.local.dao.SmoothedPointDao
 import com.pathly.data.local.dao.StopDao
+import com.pathly.data.local.dao.VisitedPlaceDao
 import com.pathly.data.local.dao.WishlistDao
 import com.pathly.data.local.entity.GooglePlaceCategoryEntity
 import com.pathly.data.local.entity.GooglePlaceEntity
@@ -24,6 +25,7 @@ import com.pathly.data.local.entity.PlaceEntity
 import com.pathly.data.local.entity.PlaceResolutionEntity
 import com.pathly.data.local.entity.SmoothedPointEntity
 import com.pathly.data.local.entity.StopEntity
+import com.pathly.data.local.entity.VisitedPlaceEntity
 import com.pathly.data.local.entity.WishlistEntity
 import com.pathly.data.local.migration.DatabaseMigrations
 import com.pathly.util.Logger
@@ -39,8 +41,9 @@ import com.pathly.util.Logger
     GooglePlaceEntity::class,
     GooglePlaceCategoryEntity::class,
     WishlistEntity::class,
+    VisitedPlaceEntity::class,
   ],
-  version = 13,
+  version = 14,
   exportSchema = true,
 )
 @TypeConverters(DateConverter::class)
@@ -55,6 +58,7 @@ abstract class PathlyDatabase : RoomDatabase() {
   abstract fun googlePlaceDao(): GooglePlaceDao
   abstract fun googlePlaceCategoryDao(): GooglePlaceCategoryDao
   abstract fun wishlistDao(): WishlistDao
+  abstract fun visitedPlaceDao(): VisitedPlaceDao
 
   companion object {
     const val DATABASE_NAME = "pathly_database"

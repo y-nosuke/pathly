@@ -65,7 +65,7 @@ internal fun PlaceActionSheet(
   onDismiss: () -> Unit,
   onFetchPoiDetails: suspend (googlePlaceId: String) -> PlaceSearchResult?,
   // 新規登録（空き地点/POI/検索結果）を確定する。近接確認（表示ON=新規/OFF=確認）は呼び出し側に委ねる。
-  onRegisterNew: (lat: Double, lng: Double, name: String?, wishlist: Boolean, priority: Priority, memo: String?, googlePlaceId: String?, googleName: String?) -> Unit,
+  onRegisterNew: (lat: Double, lng: Double, name: String?, wishlist: Boolean, priority: Priority, visited: Boolean, memo: String?, googlePlaceId: String?, googleName: String?) -> Unit,
   // 以下は [PlaceSheetTarget.Existing] を渡す画面だけが必要（新規登録専用の画面は既定のままでよい）。
   // 編集中に保存しても最新値を保てるよう、単一 place はリアクティブに購読する。
   onObservePlace: (placeId: Long) -> Flow<PlaceListItem?> = { emptyFlow() },
@@ -162,7 +162,7 @@ private fun NewPlaceEditor(
   initialName: String?,
   knownDetails: PlaceSearchResult?,
   onFetchPoiDetails: suspend (googlePlaceId: String) -> PlaceSearchResult?,
-  onRegisterNew: (lat: Double, lng: Double, name: String?, wishlist: Boolean, priority: Priority, memo: String?, googlePlaceId: String?, googleName: String?) -> Unit,
+  onRegisterNew: (lat: Double, lng: Double, name: String?, wishlist: Boolean, priority: Priority, visited: Boolean, memo: String?, googlePlaceId: String?, googleName: String?) -> Unit,
   onDismiss: () -> Unit,
 ) {
   // 名前欄は「自分で付けた名前」専用なので、施設名を初期値には入れない（薄字の候補として見せる）。
@@ -171,6 +171,8 @@ private fun NewPlaceEditor(
   var memo by remember(latLng, googlePlaceId) { mutableStateOf("") }
   var wishlist by remember(latLng, googlePlaceId) { mutableStateOf(false) }
   var priority by remember(latLng, googlePlaceId) { mutableStateOf(Priority.MEDIUM) }
+  // このアプリを使う前に行った場所も、登録と同時に訪問済みにできる（行きたいとは独立）。
+  var visited by remember(latLng, googlePlaceId) { mutableStateOf(false) }
   val context = LocalContext.current
 
   // 施設は開いたら Google から施設情報（カテゴリ・住所）を取得してプレビューする（結果は登録時に使い回し）。
@@ -197,6 +199,7 @@ private fun NewPlaceEditor(
     onWishlistChange = { wishlist = it },
     priority = priority,
     onPriorityChange = { priority = it },
+    visitedContent = { VisitedToggle(visited) { visited = it } },
   )
   SheetActions {
     TextButton(onClick = onDismiss) { Text("キャンセル") }
@@ -206,7 +209,7 @@ private fun NewPlaceEditor(
       val typed = name.trim().ifBlank { null }
       val googleName = initialName?.trim()?.ifBlank { null }
       val userName = typed?.takeIf { it != googleName }
-      onRegisterNew(latLng.latitude, latLng.longitude, userName, wishlist, priority, memo.ifBlank { null }, googlePlaceId, googleName)
+      onRegisterNew(latLng.latitude, latLng.longitude, userName, wishlist, priority, visited, memo.ifBlank { null }, googlePlaceId, googleName)
       onDismiss()
     }) { Text("登録") }
   }

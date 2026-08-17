@@ -21,6 +21,7 @@ erDiagram
   places ||--o| google_places : "Google由来データ"
   google_places }o--|| google_place_categories : "業種"
   places ||--o| wishlist : "行きたい"
+  places ||--o| visited_places : "訪問済みの印"
   gps_points |o--o{ smoothed_points : "由来(sourcePointId)"
 
   gps_tracks {
@@ -92,7 +93,11 @@ erDiagram
     Long id PK
     Long placeId FK
     Int priority
-    Date visitedAt
+  }
+  visited_places {
+    Long id PK
+    Long placeId FK
+    Date markedAt
   }
 ```
 
@@ -108,7 +113,8 @@ erDiagram
 | **place_resolutions**       | Google 問い合わせログ（行の有無＝問い合わせ済みか）                                            | places に 1:0..1                                       |
 | **google_places**           | Google 由来データ（place ID・名前・住所・カテゴリ）                                            | places に 1:0..1（行＝該当 POI あり）                  |
 | **google_place_categories** | 業種のマスタ（`code`＝Google の primaryType・表示名）                                          | google_places から参照される（多対 1）                 |
-| **wishlist**                | 行きたい場所（優先度・訪問済み。メモは places.note）                                           | places に 1:0..1                                       |
+| **wishlist**                | 行きたい場所（優先度のみ。メモは places.note）                                                 | places に 1:0..1                                       |
+| **visited_places**          | 手動で「訪問済み」にした印（行の存在＝訪問済み・`markedAt`＝印を付けた日時）                   | places に 1:0..1                                       |
 
 ### 関連と削除規則（要点）
 
@@ -120,7 +126,9 @@ erDiagram
   業種の同一性は `code`（Google の `primaryType`）の UNIQUE で担保し、判定は必ず `code` で行う
   （`displayName` はロケール依存の表示専用）→ [ADR-0017](../adr/0017-normalize-place-category.md)。
 - `smoothed_points.sourcePointId` は由来の生点への参照（トレース用・任意）。DB 上の外部キー制約は張らない。
-- `wishlist` は `places` に従属し（1 place 1件・placeId は UNIQUE）、place の削除で一緒に消える。ただし place は通常消さない（再利用のため静的に保つ）。
+- `wishlist` / `visited_places` は `places` に従属し（1 place 1件・placeId は UNIQUE）、place の削除で一緒に消える。ただし place は通常消さない（再利用のため静的に保つ）。
+- **行きたいと訪問済みは別の軸**で、片方が他方の前提にならない。行きたいを外しても訪問済みの印は残る → [ADR-0020](../adr/0020-visited-independent-from-wishlist.md)。
+  訪問済みの判定は「`stops` がある **or** `visited_places` に印がある」。`markedAt` は**印を付けた日時**で、実際に訪れた日時（`stops.arrivalTime`）ではない。
 
 ### 索引
 

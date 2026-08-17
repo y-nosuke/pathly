@@ -5,12 +5,14 @@ import com.pathly.data.local.dao.GooglePlaceDao
 import com.pathly.data.local.dao.PlaceDao
 import com.pathly.data.local.dao.PlaceResolutionDao
 import com.pathly.data.local.dao.StopDao
+import com.pathly.data.local.dao.VisitedPlaceDao
 import com.pathly.data.local.dao.WishlistDao
 import com.pathly.data.local.dao.idOf
 import com.pathly.data.local.entity.GooglePlaceEntity
 import com.pathly.data.local.entity.PlaceEntity
 import com.pathly.data.local.entity.PlaceResolutionEntity
 import com.pathly.data.local.entity.PlaceWithWishlist
+import com.pathly.data.local.entity.VisitedPlaceEntity
 import com.pathly.data.local.entity.WishlistEntity
 import com.pathly.data.places.PlacesTextSearcher
 import com.pathly.domain.model.Place
@@ -33,6 +35,7 @@ import javax.inject.Singleton
 @Singleton
 class WishlistRepositoryImpl @Inject constructor(
   private val wishlistDao: WishlistDao,
+  private val visitedPlaceDao: VisitedPlaceDao,
   private val placeDao: PlaceDao,
   private val placeResolutionDao: PlaceResolutionDao,
   private val googlePlaceDao: GooglePlaceDao,
@@ -143,7 +146,6 @@ class WishlistRepositoryImpl @Inject constructor(
       WishlistEntity(
         placeId = placeId,
         priority = priority.value,
-        visitedAt = null,
         createdAt = now,
         updatedAt = now,
       ),
@@ -156,8 +158,13 @@ class WishlistRepositoryImpl @Inject constructor(
     wishlistDao.updateFields(id, priority.value, Date())
   }
 
-  override suspend fun setVisited(id: Long, visited: Boolean) {
-    wishlistDao.updateVisited(id, if (visited) Date() else null, Date())
+  override suspend fun setVisited(placeId: Long, visited: Boolean) {
+    // 行の存在＝訪問済み。既にあれば日時は上書きしない（最初に付けた日時を残す）。
+    if (visited) {
+      visitedPlaceDao.insert(VisitedPlaceEntity(placeId = placeId, markedAt = Date()))
+    } else {
+      visitedPlaceDao.deleteByPlaceId(placeId)
+    }
   }
 
   override suspend fun removeFromWishlist(id: Long) {
@@ -170,12 +177,13 @@ class WishlistRepositoryImpl @Inject constructor(
 
   override suspend fun deletePlace(placeId: Long) {
     // 立ち寄り記録（stops）は残す方針。呼び出し側で stops のある場所は削除させない（UIで非活性）。
-    // place を消すと wishlist / place_resolutions は CASCADE で消える。
+    // place を消すと wishlist / visited_places / place_resolutions は CASCADE で消える。
     // 取り消し（Undo）で元IDのまま戻せるよう、削除前に実体を控える。
     val place = placeDao.getById(placeId) ?: return
     lastDeletedPlace = DeletedPlaceSnapshot(
       place = place,
       wishlist = wishlistDao.getByPlaceId(placeId),
+      visited = visitedPlaceDao.getByPlaceId(placeId),
       resolution = placeResolutionDao.getByPlace(placeId),
       google = googlePlaceDao.getByPlace(placeId),
     )
@@ -190,6 +198,7 @@ class WishlistRepositoryImpl @Inject constructor(
     snap.google?.let { googlePlaceDao.upsert(it) }
     snap.resolution?.let { placeResolutionDao.upsert(it) }
     snap.wishlist?.let { wishlistDao.insert(it) }
+    snap.visited?.let { visitedPlaceDao.insert(it) }
     lastDeletedPlace = null
     logger.i("Undid place deletion: restored ${snap.place.id}")
     return true
@@ -199,6 +208,7 @@ class WishlistRepositoryImpl @Inject constructor(
   private class DeletedPlaceSnapshot(
     val place: PlaceEntity,
     val wishlist: WishlistEntity?,
+    val visited: VisitedPlaceEntity?,
     val resolution: PlaceResolutionEntity?,
     val google: GooglePlaceEntity?,
   )
@@ -219,7 +229,7 @@ class WishlistRepositoryImpl @Inject constructor(
     ),
     wishlistId = wishlistId,
     priority = priority?.let { Priority.fromValue(it) },
-    visitedAt = visitedAt,
+    markedVisitedAt = markedVisitedAt,
     visitCount = visitCount,
     lastStopAt = lastStopAt,
   )

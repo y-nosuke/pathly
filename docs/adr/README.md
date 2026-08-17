@@ -35,3 +35,4 @@
 | [0017](0017-normalize-place-category.md)            | 場所の業種は機械可読な code を正としてマスタに正規化する（v13）           | Accepted |
 | [0018](0018-marker-shape-conveys-certainty.md)      | 地図マーカーは「確定＝丸／これから決める＝ピン」を形で表す                | Accepted |
 | [0019](0019-single-place-editor.md)                 | 登録済みの場所の編集画面を1つに統一する（入口だけを変える）               | Accepted |
+| [0020](0020-visited-independent-from-wishlist.md)   | 訪問済みを行きたいから独立させ、別テーブルに持つ（v14）                   | Accepted |
