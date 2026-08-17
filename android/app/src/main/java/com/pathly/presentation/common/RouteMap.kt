@@ -26,8 +26,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.google.android.gms.maps.model.LatLng
 import com.google.maps.android.compose.GoogleMapComposable
-import com.google.maps.android.compose.MapsComposeExperimentalApi
-import com.google.maps.android.compose.MarkerComposable
 import com.google.maps.android.compose.MarkerState
 import com.google.maps.android.compose.Polyline
 import com.pathly.R
@@ -164,9 +162,9 @@ internal fun stopSegmentPoints(points: List<GpsPoint>, arrival: Date, departure:
  */
 @Composable
 @GoogleMapComposable
-@OptIn(MapsComposeExperimentalApi::class)
 internal fun RegisteredPlaceMarkers(
   registeredPlaces: List<RegisteredPlace>,
+  infoWindow: MapInfoWindowState,
   onRegisteredPlaceClick: (RegisteredPlace) -> Unit = {},
 ) {
   registeredPlaces.forEach { place ->
@@ -176,19 +174,17 @@ internal fun RegisteredPlaceMarkers(
     // 色＝訪問状態、グリフ＝業種、右上の旗＝行きたい。状態が変わったら描き直す。
     val badgeColor = if (place.isVisited) MarkerVisitedGreen else MarkerUnvisitedGray
     val group = place.categoryGroup
-    MarkerComposable(
+    MapMarker(
       "registered",
       place.placeId,
       place.isWishlisted,
       place.isVisited,
       group,
+      infoWindow = infoWindow,
       state = placeMarkerState,
       title = place.displayName,
       snippet = place.statusLabel,
-      onClick = {
-        onRegisteredPlaceClick(place)
-        false
-      },
+      onClick = { onRegisteredPlaceClick(place) },
     ) {
       RegisteredPlaceMarker(bg = badgeColor, glyph = categoryGlyph(group), wishlisted = place.isWishlisted)
     }
@@ -266,10 +262,10 @@ internal fun RouteBadgeMarker(bg: Color, content: @Composable () -> Unit) {
  */
 @Composable
 @GoogleMapComposable
-@OptIn(MapsComposeExperimentalApi::class)
 internal fun RouteMapContent(
   track: GpsTrack,
   displayPoints: List<GpsPoint>,
+  infoWindow: MapInfoWindowState,
   stops: List<Stop> = emptyList(),
   stopSegments: List<List<GpsPoint>> = emptyList(),
   currentStop: Stop? = null,
@@ -312,10 +308,11 @@ internal fun RouteMapContent(
     val startMarkerState = androidx.compose.runtime.remember(startPoint) {
       MarkerState(position = LatLng(startPoint.latitude, startPoint.longitude))
     }
-    MarkerComposable(
+    MapMarker(
       "start",
       startPoint.latitude,
       startPoint.longitude,
+      infoWindow = infoWindow,
       state = startMarkerState,
       title = "開始",
       snippet = "記録開始地点 - ${DateFormatters.time(track.startTime)}",
@@ -336,11 +333,12 @@ internal fun RouteMapContent(
         MarkerState(position = LatLng(endPoint.latitude, endPoint.longitude))
       }
       // 到着は赤の ■。記録中は青＋白丸（現在地）。
-      MarkerComposable(
+      MapMarker(
         "end",
         endPoint.latitude,
         endPoint.longitude,
         track.isActive,
+        infoWindow = infoWindow,
         state = endMarkerState,
         title = if (track.isActive) "現在地" else "終了",
         snippet = track.endTime?.let {
@@ -366,24 +364,22 @@ internal fun RouteMapContent(
   }
 
   // 登録済みの場所（トグルON時）。立ち寄りマーカーの下に敷き、重なりでは立ち寄りを前面にする。
-  RegisteredPlaceMarkers(registeredPlaces, onRegisteredPlaceClick)
+  RegisteredPlaceMarkers(registeredPlaces, infoWindow, onRegisteredPlaceClick)
 
   // 立ち寄り場所（訪問順の番号つき紫バッジ）。番号でルートの順序が読める。
   stops.forEachIndexed { index, stop ->
     val stopMarkerState = androidx.compose.runtime.remember(stop.id, stop.place.latitude, stop.place.longitude) {
       MarkerState(position = LatLng(stop.place.latitude, stop.place.longitude))
     }
-    MarkerComposable(
+    MapMarker(
       "stop",
       stop.id,
       index,
+      infoWindow = infoWindow,
       state = stopMarkerState,
       title = stop.place.name ?: stop.place.googleName ?: "立ち寄り",
       snippet = "${DateFormatters.shortTime(stop.arrivalTime)} ・ 滞在${stop.durationMinutes}分",
-      onClick = {
-        onStopClick(stop)
-        false
-      },
+      onClick = { onStopClick(stop) },
     ) {
       RouteBadgeMarker(bg = MarkerStopViolet) {
         Text(
@@ -401,11 +397,12 @@ internal fun RouteMapContent(
     val liveMarkerState = androidx.compose.runtime.remember(stop.place.latitude, stop.place.longitude) {
       MarkerState(position = LatLng(stop.place.latitude, stop.place.longitude))
     }
-    MarkerComposable(
+    MapMarker(
       "current-stop",
       stop.place.latitude,
       stop.place.longitude,
       stop.durationMinutes,
+      infoWindow = infoWindow,
       state = liveMarkerState,
       title = stop.place.name ?: stop.place.googleName ?: "立ち寄り中",
       snippet = "%.5f, %.5f ・ 滞在%d分".format(stop.place.latitude, stop.place.longitude, stop.durationMinutes),

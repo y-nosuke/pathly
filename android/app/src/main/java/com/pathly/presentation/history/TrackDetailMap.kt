@@ -20,8 +20,6 @@ import com.google.maps.android.compose.GoogleMap
 import com.google.maps.android.compose.MapProperties
 import com.google.maps.android.compose.MapType
 import com.google.maps.android.compose.MapUiSettings
-import com.google.maps.android.compose.MapsComposeExperimentalApi
-import com.google.maps.android.compose.MarkerComposable
 import com.google.maps.android.compose.MarkerState
 import com.google.maps.android.compose.Polyline
 import com.google.maps.android.compose.rememberCameraPositionState
@@ -31,6 +29,8 @@ import com.pathly.domain.model.GpsTrack
 import com.pathly.domain.model.RegisteredPlace
 import com.pathly.domain.model.Stop
 import com.pathly.domain.model.StopCandidate
+import com.pathly.presentation.common.MapInfoWindowState
+import com.pathly.presentation.common.MapMarker
 import com.pathly.presentation.common.MapPinMarker
 import com.pathly.presentation.common.MarkerCandidateOrange
 import com.pathly.presentation.common.MarkerPickBlue
@@ -45,11 +45,12 @@ private val rawTrackColor = Color(0x66424242)
 /** 手動追加のハイライト（選択した滞在区間）。軌跡（オレンジ）・立ち寄り（紫）と見分ける青。 */
 private val manualHighlightColor = Color(0xFF1E88E5)
 
-@OptIn(MapsComposeExperimentalApi::class)
 @Composable
 internal fun TrackMapView(
   track: GpsTrack,
   displayPoints: List<GpsPoint>,
+  // 吹き出しの開閉。シートと一緒に閉じられるよう、状態は画面側が持つ。
+  infoWindow: MapInfoWindowState,
   modifier: Modifier = Modifier,
   stops: List<Stop> = emptyList(),
   currentStop: Stop? = null,
@@ -126,6 +127,7 @@ internal fun TrackMapView(
     RouteMapContent(
       track = track,
       displayPoints = displayPoints,
+      infoWindow = infoWindow,
       stops = stops,
       stopSegments = stopSegments,
       currentStop = currentStop,
@@ -142,11 +144,12 @@ internal fun TrackMapView(
       val candidateMarkerState = remember(index, d.latitude, d.longitude) {
         MarkerState(position = LatLng(d.latitude, d.longitude))
       }
-      MarkerComposable(
+      MapMarker(
         "candidate",
         index,
         d.latitude,
         d.longitude,
+        infoWindow = infoWindow,
         state = candidateMarkerState,
         title = candidate.name ?: "候補（名称未取得）",
         snippet = "${DateFormatters.shortTime(d.arrivalTime)} ・ 滞在${d.durationMinutes}分",
@@ -167,10 +170,11 @@ internal fun TrackMapView(
     // 手動追加で指した地点（青いピン）。いま自分で置いている最中のもの。
     manualPickTarget?.let { target ->
       val pickMarkerState = remember(target) { MarkerState(position = target) }
-      MarkerComposable(
+      MapMarker(
         "manual-pick",
         target.latitude,
         target.longitude,
+        infoWindow = infoWindow,
         state = pickMarkerState,
         title = "追加する地点",
       ) {
