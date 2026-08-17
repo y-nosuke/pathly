@@ -112,7 +112,7 @@ fun TrackingScreen(
   val snackbarHostState = remember { SnackbarHostState() }
 
   // 場所を削除したら「取り消す」を出す（場所一覧・経路詳細と同じ出し方）。
-  PlaceDeleteUndoEffect(uiState.deleteUndo, snackbarHostState, viewModel::undoDelete)
+  PlaceDeleteUndoEffect(uiState.deleteUndo, snackbarHostState, viewModel::undoDelete, viewModel::consumeDeleteUndo)
 
   // 復帰のたびに権限・電池最適化の状態を再確認（システム設定から戻ったときに反映するため）
   LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {

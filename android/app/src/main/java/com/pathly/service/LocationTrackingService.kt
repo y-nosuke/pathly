@@ -152,7 +152,14 @@ class LocationTrackingService : Service() {
         val trackId = intent.getLongExtra(EXTRA_TRACK_ID, -1L).takeIf { it > 0 }
         startLocationTracking(resumeTrackId = trackId)
       }
-      ACTION_STOP_TRACKING -> stopLocationTracking()
+      ACTION_STOP_TRACKING -> {
+        stopLocationTracking()
+        // 停止を受けたあとは OS にサービスを作り直させない。確定処理の途中でプロセスが死ぬと、
+        // START_STICKY の再起動が null intent で入り、restoreTrackingIfNeeded() が
+        // 「アクティブなトラックがある」と見て**記録を再開してしまう**（止めたはずの記録が
+        // 復活する）。最後の onStartCommand の戻り値が採用されるので、ここで打ち切る。
+        return START_NOT_STICKY
+      }
       // intent が null＝START_STICKY による再起動（OSにkillされた後など）。
       // アクティブなトラックがあれば記録を再開して自己回復する。
       null -> restoreTrackingIfNeeded()
@@ -212,8 +219,14 @@ class LocationTrackingService : Service() {
 
         is Command.Finish -> {
           currentTrackId?.let { trackId ->
-            advance(trackId, isFinal = true)
+            // **先にトラックを閉じる。** 確定（全点の再平滑化・立ち寄り検出）は経路が長いほど
+            // 時間がかかり、その最中にプロセスが死ぬと「アクティブなまま」の経路が残る。
+            // 残ると次の起動で記録中として復活するので、止めた事実を真っ先に永続化する。
+            // 終了時刻も、確定が終わった時刻ではなく止めた時刻の方が実態に合う。
             gpsTrackDao.finishTrack(trackId, Date())
+            // 確定が途中で終わっても、総移動距離は起動時のバックフィルが拾い、取りこぼした
+            // 立ち寄りは再解析で足せる（記録が復活するより害が小さい）。
+            advance(trackId, isFinal = true)
           }
           currentTrackId = null
         }

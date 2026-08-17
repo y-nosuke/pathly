@@ -127,6 +127,7 @@ fun TrackDetailScreen(
   // 場所を削除した直後の取り消し待ち（スナックバーで「取り消す」を出す）。
   placeDeleteUndo: PlaceDeleteUndo = PlaceDeleteUndo(),
   onUndoPlaceDelete: () -> Unit = {},
+  onPlaceDeleteUndoShown: () -> Unit = {},
   // 場所シートの訪問履歴から、その訪問のお出掛け（別の経路詳細）を開く。
   onOpenTrack: (trackId: Long) -> Unit = {},
   onFetchPoiDetails: suspend (googlePlaceId: String) -> PlaceSearchResult? = { null },
@@ -193,7 +194,7 @@ fun TrackDetailScreen(
   // 削除は確認ダイアログを出さず即時実行し、スナックバーの「取り消す」で元に戻せる。
   val snackbarHostState = remember { SnackbarHostState() }
   // 場所そのものの削除（場所シート）も同じスナックバーで取り消せるようにする。
-  PlaceDeleteUndoEffect(placeDeleteUndo, snackbarHostState, onUndoPlaceDelete)
+  PlaceDeleteUndoEffect(placeDeleteUndo, snackbarHostState, onUndoPlaceDelete, onPlaceDeleteUndoShown)
   val deleteWithUndo: (List<Long>) -> Unit = { ids ->
     if (ids.isNotEmpty()) {
       onDeleteStops(ids)

@@ -108,6 +108,20 @@ class TrackingViewModelTest {
   }
 
   @Test
+  fun `削除の通知は出し終えたら消化する`() = runTest {
+    val viewModel = createViewModel()
+
+    viewModel.deletePlace(1L)
+    testDispatcher.scheduler.advanceUntilIdle()
+    assertEquals("削除で通知が積まれる", 1, viewModel.uiState.value.deleteUndo.token)
+
+    // 消化しないと、画面を離れて戻るたびに同じ通知が出てしまう（LaunchedEffect が作り直されるため）。
+    viewModel.consumeDeleteUndo()
+
+    assertEquals("消化すると出すものが無い状態に戻る", 0, viewModel.uiState.value.deleteUndo.token)
+  }
+
+  @Test
   fun `clearError_エラーメッセージクリア`() = runTest {
     val viewModel = createViewModel()
 

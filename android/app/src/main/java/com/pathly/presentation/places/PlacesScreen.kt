@@ -125,7 +125,7 @@ fun PlacesListRoute(
   }
 
   // 削除（一覧・詳細どちらから消しても）を検知して取り消しスナックバーを出す。
-  PlaceDeleteUndoEffect(uiState.deleteUndo, snackbarHostState, viewModel::undoDelete)
+  PlaceDeleteUndoEffect(uiState.deleteUndo, snackbarHostState, viewModel::undoDelete, viewModel::consumeDeleteUndo)
 
   // 登録（「登録しました」/「この場所は登録済みです」）を検知して、削除と同じ下部スナックバーで知らせる。
   LaunchedEffect(uiState.registerToken) {

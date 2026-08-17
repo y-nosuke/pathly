@@ -273,6 +273,7 @@ private fun TrackDetailRoute(
     onDeletePlace = viewModel::deletePlace,
     placeDeleteUndo = placeDeleteUndo,
     onUndoPlaceDelete = viewModel::undoDelete,
+    onPlaceDeleteUndoShown = viewModel::consumeDeleteUndo,
     onOpenTrack = onOpenTrack,
     onFetchPoiDetails = viewModel::fetchPoiDetails,
     onFetchNearbyPois = viewModel::nearbyPois,
