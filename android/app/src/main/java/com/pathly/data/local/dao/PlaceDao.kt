@@ -67,13 +67,14 @@ interface PlaceDao {
       "p.note AS note, p.createdAt AS createdAt, p.updatedAt AS updatedAt, " +
       "g.googlePlaceId AS googlePlaceId, g.name AS googleName, g.address AS googleAddress, " +
       "c.code AS categoryCode, c.displayName AS categoryDisplayName, " +
-      "w.id AS wishlistId, w.priority AS priority, w.visitedAt AS visitedAt, " +
+      "w.id AS wishlistId, w.priority AS priority, v.markedAt AS markedVisitedAt, " +
       "(SELECT COUNT(*) FROM stops s WHERE s.placeId = p.id) AS visitCount, " +
       "(SELECT MAX(s.arrivalTime) FROM stops s WHERE s.placeId = p.id) AS lastStopAt " +
       "FROM places p " +
       "LEFT JOIN google_places g ON g.placeId = p.id " +
       "LEFT JOIN google_place_categories c ON c.id = g.categoryId " +
       "LEFT JOIN wishlist w ON w.placeId = p.id " +
+      "LEFT JOIN visited_places v ON v.placeId = p.id " +
       "ORDER BY p.createdAt DESC",
   )
   fun getPlacesWithWishlist(): Flow<List<PlaceWithWishlist>>
@@ -84,13 +85,14 @@ interface PlaceDao {
       "p.note AS note, p.createdAt AS createdAt, p.updatedAt AS updatedAt, " +
       "g.googlePlaceId AS googlePlaceId, g.name AS googleName, g.address AS googleAddress, " +
       "c.code AS categoryCode, c.displayName AS categoryDisplayName, " +
-      "w.id AS wishlistId, w.priority AS priority, w.visitedAt AS visitedAt, " +
+      "w.id AS wishlistId, w.priority AS priority, v.markedAt AS markedVisitedAt, " +
       "(SELECT COUNT(*) FROM stops s WHERE s.placeId = p.id) AS visitCount, " +
       "(SELECT MAX(s.arrivalTime) FROM stops s WHERE s.placeId = p.id) AS lastStopAt " +
       "FROM places p " +
       "LEFT JOIN google_places g ON g.placeId = p.id " +
       "LEFT JOIN google_place_categories c ON c.id = g.categoryId " +
       "LEFT JOIN wishlist w ON w.placeId = p.id " +
+      "LEFT JOIN visited_places v ON v.placeId = p.id " +
       "WHERE p.id = :id",
   )
   suspend fun getPlaceWithWishlist(id: Long): PlaceWithWishlist?
@@ -108,7 +110,7 @@ interface PlaceDao {
       "p.latitude AS latitude, p.longitude AS longitude, " +
       "(SELECT COUNT(*) FROM wishlist w WHERE w.placeId = p.id) AS wishlistCount, " +
       "(SELECT COUNT(*) FROM stops s WHERE s.placeId = p.id) AS visitCount, " +
-      "(SELECT w.visitedAt FROM wishlist w WHERE w.placeId = p.id LIMIT 1) AS visitedAt, " +
+      "(SELECT v.markedAt FROM visited_places v WHERE v.placeId = p.id LIMIT 1) AS markedVisitedAt, " +
       "c.code AS categoryCode " +
       "FROM places p LEFT JOIN google_places g ON g.placeId = p.id " +
       "LEFT JOIN google_place_categories c ON c.id = g.categoryId",
@@ -124,7 +126,7 @@ interface PlaceDao {
       "p.latitude AS latitude, p.longitude AS longitude, " +
       "(SELECT COUNT(*) FROM wishlist w WHERE w.placeId = p.id) AS wishlistCount, " +
       "(SELECT COUNT(*) FROM stops s WHERE s.placeId = p.id) AS visitCount, " +
-      "(SELECT w.visitedAt FROM wishlist w WHERE w.placeId = p.id LIMIT 1) AS visitedAt, " +
+      "(SELECT v.markedAt FROM visited_places v WHERE v.placeId = p.id LIMIT 1) AS markedVisitedAt, " +
       "c.code AS categoryCode " +
       "FROM places p LEFT JOIN google_places g ON g.placeId = p.id " +
       "LEFT JOIN google_place_categories c ON c.id = g.categoryId " +

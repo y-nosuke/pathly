@@ -112,8 +112,8 @@ fun TrackDetailScreen(
   onDismissNearbyStopPrompt: () -> Unit = {},
   onMessageShown: () -> Unit = {},
   // 空き地点/POI の登録。近くに既存があるかの判断は ViewModel（PlaceEditUseCase）側で行う。
-  onRegisterPlace: (lat: Double, lng: Double, name: String?, wishlist: Boolean, priority: Priority, memo: String?, googlePlaceId: String?, googleName: String?) -> Unit =
-    { _, _, _, _, _, _, _, _ -> },
+  onRegisterPlace: (lat: Double, lng: Double, name: String?, wishlist: Boolean, priority: Priority, visited: Boolean, memo: String?, googlePlaceId: String?, googleName: String?) -> Unit =
+    { _, _, _, _, _, _, _, _, _ -> },
   // 近接確認の保留状態（非nullで確認ダイアログを出す）とその選択。
   nearbyRegisterPrompt: NearbyRegisterPrompt? = null,
   onConfirmNearbyLink: () -> Unit = {},

@@ -258,6 +258,56 @@ class MigrationTest {
     db.close()
   }
 
+  @Test
+  fun migrate13To14_movesManualVisitedOutOfWishlist() {
+    // v13 のスキーマで、行きたい＋訪問済みの場所と、行きたいだけの場所を用意する。
+    helper.createDatabase(TEST_DB, 13).apply {
+      execSQL(
+        "INSERT INTO places (id, name, latitude, longitude, note, source, createdAt, updatedAt) " +
+          "VALUES (1, '訪問済みの場所', 35.0, 139.0, NULL, 'USER', 0, 0), " +
+          "(2, '未訪問の場所', 35.1, 139.1, NULL, 'USER', 0, 0)",
+      )
+      execSQL(
+        "INSERT INTO wishlist (id, placeId, priority, visitedAt, createdAt, updatedAt) " +
+          "VALUES (10, 1, 2, 1700000000000, 0, 0), (11, 2, 1, NULL, 0, 0)",
+      )
+      close()
+    }
+
+    // 13→14 を適用。作り直した wishlist の DDL が Room の生成物とずれていればここで失敗する。
+    val db = helper.runMigrationsAndValidate(
+      TEST_DB,
+      14,
+      true,
+      DatabaseMigrations.MIGRATION_13_14,
+    )
+
+    // 印があったものだけ visited_places へ移る（日時はそのまま）。
+    db.query("SELECT placeId, markedAt FROM visited_places").use { cursor ->
+      assertEquals(1, cursor.count)
+      assertTrue(cursor.moveToFirst())
+      assertEquals(1L, cursor.getLong(0))
+      assertEquals(1700000000000L, cursor.getLong(1))
+    }
+
+    // wishlist は id・優先度を保ったまま残る（訪問済みの列だけが消える）。
+    db.query("SELECT id, placeId, priority FROM wishlist ORDER BY id").use { cursor ->
+      assertEquals(2, cursor.count)
+      assertTrue(cursor.moveToFirst())
+      assertEquals(10L, cursor.getLong(0))
+      assertEquals(1L, cursor.getLong(1))
+      assertEquals(2, cursor.getInt(2))
+    }
+
+    // 行きたいを外しても訪問済みの印は残る（これが v14 の目的）。
+    db.execSQL("DELETE FROM wishlist WHERE placeId = 1")
+    db.query("SELECT COUNT(*) FROM visited_places WHERE placeId = 1").use { cursor ->
+      assertTrue(cursor.moveToFirst())
+      assertEquals(1, cursor.getInt(0))
+    }
+    db.close()
+  }
+
   companion object {
     private const val TEST_DB = "migration-test"
   }

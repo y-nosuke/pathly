@@ -88,8 +88,12 @@ interface WishlistRepository {
   /** 行きたいの優先度を更新する。 */
   suspend fun updateWishlist(id: Long, priority: Priority)
 
-  /** 訪問済み/未訪問を切り替える。 */
-  suspend fun setVisited(id: Long, visited: Boolean)
+  /**
+   * 手動の「訪問済み」を付け外しする。**行きたい登録とは独立**（adr/0020）なので、
+   * wishlist ではなく place を指す。立ち寄り記録がある場所はそれ自体で訪問済みなので、
+   * 呼び出し側で印を触らせないこと（UI で切替を出さない）。
+   */
+  suspend fun setVisited(placeId: Long, visited: Boolean)
 
   /** 「行きたい」から外す（wishlist 行のみ削除。場所 place は残す）。 */
   suspend fun removeFromWishlist(id: Long)

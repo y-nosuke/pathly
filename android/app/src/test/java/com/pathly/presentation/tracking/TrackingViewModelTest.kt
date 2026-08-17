@@ -226,11 +226,11 @@ class TrackingViewModelTest {
   fun `登録_近くに既存があれば確認待ちにする`() = runTest {
     val nearby = RegisteredPlace(placeId = 5L, name = "隣の店", latitude = 35.0, longitude = 139.0)
     coEvery {
-      mockPlaceEditUseCase.registerWithNearbyCheck(any(), any(), any(), any(), any(), any(), any(), any())
+      mockPlaceEditUseCase.registerWithNearbyCheck(any(), any(), any(), any(), any(), any(), any(), any(), any())
     } returns PlaceEditUseCase.RegisterResult.NearbyFound(nearby)
     val viewModel = createViewModel()
 
-    viewModel.registerPlaceWithNearbyCheck(35.0, 139.0, "新しい場所", false, Priority.MEDIUM, null, null)
+    viewModel.registerPlaceWithNearbyCheck(35.0, 139.0, "新しい場所", false, Priority.MEDIUM, false, null, null)
     testDispatcher.scheduler.advanceUntilIdle()
 
     val prompt = viewModel.uiState.value.nearbyRegisterPrompt
@@ -242,13 +242,13 @@ class TrackingViewModelTest {
   fun `登録_近接確認で新規を選べば確認を閉じて強制的に新規登録する`() = runTest {
     val nearby = RegisteredPlace(placeId = 5L, name = "隣の店", latitude = 35.0, longitude = 139.0)
     coEvery {
-      mockPlaceEditUseCase.registerWithNearbyCheck(any(), any(), any(), any(), any(), any(), any(), any())
+      mockPlaceEditUseCase.registerWithNearbyCheck(any(), any(), any(), any(), any(), any(), any(), any(), any())
     } returns PlaceEditUseCase.RegisterResult.NearbyFound(nearby)
     coEvery {
-      mockPlaceEditUseCase.register(any(), any(), any(), any(), any(), any(), any(), any())
+      mockPlaceEditUseCase.register(any(), any(), any(), any(), any(), any(), any(), any(), any())
     } returns PlaceEditUseCase.RegisterResult.Registered(9L, alreadyExisted = false)
     val viewModel = createViewModel()
-    viewModel.registerPlaceWithNearbyCheck(35.0, 139.0, "新しい場所", true, Priority.HIGH, "メモ", null)
+    viewModel.registerPlaceWithNearbyCheck(35.0, 139.0, "新しい場所", true, Priority.HIGH, false, "メモ", null)
     testDispatcher.scheduler.advanceUntilIdle()
 
     viewModel.confirmNearbyNew()
@@ -256,34 +256,34 @@ class TrackingViewModelTest {
 
     assertNull("確認は閉じる", viewModel.uiState.value.nearbyRegisterPrompt)
     // 座標同定せず必ず新しい場所を作る。
-    coVerify { mockPlaceEditUseCase.register(35.0, 139.0, "新しい場所", true, Priority.HIGH, "メモ", null, true) }
+    coVerify { mockPlaceEditUseCase.register(35.0, 139.0, "新しい場所", true, Priority.HIGH, false, "メモ", null, true) }
   }
 
   @Test
   fun `登録_近接確認で紐付けを選べば既存の場所へ反映する`() = runTest {
     val nearby = RegisteredPlace(placeId = 5L, name = "隣の店", latitude = 35.0, longitude = 139.0)
     coEvery {
-      mockPlaceEditUseCase.registerWithNearbyCheck(any(), any(), any(), any(), any(), any(), any(), any())
+      mockPlaceEditUseCase.registerWithNearbyCheck(any(), any(), any(), any(), any(), any(), any(), any(), any())
     } returns PlaceEditUseCase.RegisterResult.NearbyFound(nearby)
     val viewModel = createViewModel()
-    viewModel.registerPlaceWithNearbyCheck(35.0, 139.0, null, true, Priority.LOW, "メモ", null)
+    viewModel.registerPlaceWithNearbyCheck(35.0, 139.0, null, true, Priority.LOW, true, "メモ", null)
     testDispatcher.scheduler.advanceUntilIdle()
 
     viewModel.confirmNearbyLink()
     testDispatcher.scheduler.advanceUntilIdle()
 
     assertNull("確認は閉じる", viewModel.uiState.value.nearbyRegisterPrompt)
-    coVerify { mockPlaceEditUseCase.linkToExisting(5L, true, Priority.LOW, "メモ") }
+    coVerify { mockPlaceEditUseCase.linkToExisting(5L, true, Priority.LOW, true, "メモ") }
   }
 
   @Test
   fun `登録_確認が不要なら即座に登録して結果を通知する`() = runTest {
     coEvery {
-      mockPlaceEditUseCase.registerWithNearbyCheck(any(), any(), any(), any(), any(), any(), any(), any())
+      mockPlaceEditUseCase.registerWithNearbyCheck(any(), any(), any(), any(), any(), any(), any(), any(), any())
     } returns PlaceEditUseCase.RegisterResult.Registered(9L, alreadyExisted = false)
     val viewModel = createViewModel()
 
-    viewModel.registerPlaceWithNearbyCheck(35.0, 139.0, "カフェ", false, Priority.MEDIUM, null, "gp-1")
+    viewModel.registerPlaceWithNearbyCheck(35.0, 139.0, "カフェ", false, Priority.MEDIUM, false, null, "gp-1")
     testDispatcher.scheduler.advanceUntilIdle()
 
     val state = viewModel.uiState.value

@@ -103,7 +103,7 @@ class PlaceRepositoryImpl @Inject constructor(
     longitude = longitude,
     isWishlisted = wishlistCount > 0,
     // 「場所」タブと同じ判定: 立ち寄り記録があるか、手動で訪問済みにしたら訪問済み。
-    isVisited = visitCount > 0 || visitedAt != null,
+    isVisited = visitCount > 0 || markedVisitedAt != null,
     categoryCode = categoryCode,
   )
 

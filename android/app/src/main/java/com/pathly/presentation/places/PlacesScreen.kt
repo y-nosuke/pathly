@@ -202,7 +202,7 @@ fun SearchAddRoute(
     onSelectPrediction = viewModel::selectPrediction,
     onBackToPredictions = viewModel::clearSearchResult,
     onCancel = onDone,
-    onRegister = { lat, lng, name, wishlist, priority, memo, googlePlaceId, googleName ->
+    onRegister = { lat, lng, name, wishlist, priority, visited, memo, googlePlaceId, googleName ->
       // 地図タップと同じ登録経路に通す（近接確認の要否も UseCase 側の判断に任せる）。
       // 施設情報は検索時に取得済みなので渡して引き直させない。
       viewModel.registerPlaceWithNearbyCheck(
@@ -211,6 +211,7 @@ fun SearchAddRoute(
         name,
         wishlist,
         priority,
+        visited,
         memo,
         googlePlaceId,
         googleName = googleName,
@@ -603,7 +604,7 @@ private fun WishlistFlagButton(
 private fun AddPlaceContent(
   onCancel: () -> Unit,
   // 近くに既存があるかの判断は ViewModel（PlaceEditUseCase）側で行う。
-  onRegister: (lat: Double, lng: Double, name: String?, wishlist: Boolean, priority: Priority, memo: String?, googlePlaceId: String?, googleName: String?) -> Unit,
+  onRegister: (lat: Double, lng: Double, name: String?, wishlist: Boolean, priority: Priority, visited: Boolean, memo: String?, googlePlaceId: String?, googleName: String?) -> Unit,
   onFetchDetails: suspend (googlePlaceId: String) -> PlaceSearchResult?,
   modifier: Modifier = Modifier,
   // 近接確認の保留状態（非nullで確認ダイアログを出す）とその選択。
@@ -775,8 +776,8 @@ private fun PlaceDetailContent(
   showRegisteredPlaces: Boolean = false,
   onToggleRegisteredPlaces: () -> Unit = {},
   // 地図タップでの場所登録（POI・空き地点とも）。近接確認の要否は ViewModel 側で判断する。
-  onRegisterPlaceAtPoint: (lat: Double, lng: Double, name: String?, wishlist: Boolean, priority: Priority, memo: String?, googlePlaceId: String?, googleName: String?) -> Unit =
-    { _, _, _, _, _, _, _, _ -> },
+  onRegisterPlaceAtPoint: (lat: Double, lng: Double, name: String?, wishlist: Boolean, priority: Priority, visited: Boolean, memo: String?, googlePlaceId: String?, googleName: String?) -> Unit =
+    { _, _, _, _, _, _, _, _, _ -> },
   // 近接確認の保留状態（非nullで確認ダイアログを出す）とその選択。
   nearbyRegisterPrompt: NearbyRegisterPrompt? = null,
   onConfirmNearbyLink: () -> Unit = {},
@@ -954,7 +955,7 @@ private fun SearchAddContent(
   onSelectPrediction: (String) -> Unit,
   onBackToPredictions: () -> Unit,
   onCancel: () -> Unit,
-  onRegister: (lat: Double, lng: Double, name: String?, wishlist: Boolean, priority: Priority, memo: String?, googlePlaceId: String?, googleName: String?) -> Unit,
+  onRegister: (lat: Double, lng: Double, name: String?, wishlist: Boolean, priority: Priority, visited: Boolean, memo: String?, googlePlaceId: String?, googleName: String?) -> Unit,
   modifier: Modifier = Modifier,
 ) {
   val result = search.result
@@ -1063,7 +1064,7 @@ private fun PredictionRow(
 private fun SearchResultForm(
   result: PlaceSearchResult,
   onBack: () -> Unit,
-  onRegister: (lat: Double, lng: Double, name: String?, wishlist: Boolean, priority: Priority, memo: String?, googlePlaceId: String?, googleName: String?) -> Unit,
+  onRegister: (lat: Double, lng: Double, name: String?, wishlist: Boolean, priority: Priority, visited: Boolean, memo: String?, googlePlaceId: String?, googleName: String?) -> Unit,
   modifier: Modifier = Modifier,
 ) {
   val position = LatLng(result.latitude, result.longitude)
@@ -1164,8 +1165,10 @@ internal fun VisitRow(
 /**
  * 場所フォームの共通本体。地図で追加・検索で追加・POI 登録・詳細編集のどこでも同じ並びで
  * 名前 → カテゴリ/住所（Google 由来・読取専用）→ Google マップで開く → メモ →
- * 行きたいに登録（ラベル付きスイッチ）→ 優先度 →（編集のみ）訪問済み を出す。
+ * 行きたいに登録（ラベル付きスイッチ）→ 優先度 → 訪問済み を出す。
  * 送信ボタン・地図・履歴・削除などは呼び出し側が持つ。
+ *
+ * **行きたいと訪問済みは別の軸**なので、訪問済みは行きたいの中に入れ子にしない（adr/0020）。
  */
 @Composable
 internal fun PlaceFormBody(
@@ -1262,13 +1265,10 @@ internal fun PlaceFormBody(
       Switch(checked = wishlist, onCheckedChange = onWishlistChange)
     }
 
+    // 優先度は「行きたい」に属する情報なので、こちらは入れ子のままにする。
     if (wishlist) {
       Spacer(modifier = Modifier.height(12.dp))
       PrioritySelector(selected = priority, onSelect = onPriorityChange)
-      visitedContent?.let { content ->
-        Spacer(modifier = Modifier.height(8.dp))
-        content()
-      }
     } else if (wishlistOffHint != null) {
       Spacer(modifier = Modifier.height(8.dp))
       Text(
@@ -1277,6 +1277,28 @@ internal fun PlaceFormBody(
         color = MaterialTheme.colorScheme.onSurfaceVariant,
       )
     }
+
+    // 訪問済みは行きたいと独立。行きたいOFFのままでも付け外しできる。
+    visitedContent?.let { content ->
+      Spacer(modifier = Modifier.height(12.dp))
+      content()
+    }
+  }
+}
+
+/**
+ * 手動の「訪問済み」トグル。登録フォームでも編集フォームでも同じ見た目にする。
+ * 立ち寄り記録がある場所はそれ自体で訪問済みなので、そちらでは出さない（件数を出す）。
+ */
+@Composable
+internal fun VisitedToggle(visited: Boolean, onVisitedChange: (Boolean) -> Unit) {
+  Row(
+    modifier = Modifier.fillMaxWidth(),
+    horizontalArrangement = Arrangement.SpaceBetween,
+    verticalAlignment = Alignment.CenterVertically,
+  ) {
+    Text(text = if (visited) "訪問済み" else "未訪問")
+    Switch(checked = visited, onCheckedChange = onVisitedChange)
   }
 }
 
