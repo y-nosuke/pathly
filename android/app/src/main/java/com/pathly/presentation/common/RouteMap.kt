@@ -24,7 +24,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.google.android.gms.maps.model.Dot
+import com.google.android.gms.maps.model.Dash
 import com.google.android.gms.maps.model.Gap
 import com.google.android.gms.maps.model.LatLng
 import com.google.maps.android.compose.GoogleMapComposable
@@ -151,11 +151,14 @@ internal fun MapPinMarker(bg: Color, @DrawableRes glyph: Int) {
 }
 
 /**
- * 取れなかった区間を結ぶ点線の色と模様。軌跡（実線・濃いオレンジ）より薄く細くして、
- * **実測ではない**ことを見た目で分ける。距離には含めない（→ adr/0022）。
+ * 取れなかった区間を結ぶ破線の色と模様（→ adr/0022）。
+ *
+ * 軌跡と**同じ色・同じ太さ**にして、同じ経路の一部だと分かるようにする。実測でないことは
+ * **模様だけ**で表す。薄く細くすると地図の上で埋もれて見つけられない（最初そうして失敗した）。
+ * 模様の長さは画面のピクセル基準なので、ズームを変えても破線の見え方は変わらない。
  */
-internal val TrackGapColor = Color(0x99FF7043)
-private val GapPattern = listOf(Dot(), Gap(12f))
+internal val TrackGapColor = TrackLineOrange
+private val GapPattern = listOf(Dash(24f), Gap(16f))
 
 // 確定した立ち寄りの滞在区間ハイライト（濃い青の帯）。軌跡（オレンジ）の下に太く敷く。
 internal val StopSegmentColor = Color(0xF00D47A1)
@@ -326,7 +329,7 @@ internal fun RouteMapContent(
         Polyline(
           points = listOf(LatLng(from.latitude, from.longitude), LatLng(to.latitude, to.longitude)),
           color = TrackGapColor,
-          width = 4f,
+          width = 6f,
           pattern = GapPattern,
         )
       }
