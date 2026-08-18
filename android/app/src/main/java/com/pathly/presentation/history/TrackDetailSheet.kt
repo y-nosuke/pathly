@@ -274,6 +274,17 @@ internal fun TrackSummaryHeader(
       color = MaterialTheme.colorScheme.onSurfaceVariant,
     )
 
+    // 欠落を含む経路は、距離のうちどれだけが「取れなかった区間の直線」かを出す。
+    // 総距離には含めるが（下限値なので足すほど実際に近づく）、実測ではないことは見せる。
+    if (track.hasGap) {
+      val bridgedKm = (track.bridgedDistanceMeters / 1000.0 * 100).roundToInt() / 100.0
+      Text(
+        text = "うち ${bridgedKm}km は記録が途切れた区間（直線で補完・地図では点線）",
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+      )
+    }
+
     FlowRow(
       modifier = Modifier.fillMaxWidth(),
       horizontalArrangement = Arrangement.spacedBy(8.dp),

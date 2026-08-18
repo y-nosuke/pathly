@@ -29,6 +29,7 @@ import com.pathly.domain.model.GpsTrack
 import com.pathly.domain.model.RegisteredPlace
 import com.pathly.domain.model.Stop
 import com.pathly.domain.model.StopCandidate
+import com.pathly.domain.model.TrackSegments
 import com.pathly.presentation.common.MapInfoWindowState
 import com.pathly.presentation.common.MapMarker
 import com.pathly.presentation.common.MapPinMarker
@@ -116,11 +117,16 @@ internal fun TrackMapView(
   ) {
     // 調整モードでは生データを灰色で重ねて見比べる
     if (showRawOverlay && track.points.size >= 2) {
-      Polyline(
-        points = track.points.map { LatLng(it.latitude, it.longitude) },
-        color = rawTrackColor,
-        width = 10f,
-      )
+      // 生データも補正後と同じく、途切れた区間はまたがずに引く（見比べる前提が揃う）。
+      TrackSegments.split(track.points).forEach { segment ->
+        if (segment.size >= 2) {
+          Polyline(
+            points = segment.map { LatLng(it.latitude, it.longitude) },
+            color = rawTrackColor,
+            width = 10f,
+          )
+        }
+      }
     }
 
     // 軌跡・帯・開始/終了/立ち寄りマーカーは記録画面と共通の描画にまとめる（見た目統一）。

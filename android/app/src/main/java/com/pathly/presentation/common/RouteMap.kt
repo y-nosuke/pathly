@@ -24,6 +24,8 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.google.android.gms.maps.model.Dash
+import com.google.android.gms.maps.model.Gap
 import com.google.android.gms.maps.model.LatLng
 import com.google.maps.android.compose.GoogleMapComposable
 import com.google.maps.android.compose.MarkerState
@@ -34,6 +36,7 @@ import com.pathly.domain.model.GpsTrack
 import com.pathly.domain.model.PlaceCategoryGroup
 import com.pathly.domain.model.RegisteredPlace
 import com.pathly.domain.model.Stop
+import com.pathly.domain.model.TrackSegments
 import com.pathly.ui.theme.TrackLineOrange
 import com.pathly.util.DateFormatters
 import java.util.Date
@@ -146,6 +149,21 @@ internal fun MapPinMarker(bg: Color, @DrawableRes glyph: Int) {
     }
   }
 }
+
+/**
+ * 取れなかった区間を結ぶ破線の色と模様（→ adr/0022）。
+ *
+ * **色と模様の両方**で軌跡と分ける。模様だけに頼れないのは、模様の長さが画面のピクセル基準
+ * だから。縮尺を小さくすると区間が画面上で数十ピクセルまで縮み、破片が1〜2個しか描けず
+ * 実線と見分けが付かなくなる。色なら縮尺に関係なく効く。
+ *
+ * 色は**軌跡と同じ濃さの灰色**にする。薄くすると地図に埋もれて見つけられず（最初そうして
+ * 失敗した）、かといってオレンジのままでは縮尺を小さくしたときに区別が付かない。
+ * 灰色は「分からない区間」を表すのにも素直で、前後をオレンジの実線が挟むので
+ * 同じ経路の一部であることは形から分かる。
+ */
+internal val TrackGapColor = Color(0xFF666666)
+private val GapPattern = listOf(Dash(12f), Gap(8f))
 
 // 確定した立ち寄りの滞在区間ハイライト（濃い青の帯）。軌跡（オレンジ）の下に太く敷く。
 internal val StopSegmentColor = Color(0xF00D47A1)
@@ -297,11 +315,30 @@ internal fun RouteMapContent(
   }
 
   if (displayPoints.size >= 2) {
-    Polyline(
-      points = displayPoints.map { LatLng(it.latitude, it.longitude) },
-      color = TrackLineOrange,
-      width = 6f,
-    )
+    // 途切れた区間は実線で結ばない。繋ぐと「通っていない直線」を描いてしまう（→ adr/0022）。
+    // 代わりに、前後の位置関係が分かるよう点線で結ぶ（実測ではない、という見た目にする）。
+    val segments = TrackSegments.split(displayPoints)
+    segments.forEach { segment ->
+      if (segment.size >= 2) {
+        Polyline(
+          points = segment.map { LatLng(it.latitude, it.longitude) },
+          color = TrackLineOrange,
+          width = 6f,
+        )
+      }
+    }
+    segments.zipWithNext { before, after ->
+      val from = before.lastOrNull()
+      val to = after.firstOrNull()
+      if (from != null && to != null) {
+        Polyline(
+          points = listOf(LatLng(from.latitude, from.longitude), LatLng(to.latitude, to.longitude)),
+          color = TrackGapColor,
+          width = 6f,
+          pattern = GapPattern,
+        )
+      }
+    }
 
     // 出発は緑の ▶ グリフ（色だけでなく形でも「開始」と分かる）。
     val startPoint = displayPoints.first()
