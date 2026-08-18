@@ -69,6 +69,12 @@ class TrackingController @Inject constructor(
   /** 記録中か。サービスへ接続できたときは、サービス自身の状態で上書きする。 */
   val isTracking: StateFlow<Boolean> = _isTracking.asStateFlow()
 
+  /**
+   * 停止を受けてから確定（全点の再平滑化・立ち寄り検出）が終わるまで true。
+   * サービスは確定後すぐ畳まれるので、バインド越しではなくサービスの状態をそのまま流す。
+   */
+  val isFinalizing: StateFlow<Boolean> = LocationTrackingService.isFinalizing
+
   private val _unexpectedDisconnect = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
 
   /**

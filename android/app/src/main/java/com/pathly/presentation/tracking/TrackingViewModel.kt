@@ -64,6 +64,7 @@ class TrackingViewModel @Inject constructor(
     observeRegisteredPlaces()
     observeLocationUpdates()
     observeUnexpectedDisconnect()
+    observeFinalizing()
   }
 
   /**
@@ -88,6 +89,18 @@ class TrackingViewModel @Inject constructor(
         _uiState.update { it.copy(isTracking = false) }
         delay(SERVICE_RESTART_GRACE_MS)
         reconcileTrackingState()
+      }
+    }
+  }
+
+  /**
+   * 保存（確定）中かをサービスから受け取る。停止を押してから確定が終わるまでの間、
+   * 画面はローディングを出してバックを塞ぐ（→ adr/0021）。
+   */
+  private fun observeFinalizing() {
+    viewModelScope.launch {
+      trackingController.isFinalizing.collect { finalizing ->
+        _uiState.update { it.copy(isFinalizing = finalizing) }
       }
     }
   }
@@ -227,18 +240,30 @@ class TrackingViewModel @Inject constructor(
     TrackingController.StartFailure.LOCATION_DISABLED -> "端末の位置情報がオフです。設定でオンにしてください"
   }
 
-  /** 中断されたトラックを完了として履歴に保存する */
+  /**
+   * 中断されたトラックを完了として履歴に保存する。
+   *
+   * 停止時と**同じ確定**（全点の再平滑化・立ち寄り検出）を通してから閉じる。ここを素通しで
+   * 閉じると、確定できずに中断した経路が確定済みの顔で履歴に並んでしまう（→ adr/0021）。
+   * サービスは動いていないので、確定中の表示はここで立てる。
+   */
   fun finishInterruptedTracking() {
     val interrupted = _uiState.value.interruptedTrack ?: return
     viewModelScope.launch {
-      val endTime = interrupted.points.lastOrNull()?.timestamp ?: java.util.Date()
-      gpsTrackRepository.finishTrack(interrupted.id, endTime)
-      _uiState.update {
-        it.copy(
-          isTracking = false,
-          currentTrackId = null,
-          interruptedTrack = null,
-        )
+      _uiState.update { it.copy(isFinalizing = true, interruptedTrack = null) }
+      try {
+        gpsTrackRepository.updateSmoothedForTrack(interrupted.id, isFinal = true)
+        placeRepository.updateStopsForTrack(interrupted.id, isFinal = true)
+        val endTime = interrupted.points.lastOrNull()?.timestamp ?: java.util.Date()
+        gpsTrackRepository.finishTrack(interrupted.id, endTime)
+      } finally {
+        _uiState.update {
+          it.copy(
+            isTracking = false,
+            currentTrackId = null,
+            isFinalizing = false,
+          )
+        }
       }
     }
   }

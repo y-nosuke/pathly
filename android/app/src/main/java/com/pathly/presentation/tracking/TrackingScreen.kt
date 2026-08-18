@@ -1,5 +1,7 @@
 package com.pathly.presentation.tracking
 
+import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -41,6 +43,7 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
@@ -113,6 +116,11 @@ fun TrackingScreen(
 
   // 場所を削除したら「取り消す」を出す（場所一覧・経路詳細と同じ出し方）。
   PlaceDeleteUndoEffect(uiState.deleteUndo, snackbarHostState, viewModel::undoDelete, viewModel::consumeDeleteUndo)
+
+  // 保存（確定）中はバックで抜けさせない。抜けられると「保存できていないのに終わった」ように
+  // 見える。ただしこれで防げるのはバックだけで、タスクから消す・OS に落とされるのは防げない
+  // （そちらは停止後に記録を復活させないことで受け止める → adr/0021）。
+  BackHandler(enabled = uiState.isFinalizing) { /* 何もしない（保存が終わるまで待たせる） */ }
 
   // 復帰のたびに権限・電池最適化の状態を再確認（システム設定から戻ったときに反映するため）
   LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
@@ -454,6 +462,11 @@ fun TrackingScreen(
         modifier = Modifier.align(Alignment.BottomCenter),
         sheetState = placeSheetState,
       )
+    }
+
+    // 保存（確定）中は画面全体を覆う。終わっていないのに終わったように見せない（→ adr/0021）。
+    if (uiState.isFinalizing) {
+      FinalizingOverlay()
     }
 
     // 場所の削除を取り消すスナックバー（最前面）。シート・オーバーレイの上に出す。
@@ -886,6 +899,40 @@ private fun StatColumn(
       style = MaterialTheme.typography.bodySmall,
       color = MaterialTheme.colorScheme.onSurfaceVariant,
     )
+  }
+}
+
+/**
+ * 保存（確定）中の覆い。タップを吸って操作させず、まだ終わっていないことを見せる。
+ *
+ * 経路が長いほど確定（全点の再平滑化・立ち寄り検出）に時間がかかる。ここで待たせずに
+ * 画面を閉じられると、保存が終わっていないのに終わったように見える（→ adr/0021）。
+ */
+@Composable
+private fun FinalizingOverlay() {
+  Box(
+    modifier = Modifier
+      .fillMaxSize()
+      .background(MaterialTheme.colorScheme.scrim.copy(alpha = 0.5f))
+      // タップを全部ここで吸う（下の地図やボタンに通さない）。押した見た目は出さない。
+      .pointerInput(Unit) { awaitPointerEventScope { while (true) awaitPointerEvent() } },
+    contentAlignment = Alignment.Center,
+  ) {
+    Card {
+      Column(
+        modifier = Modifier.padding(horizontal = 28.dp, vertical = 24.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+      ) {
+        CircularProgressIndicator()
+        Text(text = "記録を保存しています", style = MaterialTheme.typography.titleSmall)
+        Text(
+          text = "経路が長いと少し時間がかかります",
+          style = MaterialTheme.typography.bodySmall,
+          color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+      }
+    }
   }
 }
 

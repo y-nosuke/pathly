@@ -57,6 +57,9 @@ class TrackingViewModelTest {
     every { it.showRegisteredPlaces(any()) } returns MutableStateFlow(false)
   }
 
+  /** 保存（確定）中かをテストから切り替えるための入口。 */
+  private val finalizing = MutableStateFlow(false)
+
   /** 予期せぬ切断をテストから発火させるための入口。 */
   private val disconnects = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
   private val mockController = mockk<TrackingController>(relaxed = true).also {
@@ -64,6 +67,7 @@ class TrackingViewModelTest {
     every { it.locationCount } returns MutableStateFlow(0)
     every { it.isTracking } returns MutableStateFlow(false)
     every { it.unexpectedDisconnect } returns disconnects
+    every { it.isFinalizing } returns finalizing
   }
 
   @Before
@@ -232,6 +236,44 @@ class TrackingViewModelTest {
     val state = viewModel.uiState.value
     assertFalse("記録中ではない", state.isTracking)
     assertEquals("再開/完了をユーザーに選ばせる", track, state.interruptedTrack)
+  }
+
+  // ---- 保存（確定）の見え方 ----
+
+  @Test
+  fun `保存中はサービスの状態がそのまま画面に出る`() = runTest {
+    val viewModel = createViewModel()
+    assertFalse("初期は保存中ではない", viewModel.uiState.value.isFinalizing)
+
+    // 停止を受けたサービスが確定に入る。画面はローディングを出してバックを塞ぐ。
+    finalizing.value = true
+    testDispatcher.scheduler.advanceUntilIdle()
+    assertTrue("保存中になる", viewModel.uiState.value.isFinalizing)
+
+    finalizing.value = false
+    testDispatcher.scheduler.advanceUntilIdle()
+    assertFalse("終われば戻る", viewModel.uiState.value.isFinalizing)
+  }
+
+  @Test
+  fun `中断記録を完了にするときも確定を通してから閉じる`() = runTest {
+    val viewModel = createViewModel()
+    val track = activeTrack(id = 9L)
+    coEvery { mockRepository.getActiveTrack() } returns track
+    every { mockController.reattach() } returns false
+    disconnects.tryEmit(Unit)
+    testDispatcher.scheduler.advanceUntilIdle()
+
+    viewModel.finishInterruptedTracking()
+    testDispatcher.scheduler.advanceUntilIdle()
+
+    // 素通しで閉じると、確定できていない経路が確定済みの顔で履歴に並ぶ。
+    coVerify { mockRepository.updateSmoothedForTrack(9L, true) }
+    coVerify { mockPlaceRepository.updateStopsForTrack(9L, true) }
+    coVerify { mockRepository.finishTrack(9L, any()) }
+    val state = viewModel.uiState.value
+    assertNull("中断ダイアログは閉じる", state.interruptedTrack)
+    assertFalse("保存中の表示も戻る", state.isFinalizing)
   }
 
   // ---- 近接確認（もとは Composable 側の分岐だった） ----
