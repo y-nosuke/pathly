@@ -34,6 +34,7 @@ import com.pathly.domain.model.GpsTrack
 import com.pathly.domain.model.PlaceCategoryGroup
 import com.pathly.domain.model.RegisteredPlace
 import com.pathly.domain.model.Stop
+import com.pathly.domain.model.TrackSegments
 import com.pathly.ui.theme.TrackLineOrange
 import com.pathly.util.DateFormatters
 import java.util.Date
@@ -297,11 +298,16 @@ internal fun RouteMapContent(
   }
 
   if (displayPoints.size >= 2) {
-    Polyline(
-      points = displayPoints.map { LatLng(it.latitude, it.longitude) },
-      color = TrackLineOrange,
-      width = 6f,
-    )
+    // 途切れた区間はまたいで結ばない。繋ぐと「通っていない直線」を描いてしまう（→ adr/0022）。
+    TrackSegments.split(displayPoints).forEach { segment ->
+      if (segment.size >= 2) {
+        Polyline(
+          points = segment.map { LatLng(it.latitude, it.longitude) },
+          color = TrackLineOrange,
+          width = 6f,
+        )
+      }
+    }
 
     // 出発は緑の ▶ グリフ（色だけでなく形でも「開始」と分かる）。
     val startPoint = displayPoints.first()

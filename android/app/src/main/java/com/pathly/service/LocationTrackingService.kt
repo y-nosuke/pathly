@@ -25,6 +25,7 @@ import com.pathly.data.local.dao.GpsPointDao
 import com.pathly.data.local.dao.GpsTrackDao
 import com.pathly.data.local.entity.GpsPointEntity
 import com.pathly.data.local.entity.GpsTrackEntity
+import com.pathly.data.settings.LocationAccuracy
 import com.pathly.data.settings.SettingsRepository
 import com.pathly.domain.repository.GpsTrackRepository
 import com.pathly.domain.repository.PlaceRepository
@@ -316,8 +317,13 @@ class LocationTrackingService : Service() {
 
     // 設定された記録間隔（秒）を使う。バッチ許容で省電力化。
     val intervalMs = settingsRepository.currentGpsIntervalSeconds() * 1000L
+    // 精度も設定に従う。省電力（既定）は Wi-Fi・基地局中心、高精度は GNSS を積極的に使う。
+    val priority = when (settingsRepository.currentLocationAccuracy()) {
+      LocationAccuracy.BALANCED -> Priority.PRIORITY_BALANCED_POWER_ACCURACY
+      LocationAccuracy.HIGH -> Priority.PRIORITY_HIGH_ACCURACY
+    }
     val locationRequest = LocationRequest.Builder(
-      Priority.PRIORITY_BALANCED_POWER_ACCURACY,
+      priority,
       intervalMs,
     )
       .setMinUpdateIntervalMillis(intervalMs / 2)

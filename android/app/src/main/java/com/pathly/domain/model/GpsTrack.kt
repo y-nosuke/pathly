@@ -46,22 +46,26 @@ data class GpsTrack(
   private val computedSmoothedPoints: List<GpsPoint> by lazy { TrackSmoother.smooth(points) }
 
   /**
+   * 補正後の点列を、**途切れていない区間ごと**に分けたもの。地図の線も距離もこの単位で扱う。
+   *
+   * GPS が取れない時間帯（長いトンネル・アプリの更新や強制終了）の前後を 1 本に繋ぐと、
+   * 通っていない直線が描かれ距離にも乗ってしまうため（→ adr/0022）。
+   */
+  val smoothedSegments: List<List<GpsPoint>>
+    get() = TrackSegments.split(smoothedPoints)
+
+  /** 途切れ（欠落）を含む経路か。 */
+  val hasGap: Boolean
+    get() = smoothedSegments.size > 1
+
+  /**
    * 総移動距離（メートル）。確定済みなら保存値をそのまま使い、無ければ補正後の点列から計算する。
+   * **途切れた区間はまたがない**（記録が無い区間を移動したことにしない）。
    *
    * 保存値を優先するのが要点で、以前は一覧を描くたびに全経路を平滑化し直していた。
    * Flow が再発行するたびインスタンスが作り直されて [computedSmoothedPoints] の
    * lazy キャッシュも捨てられるため、記録中は10秒ごとに全履歴分を再計算していた。
    */
   val totalDistanceMeters: Double
-    get() = storedDistanceMeters ?: calculateDistance(smoothedPoints)
-
-  private fun calculateDistance(pts: List<GpsPoint>): Double {
-    if (pts.size < 2) return 0.0
-
-    var totalDistance = 0.0
-    for (i in 1 until pts.size) {
-      totalDistance += Geo.distanceMeters(pts[i - 1], pts[i])
-    }
-    return totalDistance
-  }
+    get() = storedDistanceMeters ?: smoothedSegments.sumOf { TrackSmoother.totalDistanceMeters(it) }
 }

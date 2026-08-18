@@ -33,11 +33,28 @@ object TrackSmoother {
   /** 平滑化の窓サイズ（奇数）。大きいほど滑らかになる。 */
   const val SMOOTHING_WINDOW = 5
 
-  /** 補正後の点列を返す。点が少ない場合はそのまま返す。 */
+  /**
+   * 補正後の点列を、**途切れていない区間ごと**に返す。
+   *
+   * 区間で分けてから平滑化するのが要点。分けずに窓を回すと、欠落をまたいだ平均が取られ、
+   * 何十kmも離れた点どうしが混ざって境目が大きくずれる（→ adr/0022）。
+   */
+  fun smoothSegments(points: List<GpsPoint>, params: SmoothingParams = SmoothingParams()): List<List<GpsPoint>> = TrackSegments.split(points).map { segment ->
+    if (segment.size < 3) {
+      segment
+    } else {
+      accuracyWeightedSmooth(removeJumps(segment, params.maxSpeedMps), params.window)
+    }
+  }
+
+  /**
+   * 補正後の点列を返す。点が少ない場合はそのまま返す。
+   * 途切れをまたがずに平滑化した結果を、1 本に繋げて返す（区間の境目が要るときは
+   * [smoothSegments] を使う）。
+   */
   fun smooth(points: List<GpsPoint>, params: SmoothingParams = SmoothingParams()): List<GpsPoint> {
     if (points.size < 3) return points
-    val filtered = removeJumps(points, params.maxSpeedMps)
-    return accuracyWeightedSmooth(filtered, params.window)
+    return smoothSegments(points, params).flatten()
   }
 
   private fun removeJumps(points: List<GpsPoint>, maxSpeedMps: Double): List<GpsPoint> {
@@ -80,7 +97,15 @@ object TrackSmoother {
     }
   }
 
-  /** 点列の総移動距離（メートル）。 */
+  /**
+   * 総移動距離（メートル）。**途切れた区間はまたがない**。
+   *
+   * またいで足すと、GPS が取れていなかった区間の直線距離が「移動した距離」として乗ってしまう。
+   * 実際にそこを通ったかどうかは記録が無いので分からない（→ adr/0022）。
+   */
+  fun distanceExcludingGaps(points: List<GpsPoint>): Double = TrackSegments.split(points).sumOf { totalDistanceMeters(it) }
+
+  /** 点列の総移動距離（メートル）。**途切れも繋いで足す**ので、通常は [distanceExcludingGaps] を使う。 */
   fun totalDistanceMeters(points: List<GpsPoint>): Double {
     if (points.size < 2) return 0.0
     var total = 0.0

@@ -193,7 +193,7 @@ class GpsTrackRepositoryImpl @Inject constructor(
 
     val smoothed = TrackSmoother.smooth(raw)
     // 確定時に総移動距離を焼き込む。一覧はこの値だけを読み、点をロードしない。
-    if (isFinal) gpsTrackDao.updateTotalDistance(trackId, TrackSmoother.totalDistanceMeters(smoothed))
+    if (isFinal) gpsTrackDao.updateTotalDistance(trackId, TrackSmoother.distanceExcludingGaps(smoothed))
     val half = SmoothingParams().window / 2
     val finalizedCount = if (isFinal) smoothed.size else (smoothed.size - half).coerceAtLeast(0)
 
@@ -228,7 +228,7 @@ class GpsTrackRepositoryImpl @Inject constructor(
       for (trackId in ids) {
         val smoothed = smoothedPointDao.getByTrack(trackId).map { it.toGpsPoint() }
           .ifEmpty { TrackSmoother.smooth(gpsPointDao.getPointsByTrackIdSync(trackId).map { it.toGpsPoint() }) }
-        gpsTrackDao.updateTotalDistance(trackId, TrackSmoother.totalDistanceMeters(smoothed))
+        gpsTrackDao.updateTotalDistance(trackId, TrackSmoother.distanceExcludingGaps(smoothed))
       }
       logger.i("Backfilled total distance for ${ids.size} tracks")
     } catch (e: Exception) {
