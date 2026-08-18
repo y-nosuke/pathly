@@ -29,8 +29,8 @@ internal fun TuningSheet(
   modifier: Modifier = Modifier,
 ) {
   val smoothed = remember(track, params) { TrackSmoother.smooth(track.points, params) }
-  val rawKm = (TrackSmoother.distanceExcludingGaps(track.points) / 1000.0 * 100).roundToInt() / 100.0
-  val smKm = (TrackSmoother.distanceExcludingGaps(smoothed) / 1000.0 * 100).roundToInt() / 100.0
+  val rawKm = (TrackSmoother.totalDistanceMeters(track.points) / 1000.0 * 100).roundToInt() / 100.0
+  val smKm = (TrackSmoother.totalDistanceMeters(smoothed) / 1000.0 * 100).roundToInt() / 100.0
   val rawTurn = TrackSmoother.totalTurningDegrees(track.points).roundToInt()
   val smTurn = TrackSmoother.totalTurningDegrees(smoothed).roundToInt()
 

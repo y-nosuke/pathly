@@ -98,14 +98,18 @@ object TrackSmoother {
   }
 
   /**
-   * 総移動距離（メートル）。**途切れた区間はまたがない**。
+   * **実際に記録できた区間だけ**を合計した距離（メートル）。取れなかった区間は含めない。
    *
-   * またいで足すと、GPS が取れていなかった区間の直線距離が「移動した距離」として乗ってしまう。
-   * 実際にそこを通ったかどうかは記録が無いので分からない（→ adr/0022）。
+   * 表示する総距離はこれに欠落の直線距離を足したもの（→ adr/0022）。内訳を見せるときに使う。
    */
   fun distanceExcludingGaps(points: List<GpsPoint>): Double = TrackSegments.split(points).sumOf { totalDistanceMeters(it) }
 
-  /** 点列の総移動距離（メートル）。**途切れも繋いで足す**ので、通常は [distanceExcludingGaps] を使う。 */
+  /**
+   * 点列の総移動距離（メートル）。**途切れも直線で結んで足す**。
+   *
+   * 2 点間の実際の移動距離は最短距離を必ず上回るので、これを足しても真の距離を超えることはなく、
+   * 記録できた分だけを足すより真の値に近づく（→ adr/0022）。
+   */
   fun totalDistanceMeters(points: List<GpsPoint>): Double {
     if (points.size < 2) return 0.0
     var total = 0.0

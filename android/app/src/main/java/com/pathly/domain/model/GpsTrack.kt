@@ -58,14 +58,30 @@ data class GpsTrack(
   val hasGap: Boolean
     get() = smoothedSegments.size > 1
 
+  /** 実際に記録できた区間だけを合計した距離（メートル）。 */
+  val measuredDistanceMeters: Double
+    get() = smoothedSegments.sumOf { TrackSmoother.totalDistanceMeters(it) }
+
+  /**
+   * 取れなかった区間を、両端の直線距離で補った分（メートル）。
+   *
+   * 2 点間の実際の移動距離は、その 2 点を結ぶ最短距離を**必ず上回る**。したがってこれを足しても
+   * 真の距離を超えることはなく、足すほど下から近づく（→ adr/0022）。
+   */
+  val bridgedDistanceMeters: Double
+    get() = smoothedSegments.zipWithNext { before, after ->
+      Geo.distanceMeters(before.last(), after.first())
+    }.sum()
+
   /**
    * 総移動距離（メートル）。確定済みなら保存値をそのまま使い、無ければ補正後の点列から計算する。
-   * **途切れた区間はまたがない**（記録が無い区間を移動したことにしない）。
+   * 記録できた分（[measuredDistanceMeters]）に、取れなかった区間の直線距離
+   * （[bridgedDistanceMeters]）を足したもの。
    *
    * 保存値を優先するのが要点で、以前は一覧を描くたびに全経路を平滑化し直していた。
    * Flow が再発行するたびインスタンスが作り直されて [computedSmoothedPoints] の
    * lazy キャッシュも捨てられるため、記録中は10秒ごとに全履歴分を再計算していた。
    */
   val totalDistanceMeters: Double
-    get() = storedDistanceMeters ?: smoothedSegments.sumOf { TrackSmoother.totalDistanceMeters(it) }
+    get() = storedDistanceMeters ?: (measuredDistanceMeters + bridgedDistanceMeters)
 }
