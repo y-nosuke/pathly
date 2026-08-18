@@ -67,6 +67,18 @@ class LocationTrackingService : Service() {
     @Volatile
     var isTracking: Boolean = false
       private set
+
+    private val _isFinalizing = MutableStateFlow(false)
+
+    /**
+     * 停止を受けてから確定（全点の再平滑化・立ち寄り検出）が終わるまで true。
+     *
+     * 画面はこの間ローディングを出してバックを塞ぎ、「保存が終わっていないのに終わったように
+     * 見える」状態を作らない（→ adr/0021）。プロセス内の状態なので [isTracking] と同じく、
+     * プロセスが終われば false に戻る。サービスは確定後すぐ畳まれるため、バインドではなく
+     * companion に置いて画面から途切れずに読めるようにしている。
+     */
+    val isFinalizing: StateFlow<Boolean> = _isFinalizing.asStateFlow()
   }
 
   @Inject
@@ -152,7 +164,14 @@ class LocationTrackingService : Service() {
         val trackId = intent.getLongExtra(EXTRA_TRACK_ID, -1L).takeIf { it > 0 }
         startLocationTracking(resumeTrackId = trackId)
       }
-      ACTION_STOP_TRACKING -> stopLocationTracking()
+      ACTION_STOP_TRACKING -> {
+        stopLocationTracking()
+        // 停止を受けたあとは OS にサービスを作り直させない。確定処理の途中でプロセスが死ぬと、
+        // START_STICKY の再起動が null intent で入り、restoreTrackingIfNeeded() が
+        // 「アクティブなトラックがある」と見て**記録を再開してしまう**（止めたはずの記録が
+        // 復活する）。最後の onStartCommand の戻り値が採用されるので、ここで打ち切る。
+        return START_NOT_STICKY
+      }
       // intent が null＝START_STICKY による再起動（OSにkillされた後など）。
       // アクティブなトラックがあれば記録を再開して自己回復する。
       null -> restoreTrackingIfNeeded()
@@ -212,6 +231,11 @@ class LocationTrackingService : Service() {
 
         is Command.Finish -> {
           currentTrackId?.let { trackId ->
+            // 確定（全点の再平滑化・立ち寄り検出）を終えてからトラックを閉じる。**この順序を守る。**
+            // 逆にすると、確定が途中で終わった経路が「きれいに終わった経路」として残り、
+            // 末尾の立ち寄りが欠けていることに気づけない（→ adr/0021）。
+            // 確定が終わらなければ isActive = 1 のまま残り、次の起動で「再開する／完了にする」
+            // として現れる＝失敗が隠れない。
             advance(trackId, isFinal = true)
             gpsTrackDao.finishTrack(trackId, Date())
           }
@@ -254,7 +278,10 @@ class LocationTrackingService : Service() {
 
   private fun stopLocationTracking() {
     isTracking = false
+    _isFinalizing.value = true
     stopLocationUpdates()
+    // 通知も「保存中」に変える。画面を離れていても、まだ終わっていないことが分かるように。
+    updateNotification("記録を保存しています...")
 
     // 確定処理はキューの**最後尾**に積む。まだ保存されていないバッチを追い越さないので、
     // 直前に届いた点まで含めて確定できる。
@@ -266,10 +293,17 @@ class LocationTrackingService : Service() {
     serviceScope.launch {
       done.await()
       withContext(Dispatchers.Main) {
+        _isFinalizing.value = false
         stopForeground(STOP_FOREGROUND_REMOVE)
         stopSelf()
       }
     }
+  }
+
+  /** 進行中の通知の文言だけ差し替える（前景サービスは維持したまま）。 */
+  private fun updateNotification(text: String) {
+    val manager = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
+    manager.notify(NOTIFICATION_ID, createNotification(text))
   }
 
   private fun startLocationUpdates() {
@@ -527,6 +561,8 @@ class LocationTrackingService : Service() {
   override fun onDestroy() {
     super.onDestroy()
     isTracking = false
+    // 確定の途中でサービスが畳まれた場合に、画面をローディングのまま取り残さない。
+    _isFinalizing.value = false
     stopLocationUpdates()
     commands.close()
     serviceScope.cancel()

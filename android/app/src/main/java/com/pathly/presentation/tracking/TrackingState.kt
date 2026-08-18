@@ -9,6 +9,8 @@ import com.pathly.presentation.places.PlaceDeleteUndo
 
 data class TrackingState(
   val isTracking: Boolean = false,
+  /** 停止を押してから保存（確定）が終わるまで。ローディングを出してバックを塞ぐ。 */
+  val isFinalizing: Boolean = false,
   val hasLocationPermission: Boolean = false,
   val currentTrackId: Long? = null,
   val errorMessage: String? = null,

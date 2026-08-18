@@ -318,6 +318,11 @@ class TrackDetailViewModel @Inject constructor(
     }
   }
 
+  /** 削除の通知を出し終えた（画面に戻るたび再表示しないよう消化する）。 */
+  fun consumeDeleteUndo() {
+    _deleteUndo.value = _deleteUndo.value.shown()
+  }
+
   /** 直近の削除を取り消して元に戻す（スナックバーの「取り消す」）。 */
   fun undoDelete() {
     viewModelScope.launch {

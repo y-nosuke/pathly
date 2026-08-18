@@ -88,6 +88,24 @@ ViewModel・UseCase を単体テストできる（[testing.md](./testing.md)）�
 (2) Android framework 依存で ViewModel のユニットテストがほぼ書けない、という 2 つの実害があったため。
 ViewModel は `TrackingController` が公開する Flow と suspend 関数だけを見る。
 
+### 記録の停止は確定を待たせ、待っていることを見せる
+
+停止を受けたら、確定処理（全点の再平滑化・立ち寄り検出）を終えて**から**トラックを閉じる
+（`isActive = 0`）。**この順序を守る。** 逆にすると、確定が途中で終わった経路が「きれいに
+終わった経路」として履歴に並び、末尾の立ち寄りが欠けていることに気づけない
+（→ [ADR-0021](../adr/0021-stop-recording-durably.md)）。
+
+確定にかかる時間は点数にほぼ比例するので、長い経路では数秒かかる。その間は
+`LocationTrackingService.isFinalizing` が true になり、画面はローディングで覆って
+バックを塞ぐ（`TrackingScreen`）。通知の文言も「記録を保存しています...」に変える。
+サービスは確定後すぐ畳まれるため、この状態はバインド越しではなく companion に置いて
+画面から途切れずに読めるようにしている。
+
+`ACTION_STOP_TRACKING` を受けた `onStartCommand` は **`START_NOT_STICKY`** を返す。
+停止の直後にプロセスが死んだとき、OS がサービスを作り直して `restoreTrackingIfNeeded()` が
+記録を再開してしまう（＝止めた記録が復活する）のを止める。記録中の異常終了からの
+自己回復（`START_STICKY`）は残す。
+
 ### バックグラウンドジョブは WorkManager
 
 「オフラインで記録した立ち寄りの名前解決」のように、**アプリが起動していなくても・通信が戻ってから
