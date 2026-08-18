@@ -24,6 +24,8 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.google.android.gms.maps.model.Dot
+import com.google.android.gms.maps.model.Gap
 import com.google.android.gms.maps.model.LatLng
 import com.google.maps.android.compose.GoogleMapComposable
 import com.google.maps.android.compose.MarkerState
@@ -147,6 +149,13 @@ internal fun MapPinMarker(bg: Color, @DrawableRes glyph: Int) {
     }
   }
 }
+
+/**
+ * 取れなかった区間を結ぶ点線の色と模様。軌跡（実線・濃いオレンジ）より薄く細くして、
+ * **実測ではない**ことを見た目で分ける。距離には含めない（→ adr/0022）。
+ */
+internal val TrackGapColor = Color(0x99FF7043)
+private val GapPattern = listOf(Dot(), Gap(12f))
 
 // 確定した立ち寄りの滞在区間ハイライト（濃い青の帯）。軌跡（オレンジ）の下に太く敷く。
 internal val StopSegmentColor = Color(0xF00D47A1)
@@ -298,13 +307,27 @@ internal fun RouteMapContent(
   }
 
   if (displayPoints.size >= 2) {
-    // 途切れた区間はまたいで結ばない。繋ぐと「通っていない直線」を描いてしまう（→ adr/0022）。
-    TrackSegments.split(displayPoints).forEach { segment ->
+    // 途切れた区間は実線で結ばない。繋ぐと「通っていない直線」を描いてしまう（→ adr/0022）。
+    // 代わりに、前後の位置関係が分かるよう点線で結ぶ（実測ではない、という見た目にする）。
+    val segments = TrackSegments.split(displayPoints)
+    segments.forEach { segment ->
       if (segment.size >= 2) {
         Polyline(
           points = segment.map { LatLng(it.latitude, it.longitude) },
           color = TrackLineOrange,
           width = 6f,
+        )
+      }
+    }
+    segments.zipWithNext { before, after ->
+      val from = before.lastOrNull()
+      val to = after.firstOrNull()
+      if (from != null && to != null) {
+        Polyline(
+          points = listOf(LatLng(from.latitude, from.longitude), LatLng(to.latitude, to.longitude)),
+          color = TrackGapColor,
+          width = 4f,
+          pattern = GapPattern,
         )
       }
     }
