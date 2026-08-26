@@ -5,6 +5,7 @@ import com.pathly.data.local.dao.GpsTrackDao
 import com.pathly.data.local.dao.SmoothedPointDao
 import com.pathly.data.local.dao.StopDao
 import com.pathly.data.local.entity.GpsPointEntity
+import com.pathly.data.local.entity.GpsTrackEntity
 import com.pathly.data.local.entity.SmoothedPointEntity
 import io.mockk.coEvery
 import io.mockk.coVerify
@@ -12,6 +13,8 @@ import io.mockk.mockk
 import io.mockk.slot
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.util.Date
 
@@ -157,5 +160,71 @@ class GpsTrackRepositoryImplSmoothingTest {
     repository.backfillMissingDistances()
 
     coVerify(exactly = 0) { gpsTrackDao.updateTotalDistance(any(), any()) }
+  }
+
+  // 保存済みの補正点（作り直しの判定に使う。平滑化は時刻を動かさないので欠落はここでも見える）。
+  private fun storedSmoothed(times: List<Long>) = times.mapIndexed { i, t ->
+    SmoothedPointEntity(
+      trackId = 1L,
+      seq = i,
+      latitude = 35.0 + i * 0.0001,
+      longitude = 139.0,
+      timestamp = Date(t),
+    )
+  }
+
+  @Test
+  fun resmooth_whenStoredPointsHaveGap_rebuildsThem() = runTest {
+    // 保存済みの補正点に10分の空白がある＝欠落をまたいで平均した頃のデータ（→ adr/0022）。
+    coEvery { gpsTrackDao.getFinishedTrackIds() } returns listOf(1L)
+    coEvery { smoothedPointDao.getByTrack(1L) } returns storedSmoothed(listOf(0L, 10_000L, 610_000L))
+    coEvery { gpsPointDao.getPointsByTrackIdSync(1L) } returns straightPoints(6)
+    coEvery { smoothedPointDao.countByTrack(1L) } returns 0
+    coEvery { gpsTrackDao.getActiveTrack() } returns null
+
+    assertTrue("やり切ったので二度目は要らない", repository.resmoothGappedTracks())
+
+    // 消してから入れ直すのではなく、原子的に差し替える（途中で死んでも0行で残らない）。
+    val rows = slot<List<SmoothedPointEntity>>()
+    coVerify { smoothedPointDao.replaceForTrack(1L, capture(rows)) }
+    assertEquals("末尾まで作り直す", 6, rows.captured.size)
+    assertEquals(listOf(0, 1, 2, 3, 4, 5), rows.captured.map { it.seq })
+    coVerify(exactly = 0) { smoothedPointDao.deleteByTrack(any()) }
+    // 距離も焼き直す（作り直した点列で測り直すため）。
+    coVerify { gpsTrackDao.updateTotalDistance(1L, any()) }
+  }
+
+  @Test
+  fun resmooth_whenNoGap_leavesStoredPointsAlone() = runTest {
+    coEvery { gpsTrackDao.getFinishedTrackIds() } returns listOf(1L)
+    coEvery { smoothedPointDao.getByTrack(1L) } returns storedSmoothed(listOf(0L, 10_000L, 20_000L))
+    coEvery { gpsTrackDao.getActiveTrack() } returns null
+
+    assertTrue(repository.resmoothGappedTracks())
+
+    coVerify(exactly = 0) { smoothedPointDao.replaceForTrack(any(), any()) }
+    coVerify(exactly = 0) { gpsTrackDao.updateTotalDistance(any(), any()) }
+  }
+
+  @Test
+  fun resmooth_whenRawPointsAreMissing_leavesStoredPointsAlone() = runTest {
+    // 保存済みと生点が食い違う壊れた状態。消して0行にする方が悪いので触らない。
+    coEvery { gpsTrackDao.getFinishedTrackIds() } returns listOf(1L)
+    coEvery { smoothedPointDao.getByTrack(1L) } returns storedSmoothed(listOf(0L, 610_000L))
+    coEvery { gpsPointDao.getPointsByTrackIdSync(1L) } returns emptyList()
+    coEvery { gpsTrackDao.getActiveTrack() } returns null
+
+    assertTrue(repository.resmoothGappedTracks())
+
+    coVerify(exactly = 0) { smoothedPointDao.replaceForTrack(any(), any()) }
+  }
+
+  @Test
+  fun resmooth_whileRecording_isNotDoneYet() = runTest {
+    // 記録中の経路には触らないので、やり切ったとは言えない（次の起動でやり直す）。
+    coEvery { gpsTrackDao.getFinishedTrackIds() } returns emptyList()
+    coEvery { gpsTrackDao.getActiveTrack() } returns GpsTrackEntity(id = 9L, startTime = Date(0L))
+
+    assertFalse(repository.resmoothGappedTracks())
   }
 }

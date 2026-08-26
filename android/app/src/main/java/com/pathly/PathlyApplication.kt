@@ -7,7 +7,9 @@ import androidx.work.Configuration
 import com.google.android.gms.maps.MapsInitializer
 import com.google.android.gms.maps.OnMapsSdkInitializedCallback
 import com.google.android.libraries.places.api.Places
+import com.pathly.data.settings.MaintenanceStore
 import com.pathly.data.work.PlaceNameCatchUpWorker
+import com.pathly.domain.model.TrackSmoother
 import com.pathly.domain.repository.GpsTrackRepository
 import com.pathly.util.Logger
 import dagger.hilt.android.HiltAndroidApp
@@ -30,6 +32,9 @@ class PathlyApplication :
 
   @Inject
   lateinit var gpsTrackRepository: GpsTrackRepository
+
+  @Inject
+  lateinit var maintenanceStore: MaintenanceStore
 
   @Inject
   lateinit var workerFactory: HiltWorkerFactory
@@ -57,8 +62,19 @@ class PathlyApplication :
     // ネットワーク接続を制約にしているので、いま繋がっていなくても復帰した時点で走る。
     PlaceNameCatchUpWorker.enqueue(this)
 
-    // v11 より前に記録した経路の総移動距離を埋める（対象が無ければ即終了する一度きりの処理）。
-    appScope.launch { gpsTrackRepository.backfillMissingDistances() }
+    // 保存済みのデータに対する一度きりの修復。距離を埋めてから補正点を作り直す順にする
+    // （作り直しは距離も焼き直すので、逆だと二度手間になる）。
+    appScope.launch {
+      // v11 より前に記録した経路の総移動距離を埋める（対象が無ければ即終了する）。
+      gpsTrackRepository.backfillMissingDistances()
+      // 欠落をまたいで平均された補正点を作り直す（→ adr/0022）。やり切れたときだけ世代を
+      // 進めるので、途中で落ちても記録中でも、次の起動でやり直される。
+      if (maintenanceStore.smoothingGeneration < TrackSmoother.GENERATION &&
+        gpsTrackRepository.resmoothGappedTracks()
+      ) {
+        maintenanceStore.smoothingGeneration = TrackSmoother.GENERATION
+      }
+    }
   }
 
   override fun onMapsSdkInitialized(renderer: MapsInitializer.Renderer) {

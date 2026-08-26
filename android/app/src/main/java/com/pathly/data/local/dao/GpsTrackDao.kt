@@ -36,6 +36,10 @@ interface GpsTrackDao {
   @Query("UPDATE gps_tracks SET totalDistanceMeters = :meters WHERE id = :trackId")
   suspend fun updateTotalDistance(trackId: Long, meters: Double)
 
+  /** 完了済み経路の ID（保存済みの補正点を作り直す対象。記録中の経路はサービスが書いているので含めない）。 */
+  @Query("SELECT id FROM gps_tracks WHERE isActive = 0")
+  suspend fun getFinishedTrackIds(): List<Long>
+
   /** 距離が未計算の完了済み経路（v11 以前に記録した分のバックフィル対象）。 */
   @Query("SELECT id FROM gps_tracks WHERE isActive = 0 AND totalDistanceMeters IS NULL")
   suspend fun getFinishedTrackIdsWithoutDistance(): List<Long>

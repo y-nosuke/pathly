@@ -10,6 +10,7 @@ import com.pathly.data.local.entity.SmoothedPointEntity
 import com.pathly.domain.model.GpsPoint
 import com.pathly.domain.model.GpsTrack
 import com.pathly.domain.model.SmoothingParams
+import com.pathly.domain.model.TrackSegments
 import com.pathly.domain.model.TrackSmoother
 import com.pathly.domain.repository.GpsTrackRepository
 import com.pathly.util.Logger
@@ -200,17 +201,7 @@ class GpsTrackRepositoryImpl @Inject constructor(
     val persisted = smoothedPointDao.countByTrack(trackId)
     if (finalizedCount <= persisted) return
 
-    val rows = (persisted until finalizedCount).map { i ->
-      val p = smoothed[i]
-      SmoothedPointEntity(
-        trackId = trackId,
-        seq = i,
-        latitude = p.latitude,
-        longitude = p.longitude,
-        timestamp = p.timestamp,
-        sourcePointId = p.id.takeIf { it != 0L },
-      )
-    }
+    val rows = (persisted until finalizedCount).map { i -> smoothedRow(trackId, i, smoothed[i]) }
     smoothedPointDao.insertAll(rows)
     logger.d("Persisted ${rows.size} smoothed points for track $trackId (total $finalizedCount)")
   }
@@ -235,6 +226,73 @@ class GpsTrackRepositoryImpl @Inject constructor(
       logger.e("backfillMissingDistances failed", e)
     }
   }
+
+  /**
+   * 欠落をまたいで平均された補正点を作り直す（→ adr/0022）。
+   *
+   * [persistSmoothed] は末尾に足すだけで既存の行を書き直さないので、区間ごとの平滑化を
+   * 入れる前に記録した経路は、欠落の向こう側の点と平均された座標を持ったままになる。
+   * 窓が5点なら欠落直前の点は向こう側へ 2/5 だけ引き寄せられる（160km の空白なら 64km）。
+   * 放っておくと、その架空の移動が地図に**実測の実線**として描かれ、距離の内訳でも
+   * 「記録できた分」に数えられる。作り直したい理由はここで、見た目の細かさではない。
+   *
+   * 立ち寄りは検出し直さない。手で足した・付け替えた・メモを書いたものを壊すため
+   * （やり直したいときは経路詳細の再解析から。→ adr/0012）。
+   *
+   * 「もう呼ばなくてよいか」の記録は呼び出し側（PathlyApplication）が持つ。途中でプロセスが
+   * 死んでも、経路ごとの差し替えは原子的で（[SmoothedPointDao.replaceForTrack]）、
+   * false のときは世代も進まないので、次の起動で最初からやり直せばよい
+   * （作り直しは何度やっても同じ結果になる）。
+   */
+  override suspend fun resmoothGappedTracks(): Boolean = try {
+    var repaired = 0
+    for (trackId in gpsTrackDao.getFinishedTrackIds()) {
+      smoothingMutex.withLock {
+        val stored = smoothedPointDao.getByTrack(trackId).map { it.toGpsPoint() }
+        // 平滑化は時刻を動かさないので、汚染された点列からでも欠落は見える。
+        if (stored.size >= 2 && TrackSegments.hasGap(stored)) {
+          rebuildSmoothed(trackId)
+          repaired++
+        }
+      }
+    }
+    logger.i("Re-smoothed $repaired tracks with gaps")
+    // 記録中の経路には触っていない。1本でも走っていたら、その分は次の起動に回す。
+    gpsTrackDao.getActiveTrack() == null
+  } catch (e: Exception) {
+    logger.e("resmoothGappedTracks failed", e)
+    false
+  }
+
+  /**
+   * 1本ぶんの補正点を生点から作り直す。呼び出しは [smoothingMutex] で直列化されている前提。
+   *
+   * **組み立ててから丸ごと差し替える**（消してから入れ直さない）。消した直後に死ぬと 0 行のまま
+   * 残り、次の起動では「欠落なし」と見えて作り直しの対象から外れてしまうため。
+   * 距離は差し替えの前に焼き直す。ここで死んでも行は古いまま＝また欠落ありと判定されるので、
+   * 次の起動でやり直して同じ値に落ち着く。
+   */
+  private suspend fun rebuildSmoothed(trackId: Long) {
+    val raw = gpsPointDao.getPointsByTrackIdSync(trackId).map { it.toGpsPoint() }
+    // 生点が足りない（保存済みと食い違う）ときは触らない。消して 0 行にする方が悪い。
+    if (raw.size < 2) return
+
+    val smoothed = TrackSmoother.smooth(raw)
+    gpsTrackDao.updateTotalDistance(trackId, TrackSmoother.totalDistanceMeters(smoothed))
+    smoothedPointDao.replaceForTrack(
+      trackId,
+      smoothed.mapIndexed { seq, point -> smoothedRow(trackId, seq, point) },
+    )
+  }
+
+  private fun smoothedRow(trackId: Long, seq: Int, point: GpsPoint): SmoothedPointEntity = SmoothedPointEntity(
+    trackId = trackId,
+    seq = seq,
+    latitude = point.latitude,
+    longitude = point.longitude,
+    timestamp = point.timestamp,
+    sourcePointId = point.id.takeIf { it != 0L },
+  )
 
   /**
    * ローカルデータベースの健全性チェック

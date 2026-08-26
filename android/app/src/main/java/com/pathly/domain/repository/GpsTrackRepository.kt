@@ -29,4 +29,10 @@ interface GpsTrackRepository {
    * 起動時に一度だけ走ればよい（対象が無ければ即 return）。
    */
   suspend fun backfillMissingDistances()
+
+  /**
+   * 欠落をまたいで平均された補正点を持つ完了済み経路を作り直す（→ adr/0022）。
+   * 起動時に一度だけ走ればよい。**やり切れたら true**（false なら次の起動でやり直す）。
+   */
+  suspend fun resmoothGappedTracks(): Boolean
 }
