@@ -50,13 +50,19 @@ data class GpsTrack(
    *
    * GPS が取れない時間帯（長いトンネル・アプリの更新や強制終了）の前後を 1 本に繋ぐと、
    * 通っていない直線が描かれ距離にも乗ってしまうため（→ adr/0022）。
+   *
+   * [computedSmoothedPoints] と同じく lazy にしてある。詳細画面は 1 回の描画で距離も内訳も
+   * 途切れの有無も引くので、その都度切り直すと全点ぶんのリストを作り直すことになる。
    */
-  val smoothedSegments: List<List<GpsPoint>>
-    get() = TrackSegments.split(smoothedPoints)
+  val smoothedSegments: List<List<GpsPoint>> by lazy { TrackSegments.split(smoothedPoints) }
+
+  /** 途切れた箇所の数（区間の数 - 1）。 */
+  val gapCount: Int
+    get() = (smoothedSegments.size - 1).coerceAtLeast(0)
 
   /** 途切れ（欠落）を含む経路か。 */
   val hasGap: Boolean
-    get() = smoothedSegments.size > 1
+    get() = gapCount > 0
 
   /** 実際に記録できた区間だけを合計した距離（メートル）。 */
   val measuredDistanceMeters: Double
@@ -66,7 +72,7 @@ data class GpsTrack(
    * 取れなかった区間を、両端の直線距離で補った分（メートル）。
    *
    * 2 点間の実際の移動距離は、その 2 点を結ぶ最短距離を**必ず上回る**。したがってこれを足しても
-   * 真の距離を超えることはなく、足すほど下から近づく（→ adr/0022）。
+   * 補完したぶんが過大になることはなく、足すほど下から近づく（→ adr/0022）。
    */
   val bridgedDistanceMeters: Double
     get() = smoothedSegments.zipWithNext { before, after ->

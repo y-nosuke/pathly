@@ -275,11 +275,16 @@ internal fun TrackSummaryHeader(
     )
 
     // 欠落を含む経路は、距離のうちどれだけが「取れなかった区間の直線」かを出す。
-    // 総距離には含めるが（下限値なので足すほど実際に近づく）、実測ではないことは見せる。
+    // 総距離には含めるが（補完ぶんは過大にならないので足す方が実際に近い）、実測ではないことは見せる。
+    // 同じ場所で再開したときは補完ぶんが 0.0km になるので、箇所数を主語にして「0.0km」を見せない。
     if (track.hasGap) {
       val bridgedKm = (track.bridgedDistanceMeters / 1000.0 * 100).roundToInt() / 100.0
       Text(
-        text = "うち ${bridgedKm}km は記録が途切れた区間（直線で補完・地図では点線）",
+        text = if (bridgedKm > 0.0) {
+          "記録が途切れた区間が${track.gapCount}箇所（距離のうち ${bridgedKm}km は直線で補完・地図では点線）"
+        } else {
+          "記録が途切れた区間が${track.gapCount}箇所（ほぼ同じ場所で再開・地図では点線）"
+        },
         style = MaterialTheme.typography.bodySmall,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
       )

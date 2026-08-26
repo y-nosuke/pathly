@@ -13,6 +13,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.shadow
@@ -317,7 +318,7 @@ internal fun RouteMapContent(
   if (displayPoints.size >= 2) {
     // 途切れた区間は実線で結ばない。繋ぐと「通っていない直線」を描いてしまう（→ adr/0022）。
     // 代わりに、前後の位置関係が分かるよう点線で結ぶ（実測ではない、という見た目にする）。
-    val segments = TrackSegments.split(displayPoints)
+    val segments = remember(displayPoints) { TrackSegments.split(displayPoints) }
     segments.forEach { segment ->
       if (segment.size >= 2) {
         Polyline(
