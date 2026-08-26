@@ -18,10 +18,26 @@ object StopDetector {
   /** 立ち寄りとみなす最小滞在時間。単位: ミリ秒（3分）。 */
   const val MIN_DURATION_MS = 3 * 60 * 1000L
 
+  /**
+   * 立ち寄りを検出する。**途切れた区間はまたがない**（→ adr/0022）。
+   *
+   * 滞在時間は2点の時刻の差で測るので、またぐと「取れていなかった時間」まで滞在に数えてしまう。
+   * アプリが止まっていた間に出掛けて同じ場所に戻ると、その往復がまるごと1回の長い滞在になる。
+   * 欠落の向こう側で何をしていたかは分からないのだから、区間ごとに検出して繋がない。
+   */
   fun detect(
     points: List<GpsPoint>,
     radiusMeters: Double = RADIUS_METERS,
     minDurationMs: Long = MIN_DURATION_MS,
+  ): List<DetectedStop> = TrackSegments.split(points).flatMap { segment ->
+    detectWithinSegment(segment, radiusMeters, minDurationMs)
+  }
+
+  /** 途切れていない1区間の中から検出する。 */
+  private fun detectWithinSegment(
+    points: List<GpsPoint>,
+    radiusMeters: Double,
+    minDurationMs: Long,
   ): List<DetectedStop> {
     if (points.size < 2) return emptyList()
 
