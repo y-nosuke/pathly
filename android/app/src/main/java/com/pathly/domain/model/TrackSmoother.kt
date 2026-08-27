@@ -34,6 +34,12 @@ object TrackSmoother {
   const val SMOOTHING_WINDOW = 5
 
   /**
+   * 平滑化アルゴリズムの世代。保存済みの補正点（smoothed_points）がどの世代で作られたかを
+   * 覚えておき、古ければ起動時に作り直す（→ adr/0022）。**作り直しが要る変更を入れたら上げる。**
+   */
+  const val GENERATION = 1
+
+  /**
    * 補正後の点列を、**途切れていない区間ごと**に返す。
    *
    * 区間で分けてから平滑化するのが要点。分けずに窓を回すと、欠落をまたいだ平均が取られ、
@@ -98,17 +104,11 @@ object TrackSmoother {
   }
 
   /**
-   * **実際に記録できた区間だけ**を合計した距離（メートル）。取れなかった区間は含めない。
-   *
-   * 表示する総距離はこれに欠落の直線距離を足したもの（→ adr/0022）。内訳を見せるときに使う。
-   */
-  fun distanceExcludingGaps(points: List<GpsPoint>): Double = TrackSegments.split(points).sumOf { totalDistanceMeters(it) }
-
-  /**
    * 点列の総移動距離（メートル）。**途切れも直線で結んで足す**。
    *
-   * 2 点間の実際の移動距離は最短距離を必ず上回るので、これを足しても真の距離を超えることはなく、
-   * 記録できた分だけを足すより真の値に近づく（→ adr/0022）。
+   * 2 点間の実際の移動距離は最短距離を必ず上回るので、**補完したぶんが過大になることはない**。
+   * 足さないより実際に近づく（記録できた区間ぶんはノイズで上振れし得るので、合計が常に
+   * 実際の下限になるわけではない → adr/0022）。
    */
   fun totalDistanceMeters(points: List<GpsPoint>): Double {
     if (points.size < 2) return 0.0

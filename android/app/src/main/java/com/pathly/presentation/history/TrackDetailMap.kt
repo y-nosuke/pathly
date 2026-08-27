@@ -40,8 +40,13 @@ import com.pathly.util.DateFormatters
 
 // 経路詳細の地図。軌跡・立ち寄り・候補・手動追加のハイライトを重ねて描く。
 
-/** 補正の調整モードで、比較用に重ねる生データの色。 */
-private val rawTrackColor = Color(0x66424242)
+/**
+ * 補正の調整モードで、比較用に重ねる生データの色。
+ *
+ * **灰色は使えない**（欠落を結ぶ破線が灰色で、意味が違う線が同じ色になるため → adr/0022）。
+ * 半透明の紫にして、補正後（橙）とも欠落（灰）とも分ける。
+ */
+private val rawTrackColor = Color(0x665E35B1)
 
 /** 手動追加のハイライト（選択した滞在区間）。軌跡（オレンジ）・立ち寄り（紫）と見分ける青。 */
 private val manualHighlightColor = Color(0xFF1E88E5)
@@ -115,10 +120,11 @@ internal fun TrackMapView(
     onPOIClick = onPoiClick,
     onMapClick = onMapClick,
   ) {
-    // 調整モードでは生データを灰色で重ねて見比べる
+    // 調整モードでは生データを紫で重ねて見比べる
     if (showRawOverlay && track.points.size >= 2) {
       // 生データも補正後と同じく、途切れた区間はまたがずに引く（見比べる前提が揃う）。
-      TrackSegments.split(track.points).forEach { segment ->
+      val rawSegments = remember(track.points) { TrackSegments.split(track.points) }
+      rawSegments.forEach { segment ->
         if (segment.size >= 2) {
           Polyline(
             points = segment.map { LatLng(it.latitude, it.longitude) },

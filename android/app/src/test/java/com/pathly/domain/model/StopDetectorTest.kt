@@ -76,4 +76,29 @@ class StopDetectorTest {
     )
     assertEquals(2, StopDetector.detect(points).size)
   }
+
+  @Test
+  fun detect_gapBetweenTwoPoints_isNotDwell() {
+    // 同じ場所の2点が10分空いている＝その間どこに居たかは分からない。滞在に数えない（→ adr/0022）。
+    val points = listOf(
+      point(0, 35.0000, 139.0000, 0),
+      point(1, 35.0001, 139.0000, 600),
+    )
+    assertTrue(StopDetector.detect(points).isEmpty())
+  }
+
+  @Test
+  fun detect_gapInsideCluster_doesNotMergeDwells() {
+    // 同じ場所で2分 → アプリが20分止まる → 戻ってきて2分。
+    // またいで数えると「24分の立ち寄り」になるが、どちらの滞在も3分に足りていない。
+    val points = listOf(
+      point(0, 35.0000, 139.0000, 0),
+      point(1, 35.0001, 139.0000, 60),
+      point(2, 35.0000, 139.0001, 120),
+      point(3, 35.0000, 139.0000, 1320),
+      point(4, 35.0001, 139.0000, 1380),
+      point(5, 35.0000, 139.0001, 1440),
+    )
+    assertTrue(StopDetector.detect(points).isEmpty())
+  }
 }

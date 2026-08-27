@@ -25,6 +25,16 @@ class TrackSegmentsTest {
     createdAt = Date(0L),
   )
 
+  private fun track(points: List<GpsPoint>): GpsTrack = GpsTrack(
+    id = 1L,
+    startTime = Date(0L),
+    endTime = null,
+    isActive = false,
+    points = points,
+    createdAt = Date(0L),
+    updatedAt = Date(0L),
+  )
+
   @Test
   fun `空なら区間も空`() {
     assertEquals(emptyList<List<GpsPoint>>(), TrackSegments.split(emptyList()))
@@ -68,38 +78,29 @@ class TrackSegmentsTest {
     // 同じ場所で3点 → 10分の空白 → 1km離れた場所で3点。
     val before = (0..2).map { point(it * 10L, lat = 35.0) }
     val after = (0..2).map { point(600L + it * 10L, lat = 35.01) }
-
-    val measured = TrackSmoother.distanceExcludingGaps(before + after)
-    val total = TrackSmoother.totalDistanceMeters(before + after)
+    val track = track(before + after)
 
     // 記録できた分はほぼ0（同じ場所に留まっているだけ）。
-    assertTrue("実測はほぼ0", measured < 1.0)
+    assertTrue("実測はほぼ0", track.measuredDistanceMeters < 1.0)
     // 空白の両端を直線で結んだ分（1km強）が総距離に乗る。実際の移動はこれ以上あったはずなので、
-    // 足しても過大にはならない。
-    assertTrue("補完込みなら空白ぶんが乗る", total > 1000.0)
+    // 補完したぶんが過大になることはない。
+    assertTrue("補完ぶんが1km強", track.bridgedDistanceMeters > 1000.0)
+    assertTrue("補完込みなら空白ぶんが乗る", track.totalDistanceMeters > 1000.0)
   }
 
   @Test
   fun `経路の距離は実測ぶんと補完ぶんの合計になる`() {
     val before = (0..2).map { point(it * 10L, lat = 35.0) }
     val after = (0..2).map { point(600L + it * 10L, lat = 35.01) }
-    val track = GpsTrack(
-      id = 1L,
-      startTime = Date(0L),
-      endTime = null,
-      isActive = false,
-      points = before + after,
-      createdAt = Date(0L),
-      updatedAt = Date(0L),
-    )
+    val track = track(before + after)
 
     assertTrue("欠落を含む経路と分かる", track.hasGap)
+    assertEquals("途切れは1箇所", 1, track.gapCount)
     assertEquals(
       track.totalDistanceMeters,
       track.measuredDistanceMeters + track.bridgedDistanceMeters,
       0.001,
     )
-    assertTrue("補完ぶんが1km強", track.bridgedDistanceMeters > 1000.0)
   }
 
   @Test
