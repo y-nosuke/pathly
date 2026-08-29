@@ -49,6 +49,13 @@ interface StopDao {
   @Query("UPDATE stops SET placeId = :placeId WHERE id = :stopId")
   suspend fun updatePlace(stopId: Long, placeId: Long)
 
+  /**
+   * ある場所を指す立ち寄りを**まとめて**別の場所へ付け替える（同じ施設と分かった place の統合）。
+   * 統合される側の place はこのあと消えるので、参照を先に移しておく（→ adr/0023）。
+   */
+  @Query("UPDATE stops SET placeId = :newPlaceId WHERE placeId = :oldPlaceId")
+  suspend fun repointPlace(oldPlaceId: Long, newPlaceId: Long)
+
   @Transaction
   @Query("SELECT * FROM stops WHERE trackId = :trackId ORDER BY arrivalTime ASC")
   fun getStopsWithPlaceByTrack(trackId: Long): Flow<List<StopWithPlace>>

@@ -64,8 +64,9 @@ POI タップで登録済みだったときに座標が動かないのはこの�
 
 1. アンカー座標の近傍（30m）に既存があれば再利用する。**DB だけで完結し Places は叩かない。**
 2. 無ければ新規作成して 1 回だけ解決し、`googlePlaceId` が判明した時点で**同じ ID を持つ place が
-   あればそちらへ統合**する（stops・wishlist・visited_places の参照を付け替えて、作ったばかりの
-   行を捨てる）。
+   あればそちらへ統合**する（`stops` の参照を寄せ先へ付け替えてから、作ったばかりの行を消す。
+   統合するのは下の条件を満たす place だけなので、付け替える wishlist・visited_places は無い）。
+   引くのは **`google_places` を upsert する前**。後だと自分自身が当たる。
 
 `googlePlaceId` は「検索前の鍵」ではなく「**解決後の統合キー**」。だから Places の呼び出しは
 place 1 件 1 回のままで増えない（→ [ADR-0014](../adr/0014-place-naming-cost-policy.md)）。
