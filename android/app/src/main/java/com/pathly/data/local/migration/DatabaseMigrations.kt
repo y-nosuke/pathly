@@ -483,6 +483,43 @@ object DatabaseMigrations {
   }
 
   /**
+   * バージョン14から15へのマイグレーション。
+   * Google 由来の座標を `google_places` に分離する（adr/0023）。
+   *
+   * `places` の座標は同定に使うアンカーなのに、自動命名が施設の座標で上書きしていた。
+   * 鍵が動くため、施設の代表点が重心から 30m 超離れると自分で作った place を見失い、
+   * 確保のたびに新しい place ができていた（同じ場所の大量重複）。
+   *
+   * 既存行の埋め戻しは `places` の座標から行う。上書き済みの行はそこに Google の座標が
+   * 入っており、**いま画面に出ている位置がそのまま表示座標になる**（見え方を変えない）。
+   * 元の観測座標は復元できないが、以後アンカーは動かないので同定は安定する。
+   *
+   * DDL は Room がエンティティから生成するものと一致させること（起動時のスキーマ検証を通すため）。
+   */
+  val MIGRATION_14_15 = object : Migration(14, 15) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+      try {
+        logger.i("Starting migration from version 14 to 15")
+
+        db.execSQL("ALTER TABLE `google_places` ADD COLUMN `latitude` REAL")
+        db.execSQL("ALTER TABLE `google_places` ADD COLUMN `longitude` REAL")
+
+        // 表示位置を変えないため、いまの places の座標を表示座標として引き継ぐ。
+        db.execSQL(
+          "UPDATE `google_places` SET " +
+            "`latitude` = (SELECT `latitude` FROM `places` WHERE `places`.`id` = `google_places`.`placeId`), " +
+            "`longitude` = (SELECT `longitude` FROM `places` WHERE `places`.`id` = `google_places`.`placeId`)",
+        )
+
+        logger.i("Migration from version 14 to 15 completed successfully")
+      } catch (e: Exception) {
+        logger.e("Migration from version 14 to 15 failed", e)
+        throw e
+      }
+    }
+  }
+
+  /**
    * 現在利用可能な全てのマイグレーション
    */
   val ALL_MIGRATIONS = arrayOf(
@@ -499,6 +536,7 @@ object DatabaseMigrations {
     MIGRATION_11_12,
     MIGRATION_12_13,
     MIGRATION_13_14,
+    MIGRATION_14_15,
     // 将来のマイグレーションをここに追加
   )
 

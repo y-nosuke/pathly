@@ -308,6 +308,48 @@ class MigrationTest {
     db.close()
   }
 
+  @Test
+  fun migrate14To15_movesGoogleCoordinateOutOfPlaces() {
+    // v14 のスキーマで、施設に紐付いた場所（座標は既に施設のものへ上書き済み）と、
+    // 紐付いていない場所を用意する。
+    helper.createDatabase(TEST_DB, 14).apply {
+      execSQL(
+        "INSERT INTO places (id, name, latitude, longitude, note, source, createdAt, updatedAt) " +
+          "VALUES (1, NULL, 35.7, 139.7, NULL, 'DETECTED', 0, 0), " +
+          "(2, '名前だけの場所', 35.1, 139.1, NULL, 'USER', 0, 0)",
+      )
+      execSQL(
+        "INSERT INTO google_places (placeId, googlePlaceId, name, address, categoryId) " +
+          "VALUES (1, 'gp-1', '清瀧神社', '千葉県浦安市…', NULL)",
+      )
+      close()
+    }
+
+    // 14→15 を適用。追加した列の DDL が Room の生成物とずれていればここで失敗する。
+    val db = helper.runMigrationsAndValidate(
+      TEST_DB,
+      15,
+      true,
+      DatabaseMigrations.MIGRATION_14_15,
+    )
+
+    // 表示位置を変えないため、いまの places の座標を google_places へ引き継ぐ。
+    db.query("SELECT latitude, longitude FROM google_places WHERE placeId = 1").use { cursor ->
+      assertTrue(cursor.moveToFirst())
+      assertEquals(35.7, cursor.getDouble(0), 1e-9)
+      assertEquals(139.7, cursor.getDouble(1), 1e-9)
+    }
+
+    // places の座標（同定のアンカー）はそのまま。紐付いていない場所にも影響しない。
+    db.query("SELECT latitude FROM places ORDER BY id").use { cursor ->
+      assertTrue(cursor.moveToFirst())
+      assertEquals(35.7, cursor.getDouble(0), 1e-9)
+      assertTrue(cursor.moveToNext())
+      assertEquals(35.1, cursor.getDouble(0), 1e-9)
+    }
+    db.close()
+  }
+
   companion object {
     private const val TEST_DB = "migration-test"
   }

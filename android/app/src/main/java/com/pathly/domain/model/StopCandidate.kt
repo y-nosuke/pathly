@@ -12,4 +12,10 @@ data class StopCandidate(
   val address: String? = null,
   val category: PlaceCategory? = null,
   val googlePlaceId: String? = null,
+  /**
+   * Google が持つ施設の代表点（表示用）。追加時に google_places へ焼き込む。
+   * 場所の同定に使うアンカーは [detected] の重心なので、こちらは同定には使わない（→ adr/0023）。
+   */
+  val googleLatitude: Double? = null,
+  val googleLongitude: Double? = null,
 )

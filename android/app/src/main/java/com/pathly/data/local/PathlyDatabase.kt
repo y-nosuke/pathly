@@ -43,7 +43,7 @@ import com.pathly.util.Logger
     WishlistEntity::class,
     VisitedPlaceEntity::class,
   ],
-  version = 14,
+  version = 15,
   exportSchema = true,
 )
 @TypeConverters(DateConverter::class)

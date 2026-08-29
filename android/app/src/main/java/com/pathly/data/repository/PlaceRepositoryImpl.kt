@@ -147,12 +147,28 @@ class PlaceRepositoryImpl @Inject constructor(
       if (distanceMeters(place.latitude, place.longitude, d.latitude, d.longitude) > DEDUPE_RADIUS_METERS) continue
       val name = place.name ?: place.googleName
       if (name != null) {
-        return StopCandidate(d, name, place.googleAddress, place.category, place.googlePlaceId)
+        return StopCandidate(
+          d,
+          name,
+          place.googleAddress,
+          place.category,
+          place.googlePlaceId,
+          place.googleLatitude,
+          place.googleLongitude,
+        )
       }
     }
     return when (val outcome = placesNameResolver.resolve(d.latitude, d.longitude)) {
       is PlacesNameResolver.Outcome.Found ->
-        StopCandidate(d, outcome.name, outcome.address, outcome.category, outcome.googlePlaceId)
+        StopCandidate(
+          d,
+          outcome.name,
+          outcome.address,
+          outcome.category,
+          outcome.googlePlaceId,
+          outcome.latitude,
+          outcome.longitude,
+        )
       PlacesNameResolver.Outcome.NoMatch, PlacesNameResolver.Outcome.NotAttempted -> StopCandidate(d)
     }
   }
@@ -181,6 +197,8 @@ class PlaceRepositoryImpl @Inject constructor(
               candidate.name,
               candidate.address,
               categoryIdOf(candidate.category),
+              candidate.googleLatitude,
+              candidate.googleLongitude,
             ),
           )
         }
@@ -274,7 +292,15 @@ class PlaceRepositoryImpl @Inject constructor(
         val pid = findOrCreateByGooglePlaceId(chosen.googlePlaceId, chosen.latitude, chosen.longitude, PlaceSource.USER).first
         if (googlePlaceDao.getByPlace(pid) == null) {
           googlePlaceDao.upsert(
-            GooglePlaceEntity(pid, chosen.googlePlaceId, chosen.name, chosen.address, categoryIdOf(chosen.category)),
+            GooglePlaceEntity(
+              pid,
+              chosen.googlePlaceId,
+              chosen.name,
+              chosen.address,
+              categoryIdOf(chosen.category),
+              chosen.latitude,
+              chosen.longitude,
+            ),
           )
         }
         if (placeResolutionDao.getByPlace(pid) == null) placeResolutionDao.upsert(PlaceResolutionEntity(pid, Date()))
@@ -487,6 +513,8 @@ class PlaceRepositoryImpl @Inject constructor(
   private suspend fun resolvePlace(place: PlaceEntity) {
     when (val outcome = placesNameResolver.resolve(place.latitude, place.longitude)) {
       is PlacesNameResolver.Outcome.Found -> {
+        // 施設の座標は google_places に入れる（表示用）。places の座標＝同定のアンカーは
+        // 触らない。ここで動かすと自分で作った place を次の確保で見失う（→ adr/0023）。
         googlePlaceDao.upsert(
           GooglePlaceEntity(
             place.id,
@@ -494,13 +522,11 @@ class PlaceRepositoryImpl @Inject constructor(
             outcome.name,
             outcome.address,
             categoryIdOf(outcome.category),
+            outcome.latitude,
+            outcome.longitude,
           ),
         )
         placeResolutionDao.upsert(PlaceResolutionEntity(place.id, Date()))
-        // 暫定の GPS 座標を、解決した施設の正確な座標へ置き換える（取れたときだけ）。
-        if (outcome.latitude != null && outcome.longitude != null) {
-          placeDao.updateCoordinates(place.id, outcome.latitude, outcome.longitude, Date())
-        }
       }
 
       PlacesNameResolver.Outcome.NoMatch ->
@@ -558,8 +584,10 @@ class PlaceRepositoryImpl @Inject constructor(
   private fun PlaceEntity.toPlace(google: GooglePlaceWithCategory?): Place = Place(
     id = id,
     name = name,
-    latitude = latitude,
-    longitude = longitude,
+    // ドメインの Place が持つのは**表示座標**（Google の代表点 → 無ければアンカー）。
+    // 同定に使うアンカーは PlaceEntity 側にだけ置く（→ adr/0023）。
+    latitude = google?.google?.latitude ?: latitude,
+    longitude = google?.google?.longitude ?: longitude,
     note = note,
     googleName = google?.google?.name,
     googleAddress = google?.google?.address,

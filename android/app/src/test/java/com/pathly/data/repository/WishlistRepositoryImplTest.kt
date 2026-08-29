@@ -125,7 +125,10 @@ class WishlistRepositoryImplTest {
             it.googlePlaceId == "gp-42" &&
             it.name == "清瀧神社" &&
             it.address == "千葉県浦安市…" &&
-            it.categoryId == 5L
+            it.categoryId == 5L &&
+            // 施設の座標は google_places 側に入る（表示用）。
+            it.latitude == 35.65 &&
+            it.longitude == 139.9
         },
       )
     }
@@ -133,8 +136,6 @@ class WishlistRepositoryImplTest {
     coVerify { googlePlaceCategoryDao.upsertAndGetId("shinto_shrine", "神社") }
     // 解決記録を残す（以後 Nearby を叩かない）。
     coVerify { placeResolutionDao.upsert(match { it.placeId == 7L }) }
-    // 暫定座標を施設の正確な座標へ置き換える。
-    coVerify { placeDao.updateCoordinates(7L, 35.65, 139.9, any()) }
   }
 
   @Test
