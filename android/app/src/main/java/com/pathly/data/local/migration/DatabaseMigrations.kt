@@ -511,12 +511,70 @@ object DatabaseMigrations {
             "`longitude` = (SELECT `longitude` FROM `places` WHERE `places`.`id` = `google_places`.`placeId`)",
         )
 
+        mergeDuplicatePlaces(db)
+
         logger.i("Migration from version 14 to 15 completed successfully")
       } catch (e: Exception) {
         logger.e("Migration from version 14 to 15 failed", e)
         throw e
       }
     }
+  }
+
+  /**
+   * 既にできてしまった重複を、施設の同一性（`googlePlaceId`）で 1 件にまとめる（adr/0023）。
+   *
+   * 寄せてよいのは**まだ誰も触っていない検出由来**だけ（コード側の統合と同じ条件）。
+   * 自分で名前・メモを入れた place、行きたい・訪問済みの印が付いた place、`USER` 由来は残す。
+   * **触られた place が 2 つ以上ある施設は、どれが正か決められないので何もしない。**
+   *
+   * 生き残りは「触られた 1 件」があればそれ、無ければ最も古い（id が最小の）行。
+   * 立ち寄りの参照を寄せ先へ移してから、余った行を消す。
+   *
+   * **子テーブルは CASCADE に頼らず明示的に消す。** `PRAGMA foreign_keys` はトランザクション内では
+   * 黙って無視されるため、外部キーが効いていない状態でこの migration が走ると
+   * `google_places` / `place_resolutions` が孤児として残る（実際に SQLite で再現した）。
+   */
+  private fun mergeDuplicatePlaces(db: SupportSQLiteDatabase) {
+    // 施設ごとの place と「触られているか」を作業表に出す。
+    db.execSQL(
+      "CREATE TEMPORARY TABLE `place_identity` AS " +
+        "SELECT p.`id` AS `placeId`, g.`googlePlaceId` AS `gid`, " +
+        "CASE WHEN p.`source` <> 'DETECTED' OR p.`name` IS NOT NULL OR p.`note` IS NOT NULL " +
+        "OR EXISTS (SELECT 1 FROM `wishlist` w WHERE w.`placeId` = p.`id`) " +
+        "OR EXISTS (SELECT 1 FROM `visited_places` v WHERE v.`placeId` = p.`id`) " +
+        "THEN 1 ELSE 0 END AS `touched` " +
+        "FROM `places` p INNER JOIN `google_places` g ON g.`placeId` = p.`id`",
+    )
+    // 重複していて、かつ触られた place が高々1つの施設だけを対象にする。
+    db.execSQL(
+      "CREATE TEMPORARY TABLE `place_survivor` AS " +
+        "SELECT i.`gid` AS `gid`, COALESCE(" +
+        "(SELECT i2.`placeId` FROM `place_identity` i2 WHERE i2.`gid` = i.`gid` AND i2.`touched` = 1), " +
+        "(SELECT MIN(i3.`placeId`) FROM `place_identity` i3 WHERE i3.`gid` = i.`gid`)" +
+        ") AS `survivorId` " +
+        "FROM `place_identity` i GROUP BY i.`gid` " +
+        "HAVING COUNT(*) > 1 AND SUM(i.`touched`) <= 1",
+    )
+
+    val losers = "SELECT i.`placeId` FROM `place_identity` i " +
+      "INNER JOIN `place_survivor` s ON s.`gid` = i.`gid` " +
+      "WHERE i.`touched` = 0 AND i.`placeId` <> s.`survivorId`"
+
+    // 参照を寄せ先へ移してから消す（順序を守る）。
+    db.execSQL(
+      "UPDATE `stops` SET `placeId` = (" +
+        "SELECT s.`survivorId` FROM `place_survivor` s " +
+        "INNER JOIN `place_identity` i ON i.`gid` = s.`gid` " +
+        "WHERE i.`placeId` = `stops`.`placeId`) " +
+        "WHERE `placeId` IN ($losers)",
+    )
+    db.execSQL("DELETE FROM `google_places` WHERE `placeId` IN ($losers)")
+    db.execSQL("DELETE FROM `place_resolutions` WHERE `placeId` IN ($losers)")
+    db.execSQL("DELETE FROM `places` WHERE `id` IN ($losers)")
+
+    db.execSQL("DROP TABLE `place_identity`")
+    db.execSQL("DROP TABLE `place_survivor`")
   }
 
   /**
