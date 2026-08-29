@@ -50,6 +50,17 @@ Google 由来データを別テーブルにした判断は [ADR-0001](../adr/000
 `findOrCreateByGooglePlaceId` は**既存が見つかったら座標も含め何も書き換えずに返す**。
 POI タップで登録済みだったときに座標が動かないのはこのため（→ [ADR-0011](../adr/0011-place-coordinate-source.md)）。
 
+> **既知の不具合（→ [ADR-0023](../adr/0023-place-identity-and-coordinate-anchor.md)・未実装）**
+>
+> 座標同定は `places` の座標を鍵にしているのに、自動命名がその座標を施設の座標へ**上書きする**
+> （下記「命名」）。施設の代表点が重心から 30m を超えて離れると、その place は自分を作った重心から
+> **二度と見つからなくなり**、確保のたびに新しい place ができる。記録中は位置バッチごとに
+> `findOrCreatePlace` を呼ぶため、条件がそろうと 1 回の滞在で数百件に増える。
+>
+> 直す方向は ADR-0023 のとおり: `places` の座標を**アンカー（作成時に確定・以後不変）**にし、
+> Google の座標は `google_places` に持たせる。同定はアンカー →（解決後に）`googlePlaceId` の
+> 2 段にし、滞在中の place 確保は 1 回にする。
+
 ## 由来（source）と自動回収
 
 `places.source`（`DETECTED` / `USER`）を持つ（→ [ADR-0005](../adr/0005-place-source-and-lifecycle.md)）。
@@ -94,6 +105,13 @@ API キー（地図と共用）を**そのまま安全に**使えるため。
 
 解決できたら place の座標を**施設の座標へ置き換える**。手動の紐付け（`linkPlaceToGoogle`）も同様に
 `google_places`・`place_resolutions` を上書きし座標を採用する（`places.name` は触らない）。
+
+> **この上書きが重複登録の原因**（→ [ADR-0023](../adr/0023-place-identity-and-coordinate-anchor.md)・未実装）。
+> 名前は v7 で「ユーザーの名前は `places`・Google の名前は `google_places`」に分離したのに
+> （→ [ADR-0001](../adr/0001-place-data-separation.md)）、**座標だけがその分離から取り残されている**。
+> 実装後は `places` の座標を書き換えず `google_places` 側に座標を持たせ、表示は
+> `COALESCE(google_places.latitude, places.latitude)` で解決する。表示が施設の座標になる
+> （→ [ADR-0011](../adr/0011-place-coordinate-source.md)）点は変わらない。
 
 ## 表示名の解決
 
