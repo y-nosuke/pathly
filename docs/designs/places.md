@@ -25,6 +25,9 @@ Google 由来データを別テーブルにした判断は [ADR-0001](../adr/000
   （→ [ADR-0017](../adr/0017-normalize-place-category.md)）。正は機械可読な `code`（Places の
   `primaryType`＝`cafe`）で、`displayName`（「カフェ」）は表示専用。**判定に表示名を使わない**
   （ロケールで変わる）。行は事前にシードせず、応答で出会った業種だけ都度 upsert して育てる。
+- **座標の入れ物も 2 つあり、混ぜない**（名前と同じ形 → [ADR-0023](../adr/0023-place-identity-and-coordinate-anchor.md)）。
+  `places` の座標は**アンカー**（非 null・作成時に確定・以後不変）で**同定にだけ**使う。
+  `google_places` の座標（nullable。Places が `LOCATION` を返さないことがある）は**表示にだけ**使う。
 - 近傍検索が全表走査にならないよう `places(latitude, longitude)` に索引を張る。記録中は位置のバッチごとに
   引かれるため、場所が増えるほど効く。
 
@@ -41,25 +44,41 @@ Google 由来データを別テーブルにした判断は [ADR-0001](../adr/000
 
 ## 同定（重複させない）
 
+同定に使う座標は**アンカー**（`places.latitude/longitude`）。行を作る瞬間に決まり、
+**自動処理では二度と書き換えない**（→ [ADR-0023](../adr/0023-place-identity-and-coordinate-anchor.md)）。
+Google の座標は `google_places` 側に持ち、アンカーには入れない。**同定の鍵を動かさない**のが要点で、
+動かすと「自分で作った place を次の確保で見つけられず、無限に増える」。
+
 | 入力                     | 使う手                                                                                                                                                                                |
 | ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `googlePlaceId` が分かる | `findOrCreateByGooglePlaceId` … `google_places` の `googlePlaceId → placeId` を引く。無ければ **Google の座標で**新規（→ [ADR-0006](../adr/0006-place-identity-by-googleplaceid.md)） |
-| 座標しか無い             | `findOrCreatePlace` … 同一場所とみなす距離の中の既存を再利用                                                                                                                          |
+| 座標しか無い             | `findOrCreatePlace` … 同一場所とみなす距離（30m）の中の既存を再利用                                                                                                                   |
 | 近接確認で「新規」       | `forceNewPlace = true` で座標同定をバイパス                                                                                                                                           |
 
 `findOrCreateByGooglePlaceId` は**既存が見つかったら座標も含め何も書き換えずに返す**。
 POI タップで登録済みだったときに座標が動かないのはこのため（→ [ADR-0011](../adr/0011-place-coordinate-source.md)）。
 
-> **既知の不具合（→ [ADR-0023](../adr/0023-place-identity-and-coordinate-anchor.md)・未実装）**
->
-> 座標同定は `places` の座標を鍵にしているのに、自動命名がその座標を施設の座標へ**上書きする**
-> （下記「命名」）。施設の代表点が重心から 30m を超えて離れると、その place は自分を作った重心から
-> **二度と見つからなくなり**、確保のたびに新しい place ができる。記録中は位置バッチごとに
-> `findOrCreatePlace` を呼ぶため、条件がそろうと 1 回の滞在で数百件に増える。
->
-> 直す方向は ADR-0023 のとおり: `places` の座標を**アンカー（作成時に確定・以後不変）**にし、
-> Google の座標は `google_places` に持たせる。同定はアンカー →（解決後に）`googlePlaceId` の
-> 2 段にし、滞在中の place 確保は 1 回にする。
+### 自動検出の同定は 2 段
+
+検出は座標しか持っていないので、**アンカーで探す → 解決して ID が分かったら寄せる**の順で同定する。
+
+1. アンカー座標の近傍（30m）に既存があれば再利用する。**DB だけで完結し Places は叩かない。**
+2. 無ければ新規作成して 1 回だけ解決し、`googlePlaceId` が判明した時点で**同じ ID を持つ place が
+   あればそちらへ統合**する（stops・wishlist・visited_places の参照を付け替えて、作ったばかりの
+   行を捨てる）。
+
+`googlePlaceId` は「検索前の鍵」ではなく「**解決後の統合キー**」。だから Places の呼び出しは
+place 1 件 1 回のままで増えない（→ [ADR-0014](../adr/0014-place-naming-cost-policy.md)）。
+
+**自動統合してよいのは、まだ誰も触っていない `DETECTED` の place だけ。** 自分で付けた名前・メモ・
+行きたい・訪問済みの印が付いた place と `USER` 由来は、ID が同じでも自動では吸収しない。
+自動命名は半径 50m の最寄り 1 件しか見ないので**別の場所が同じ施設に解決されることがあり**、
+融合してしまうと分け直せないため。
+
+滞在中に place を確保するのは**ひとつの滞在につき 1 回**（[stops.md](stops.md)）。
+
+`google_places.googlePlaceId` の一意制約は、既存データの統合と衝突方針（`REPLACE` をやめる）が
+決まってから入れる。それまでは統合ロジックで守る。
 
 ## 由来（source）と自動回収
 
@@ -103,15 +122,10 @@ API キー（地図と共用）を**そのまま安全に**使えるため。
 未解決のまま残った place は `data/work/PlaceNameCatchUpWorker`（WorkManager・**ネットワーク接続を制約**）が
 まとめて拾う。起動時に予約するだけなので、いま圏外でも通信が戻った時点で OS が走らせる。
 
-解決できたら place の座標を**施設の座標へ置き換える**。手動の紐付け（`linkPlaceToGoogle`）も同様に
-`google_places`・`place_resolutions` を上書きし座標を採用する（`places.name` は触らない）。
-
-> **この上書きが重複登録の原因**（→ [ADR-0023](../adr/0023-place-identity-and-coordinate-anchor.md)・未実装）。
-> 名前は v7 で「ユーザーの名前は `places`・Google の名前は `google_places`」に分離したのに
-> （→ [ADR-0001](../adr/0001-place-data-separation.md)）、**座標だけがその分離から取り残されている**。
-> 実装後は `places` の座標を書き換えず `google_places` 側に座標を持たせ、表示は
-> `COALESCE(google_places.latitude, places.latitude)` で解決する。表示が施設の座標になる
-> （→ [ADR-0011](../adr/0011-place-coordinate-source.md)）点は変わらない。
+解決できたら、施設の名前・住所・カテゴリ・**座標**を `google_places` に書く。手動の紐付け
+（`linkPlaceToGoogle`）も同じ列を上書きする。**どちらも `places` は触らない**（名前も座標も）。
+名前で先にやった分離（→ [ADR-0001](../adr/0001-place-data-separation.md)）を座標にも及ぼしたもので、
+ユーザー／観測の値は `places`、Google の値は `google_places` に揃う。
 
 ## 表示名の解決
 
@@ -124,6 +138,20 @@ API キー（地図と共用）を**そのまま安全に**使えるため。
 - 計算は 1 か所（表示名ヘルパ）に集約し、各射影から使う。
 - 地図のマーカー用には最小情報だけ返す射影を別に持つ（`observeRegisteredPlaces`・`NamedPlaceRow`）。
   以前は「全 place を読む → 近いものを探す → place ごとに `google_places` を引く」で N+1 になっていた。
+
+## 表示座標の解決
+
+名前と同じく**フォールバックを揃える**。`COALESCE(google_places.latitude, places.latitude)`
+（経度も同様）で、施設に紐付いていれば施設の代表点、無ければアンカーに落ちる。
+表示は施設の座標を正とする（→ [ADR-0011](../adr/0011-place-coordinate-source.md)）ので、
+見え方は座標を分離する前と変わらない。
+
+**同定はアンカー、見た目は表示座標**と役目で使い分ける。地図のピン・マーカー・地図タップの
+近接確認（「この近くに登録済みがあります」）は、人が画面で見ている距離の話なので**表示座標**で判定する。
+`findOrCreatePlace` の 30m 同定だけがアンカーを見る。
+
+アンカーは「その place の**現在地**」ではなく「**最初にそこで確保した**」という履歴的な値。
+別の施設に選び直してもアンカーは元の位置に残るが、ID を持つ place の同定は ID が優先するので影響しない。
 
 ## Google マップで開く
 
