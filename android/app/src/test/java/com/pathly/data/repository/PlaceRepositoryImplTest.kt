@@ -195,6 +195,9 @@ class PlaceRepositoryImplTest {
     }
     coEvery { placeResolutionDao.upsert(any()) } answers { resolved += firstArg<PlaceResolutionEntity>().placeId }
     coEvery { googlePlaceDao.getWithCategoryByPlace(any()) } returns null
+    // この施設を持つ place はまだ無い＝統合は起きない。relaxed のままだと 0L が返り、
+    // 「既に同じ施設の place がある」と誤判定される（→ 統合されて upsert が走らない）。
+    coEvery { googlePlaceDao.getPlaceIdByGoogleId(any()) } returns null
     coEvery { placeDao.getUnresolvedPlacesForTrack(1L) } returns emptyList()
     coEvery { stopDao.getByTrack(1L) } returns emptyList()
     coEvery { smoothedPointDao.getByTrackAfter(1L, any()) } returns dwellingPoints()
