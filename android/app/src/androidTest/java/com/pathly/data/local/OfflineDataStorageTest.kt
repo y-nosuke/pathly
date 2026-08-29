@@ -229,7 +229,7 @@ class OfflineDataStorageTest {
 
     // Then: 現在のスキーマバージョンと一致（マイグレーション追加時はここも更新。
     // マイグレーションの内容検証は MigrationTest が担う）。
-    assertEquals("Database version should match current schema", 12, currentVersion)
+    assertEquals("Database version should match current schema", 15, currentVersion)
   }
 
   @Test
