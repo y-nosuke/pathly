@@ -485,6 +485,8 @@ fun TrackingScreen(
         longitude = target.longitude,
         points = uiState.currentTrack?.smoothedPoints.orEmpty(),
         onFetchCandidates = viewModel::nearbyPois,
+        onSearchPredictions = viewModel::predictPlaces,
+        onFetchPrediction = viewModel::fetchPlaceResult,
         onConfirm = { input ->
           val origin = target.origin
           if (origin is ManualStopOrigin.ExistingPlace) {
@@ -555,6 +557,8 @@ fun TrackingScreen(
     StopReassignDialog(
       stop = stop,
       onFetchCandidates = viewModel::nearbyPois,
+      onSearchPredictions = viewModel::predictPlaces,
+      onFetchPrediction = viewModel::fetchPlaceResult,
       onConfirm = { chosen, customName ->
         viewModel.reassignStop(stop.id, chosen, customName)
         reassignTarget = null

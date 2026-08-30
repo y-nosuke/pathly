@@ -639,6 +639,8 @@ fun TrackDetailScreen(
           longitude = pick.longitude,
           points = manualPoints,
           onFetchCandidates = onFetchNearbyPois,
+          onSearchPredictions = onSearchPredictions,
+          onFetchPrediction = onFetchPrediction,
           onConfirm = { input ->
             val origin = pick.origin
             if (origin is ManualStopOrigin.ExistingPlace) {
@@ -741,6 +743,8 @@ fun TrackDetailScreen(
     StopReassignDialog(
       stop = stop,
       onFetchCandidates = onFetchNearbyPois,
+      onSearchPredictions = onSearchPredictions,
+      onFetchPrediction = onFetchPrediction,
       onConfirm = { chosen, customName ->
         onReassignStop(stop.id, chosen, customName)
         reassignTarget = null

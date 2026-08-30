@@ -31,9 +31,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.pathly.domain.model.GpsPoint
+import com.pathly.domain.model.PlacePrediction
 import com.pathly.domain.model.PlaceSearchResult
 import com.pathly.presentation.common.FloatingSheet
 import com.pathly.presentation.common.FloatingSheetState
+import com.pathly.presentation.common.PlaceNameSearchField
 import com.pathly.presentation.common.rememberFloatingSheetState
 import java.util.Date
 
@@ -84,6 +86,9 @@ data class ManualStopInput(
  *
  * 地図を見ながら滞在区間を調整できるよう、[FloatingSheet]（非モーダル）で出す。
  * 近くの施設候補を出すのは [ManualStopOrigin.CurrentLocation] のときだけ。
+ *
+ * 施設がまだ決まっていない起点（地図の空き地点・「今ここ」）では、**名前でも探せる**ようにする。
+ * 地図に POI が出ていない施設・代表点が敷地の中心にある広い施設は、地点を指すだけでは選べないため。
  */
 @Composable
 fun ManualStopSheet(
@@ -97,6 +102,9 @@ fun ManualStopSheet(
   modifier: Modifier = Modifier,
   // 滞在区間の変更を地図のハイライトへ伝える（到着〜出発のインデックス）。
   onRangeChange: (start: Int, end: Int) -> Unit = { _, _ -> },
+  // 名前での施設検索（両方そろったときだけ検索欄を出す）。座標の近くに出ない施設用。
+  onSearchPredictions: (suspend (String) -> List<PlacePrediction>)? = null,
+  onFetchPrediction: (suspend (String) -> PlaceSearchResult?)? = null,
   // 地図の下パディングを合わせたい画面は、自分で作った state を渡す。
   sheetState: FloatingSheetState = rememberFloatingSheetState(peekFraction = 0.5f),
 ) {
@@ -175,6 +183,18 @@ fun ManualStopSheet(
           name = name,
           onNameChange = { name = it },
           googleName = googleName,
+        )
+      }
+
+      // 施設がまだ決まっていない起点（空き地点・「今ここ」）は、名前でも探せるようにする。
+      // 選ぶと施設が確定し、座標もその施設のものを使う（他の経路と揃う）。
+      val searchable = origin is ManualStopOrigin.MapPoint || origin is ManualStopOrigin.CurrentLocation
+      if (searchable && onSearchPredictions != null && onFetchPrediction != null) {
+        PlaceNameSearchField(
+          onSearchPredictions = onSearchPredictions,
+          onFetchPrediction = onFetchPrediction,
+          onPicked = { selected = it },
+          heading = "地図に出ていない場所は名前で検索",
         )
       }
 

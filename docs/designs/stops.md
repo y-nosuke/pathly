@@ -76,9 +76,16 @@
   - **手動追加した立ち寄りは自動命名しない。** `addManualStop` は常に `place_resolutions` 行を残すので、
     ライブ検出の自動命名がユーザーの入力（または「名前なし」の選択）を上書きしない。
 - **既存の場所へ紐付け**: `addManualStopForPlace`。新規 place を作らずに訪問だけ足す。
+- **名前で探して足す**: 施設がまだ決まっていない起点（地図の空き地点・「今ここ」）では、
+  `presentation/common/PlaceNameSearchField`（キーワード検索の共通部品）で施設を選べる。座標だけを
+  頼りにすると、地図に POI が出ていない場所・代表点が敷地の中心にある広い施設は選べないため。
+  選ぶと `googlePlaceId` と**施設の座標**が確定し、以降は POI をタップしたときと同じ扱いになる。
 - **選び直し（この訪問だけ付け替え）**: `reassignStopPlace`。POI 候補を選べば施設の同一性で同定した place へ、
   名前だけ手入力なら元の座標で新しい USER 場所を作る。**他の経路・訪問は不変**
   （→ [ADR-0007](../adr/0007-reassign-stop-this-visit-only.md)）。
+  - ダイアログの中身は場所詳細の「Googleで情報を取得」と**同じ** `NearbyCandidatePickerDialog`。
+    近くの候補に出ない施設のために**名前での検索**も出す（両画面とも同じ `PlaceNameSearchField`）。
+    テキスト欄が2つ並ぶが役目は別で、上は**自分で付ける名前**、下は**施設の検索**。
 - **滞在期間の編集**: `updateStopDuration(stopId, arrival, departure)` が `stops` の到着・出発だけを
   更新する。**GPS 点・補正後の点は触らない**（観測した事実は変えない）。到着が出発以降になる指定は
   書かずに捨てる。画面は手動追加と同じ `StopRangeEditor`（軌跡点のインデックスで調整）を使うので、
@@ -136,6 +143,7 @@
 | ライブ立ち寄り中   | 記録中サービスの `StateFlow`（非永続）→ `data/tracking/TrackingController` → `presentation/tracking/`         |
 | 再解析             | `detectMissingStops` / `addStops`                                                                             |
 | 手動追加           | `addManualStop` / `domain/usecase/AddManualStopUseCase.kt` ＋ `presentation/stops/ManualStopSheet.kt`         |
+| 施設の名前検索     | `presentation/common/PlaceNameSearchField.kt`（追加シート・選び直し・場所詳細の紐付けで共用）                 |
 | 付け替え           | `reassignStopPlace` ＋ `presentation/stops/StopReassignDialog.kt`                                             |
 | 期間の編集         | `updateStopDuration` ＋ `presentation/stops/StopDurationSheet.kt`（区間UIは `ManualStopRange.kt` と共用）     |
 | 統合               | `mergeStops` ＋ `presentation/history/TrackDetailSheet.kt` の選択バー（「まとめる」）                         |
