@@ -530,6 +530,50 @@ class TrackDetailScreenTest {
     composeTestRule.onNodeWithText("スライダーで大まかに、＋/− で1点ずつ微調整できます。").assertIsDisplayed()
   }
 
+  @Test
+  fun trackDetailScreen_unnamedTrack_renameChipSavesName() {
+    val onRenameTrack = mockk<(String) -> Unit>(relaxed = true)
+    val track = createSampleTrack()
+
+    composeTestRule.setContent {
+      PathlyAndroidTheme {
+        TrackDetailScreen(
+          track = track,
+          onBackClick = mockOnBackClick,
+          mapContent = {},
+          onRenameTrack = onRenameTrack,
+        )
+      }
+    }
+
+    composeTestRule.onNodeWithText("名前を付ける").performClick()
+    composeTestRule.onNodeWithText("経路の名前").assertIsDisplayed()
+    composeTestRule.onNodeWithText("例: 鎌倉さんぽ").performTextInput("鎌倉さんぽ")
+    composeTestRule.onNodeWithText("保存").performClick()
+
+    verify { onRenameTrack("鎌倉さんぽ") }
+  }
+
+  @Test
+  fun trackDetailScreen_namedTrack_showsNameAsHeadingWithDateBelow() {
+    val track = createSampleTrack().copy(name = "鎌倉さんぽ")
+
+    composeTestRule.setContent {
+      PathlyAndroidTheme {
+        TrackDetailScreen(
+          track = track,
+          onBackClick = mockOnBackClick,
+          mapContent = {},
+        )
+      }
+    }
+
+    // 一覧のカードと同じ見せ方: 名前が見出し、日付は副題。チップは「名前を編集」に変わる。
+    composeTestRule.onNodeWithText("鎌倉さんぽ").assertIsDisplayed()
+    composeTestRule.onNodeWithText("2022年01月01日").assertIsDisplayed()
+    composeTestRule.onNodeWithText("名前を編集").assertIsDisplayed()
+  }
+
   private fun sampleStop(
     placeId: Long = 1L,
     name: String? = null,

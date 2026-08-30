@@ -25,7 +25,6 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -276,34 +275,6 @@ private fun FilterSortBar(
       }
     }
   }
-}
-
-@Composable
-private fun RenameTrackDialog(
-  initialName: String,
-  onDismiss: () -> Unit,
-  onConfirm: (String) -> Unit,
-) {
-  var text by remember { mutableStateOf(initialName) }
-  AlertDialog(
-    onDismissRequest = onDismiss,
-    title = { Text("経路の名前") },
-    text = {
-      OutlinedTextField(
-        value = text,
-        onValueChange = { text = it },
-        singleLine = true,
-        placeholder = { Text("例: 鎌倉さんぽ") },
-        supportingText = { Text("空にすると未命名に戻ります") },
-      )
-    },
-    confirmButton = {
-      TextButton(onClick = { onConfirm(text) }) { Text("保存") }
-    },
-    dismissButton = {
-      TextButton(onClick = onDismiss) { Text("キャンセル") }
-    },
-  )
 }
 
 @Composable

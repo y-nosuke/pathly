@@ -95,6 +95,8 @@ fun TrackDetailScreen(
   unresolvedCount: Int = 0,
   message: String? = null,
   onEditPlaceName: (placeId: Long, name: String) -> Unit = { _, _ -> },
+  // 経路そのものの名前（空なら未命名に戻す）。一覧のカードのメニューと同じダイアログを使う。
+  onRenameTrack: (name: String) -> Unit = {},
   onEditStopNote: (stopId: Long, note: String?) -> Unit = { _, _ -> },
   onResolveNames: () -> Unit = {},
   onReanalyze: () -> Unit = {},
@@ -170,6 +172,8 @@ fun TrackDetailScreen(
   var editingNoteStop by remember { mutableStateOf<Stop?>(null) }
   // 「場所を選び直す」対象の立ち寄り（誤検知の訂正・この訪問だけ付け替え）。
   var reassignTarget by remember { mutableStateOf<Stop?>(null) }
+  // 経路の名前を編集中か（見出しタップ／チップから開く）。
+  var renamingTrack by remember { mutableStateOf(false) }
   // 滞在期間を編集中の立ち寄り。地図を見ながら調整するので、ダイアログではなくシートで出す。
   var durationEditStop by remember { mutableStateOf<Stop?>(null) }
   // 編集中の滞在区間（到着〜出発の点インデックス）。手動追加と同じく地図に青くハイライトする。
@@ -541,6 +545,7 @@ fun TrackDetailScreen(
             manualPick = null
             manualMode = true
           },
+          onRenameTrack = { renamingTrack = true },
           onEnterSelection = { stop ->
             selectionMode = true
             if (stop.id !in selectedStopIds) selectedStopIds.add(stop.id)
@@ -727,6 +732,17 @@ fun TrackDetailScreen(
         sheetState = placeSheetState,
       )
     }
+  }
+
+  if (renamingTrack) {
+    RenameTrackDialog(
+      initialName = track.name.orEmpty(),
+      onDismiss = { renamingTrack = false },
+      onConfirm = { name ->
+        onRenameTrack(name)
+        renamingTrack = false
+      },
+    )
   }
 
   editingStop?.let { stop ->
