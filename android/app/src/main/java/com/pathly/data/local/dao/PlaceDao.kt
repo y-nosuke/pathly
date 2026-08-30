@@ -23,6 +23,9 @@ interface PlaceDao {
    * 矩形に入る場所を id 順に返す（近傍検索の**前段の絞り込み**）。
    * 矩形は円より広いので、正確な距離判定は呼び出し側で行うこと。
    * 座標索引が効くため、場所が増えても全表走査にならない。
+   *
+   * 見るのは `places` の**アンカー**（同定用・不変）。表示座標（Google 由来）は見ない（→ adr/0023）。
+   * 記録中は位置バッチごとに引かれる**最も熱い経路**なので、索引が効く形を崩さないこと。
    */
   @Query(
     "SELECT * FROM places " +
@@ -40,10 +43,14 @@ interface PlaceDao {
   /**
    * 矩形に入る場所を、Google 由来の情報付きで返す（候補の表示名を無料で再利用するため）。
    * place ごとに google_places を引き直す N+1 を避ける。
+   *
+   * 座標は**アンカー**（[getInBounds] と同じ同定の土俵で距離を測るため）。
+   * Google の座標は、候補に焼き込んで表示へ引き継ぐために別列で持ち出す。
    */
   @Query(
     "SELECT p.id AS id, p.name AS name, p.latitude AS latitude, p.longitude AS longitude, " +
       "g.googlePlaceId AS googlePlaceId, g.name AS googleName, g.address AS googleAddress, " +
+      "g.latitude AS googleLatitude, g.longitude AS googleLongitude, " +
       "c.code AS categoryCode, c.displayName AS categoryDisplayName " +
       "FROM places p LEFT JOIN google_places g ON g.placeId = p.id " +
       "LEFT JOIN google_place_categories c ON c.id = g.categoryId " +
@@ -61,9 +68,13 @@ interface PlaceDao {
   /**
    * 「場所」タブ用: 全ての場所を、Google 由来データ・行きたい登録（あれば）と立ち寄り件数付きで取得する。
    * places / google_places / wishlist / stops を明示的に参照するので、いずれの変更にもリアクティブに追従する。
+   *
+   * 座標は**表示座標**（Google の代表点 → 無ければアンカー）。同定用のアンカーそのものは返さない
+   * （→ adr/0023）。
    */
   @Query(
-    "SELECT p.id AS id, p.name AS name, p.latitude AS latitude, p.longitude AS longitude, " +
+    "SELECT p.id AS id, p.name AS name, " +
+      "COALESCE(g.latitude, p.latitude) AS latitude, COALESCE(g.longitude, p.longitude) AS longitude, " +
       "p.note AS note, p.createdAt AS createdAt, p.updatedAt AS updatedAt, " +
       "g.googlePlaceId AS googlePlaceId, g.name AS googleName, g.address AS googleAddress, " +
       "c.code AS categoryCode, c.displayName AS categoryDisplayName, " +
@@ -81,7 +92,8 @@ interface PlaceDao {
 
   /** [getPlacesWithWishlist] の単一取得版（記録画面などで既存 place の現在値を編集するため）。 */
   @Query(
-    "SELECT p.id AS id, p.name AS name, p.latitude AS latitude, p.longitude AS longitude, " +
+    "SELECT p.id AS id, p.name AS name, " +
+      "COALESCE(g.latitude, p.latitude) AS latitude, COALESCE(g.longitude, p.longitude) AS longitude, " +
       "p.note AS note, p.createdAt AS createdAt, p.updatedAt AS updatedAt, " +
       "g.googlePlaceId AS googlePlaceId, g.name AS googleName, g.address AS googleAddress, " +
       "c.code AS categoryCode, c.displayName AS categoryDisplayName, " +
@@ -104,10 +116,12 @@ interface PlaceDao {
    * 地図に出す「登録済みの場所」全件（USER・DETECTED どちらも）。名前は
    * places.name → google_places.name → google_places.address の順にフォールバック。
    * 状態（行きたい／訪問済み）を描き分けるため、wishlist 件数・立ち寄り件数・手動訪問日時も返す。
+   *
+   * 座標は**表示座標**（Google の代表点 → 無ければアンカー）。地図に出す位置だから（→ adr/0023）。
    */
   @Query(
     "SELECT p.id AS placeId, COALESCE(p.name, g.name, g.address) AS name, " +
-      "p.latitude AS latitude, p.longitude AS longitude, " +
+      "COALESCE(g.latitude, p.latitude) AS latitude, COALESCE(g.longitude, p.longitude) AS longitude, " +
       "(SELECT COUNT(*) FROM wishlist w WHERE w.placeId = p.id) AS wishlistCount, " +
       "(SELECT COUNT(*) FROM stops s WHERE s.placeId = p.id) AS visitCount, " +
       "(SELECT v.markedAt FROM visited_places v WHERE v.placeId = p.id LIMIT 1) AS markedVisitedAt, " +
@@ -120,18 +134,23 @@ interface PlaceDao {
   /**
    * [observeRegisteredPlaces] の一回取得版を、矩形で絞って返す（近接確認用）。
    * 以前は全場所を件数の副問い合わせ付きで読んでから距離で絞っていた。
+   *
+   * 「地図で見えているピンの近くに登録済みがあるか」を問う機能なので、**表示座標**で絞る
+   * （→ adr/0023）。COALESCE を挟むため `places(latitude, longitude)` の索引は効かないが、
+   * これはタップ 1 回につき 1 度の問い合わせで、記録中に毎バッチ引かれる [getInBounds]（同定・
+   * アンカー）とは別。熱い方の索引は保たれる。
    */
   @Query(
     "SELECT p.id AS placeId, COALESCE(p.name, g.name, g.address) AS name, " +
-      "p.latitude AS latitude, p.longitude AS longitude, " +
+      "COALESCE(g.latitude, p.latitude) AS latitude, COALESCE(g.longitude, p.longitude) AS longitude, " +
       "(SELECT COUNT(*) FROM wishlist w WHERE w.placeId = p.id) AS wishlistCount, " +
       "(SELECT COUNT(*) FROM stops s WHERE s.placeId = p.id) AS visitCount, " +
       "(SELECT v.markedAt FROM visited_places v WHERE v.placeId = p.id LIMIT 1) AS markedVisitedAt, " +
       "c.code AS categoryCode " +
       "FROM places p LEFT JOIN google_places g ON g.placeId = p.id " +
       "LEFT JOIN google_place_categories c ON c.id = g.categoryId " +
-      "WHERE p.latitude BETWEEN :minLatitude AND :maxLatitude " +
-      "AND p.longitude BETWEEN :minLongitude AND :maxLongitude",
+      "WHERE COALESCE(g.latitude, p.latitude) BETWEEN :minLatitude AND :maxLatitude " +
+      "AND COALESCE(g.longitude, p.longitude) BETWEEN :minLongitude AND :maxLongitude",
   )
   suspend fun getRegisteredPlacesInBounds(
     minLatitude: Double,
@@ -192,12 +211,8 @@ interface PlaceDao {
   @Query("UPDATE places SET source = :source WHERE id = :id")
   suspend fun updateSource(id: Long, source: String)
 
-  /**
-   * 座標を更新する（Google で解決／紐付けたとき、暫定の GPS 座標を施設の正確な座標に置き換える）。
-   * 表示・地図ピン・30m 重複判定の精度が上がる。
-   */
-  @Query("UPDATE places SET latitude = :latitude, longitude = :longitude, updatedAt = :updatedAt WHERE id = :id")
-  suspend fun updateCoordinates(id: Long, latitude: Double, longitude: Double, updatedAt: Date)
+  // 座標を更新する DAO は**置かない**。places の座標は同定に使うアンカーで、作成時に決まったら
+  // 動かさない（→ adr/0023）。Google の座標は google_places 側に書く（GooglePlaceDao）。
 
   @Query("DELETE FROM places WHERE id = :id")
   suspend fun deleteById(id: Long)

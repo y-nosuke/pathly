@@ -102,7 +102,15 @@ class WishlistRepositoryImpl @Inject constructor(
       val result = knownDetails?.takeIf { it.googlePlaceId == googlePlaceId } ?: placesTextSearcher.fetch(googlePlaceId)
       googlePlaceDao.upsert(
         if (result != null) {
-          GooglePlaceEntity(placeId, result.googlePlaceId, result.name, result.address, googlePlaceCategoryDao.idOf(result.category))
+          GooglePlaceEntity(
+            placeId,
+            result.googlePlaceId,
+            result.name,
+            result.address,
+            googlePlaceCategoryDao.idOf(result.category),
+            result.latitude,
+            result.longitude,
+          )
         } else {
           // オフライン等で取れなくても、id とタップ時に分かっている施設名は控える
           // （住所・カテゴリは欠けるが、少なくとも未命名にはならない）。
@@ -115,14 +123,21 @@ class WishlistRepositoryImpl @Inject constructor(
   }
 
   override suspend fun linkPlaceToGoogle(placeId: Long, result: PlaceSearchResult) {
-    // 施設情報を上書き保存（名前・住所・カテゴリ・place ID）。places.name は触らない。
+    // 施設情報を上書き保存（名前・住所・カテゴリ・place ID・施設の座標）。places は触らない
+    // （名前も座標も）。座標を places に書くと同定の鍵が動く（→ adr/0023）。
     googlePlaceDao.upsert(
-      GooglePlaceEntity(placeId, result.googlePlaceId, result.name, result.address, googlePlaceCategoryDao.idOf(result.category)),
+      GooglePlaceEntity(
+        placeId,
+        result.googlePlaceId,
+        result.name,
+        result.address,
+        googlePlaceCategoryDao.idOf(result.category),
+        result.latitude,
+        result.longitude,
+      ),
     )
     // 解決記録を残す（以後は自動命名で Nearby を叩かない）。
     placeResolutionDao.upsert(PlaceResolutionEntity(placeId, Date()))
-    // 暫定の座標を施設の正確な座標へ置き換える。
-    placeDao.updateCoordinates(placeId, result.latitude, result.longitude, Date())
     logger.i("Linked place $placeId to google=${result.googlePlaceId}")
   }
 

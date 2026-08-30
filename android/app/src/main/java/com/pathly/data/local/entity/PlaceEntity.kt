@@ -21,6 +21,12 @@ data class PlaceEntity(
   val id: Long = 0,
   /** 自分で付けた名前（null=未命名。Google 由来の名前は入れない）。 */
   val name: String? = null,
+  /**
+   * 同定に使う**アンカー**。行を作る瞬間に決まり、**自動処理では二度と書き換えない**（→ adr/0023）。
+   * 出どころは行の生まれ方で違う（GPS 重心・地図アイコン・施設の座標・指した点）が、
+   * 大事なのは出どころではなく**あとから動かないこと**。動かすと「自分で作った place を
+   * 次の確保で見つけられず無限に増える」。表示に使う座標は [GooglePlaceEntity] 側に持つ。
+   */
   val latitude: Double,
   val longitude: Double,
   /** 場所のメモ（「行きたい」登録と独立に持てる。null/空=メモ無し）。 */

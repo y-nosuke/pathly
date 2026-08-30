@@ -44,4 +44,11 @@ data class GooglePlaceEntity(
   val address: String? = null,
   /** Google のカテゴリ（[GooglePlaceCategoryEntity] の id）。未解決・業種なしは null。 */
   val categoryId: Long? = null,
+  /**
+   * Google が持つその施設の代表点（LOCATION）。**表示にだけ使う**（→ adr/0023）。
+   * [PlaceEntity] の座標（同定に使うアンカー）は書き換えない。取れなければ null で、
+   * そのときの表示はアンカーに落ちる。
+   */
+  val latitude: Double? = null,
+  val longitude: Double? = null,
 )

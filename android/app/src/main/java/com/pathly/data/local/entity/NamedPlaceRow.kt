@@ -11,11 +11,15 @@ import com.pathly.domain.model.PlaceCategory
 data class NamedPlaceRow(
   val id: Long,
   val name: String?,
+  /** 同定用のアンカー（places の座標）。距離判定はこれで行う（→ adr/0023）。 */
   val latitude: Double,
   val longitude: Double,
   val googlePlaceId: String?,
   val googleName: String?,
   val googleAddress: String?,
+  /** Google が持つ施設の代表点（表示用）。候補に焼き込んで表示へ引き継ぐ。無ければ null。 */
+  val googleLatitude: Double?,
+  val googleLongitude: Double?,
   // 業種はマスタ（google_place_categories）から結合して持つ。code が無ければ業種なし。
   val categoryCode: String?,
   val categoryDisplayName: String?,

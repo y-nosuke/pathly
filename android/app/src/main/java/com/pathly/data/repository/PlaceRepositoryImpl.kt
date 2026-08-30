@@ -7,6 +7,7 @@ import com.pathly.data.local.dao.PlaceDao
 import com.pathly.data.local.dao.PlaceResolutionDao
 import com.pathly.data.local.dao.SmoothedPointDao
 import com.pathly.data.local.dao.StopDao
+import com.pathly.data.local.dao.VisitedPlaceDao
 import com.pathly.data.local.dao.WishlistDao
 import com.pathly.data.local.dao.idOf
 import com.pathly.data.local.entity.GooglePlaceEntity
@@ -54,6 +55,7 @@ class PlaceRepositoryImpl @Inject constructor(
   private val googlePlaceDao: GooglePlaceDao,
   private val googlePlaceCategoryDao: GooglePlaceCategoryDao,
   private val wishlistDao: WishlistDao,
+  private val visitedPlaceDao: VisitedPlaceDao,
   private val placesNameResolver: PlacesNameResolver,
 ) : PlaceRepository {
 
@@ -74,6 +76,13 @@ class PlaceRepositoryImpl @Inject constructor(
   // 立ち寄りを、検出（GPSは変わらないので同じ結果になる）が再挿入して復活させないようにする。
   // アクセスは常に [mutex] 下（[detectAndPersist]）。プロセス終了で自然にクリアされる。
   private val detectionHighWaterMillis = mutableMapOf<Long, Long>()
+
+  // いま滞在中の立ち寄りに確保した place を、トラック単位で覚える（→ adr/0023）。
+  // **ひとつの滞在につき確保は1回**。位置バッチは既定10秒ごとに届くので、毎回確保しにいくと
+  // 同じ滞在で place と Places 呼び出しが積み上がる。滞在の同一性は「クラスタの到着時刻」で見る
+  // （クラスタが伸びても到着時刻は動かない）。離脱・確定・記録終了で捨てる。
+  // アクセスは常に [mutex] 下。プロセス終了で自然にクリアされる。
+  private val liveStopPlaces = mutableMapOf<Long, LiveStopPlace>()
 
   override fun getStopsForTrack(trackId: Long): Flow<List<Stop>> = stopDao.getStopsWithPlaceByTrack(trackId).map { list -> list.map { it.toStop() } }
 
@@ -147,12 +156,28 @@ class PlaceRepositoryImpl @Inject constructor(
       if (distanceMeters(place.latitude, place.longitude, d.latitude, d.longitude) > DEDUPE_RADIUS_METERS) continue
       val name = place.name ?: place.googleName
       if (name != null) {
-        return StopCandidate(d, name, place.googleAddress, place.category, place.googlePlaceId)
+        return StopCandidate(
+          d,
+          name,
+          place.googleAddress,
+          place.category,
+          place.googlePlaceId,
+          place.googleLatitude,
+          place.googleLongitude,
+        )
       }
     }
     return when (val outcome = placesNameResolver.resolve(d.latitude, d.longitude)) {
       is PlacesNameResolver.Outcome.Found ->
-        StopCandidate(d, outcome.name, outcome.address, outcome.category, outcome.googlePlaceId)
+        StopCandidate(
+          d,
+          outcome.name,
+          outcome.address,
+          outcome.category,
+          outcome.googlePlaceId,
+          outcome.latitude,
+          outcome.longitude,
+        )
       PlacesNameResolver.Outcome.NoMatch, PlacesNameResolver.Outcome.NotAttempted -> StopCandidate(d)
     }
   }
@@ -181,6 +206,8 @@ class PlaceRepositoryImpl @Inject constructor(
               candidate.name,
               candidate.address,
               categoryIdOf(candidate.category),
+              candidate.googleLatitude,
+              candidate.googleLongitude,
             ),
           )
         }
@@ -274,7 +301,15 @@ class PlaceRepositoryImpl @Inject constructor(
         val pid = findOrCreateByGooglePlaceId(chosen.googlePlaceId, chosen.latitude, chosen.longitude, PlaceSource.USER).first
         if (googlePlaceDao.getByPlace(pid) == null) {
           googlePlaceDao.upsert(
-            GooglePlaceEntity(pid, chosen.googlePlaceId, chosen.name, chosen.address, categoryIdOf(chosen.category)),
+            GooglePlaceEntity(
+              pid,
+              chosen.googlePlaceId,
+              chosen.name,
+              chosen.address,
+              categoryIdOf(chosen.category),
+              chosen.latitude,
+              chosen.longitude,
+            ),
           )
         }
         if (placeResolutionDao.getByPlace(pid) == null) placeResolutionDao.upsert(PlaceResolutionEntity(pid, Date()))
@@ -435,7 +470,10 @@ class PlaceRepositoryImpl @Inject constructor(
     // スライスは境界より後なので、確定クラスタはすべて未保存＝新規。順に追記して境界を進める。
     var highWaterMillis = boundaryMillis
     for (d in finalized) {
-      val placeId = findOrCreatePlace(d.latitude, d.longitude)
+      // 滞在中に先行確定した place があればそれを使う（ひとつの滞在につき確保は1回）。
+      // ここで確保し直すと、クラスタが伸びて重心が動いた分だけ別の place ができ、
+      // 先行確定した方は誰からも参照されない置き去りになる（→ adr/0023）。
+      val placeId = takeLiveStopPlace(trackId, d) ?: findOrCreatePlace(d.latitude, d.longitude)
       stopDao.insert(
         StopEntity(
           placeId = placeId,
@@ -450,8 +488,13 @@ class PlaceRepositoryImpl @Inject constructor(
     if (finalized.isNotEmpty()) {
       logger.i("Persisted ${finalized.size} stops for track $trackId (incremental)")
     }
+    // 滞在が終わった（暫定クラスタが無い）なら、覚えていた place を捨てる。
+    if (provisional == null) liveStopPlaces.remove(trackId)
     // 記録終了時はハイウォーターの追跡を片付ける（trackId は再利用されない）。
-    if (isFinal) detectionHighWaterMillis.remove(trackId)
+    if (isFinal) {
+      detectionHighWaterMillis.remove(trackId)
+      liveStopPlaces.remove(trackId)
+    }
 
     // 確定した立ち寄りの未解決 place をオンラインなら命名する（オフラインは行を作らずキャッチアップ）。
     for (place in placeDao.getUnresolvedPlacesForTrack(trackId)) {
@@ -470,23 +513,47 @@ class PlaceRepositoryImpl @Inject constructor(
     _currentStop.value = liveProvisional?.let { toLiveStop(trackId, it) }
   }
 
-  /** 「立ち寄り中」の place を先行確定して名前解決し、表示用の [Stop] を作る（id は 0）。 */
+  /**
+   * 「立ち寄り中」の place を先行確定して名前解決し、表示用の [Stop] を作る（id は 0）。
+   *
+   * 確保は**その滞在につき1回**。2回目以降のティックは覚えた placeId を使い回す（→ adr/0023）。
+   */
   private suspend fun toLiveStop(trackId: Long, d: DetectedStop): Stop {
-    val placeId = findOrCreatePlace(d.latitude, d.longitude)
+    var placeId = liveStopPlaceId(trackId, d)
+      ?: findOrCreatePlace(d.latitude, d.longitude).also { liveStopPlaces[trackId] = LiveStopPlace(d.arrivalTime.time, it) }
     if (placeResolutionDao.getByPlace(placeId) == null) {
-      placeDao.getById(placeId)?.let { resolvePlace(it) }
+      // 解決の結果、同じ施設の既存 place へ統合されることがある。生き残った方を使う。
+      placeDao.getById(placeId)?.let { placeId = resolvePlace(it) }
     }
     val place = placeDao.getById(placeId)!!.toPlace(googlePlaceDao.getWithCategoryByPlace(placeId))
     return Stop(id = 0, place = place, trackId = trackId, arrivalTime = d.arrivalTime, departureTime = d.departureTime)
   }
 
+  /** その滞在（＝同じ到着時刻のクラスタ）に確保済みの place。無ければ null。 */
+  private fun liveStopPlaceId(trackId: Long, d: DetectedStop): Long? = liveStopPlaces[trackId]?.takeIf { it.arrivalMillis == d.arrivalTime.time }?.placeId
+
+  /** [liveStopPlaceId] を取り出して忘れる（確定した立ち寄りに引き渡すため）。 */
+  private fun takeLiveStopPlace(trackId: Long, d: DetectedStop): Long? = liveStopPlaceId(trackId, d)?.also { liveStopPlaces.remove(trackId) }
+
+  /** 滞在中に先行確保した place（[arrivalMillis] がその滞在の同一性）。 */
+  private class LiveStopPlace(val arrivalMillis: Long, val placeId: Long)
+
   /**
    * place を Google で名前解決し、結果を google_places に記録する（place_resolutions は問い合わせlog）。
    * Google 由来の名前・住所は google_places に入れる。places.name（ユーザー名）は触らない。
    */
-  private suspend fun resolvePlace(place: PlaceEntity) {
+  private suspend fun resolvePlace(place: PlaceEntity): Long {
     when (val outcome = placesNameResolver.resolve(place.latitude, place.longitude)) {
       is PlacesNameResolver.Outcome.Found -> {
+        // 同じ施設の place が既にあれば、そちらへ寄せる（座標で見つけられなくても
+        // 施設の同一性でまとまる）。**upsert より先に**引くこと。後だと自分自身が当たる。
+        val existing = googlePlaceDao.getPlaceIdByGoogleId(outcome.googlePlaceId)
+        if (existing != null && existing != place.id && isUntouchedDetected(place)) {
+          mergeIntoExistingPlace(place.id, existing)
+          return existing
+        }
+        // 施設の座標は google_places に入れる（表示用）。places の座標＝同定のアンカーは
+        // 触らない。ここで動かすと自分で作った place を次の確保で見失う（→ adr/0023）。
         googlePlaceDao.upsert(
           GooglePlaceEntity(
             place.id,
@@ -494,13 +561,11 @@ class PlaceRepositoryImpl @Inject constructor(
             outcome.name,
             outcome.address,
             categoryIdOf(outcome.category),
+            outcome.latitude,
+            outcome.longitude,
           ),
         )
         placeResolutionDao.upsert(PlaceResolutionEntity(place.id, Date()))
-        // 暫定の GPS 座標を、解決した施設の正確な座標へ置き換える（取れたときだけ）。
-        if (outcome.latitude != null && outcome.longitude != null) {
-          placeDao.updateCoordinates(place.id, outcome.latitude, outcome.longitude, Date())
-        }
       }
 
       PlacesNameResolver.Outcome.NoMatch ->
@@ -508,6 +573,31 @@ class PlaceRepositoryImpl @Inject constructor(
 
       PlacesNameResolver.Outcome.NotAttempted -> Unit // 行を作らず後でキャッチアップ
     }
+    return place.id
+  }
+
+  /**
+   * 自動で統合してよい place か。**まだ誰も触っていない検出由来だけ**（→ adr/0023）。
+   *
+   * 自動命名は半径 50m の最寄り1件しか見ないので、別の場所が同じ施設に解決されることがある。
+   * 融合すると分け直せないため、ユーザーが名前・メモを入れた place、行きたい・訪問済みの印が
+   * 付いた place、[PlaceSource.USER] 由来は、ID が同じでも吸収しない。
+   */
+  private suspend fun isUntouchedDetected(place: PlaceEntity): Boolean = place.source == PlaceSource.DETECTED.name &&
+    place.name == null &&
+    place.note == null &&
+    wishlistDao.countByPlace(place.id) == 0 &&
+    visitedPlaceDao.countByPlace(place.id) == 0
+
+  /** 立ち寄りの参照を移してから、統合される側の place を消す（子は CASCADE で消える）。 */
+  private suspend fun mergeIntoExistingPlace(fromPlaceId: Long, intoPlaceId: Long) {
+    stopDao.repointPlace(fromPlaceId, intoPlaceId)
+    placeDao.deleteById(fromPlaceId)
+    // 滞在中に覚えていたのが統合された側なら、寄せ先に差し替える（消えた id を使い続けない）。
+    for ((trackId, live) in liveStopPlaces.toList()) {
+      if (live.placeId == fromPlaceId) liveStopPlaces[trackId] = LiveStopPlace(live.arrivalMillis, intoPlaceId)
+    }
+    logger.i("Merged place $fromPlaceId into $intoPlaceId (same googlePlaceId)")
   }
 
   /**
@@ -558,8 +648,10 @@ class PlaceRepositoryImpl @Inject constructor(
   private fun PlaceEntity.toPlace(google: GooglePlaceWithCategory?): Place = Place(
     id = id,
     name = name,
-    latitude = latitude,
-    longitude = longitude,
+    // ドメインの Place が持つのは**表示座標**（Google の代表点 → 無ければアンカー）。
+    // 同定に使うアンカーは PlaceEntity 側にだけ置く（→ adr/0023）。
+    latitude = google?.google?.latitude ?: latitude,
+    longitude = google?.google?.longitude ?: longitude,
     note = note,
     googleName = google?.google?.name,
     googleAddress = google?.google?.address,

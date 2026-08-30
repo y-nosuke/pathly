@@ -99,6 +99,16 @@ ksp {
   arg("room.schemaLocation", "$projectDir/schemas")
 }
 
+// 書き出し先はバリアント共通なので、debug と release の KSP が重なると
+// **同じ JSON を一方が書いている最中に他方が読む**。CI で kspDebugKotlin が
+// 書きかけの 15.json を読んで落ちた（JsonDecodingException: had 'EOF'）。
+// KSP は Worker API で非同期に走るため、単一プロジェクトでも重なりうる。
+// 新しいバージョンの JSON を初めて書き出すとき（＝DB を上げたとき）に踏む。
+// 順番を固定して重なりを無くす。
+tasks.matching { it.name == "kspReleaseKotlin" }.configureEach {
+  mustRunAfter(tasks.matching { it.name == "kspDebugKotlin" })
+}
+
 dependencies {
 
   implementation(libs.androidx.core.ktx)

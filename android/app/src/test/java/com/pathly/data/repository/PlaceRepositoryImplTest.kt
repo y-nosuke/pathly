@@ -7,6 +7,7 @@ import com.pathly.data.local.dao.PlaceDao
 import com.pathly.data.local.dao.PlaceResolutionDao
 import com.pathly.data.local.dao.SmoothedPointDao
 import com.pathly.data.local.dao.StopDao
+import com.pathly.data.local.dao.VisitedPlaceDao
 import com.pathly.data.local.dao.WishlistDao
 import com.pathly.data.local.entity.GooglePlaceEntity
 import com.pathly.data.local.entity.GpsPointEntity
@@ -20,6 +21,7 @@ import com.pathly.data.places.PlacesNameResolver
 import com.pathly.domain.model.DetectedStop
 import com.pathly.domain.model.PlaceCategory
 import com.pathly.domain.model.PlaceSearchResult
+import com.pathly.domain.model.PlaceSource
 import com.pathly.domain.model.StopCandidate
 import io.mockk.coEvery
 import io.mockk.coVerify
@@ -44,6 +46,7 @@ class PlaceRepositoryImplTest {
   private val googlePlaceDao = mockk<GooglePlaceDao>(relaxed = true)
   private val googlePlaceCategoryDao = mockk<GooglePlaceCategoryDao>(relaxed = true)
   private val wishlistDao = mockk<WishlistDao>(relaxed = true)
+  private val visitedPlaceDao = mockk<VisitedPlaceDao>(relaxed = true)
   private val resolver = mockk<PlacesNameResolver>(relaxed = true)
   private val repository = PlaceRepositoryImpl(
     placeDao,
@@ -54,6 +57,7 @@ class PlaceRepositoryImplTest {
     googlePlaceDao,
     googlePlaceCategoryDao,
     wishlistDao,
+    visitedPlaceDao,
     resolver,
   )
 
@@ -156,6 +160,98 @@ class PlaceRepositoryImplTest {
     assertEquals(20L, current!!.place.id)
     coVerify { googlePlaceDao.upsert(match { it.placeId == 20L && it.googlePlaceId == "gp-2" }) }
     coVerify { placeResolutionDao.upsert(match { it.placeId == 20L }) }
+  }
+
+  /**
+   * 施設の代表点が重心から 30m 超（ここでは約 40m）離れていても、滞在中に place が増えないこと。
+   *
+   * 以前は解決のたびに places の座標を施設の座標へ書き換えていたため、同定の鍵（30m）が動いて
+   * 「自分で作った place を次のティックで見つけられない」状態になり、位置バッチごとに place が
+   * 増え続けていた（→ adr/0023）。DAO をモックで固定していた既存テストではこれを捕まえられない
+   * ので、挿入が近傍検索に反映される簡易ストアで検証する。
+   */
+  @Test
+  fun updateStops_dwelling_doesNotDuplicatePlace_whenFacilityCoordinateIsFarFromAnchor() = runTest {
+    val stored = mutableListOf<PlaceEntity>()
+    val resolved = mutableSetOf<Long>()
+    var nextId = 1L
+    coEvery { placeDao.insert(any()) } answers {
+      val id = nextId++
+      stored += firstArg<PlaceEntity>().copy(id = id)
+      id
+    }
+    coEvery { placeDao.getInBounds(any(), any(), any(), any()) } answers {
+      val minLatitude = firstArg<Double>()
+      val maxLatitude = secondArg<Double>()
+      val minLongitude = thirdArg<Double>()
+      val maxLongitude = arg<Double>(3)
+      stored.filter {
+        it.latitude in minLatitude..maxLatitude && it.longitude in minLongitude..maxLongitude
+      }
+    }
+    coEvery { placeDao.getById(any()) } answers { stored.find { place -> place.id == firstArg<Long>() } }
+    coEvery { placeResolutionDao.getByPlace(any()) } answers {
+      firstArg<Long>().takeIf { it in resolved }?.let { PlaceResolutionEntity(it, Date()) }
+    }
+    coEvery { placeResolutionDao.upsert(any()) } answers { resolved += firstArg<PlaceResolutionEntity>().placeId }
+    coEvery { googlePlaceDao.getWithCategoryByPlace(any()) } returns null
+    // この施設を持つ place はまだ無い＝統合は起きない。relaxed のままだと 0L が返り、
+    // 「既に同じ施設の place がある」と誤判定される（→ 統合されて upsert が走らない）。
+    coEvery { googlePlaceDao.getPlaceIdByGoogleId(any()) } returns null
+    coEvery { placeDao.getUnresolvedPlacesForTrack(1L) } returns emptyList()
+    coEvery { stopDao.getByTrack(1L) } returns emptyList()
+    coEvery { smoothedPointDao.getByTrackAfter(1L, any()) } returns dwellingPoints()
+    coEvery { gpsPointDao.getLatestPoint(1L) } returns gp(35.0, 139.0)
+    // 重心は約 (35.00004, 139.00004)。施設の代表点はそこから約 40m 北＝同定半径 30m の外。
+    coEvery { resolver.resolve(any(), any()) } returns
+      PlacesNameResolver.Outcome.Found("神社", "住所", null, "gp-9", 35.0004, 139.00004)
+
+    repeat(5) { repository.updateStopsForTrack(1L, isFinal = false) }
+
+    assertEquals("滞在中に何度呼ばれても place は1件", 1, stored.size)
+    // アンカーは検出した重心のまま。施設の座標は google_places に入る（表示用）。
+    assertEquals(35.00004, stored.single().latitude, 1e-7)
+    coVerify {
+      googlePlaceDao.upsert(match { it.googlePlaceId == "gp-9" && it.latitude == 35.0004 })
+    }
+    // 解決済みの place は二度と叩かない（place 1件1回・adr/0014）。
+    coVerify(exactly = 1) { resolver.resolve(any(), any()) }
+  }
+
+  /**
+   * 滞在中に先行確保した place を、確定した立ち寄りがそのまま使うこと（確保は滞在につき1回）。
+   *
+   * クラスタは点を吸収して重心が動くので、確定時に確保し直すと別の place ができ、
+   * 先行確保した方が誰からも参照されない置き去りになる（→ adr/0023）。
+   */
+  @Test
+  fun updateStops_dwellThenFinalize_reusesPlaceReservedForThatDwell() = runTest {
+    val stored = mutableListOf<PlaceEntity>()
+    var nextId = 1L
+    coEvery { placeDao.insert(any()) } answers {
+      val id = nextId++
+      stored += firstArg<PlaceEntity>().copy(id = id)
+      id
+    }
+    coEvery { placeDao.getInBounds(any(), any(), any(), any()) } returns emptyList()
+    coEvery { placeDao.getById(any()) } answers { stored.find { place -> place.id == firstArg<Long>() } }
+    coEvery { googlePlaceDao.getWithCategoryByPlace(any()) } returns null
+    coEvery { placeDao.getUnresolvedPlacesForTrack(1L) } returns emptyList()
+    coEvery { stopDao.getByTrack(1L) } returns emptyList()
+    coEvery { stopDao.insert(any()) } returns 100L
+    coEvery { gpsPointDao.getLatestPoint(1L) } returns gp(35.0, 139.0)
+    coEvery { resolver.resolve(any(), any()) } returns PlacesNameResolver.Outcome.NotAttempted
+    // 1回目は滞在中（末尾まで同じ場所）、2回目は離脱して同じクラスタが確定する。
+    coEvery { smoothedPointDao.getByTrackAfter(1L, any()) } returnsMany
+      listOf(dwellingPoints(), finishedVisitPoints())
+
+    repository.updateStopsForTrack(1L, isFinal = false)
+    repository.updateStopsForTrack(1L, isFinal = false)
+
+    assertEquals("滞在中と確定で place を作り直さない", 1, stored.size)
+    val stopSlot = slot<StopEntity>()
+    coVerify { stopDao.insert(capture(stopSlot)) }
+    assertEquals("確定した立ち寄りは先行確保した place を指す", stored.single().id, stopSlot.captured.placeId)
   }
 
   // 補正後の末尾はまだ滞在中でも、生の現在地が立ち寄りの半径外に出ていれば「立ち寄り中」表示は
@@ -302,6 +398,8 @@ class PlaceRepositoryImplTest {
         googlePlaceId = null,
         googleName = null,
         googleAddress = null,
+        googleLatitude = null,
+        googleLongitude = null,
         categoryCode = null,
         categoryDisplayName = null,
       ),
@@ -713,7 +811,7 @@ class PlaceRepositoryImplTest {
   }
 
   @Test
-  fun resolveAllUnresolvedNames_resolvesEachUnresolvedPlaceAndAdoptsCoordinates() = runTest {
+  fun resolveAllUnresolvedNames_resolvesEachUnresolvedPlaceAndKeepsAnchor() = runTest {
     coEvery { placeDao.getUnresolvedPlaces() } returns listOf(
       PlaceEntity(id = 30L, latitude = 35.0, longitude = 139.0),
     )
@@ -722,12 +820,56 @@ class PlaceRepositoryImplTest {
 
     repository.resolveAllUnresolvedNames()
 
+    // 施設の座標は google_places に入れる（表示用）。places のアンカーは動かさない（adr/0023）。
     coVerify {
-      googlePlaceDao.upsert(match { it.placeId == 30L && it.googlePlaceId == "gp-30" && it.name == "神社" })
+      googlePlaceDao.upsert(
+        match {
+          it.placeId == 30L &&
+            it.googlePlaceId == "gp-30" &&
+            it.name == "神社" &&
+            it.latitude == 35.7 &&
+            it.longitude == 139.7
+        },
+      )
     }
     coVerify { placeResolutionDao.upsert(match { it.placeId == 30L }) }
-    // 解決した施設の正確な座標を採用する。
-    coVerify { placeDao.updateCoordinates(30L, 35.7, 139.7, any()) }
+  }
+
+  @Test
+  fun resolve_whenSameFacilityAlreadyHasPlace_mergesUntouchedDetectedPlace() = runTest {
+    // 座標では見つけられなかったが、解決したら既存 place と同じ施設だった → そちらへ寄せる。
+    coEvery { placeDao.getUnresolvedPlaces() } returns listOf(
+      PlaceEntity(id = 30L, latitude = 35.0, longitude = 139.0, source = PlaceSource.DETECTED.name),
+    )
+    coEvery { resolver.resolve(any(), any()) } returns
+      PlacesNameResolver.Outcome.Found("神社", "住所", null, "gp-same", 35.7, 139.7)
+    coEvery { googlePlaceDao.getPlaceIdByGoogleId("gp-same") } returns 7L
+    coEvery { wishlistDao.countByPlace(30L) } returns 0
+    coEvery { visitedPlaceDao.countByPlace(30L) } returns 0
+
+    repository.resolveAllUnresolvedNames()
+
+    // 参照を移してから消す。新しい行に Google データは書かない（寄せ先が既に持っている）。
+    coVerify { stopDao.repointPlace(30L, 7L) }
+    coVerify { placeDao.deleteById(30L) }
+    coVerify(exactly = 0) { googlePlaceDao.upsert(any()) }
+  }
+
+  @Test
+  fun resolve_whenPlaceWasTouchedByUser_doesNotMerge() = runTest {
+    // 自分で名前を付けた place は、同じ施設に解決されても吸収しない（誤解決で融合させない）。
+    coEvery { placeDao.getUnresolvedPlaces() } returns listOf(
+      PlaceEntity(id = 31L, name = "いつもの神社", latitude = 35.0, longitude = 139.0, source = PlaceSource.DETECTED.name),
+    )
+    coEvery { resolver.resolve(any(), any()) } returns
+      PlacesNameResolver.Outcome.Found("神社", "住所", null, "gp-same", 35.7, 139.7)
+    coEvery { googlePlaceDao.getPlaceIdByGoogleId("gp-same") } returns 7L
+
+    repository.resolveAllUnresolvedNames()
+
+    coVerify(exactly = 0) { stopDao.repointPlace(any(), any()) }
+    coVerify(exactly = 0) { placeDao.deleteById(any()) }
+    coVerify { googlePlaceDao.upsert(match { it.placeId == 31L && it.googlePlaceId == "gp-same" }) }
   }
 
   @Test
