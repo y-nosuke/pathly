@@ -630,6 +630,19 @@ fun TrackDetailScreen(
             .align(Alignment.BottomCenter)
             .navigationBarsPadding(),
           onCancel = exitManual,
+          onSearchPredictions = onSearchPredictions,
+          onFetchPrediction = onFetchPrediction,
+          // 名前で選んだ施設は「その施設をタップした」のと同じ扱いにする（座標も施設のもの）。
+          // 地図もそこへ寄せて、滞在区間をハイライトで確かめられるようにする。
+          onPicked = { result ->
+            focusTarget = LatLng(result.latitude, result.longitude)
+            focusNonce++
+            manualPick = ManualStopTarget(
+              latitude = result.latitude,
+              longitude = result.longitude,
+              origin = ManualStopOrigin.Poi(name = result.name, googlePlaceId = result.googlePlaceId),
+            )
+          },
         )
       } else {
         CloseInfoWindowWithSheet(infoWindow)

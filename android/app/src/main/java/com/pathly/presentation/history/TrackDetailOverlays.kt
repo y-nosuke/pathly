@@ -26,7 +26,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import com.pathly.domain.model.PlacePrediction
+import com.pathly.domain.model.PlaceSearchResult
 import com.pathly.domain.model.StopCandidate
+import com.pathly.presentation.common.PlaceNameSearchField
 import com.pathly.util.DateFormatters
 
 // 地図の上に重ねる下部オーバーレイ群（再解析の候補選択・手動追加の案内と入力）。
@@ -134,6 +137,10 @@ internal fun CandidateOverlay(
 internal fun ManualPickPrompt(
   onCancel: () -> Unit,
   modifier: Modifier = Modifier,
+  // 名前での施設検索（両方そろったときだけ検索欄を出す）。地図に出ていない施設用。
+  onSearchPredictions: (suspend (String) -> List<PlacePrediction>)? = null,
+  onFetchPrediction: (suspend (String) -> PlaceSearchResult?)? = null,
+  onPicked: (PlaceSearchResult) -> Unit = {},
 ) {
   Surface(
     modifier = modifier
@@ -143,19 +150,34 @@ internal fun ManualPickPrompt(
     color = MaterialTheme.colorScheme.surface,
     shadowElevation = 8.dp,
   ) {
-    Row(
+    Column(
       modifier = Modifier
         .fillMaxWidth()
         .padding(start = 20.dp, end = 8.dp, top = 8.dp, bottom = 8.dp),
-      horizontalArrangement = Arrangement.SpaceBetween,
-      verticalAlignment = Alignment.CenterVertically,
     ) {
-      Text(
-        text = "立ち寄った地点を地図でタップ（施設はタップで名前も入ります）",
-        style = MaterialTheme.typography.bodyMedium,
-        modifier = Modifier.weight(1f),
-      )
-      TextButton(onClick = onCancel) { Text("キャンセル") }
+      Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically,
+      ) {
+        Text(
+          text = "立ち寄った地点を地図でタップ（施設はタップで名前も入ります）",
+          style = MaterialTheme.typography.bodyMedium,
+          modifier = Modifier.weight(1f),
+        )
+        TextButton(onClick = onCancel) { Text("キャンセル") }
+      }
+      // 地図に出ていない施設は指しようがないので、名前から選べるようにする。選んだ施設の座標を
+      // 指した地点として扱うので、そのあとの流れ（到着・出発の推定、区間の調整）は同じになる。
+      if (onSearchPredictions != null && onFetchPrediction != null) {
+        PlaceNameSearchField(
+          onSearchPredictions = onSearchPredictions,
+          onFetchPrediction = onFetchPrediction,
+          onPicked = onPicked,
+          heading = "地図に出ていない場所は名前で検索",
+          modifier = Modifier.padding(end = 12.dp, top = 4.dp, bottom = 8.dp),
+        )
+      }
     }
   }
 }
