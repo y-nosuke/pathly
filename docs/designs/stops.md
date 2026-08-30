@@ -79,10 +79,18 @@
 - **選び直し（この訪問だけ付け替え）**: `reassignStopPlace`。POI 候補を選べば施設の同一性で同定した place へ、
   名前だけ手入力なら元の座標で新しい USER 場所を作る。**他の経路・訪問は不変**
   （→ [ADR-0007](../adr/0007-reassign-stop-this-visit-only.md)）。
-- **滞在期間の編集**: `stops` の到着・出発を直接更新する。**GPS 点・補正後の点は触らない**
-  （観測した事実は変えない）。
-- **統合**: 選んだ複数の立ち寄りを 1 件にする。到着＝最も早い到着、出発＝最も遅い出発、メモは連結。
-  **間に挟まっていた別の場所の立ち寄りは消さない**（その期間の内側に残る）。
+- **滞在期間の編集**: `updateStopDuration(stopId, arrival, departure)` が `stops` の到着・出発だけを
+  更新する。**GPS 点・補正後の点は触らない**（観測した事実は変えない）。到着が出発以降になる指定は
+  書かずに捨てる。画面は手動追加と同じ `StopRangeEditor`（軌跡点のインデックスで調整）を使うので、
+  保存される時刻は必ず**実在する点の時刻**になる。
+- **統合**: `mergeStops(stopIds)` が選んだ立ち寄りを 1 件にする。残すのは**到着が最も早い 1 件**
+  （id が変わらないので地図・一覧の対応が飛ばない）。期間は最も早い到着〜最も遅い出発、メモは
+  到着順に連結（空白だけのメモは落とす）。**間に挟まっていた別の場所の立ち寄りは消さない**
+  （その期間の内側に残る）。
+  - まとめられるのは **同じ経路の・同じ場所への**訪問が 2 件以上のときだけ。混ざっていれば
+    何もせず `null` を返す（どれが正か決められないため）。UI 側も選択が 1 place に揃うまで
+    「まとめる」を押せない。
+  - 全員が同じ place を指しているので、**place の回収は起きない**（残る 1 件が参照し続ける）。
 
 やり直し系がすべて非破壊なのは意図的 → [ADR-0012](../adr/0012-non-destructive-reanalysis.md)。
 
@@ -95,7 +103,8 @@
 その結果として**期間の重なり（完全に含む「入れ子」を含む）が生じるが、これを禁止しない**。
 モールの中のカフェ、園内の施設という入れ子は現実に起きるので、禁止すると表せなくなる。
 
-- スキーマは変えない（`stops` の更新・削除だけ）。取り消しは `undoLastDeletion` と同じ形で載せる。
+- スキーマは変えない（`stops` の更新・削除だけ）。取り消しは削除と**同じ 1 スロット**に載せる
+  （`undoLastStopChange`）。
 - 手で編集した立ち寄りは、`detectMissingStops` の「既存と時間帯が重なる候補は除外」によって
   再解析の候補から自然に外れる。**「編集済み」フラグは持たせない。**
 
@@ -108,7 +117,11 @@
 （条件は「残る stop がゼロ かつ wishlist 登録もゼロ」）。由来の扱いは [places.md](places.md)。
 
 取り消しのために、削除前に **stop・回収する place・解決ログの実体を 1 件分だけ控える**。
-取り消し時は**元の id のまま再挿入**して復元する（`undoLastDeletion`）。
+取り消し時は**元の id のまま再挿入**して復元する（`undoLastStopChange`）。
+
+この控えは**削除と統合で共用する**（スナックバーは常に最新の 1 件しか出さないので単一スロットで足りる）。
+統合は「消した行」に加えて「書き換えた行（残した 1 件の変更前）」を控え、取り消しでは再挿入と
+上書きの両方を行う。
 
 ---
 
@@ -124,4 +137,6 @@
 | 再解析             | `detectMissingStops` / `addStops`                                                                             |
 | 手動追加           | `addManualStop` / `domain/usecase/AddManualStopUseCase.kt` ＋ `presentation/stops/ManualStopSheet.kt`         |
 | 付け替え           | `reassignStopPlace` ＋ `presentation/stops/StopReassignDialog.kt`                                             |
+| 期間の編集         | `updateStopDuration` ＋ `presentation/stops/StopDurationSheet.kt`（区間UIは `ManualStopRange.kt` と共用）     |
+| 統合               | `mergeStops` ＋ `presentation/history/TrackDetailSheet.kt` の選択バー（「まとめる」）                         |
 | 画面               | `presentation/history/`（`TrackDetailScreen` / `TrackDetailMap` / `TrackDetailSheet` / `TrackDetailDialogs`） |

@@ -6,6 +6,7 @@ import com.pathly.domain.model.RegisteredPlace
 import com.pathly.domain.model.Stop
 import com.pathly.domain.model.StopCandidate
 import com.pathly.domain.model.StopDeletionResult
+import com.pathly.domain.model.StopMergeResult
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.StateFlow
 import java.util.Date
@@ -127,6 +128,23 @@ interface PlaceRepository {
   suspend fun updateStopNote(stopId: Long, note: String?)
 
   /**
+   * 立ち寄り（訪問）の滞在期間を手で直す。**GPS 点・補正後の点は一切触らない**
+   * （観測した事実は変えない → adr/0012・adr/0024）。他の立ち寄りとの重なり（入れ子を含む）は
+   * 禁止しない。到着が出発以降になる指定は無視する。
+   */
+  suspend fun updateStopDuration(stopId: Long, arrivalTime: Date, departureTime: Date)
+
+  /**
+   * 選んだ立ち寄り（訪問）を1件にまとめる。到着は**最も早い到着**、出発は**最も遅い出発**、
+   * 訪問メモは連結する。残すのは到着が最も早かった1件で、他は削除する。間に挟まっていた
+   * 別の場所の立ち寄りは消さない（→ adr/0024）。
+   *
+   * まとめられるのは**同じ経路の・同じ場所への**訪問が2件以上あるときだけ。条件を満たさない
+   * ときは何もせず null を返す。取り消し（[undoLastStopChange]）用に、変更前の内容を控える。
+   */
+  suspend fun mergeStops(stopIds: List<Long>): StopMergeResult?
+
+  /**
    * 近く（30m以内）に既存の場所があれば再利用し、無ければ新規作成して place の id を返す。
    * 立ち寄りと行きたい場所で同じ場所を共有するための同定（重複排除）。
    *
@@ -156,13 +174,14 @@ interface PlaceRepository {
    * 立ち寄り（訪問）を削除する（1件でも複数でも同じ経路）。選択した訪問はすべて消し、
    * その結果どこからも参照されなくなった場所だけを場所ごと削除する。
    * 他に訪問が残る場所（＝他の履歴でも使われている）や、行きたい登録がある場所は保持する。
-   * 取り消し（[undoLastDeletion]）用に、直近の削除内容を1件だけ控える。
+   * 取り消し（[undoLastStopChange]）用に、直近の削除内容を1件だけ控える。
    */
   suspend fun deleteStops(stopIds: List<Long>): StopDeletionResult
 
   /**
-   * 直近の [deleteStops] を取り消し、消した訪問と回収した場所を**元のIDのまま**復元する。
+   * 直近の [deleteStops] / [mergeStops] を取り消す。消した訪問と回収した場所を**元のIDのまま**
+   * 復元し、統合で書き換えた行は変更前に戻す。控えは1件だけなので、取り消せるのは直近の1回。
    * 控えが無ければ何もしない。復元したら true を返す。
    */
-  suspend fun undoLastDeletion(): Boolean
+  suspend fun undoLastStopChange(): Boolean
 }

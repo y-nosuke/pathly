@@ -24,6 +24,7 @@ import com.pathly.domain.model.Geo
 import com.pathly.domain.model.GpsPoint
 import com.pathly.util.DateFormatters
 import java.util.Date
+import kotlin.math.abs
 import kotlin.math.cos
 import kotlin.math.roundToInt
 
@@ -41,6 +42,24 @@ fun nearestPointIndex(points: List<GpsPoint>, lat: Double, lng: Double): Int {
     val d = dLat * dLat + dLng * dLng
     if (d < bestD) {
       bestD = d
+      best = i
+    }
+  }
+  return best
+}
+
+/**
+ * 指定時刻に最も近い軌跡点のインデックス。保存済みの立ち寄りの到着・出発を、
+ * 期間編集のスライダー（点のインデックス）に対応づけるのに使う。
+ */
+fun nearestIndexByTime(points: List<GpsPoint>, time: Date): Int {
+  if (points.isEmpty()) return 0
+  var best = 0
+  var bestDiff = Long.MAX_VALUE
+  points.forEachIndexed { i, p ->
+    val diff = abs(p.timestamp.time - time.time)
+    if (diff < bestDiff) {
+      bestDiff = diff
       best = i
     }
   }
