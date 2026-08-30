@@ -116,6 +116,24 @@ class TrackDetailViewModel @Inject constructor(
     }
   }
 
+  /**
+   * 経路そのものの名前を付ける・直す（空なら未命名に戻す）。
+   *
+   * 表示中のトラックは読み込み時の一度きりで持っているので、保存後は手元の値も合わせる
+   * （再読込を待たずに見出しへ反映させるため）。
+   */
+  fun renameTrack(name: String) {
+    val trackId = loadedTrackId.value ?: return
+    viewModelScope.launch {
+      try {
+        gpsTrackRepository.renameTrack(trackId, name)
+        _displayTrack.value = _displayTrack.value?.copy(name = name.trim().ifBlank { null })
+      } catch (e: Exception) {
+        _message.value = "名前の変更に失敗しました: ${e.message}"
+      }
+    }
+  }
+
   fun updatePlaceName(placeId: Long, name: String) {
     viewModelScope.launch { placeRepository.updatePlaceName(placeId, name) }
   }

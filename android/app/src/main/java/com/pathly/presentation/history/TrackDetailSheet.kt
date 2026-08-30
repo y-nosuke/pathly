@@ -2,6 +2,7 @@ package com.pathly.presentation.history
 
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.Arrangement
@@ -141,6 +142,7 @@ internal fun TrackDetailSheet(
   onResolveNames: () -> Unit,
   onReanalyze: () -> Unit,
   onManualAdd: () -> Unit,
+  onRenameTrack: () -> Unit,
   onEnterSelection: (Stop) -> Unit,
   onToggleSelect: (Stop) -> Unit,
   onSelectAll: () -> Unit,
@@ -182,6 +184,7 @@ internal fun TrackDetailSheet(
         onResolveNames = onResolveNames,
         onReanalyze = onReanalyze,
         onManualAdd = onManualAdd,
+        onRenameTrack = onRenameTrack,
       )
     }
     // 立ち寄り一覧（ここだけスクロール）。シートの残り領域を埋め、独立してスクロールする。
@@ -228,6 +231,7 @@ internal fun TrackSummaryHeader(
   onResolveNames: () -> Unit,
   onReanalyze: () -> Unit,
   onManualAdd: () -> Unit,
+  onRenameTrack: () -> Unit,
 ) {
   Column(
     modifier = Modifier
@@ -241,11 +245,28 @@ internal fun TrackSummaryHeader(
       horizontalArrangement = Arrangement.SpaceBetween,
       verticalAlignment = Alignment.CenterVertically,
     ) {
-      Text(
-        text = DateFormatters.date(track.startTime),
-        style = MaterialTheme.typography.titleLarge,
-        fontWeight = FontWeight.Bold,
-      )
+      // 見出しは名前があれば名前、無ければ日付（一覧のカードと同じ見せ方）。
+      // 見出しそのものをタップして命名できる（下のチップからも開ける）。
+      Column(
+        modifier = Modifier
+          .weight(1f)
+          .clip(RoundedCornerShape(8.dp))
+          .clickable(onClick = onRenameTrack)
+          .padding(vertical = 2.dp),
+      ) {
+        Text(
+          text = if (track.hasName) track.name.orEmpty() else DateFormatters.date(track.startTime),
+          style = MaterialTheme.typography.titleLarge,
+          fontWeight = FontWeight.Bold,
+        )
+        if (track.hasName) {
+          Text(
+            text = DateFormatters.date(track.startTime),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+          )
+        }
+      }
       if (track.isActive) {
         Surface(
           shape = RoundedCornerShape(20.dp),
@@ -327,6 +348,12 @@ internal fun TrackSummaryHeader(
           onClick = onManualAdd,
         )
       }
+      ActionChip(
+        text = if (track.hasName) "名前を編集" else "名前を付ける",
+        container = MaterialTheme.colorScheme.secondaryContainer,
+        content = MaterialTheme.colorScheme.onSecondaryContainer,
+        onClick = onRenameTrack,
+      )
       if (unresolvedCount > 0) {
         ActionChip(
           text = "場所を取得（未取得 ${unresolvedCount}件）",
