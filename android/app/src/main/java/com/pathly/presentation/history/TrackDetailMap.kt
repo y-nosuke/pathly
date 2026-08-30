@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
@@ -151,22 +152,25 @@ internal fun TrackMapView(
 
     // 再解析の候補（橙のピン）。まだ追加していない＝これから決めるものなので、確定した立ち寄り
     // （紫の丸）とは形で見分ける。
-    candidates.forEachIndexed { index, candidate ->
+    // 候補も1件ずつ独立させる（立ち寄りマーカーと同じ理由。位置で使い回すと MarkerState が
+    // 差し替わってピンが消える）。並びの位置ではなく座標で識別する。
+    candidates.forEach { candidate ->
       val d = candidate.detected
-      val candidateMarkerState = remember(index, d.latitude, d.longitude) {
-        MarkerState(position = LatLng(d.latitude, d.longitude))
-      }
-      MapMarker(
-        "candidate",
-        index,
-        d.latitude,
-        d.longitude,
-        infoWindow = infoWindow,
-        state = candidateMarkerState,
-        title = candidate.name ?: "候補（名称未取得）",
-        snippet = "${DateFormatters.shortTime(d.arrivalTime)} ・ 滞在${d.durationMinutes}分",
-      ) {
-        MapPinMarker(bg = MarkerCandidateOrange, glyph = R.drawable.ic_help)
+      key(d.latitude, d.longitude, d.arrivalTime) {
+        val candidateMarkerState = remember(d.latitude, d.longitude) {
+          MarkerState(position = LatLng(d.latitude, d.longitude))
+        }
+        MapMarker(
+          "candidate",
+          d.latitude,
+          d.longitude,
+          infoWindow = infoWindow,
+          state = candidateMarkerState,
+          title = candidate.name ?: "候補（名称未取得）",
+          snippet = "${DateFormatters.shortTime(d.arrivalTime)} ・ 滞在${d.durationMinutes}分",
+        ) {
+          MapPinMarker(bg = MarkerCandidateOrange, glyph = R.drawable.ic_help)
+        }
       }
     }
 

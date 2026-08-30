@@ -13,6 +13,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.key
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -186,26 +187,29 @@ internal fun RegisteredPlaceMarkers(
   infoWindow: MapInfoWindowState,
   onRegisteredPlaceClick: (RegisteredPlace) -> Unit = {},
 ) {
+  // 立ち寄りと同じ理由で place ごとに独立させる（登録・削除・絞り込みで並びが変わる）。
   registeredPlaces.forEach { place ->
-    val placeMarkerState = androidx.compose.runtime.remember(place.placeId, place.latitude, place.longitude) {
-      MarkerState(position = LatLng(place.latitude, place.longitude))
-    }
-    // 色＝訪問状態、グリフ＝業種、右上の旗＝行きたい。状態が変わったら描き直す。
-    val badgeColor = if (place.isVisited) MarkerVisitedGreen else MarkerUnvisitedGray
-    val group = place.categoryGroup
-    MapMarker(
-      "registered",
-      place.placeId,
-      place.isWishlisted,
-      place.isVisited,
-      group,
-      infoWindow = infoWindow,
-      state = placeMarkerState,
-      title = place.displayName,
-      snippet = place.statusLabel,
-      onClick = { onRegisteredPlaceClick(place) },
-    ) {
-      RegisteredPlaceMarker(bg = badgeColor, glyph = categoryGlyph(group), wishlisted = place.isWishlisted)
+    key(place.placeId) {
+      val placeMarkerState = androidx.compose.runtime.remember(place.latitude, place.longitude) {
+        MarkerState(position = LatLng(place.latitude, place.longitude))
+      }
+      // 色＝訪問状態、グリフ＝業種、右上の旗＝行きたい。状態が変わったら描き直す。
+      val badgeColor = if (place.isVisited) MarkerVisitedGreen else MarkerUnvisitedGray
+      val group = place.categoryGroup
+      MapMarker(
+        "registered",
+        place.placeId,
+        place.isWishlisted,
+        place.isVisited,
+        group,
+        infoWindow = infoWindow,
+        state = placeMarkerState,
+        title = place.displayName,
+        snippet = place.statusLabel,
+        onClick = { onRegisteredPlaceClick(place) },
+      ) {
+        RegisteredPlaceMarker(bg = badgeColor, glyph = categoryGlyph(group), wishlisted = place.isWishlisted)
+      }
     }
   }
 }
@@ -405,27 +409,34 @@ internal fun RouteMapContent(
   RegisteredPlaceMarkers(registeredPlaces, infoWindow, onRegisteredPlaceClick)
 
   // 立ち寄り場所（訪問順の番号つき紫バッジ）。番号でルートの順序が読める。
+  //
+  // **key(stop.id) が要る。** 付けないと Compose はマーカーを並びの位置で使い回すので、
+  // 途中に立ち寄りが増えるとスロットの担当が別の立ち寄りに入れ替わり、remember で作っている
+  // MarkerState が別インスタンスに差し替わる。maps-compose の Marker は 1 つの MarkerState に
+  // 紐づく前提なので、差し替えるとマーカーが地図から外れ、ピンが消えて番号が飛んで見える。
   stops.forEachIndexed { index, stop ->
-    val stopMarkerState = androidx.compose.runtime.remember(stop.id, stop.place.latitude, stop.place.longitude) {
-      MarkerState(position = LatLng(stop.place.latitude, stop.place.longitude))
-    }
-    MapMarker(
-      "stop",
-      stop.id,
-      index,
-      infoWindow = infoWindow,
-      state = stopMarkerState,
-      title = stop.place.name ?: stop.place.googleName ?: "立ち寄り",
-      snippet = "${DateFormatters.shortTime(stop.arrivalTime)} ・ 滞在${stop.durationMinutes}分",
-      onClick = { onStopClick(stop) },
-    ) {
-      RouteBadgeMarker(bg = MarkerStopViolet) {
-        Text(
-          text = "${index + 1}",
-          color = Color.White,
-          fontWeight = FontWeight.Bold,
-          fontSize = 14.sp,
-        )
+    key(stop.id) {
+      val stopMarkerState = androidx.compose.runtime.remember(stop.place.latitude, stop.place.longitude) {
+        MarkerState(position = LatLng(stop.place.latitude, stop.place.longitude))
+      }
+      MapMarker(
+        "stop",
+        stop.id,
+        index,
+        infoWindow = infoWindow,
+        state = stopMarkerState,
+        title = stop.place.name ?: stop.place.googleName ?: "立ち寄り",
+        snippet = "${DateFormatters.shortTime(stop.arrivalTime)} ・ 滞在${stop.durationMinutes}分",
+        onClick = { onStopClick(stop) },
+      ) {
+        RouteBadgeMarker(bg = MarkerStopViolet) {
+          Text(
+            text = "${index + 1}",
+            color = Color.White,
+            fontWeight = FontWeight.Bold,
+            fontSize = 14.sp,
+          )
+        }
       }
     }
   }
