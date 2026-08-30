@@ -9,11 +9,14 @@ import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.performTouchInput
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.pathly.domain.model.GpsPoint
 import com.pathly.domain.model.GpsTrack
 import com.pathly.domain.model.Place
+import com.pathly.domain.model.PlacePrediction
+import com.pathly.domain.model.PlaceSearchResult
 import com.pathly.domain.model.Stop
 import com.pathly.ui.theme.PathlyAndroidTheme
 import io.mockk.mockk
@@ -482,6 +485,49 @@ class TrackDetailScreenTest {
     // 触らずに保存すれば、保存済みの時刻に最も近い軌跡点の時刻がそのまま渡る。
     val points = track.smoothedPoints
     verify { onUpdateStopDuration(1L, points.first().timestamp, points.last().timestamp) }
+  }
+
+  @Test
+  fun trackDetailScreen_manualAdd_searchByNameOpensSheetForThatFacility() {
+    val track = createSampleTrack()
+
+    composeTestRule.setContent {
+      PathlyAndroidTheme {
+        TrackDetailScreen(
+          track = track,
+          onBackClick = mockOnBackClick,
+          mapContent = {},
+          stops = emptyList(),
+          onSearchPredictions = { query ->
+            listOf(PlacePrediction(placeId = "gp-zoo", primaryText = "テスト動物園", secondaryText = query))
+          },
+          onFetchPrediction = {
+            PlaceSearchResult(
+              googlePlaceId = "gp-zoo",
+              name = "テスト動物園",
+              address = "東京都",
+              category = null,
+              latitude = 35.0,
+              longitude = 139.0,
+            )
+          },
+        )
+      }
+    }
+
+    // 地図をタップできない場所（地図に POI が出ていない施設）は、名前から選んで足せる。
+    composeTestRule.onNodeWithText("立ち寄りを追加").performClick()
+    composeTestRule.onNodeWithText("店名・場所名で検索").performTextInput("どうぶつ")
+    composeTestRule.waitUntil(timeoutMillis = 5_000) {
+      composeTestRule.onAllNodesWithText("テスト動物園").fetchSemanticsNodes().isNotEmpty()
+    }
+    composeTestRule.onAllNodesWithText("テスト動物園")[0].performClick()
+
+    // 施設をタップしたときと同じ入力シートに進む（滞在区間の調整つき）。
+    composeTestRule.waitUntil(timeoutMillis = 5_000) {
+      composeTestRule.onAllNodesWithText("追加").fetchSemanticsNodes().isNotEmpty()
+    }
+    composeTestRule.onNodeWithText("スライダーで大まかに、＋/− で1点ずつ微調整できます。").assertIsDisplayed()
   }
 
   private fun sampleStop(

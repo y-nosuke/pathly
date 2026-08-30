@@ -25,16 +25,12 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.pathly.domain.model.PlacePrediction
 import com.pathly.domain.model.PlaceSearchResult
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
 
 /**
  * 座標の近くの POI 候補を Nearby 検索して、ラジオで選ぶ（任意で自分でも入力／名前でも検索する）汎用ダイアログ。
@@ -66,29 +62,11 @@ fun NearbyCandidatePickerDialog(
   var selected by remember { mutableStateOf<PlaceSearchResult?>(null) }
   var customName by remember { mutableStateOf("") }
 
-  // 名前で検索（フォールバック）用の状態。
+  // 名前で検索（フォールバック）。入力欄と候補の見せ方は共通部品に任せる。
   val searchEnabled = onSearchPredictions != null && onFetchPrediction != null
-  var query by remember { mutableStateOf("") }
-  var predictions by remember { mutableStateOf<List<PlacePrediction>>(emptyList()) }
-  var searching by remember { mutableStateOf(false) }
-  val scope = rememberCoroutineScope()
 
   LaunchedEffect(reloadKey) {
     candidates = onFetchCandidates(latitude, longitude)
-  }
-
-  // キーワードのデバウンス検索（打鍵ごとに叩かない）。
-  LaunchedEffect(query) {
-    val predict = onSearchPredictions
-    if (predict == null || query.isBlank()) {
-      predictions = emptyList()
-      searching = false
-      return@LaunchedEffect
-    }
-    delay(300)
-    searching = true
-    predictions = predict(query)
-    searching = false
   }
 
   val canConfirm = selected != null || (allowCustomName && customName.isNotBlank())
@@ -180,72 +158,17 @@ fun NearbyCandidatePickerDialog(
               Spacer(modifier = Modifier.height(12.dp))
               HorizontalDivider()
               Spacer(modifier = Modifier.height(8.dp))
-              Text(
-                "見つからない場合は名前で検索",
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+              PlaceNameSearchField(
+                onSearchPredictions = onSearchPredictions!!,
+                onFetchPrediction = onFetchPrediction!!,
+                onPicked = { result ->
+                  // 検索で選んだ施設を候補の先頭に足して選択状態にする（そのまま紐付けできる）。
+                  candidates = listOf(result) +
+                    (candidates?.filterNot { it.googlePlaceId == result.googlePlaceId } ?: emptyList())
+                  selected = result
+                  customName = ""
+                },
               )
-              Spacer(modifier = Modifier.height(4.dp))
-              OutlinedTextField(
-                value = query,
-                onValueChange = { query = it },
-                singleLine = true,
-                label = { Text("店名・場所名で検索") },
-                modifier = Modifier.fillMaxWidth(),
-              )
-              if (searching) {
-                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(vertical = 6.dp)) {
-                  CircularProgressIndicator(modifier = Modifier.size(14.dp), strokeWidth = 2.dp)
-                  Spacer(modifier = Modifier.width(8.dp))
-                  Text("検索中…", style = MaterialTheme.typography.bodySmall)
-                }
-              }
-              if (predictions.isNotEmpty()) {
-                Column(
-                  modifier = Modifier
-                    .heightIn(max = 160.dp)
-                    .verticalScroll(rememberScrollState()),
-                ) {
-                  predictions.forEach { prediction ->
-                    Column(
-                      modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable {
-                          val fetch = onFetchPrediction ?: return@clickable
-                          scope.launch {
-                            val result = fetch(prediction.placeId)
-                            if (result != null) {
-                              // 検索で選んだ施設を候補の先頭に足して選択状態にする（そのまま紐付けできる）。
-                              candidates = listOf(result) +
-                                (candidates?.filterNot { it.googlePlaceId == result.googlePlaceId } ?: emptyList())
-                              selected = result
-                              customName = ""
-                              query = ""
-                              predictions = emptyList()
-                            }
-                          }
-                        }
-                        .padding(vertical = 8.dp),
-                    ) {
-                      Text(
-                        prediction.primaryText,
-                        style = MaterialTheme.typography.bodyMedium,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                      )
-                      if (prediction.secondaryText.isNotBlank()) {
-                        Text(
-                          prediction.secondaryText,
-                          style = MaterialTheme.typography.bodySmall,
-                          color = MaterialTheme.colorScheme.onSurfaceVariant,
-                          maxLines = 1,
-                          overflow = TextOverflow.Ellipsis,
-                        )
-                      }
-                    }
-                  }
-                }
-              }
             }
           }
         }
