@@ -339,6 +339,7 @@ internal fun TrackSummaryHeader(
   }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 internal fun SelectionBar(
   selectedCount: Int,
@@ -354,29 +355,30 @@ internal fun SelectionBar(
     color = MaterialTheme.colorScheme.surfaceVariant,
     modifier = Modifier.fillMaxWidth(),
   ) {
-    Row(
+    // 操作は4つあり、横に並べると幅の狭い端末で右端（キャンセル）が切れる。
+    // 収まらなければ折り返す（高さは伸びるが、押せないボタンができるよりよい）。
+    FlowRow(
       modifier = Modifier
         .fillMaxWidth()
         .padding(start = 16.dp, end = 8.dp, top = 4.dp, bottom = 4.dp),
-      horizontalArrangement = Arrangement.SpaceBetween,
-      verticalAlignment = Alignment.CenterVertically,
+      horizontalArrangement = Arrangement.spacedBy(4.dp),
+      verticalArrangement = Arrangement.Center,
+      itemVerticalAlignment = Alignment.CenterVertically,
     ) {
       Text(
         text = "${selectedCount}件選択中",
         style = MaterialTheme.typography.titleMedium,
         fontWeight = FontWeight.Bold,
       )
-      Row(verticalAlignment = Alignment.CenterVertically) {
-        TextButton(onClick = onSelectAll) {
-          Text(if (selectedCount == totalCount && totalCount > 0) "全解除" else "全選択")
-        }
-        // 同じ場所への複数の訪問を1件にまとめる（到着は最も早い・出発は最も遅い・メモは連結）。
-        TextButton(onClick = onMerge, enabled = canMerge) { Text("まとめる") }
-        TextButton(onClick = onDelete, enabled = selectedCount > 0) {
-          Text("削除", color = MaterialTheme.colorScheme.error)
-        }
-        TextButton(onClick = onCancel) { Text("キャンセル") }
+      TextButton(onClick = onSelectAll) {
+        Text(if (selectedCount == totalCount && totalCount > 0) "全解除" else "全選択")
       }
+      // 同じ場所への複数の訪問を1件にまとめる（到着は最も早い・出発は最も遅い・メモは連結）。
+      TextButton(onClick = onMerge, enabled = canMerge) { Text("まとめる") }
+      TextButton(onClick = onDelete, enabled = selectedCount > 0) {
+        Text("削除", color = MaterialTheme.colorScheme.error)
+      }
+      TextButton(onClick = onCancel) { Text("キャンセル") }
     }
   }
 }
