@@ -239,6 +239,14 @@ fun TrackDetailScreen(
   var focusTarget by remember { mutableStateOf<LatLng?>(null) }
   var focusNonce by remember { mutableIntStateOf(0) }
 
+  // 立ち寄りへ地図を寄せ、一覧側の強調も合わせる。行タップだけでなく**編集を始めるとき**にも使う。
+  // 直す対象が画面の外にあると、地図のハイライトを見ながら期間を調整できないため。
+  val focusOnStop: (Stop) -> Unit = { stop ->
+    highlightedStopId = stop.id
+    focusTarget = LatLng(stop.place.latitude, stop.place.longitude)
+    focusNonce++
+  }
+
   // 再解析の候補選択モード（候補があるあいだ）。地図にオレンジのピンで位置を見せ、
   // 地図の上に**高さ固定のオーバーレイ**で候補を出す（シートは畳んで地図を常に見せる）。
   val candidateMode = reanalyzeCandidates?.isNotEmpty() == true
@@ -380,9 +388,7 @@ fun TrackDetailScreen(
           },
           // 地図の立ち寄りピンをタップ → 一覧の該当行を強調＆スクロール＋「選び直し」を出す（記録画面と統一）。
           onStopClick = { stop ->
-            highlightedStopId = stop.id
-            focusTarget = LatLng(stop.place.latitude, stop.place.longitude)
-            focusNonce++
+            focusOnStop(stop)
             if (detent == SheetDetent.HIDDEN) sheetState.settleTo(SheetDetent.PEEK)
             reassignTarget = stop
           },
@@ -515,16 +521,19 @@ fun TrackDetailScreen(
           modifier = Modifier
             .weight(1f)
             .fillMaxWidth(),
-          onFocusStop = {
-            highlightedStopId = it.id
-            focusTarget = LatLng(it.place.latitude, it.place.longitude)
-            focusNonce++
-          },
+          onFocusStop = focusOnStop,
           onEditStop = { editingStop = it },
           onEditStopNote = { editingNoteStop = it },
-          onEditStopDuration = { durationEditStop = it },
+          // 期間の編集・場所の選び直しは、対象を地図に出してから始める（地図を見ながら直せるように）。
+          onEditStopDuration = {
+            focusOnStop(it)
+            durationEditStop = it
+          },
           canEditDuration = manualPoints.size >= 2,
-          onReassignStop = { reassignTarget = it },
+          onReassignStop = {
+            focusOnStop(it)
+            reassignTarget = it
+          },
           onDeleteStop = { deleteWithUndo(listOf(it.id)) },
           onResolveNames = onResolveNames,
           onReanalyze = onReanalyze,
