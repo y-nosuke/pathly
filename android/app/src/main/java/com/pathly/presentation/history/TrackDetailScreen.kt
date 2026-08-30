@@ -74,6 +74,7 @@ import com.pathly.presentation.places.PlaceSheetTarget
 import com.pathly.presentation.stops.ManualStopOrigin
 import com.pathly.presentation.stops.ManualStopSheet
 import com.pathly.presentation.stops.ManualStopTarget
+import com.pathly.presentation.stops.StopDurationSheet
 import com.pathly.presentation.stops.StopReassignDialog
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.emptyFlow
@@ -101,7 +102,11 @@ fun TrackDetailScreen(
   onAddStops: (List<StopCandidate>) -> Unit = {},
   onDismissReanalyze: () -> Unit = {},
   onDeleteStops: (stopIds: List<Long>) -> Unit = {},
-  onUndoDeletion: () -> Unit = {},
+  // 同じ場所への複数の訪問を1件にまとめる（→ adr/0024）。判定は ViewModel/Repository 側。
+  onMergeStops: (stopIds: List<Long>) -> Unit = {},
+  // 滞在期間の手直し。GPS 点・補正後の点は触らない。
+  onUpdateStopDuration: (stopId: Long, arrival: Date, departure: Date) -> Unit = { _, _, _ -> },
+  onUndoStopChange: () -> Unit = {},
   // 手動での立ち寄り追加。近くに既存があるかの判断は ViewModel（AddManualStopUseCase）側で行う。
   onAddManualStop: (lat: Double, lng: Double, arrival: Date, departure: Date, name: String?, googlePlaceId: String?, googleName: String?) -> Unit =
     { _, _, _, _, _, _, _ -> },
@@ -165,6 +170,12 @@ fun TrackDetailScreen(
   var editingNoteStop by remember { mutableStateOf<Stop?>(null) }
   // 「場所を選び直す」対象の立ち寄り（誤検知の訂正・この訪問だけ付け替え）。
   var reassignTarget by remember { mutableStateOf<Stop?>(null) }
+  // 滞在期間を編集中の立ち寄り。地図を見ながら調整するので、ダイアログではなくシートで出す。
+  var durationEditStop by remember { mutableStateOf<Stop?>(null) }
+  // 編集中の滞在区間（到着〜出発の点インデックス）。手動追加と同じく地図に青くハイライトする。
+  var durationRange by remember(durationEditStop) { mutableStateOf<Pair<Int, Int>?>(null) }
+  // 期間編集シートの開き具合。本体シートを畳んでいても開いた状態で出したいので別に持つ。
+  val durationSheetState = rememberFloatingSheetState(peekFraction = 0.5f)
   // 地図↔一覧の連動用: 選択中の立ち寄り。地図のピン/一覧の行どちらから選んでも相互に強調・スクロールする。
   var highlightedStopId by remember { mutableStateOf<Long?>(null) }
 
@@ -204,7 +215,22 @@ fun TrackDetailScreen(
           actionLabel = "取り消す",
           duration = SnackbarDuration.Short,
         )
-        if (result == SnackbarResult.ActionPerformed) onUndoDeletion()
+        if (result == SnackbarResult.ActionPerformed) onUndoStopChange()
+      }
+    }
+  }
+
+  // 統合も削除と同じ流儀: 確認は出さず即時実行し、スナックバーの「取り消す」で戻せる。
+  val mergeWithUndo: (List<Long>) -> Unit = { ids ->
+    if (ids.size >= 2) {
+      onMergeStops(ids)
+      scope.launch {
+        val result = snackbarHostState.showSnackbar(
+          message = "${ids.size}件をまとめました",
+          actionLabel = "取り消す",
+          duration = SnackbarDuration.Short,
+        )
+        if (result == SnackbarResult.ActionPerformed) onUndoStopChange()
       }
     }
   }
@@ -237,6 +263,9 @@ fun TrackDetailScreen(
     manualMode = false
     manualPick = null
   }
+  // 期間の編集中のシステムバックは、画面を抜けるのではなく編集をやめる。
+  BackHandler(enabled = durationEditStop != null) { durationEditStop = null }
+
   // バックは2段階で戻す: 地点確定後は地点選択（マップ）に戻すだけ、地点選択中は追加モードを抜ける。
   BackHandler(enabled = manualMode) {
     if (manualPick != null) manualPick = null else exitManual()
@@ -248,8 +277,9 @@ fun TrackDetailScreen(
   }
   // 立ち寄りの滞在区間（到着〜出発の軌跡点）。全件を軌跡の下に常時ハイライトする。
   // 補正調整・候補選択・手動追加のときは、そちらのハイライトと干渉しないよう出さない。
-  val stopSegments = remember(track.smoothedPoints, stops, tuningMode, candidateMode, manualMode) {
-    if (tuningMode || candidateMode || manualMode) {
+  val durationEditMode = durationEditStop != null
+  val stopSegments = remember(track.smoothedPoints, stops, tuningMode, candidateMode, manualMode, durationEditMode) {
+    if (tuningMode || candidateMode || manualMode || durationEditMode) {
       emptyList()
     } else {
       stops.mapNotNull { stop ->
@@ -258,15 +288,15 @@ fun TrackDetailScreen(
     }
   }
   // 立ち寄り中（ライブ）の滞在区間。通常表示のときだけ（補正調整・候補・手動追加中は出さない）。
-  val currentStopSegment = remember(track.smoothedPoints, currentStop, tuningMode, candidateMode, manualMode) {
-    if (tuningMode || candidateMode || manualMode) {
+  val currentStopSegment = remember(track.smoothedPoints, currentStop, tuningMode, candidateMode, manualMode, durationEditMode) {
+    if (tuningMode || candidateMode || manualMode || durationEditMode) {
       emptyList()
     } else {
       currentStop?.let { stopSegmentPoints(track.smoothedPoints, it.arrivalTime, it.departureTime) }.orEmpty()
     }
   }
   // 記録中の地図に出すライブ立ち寄り（通常表示のときだけ）。
-  val liveCurrentStop = if (tuningMode || candidateMode || manualMode) null else currentStop
+  val liveCurrentStop = if (tuningMode || candidateMode || manualMode || durationEditMode) null else currentStop
   // シートが隠れているか（復帰ボタン表示・地図の下パディング判定に使う）。
   val sheetHidden = detent == SheetDetent.HIDDEN
 
@@ -276,11 +306,18 @@ fun TrackDetailScreen(
       if (mapContent != null) {
         mapContent()
       } else {
-        // 手動追加で選んだ滞在区間（到着〜出発）の点列。地図に青くハイライトする。
-        val manualHighlight = if (manualMode && manualPick != null && manualPoints.size >= 2) {
-          manualRange?.let { (start, end) ->
-            manualPoints.subList(start, (end + 1).coerceAtMost(manualPoints.size))
-          }.orEmpty()
+        // 手動追加・期間編集で選んでいる滞在区間（到着〜出発）の点列。地図に青くハイライトする。
+        val editingRange = when {
+          manualMode && manualPick != null -> manualRange
+          durationEditMode -> durationRange
+          else -> null
+        }
+        val rangeHighlight = if (editingRange != null && manualPoints.size >= 2) {
+          val (start, end) = editingRange
+          manualPoints.subList(
+            start.coerceIn(0, manualPoints.lastIndex),
+            (end + 1).coerceIn(1, manualPoints.size),
+          )
         } else {
           emptyList()
         }
@@ -294,7 +331,7 @@ fun TrackDetailScreen(
           candidates = if (candidateMode && !manualMode) reanalyzeCandidates.orEmpty() else emptyList(),
           showRawOverlay = tuningMode,
           manualPickTarget = if (manualMode) manualPick?.let { LatLng(it.latitude, it.longitude) } else null,
-          highlightPoints = manualHighlight,
+          highlightPoints = rangeHighlight,
           stopSegments = stopSegments,
           // この経路の立ち寄り（確定＝紫番号／滞在中＝ティール）と同じ場所は登録済みピンを二重に出さない。
           registeredPlaces = if (showRegisteredPlaces) {
@@ -312,6 +349,7 @@ fun TrackDetailScreen(
               candidateMode -> candidateOverlayHeight
               manualMode && manualPick != null -> sheetState.heightOf(SheetDetent.PEEK)
               manualMode -> 96.dp
+              durationEditMode -> durationSheetState.heightOf(durationSheetState.detent)
               tuningMode -> tuningSheetPeekHeight
               // 場所シートを開いている間は立ち寄り一覧を引っ込めるので、そちらの高さで空ける。
               placeSheetTarget != null -> placeSheetState.heightOf(placeSheetState.detent)
@@ -460,7 +498,7 @@ fun TrackDetailScreen(
     }
 
     // ---- 通常モードのフローティングシート（つまみで開閉・一覧は独立スクロール）----
-    if (!tuningMode && !candidateMode && !manualMode && placeSheetTarget == null) {
+    if (!tuningMode && !candidateMode && !manualMode && !durationEditMode && placeSheetTarget == null) {
       FloatingSheet(
         state = sheetState,
         modifier = Modifier.align(Alignment.BottomCenter),
@@ -484,6 +522,8 @@ fun TrackDetailScreen(
           },
           onEditStop = { editingStop = it },
           onEditStopNote = { editingNoteStop = it },
+          onEditStopDuration = { durationEditStop = it },
+          canEditDuration = manualPoints.size >= 2,
           onReassignStop = { reassignTarget = it },
           onDeleteStop = { deleteWithUndo(listOf(it.id)) },
           onResolveNames = onResolveNames,
@@ -510,6 +550,11 @@ fun TrackDetailScreen(
           },
           onDeleteSelected = {
             deleteWithUndo(selectedStopIds.toList())
+            selectionMode = false
+            selectedStopIds.clear()
+          },
+          onMergeSelected = {
+            mergeWithUndo(selectedStopIds.toList())
             selectionMode = false
             selectedStopIds.clear()
           },
@@ -607,6 +652,27 @@ fun TrackDetailScreen(
           modifier = Modifier.align(Alignment.BottomCenter),
         )
       }
+    }
+
+    // 期間の編集: 地図を見ながら滞在区間を調整する（手動追加と同じレンジUI）。
+    durationEditStop?.let { stop ->
+      CloseInfoWindowWithSheet(infoWindow)
+      StopDurationSheet(
+        stop = stop,
+        points = manualPoints,
+        onConfirm = { arrivalIdx, departureIdx ->
+          onUpdateStopDuration(
+            stop.id,
+            manualPoints[arrivalIdx].timestamp,
+            manualPoints[departureIdx].timestamp,
+          )
+          durationEditStop = null
+        },
+        onCancel = { durationEditStop = null },
+        onRangeChange = { start, end -> durationRange = start to end },
+        sheetState = durationSheetState,
+        modifier = Modifier.align(Alignment.BottomCenter),
+      )
     }
 
     // スナックバー（最前面）。シート/オーバーレイの上に出す。

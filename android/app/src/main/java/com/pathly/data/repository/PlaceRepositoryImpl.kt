@@ -32,6 +32,7 @@ import com.pathly.domain.model.Stop
 import com.pathly.domain.model.StopCandidate
 import com.pathly.domain.model.StopDeletionResult
 import com.pathly.domain.model.StopDetector
+import com.pathly.domain.model.StopMergeResult
 import com.pathly.domain.repository.PlaceRepository
 import com.pathly.util.Logger
 import kotlinx.coroutines.flow.Flow
@@ -67,9 +68,9 @@ class PlaceRepositoryImpl @Inject constructor(
   private val _currentStop = MutableStateFlow<Stop?>(null)
   override val currentStop: StateFlow<Stop?> = _currentStop.asStateFlow()
 
-  // 直近の削除の取り消し用スナップショット（1件だけ保持。次の削除で置き換わる）。
+  // 直近の破壊的な変更（削除・統合）の取り消し用スナップショット（1件だけ保持。次の変更で置き換わる）。
   // 画面のスナックバーは常に最新の1件しか出さないため、単一スロットで十分。
-  private var lastDeletion: DeletedSnapshot? = null
+  private var lastStopChange: StopChangeSnapshot? = null
 
   // 記録中に確定・追記した立ち寄りの「最後の departure（ミリ秒）」をトラック単位で覚える。
   // これを削除では下げずセッション中は単調増加させることで、ユーザーが記録中に削除した
@@ -385,9 +386,45 @@ class PlaceRepositoryImpl @Inject constructor(
     stopDao.updateNote(stopId, note?.trim()?.ifBlank { null })
   }
 
+  override suspend fun updateStopDuration(stopId: Long, arrivalTime: Date, departureTime: Date) {
+    // 到着＝出発の0分滞在や逆転は、押し間違いでしか作れないので書かずに捨てる。
+    if (!departureTime.after(arrivalTime)) {
+      logger.w("Ignored invalid stop duration for stop=$stopId (arrival >= departure)")
+      return
+    }
+    stopDao.updateDuration(stopId, arrivalTime, departureTime)
+  }
+
+  override suspend fun mergeStops(stopIds: List<Long>): StopMergeResult? = mutex.withLock {
+    if (stopIds.size < 2) return@withLock null
+    val targets = stopDao.getByIds(stopIds).sortedBy { it.arrivalTime.time }
+    // まとめてよいのは「同じ経路の・同じ場所への」訪問だけ。混ざっていたらどれが正か決められない。
+    if (targets.size < 2) return@withLock null
+    if (targets.distinctBy { it.placeId }.size > 1 || targets.distinctBy { it.trackId }.size > 1) {
+      logger.w("Refused to merge ${targets.size} stops of different places/tracks")
+      return@withLock null
+    }
+    // 残すのは到着が最も早い1件。期間は全体を覆い、メモは到着順に連結する。
+    val survivor = targets.first()
+    val absorbed = targets.drop(1)
+    val merged = survivor.copy(
+      arrivalTime = Date(targets.minOf { it.arrivalTime.time }),
+      departureTime = Date(targets.maxOf { it.departureTime.time }),
+      note = targets.mapNotNull { it.note?.trim()?.ifBlank { null } }
+        .joinToString("\n")
+        .ifBlank { null },
+    )
+    stopDao.deleteByIds(absorbed.map { it.id })
+    stopDao.update(merged)
+    // 場所は全員が同じで、残った1件が参照し続けるので回収は起きない（stops だけ控える）。
+    lastStopChange = StopChangeSnapshot(stops = absorbed, modifiedStops = listOf(survivor))
+    logger.i("Merged ${targets.size} stops into stop=${survivor.id}")
+    StopMergeResult(survivingStopId = survivor.id, mergedCount = targets.size)
+  }
+
   override suspend fun deleteStops(stopIds: List<Long>): StopDeletionResult = mutex.withLock {
     if (stopIds.isEmpty()) {
-      lastDeletion = null
+      lastStopChange = null
       return@withLock StopDeletionResult(0, 0, 0)
     }
     // 取り消し（Undo）で元IDのまま戻せるよう、削除前に実体を控える。
@@ -418,21 +455,26 @@ class PlaceRepositoryImpl @Inject constructor(
         placesDeleted++
       }
     }
-    lastDeletion = DeletedSnapshot(deletedStops, deletedPlaces, deletedResolutions, deletedGooglePlaces)
+    lastStopChange = StopChangeSnapshot(deletedStops, deletedPlaces, deletedResolutions, deletedGooglePlaces)
     logger.i("Batch-deleted ${stopIds.size} stops (places: -$placesDeleted, kept $placesKept)")
     StopDeletionResult(stopsDeleted = stopIds.size, placesDeleted = placesDeleted, placesKept = placesKept)
   }
 
-  override suspend fun undoLastDeletion(): Boolean = mutex.withLock {
-    val snap = lastDeletion ?: return@withLock false
+  override suspend fun undoLastStopChange(): Boolean = mutex.withLock {
+    val snap = lastStopChange ?: return@withLock false
     // FK 順に復元する: 先に place（子が参照）→ Google データ・解決ログ → stops。
     // 明示的な id を持つ実体を再挿入するので、元の id のまま戻る。
     for (place in snap.places) placeDao.insert(place)
     for (google in snap.googlePlaces) googlePlaceDao.upsert(google)
     for (resolution in snap.resolutions) placeResolutionDao.upsert(resolution)
     for (stop in snap.stops) stopDao.insert(stop)
-    lastDeletion = null
-    logger.i("Undid deletion: restored ${snap.stops.size} stops, ${snap.places.size} places")
+    // 統合で期間・メモを書き換えた行は、消さずに変更前の内容へ戻す。
+    for (stop in snap.modifiedStops) stopDao.update(stop)
+    lastStopChange = null
+    logger.i(
+      "Undid stop change: restored ${snap.stops.size} stops, ${snap.places.size} places, " +
+        "reverted ${snap.modifiedStops.size} stops",
+    )
     true
   }
 
@@ -676,12 +718,16 @@ class PlaceRepositoryImpl @Inject constructor(
     createdAt = createdAt,
   )
 
-  /** 削除の取り消しに必要な実体一式（元IDのまま再挿入して復元する）。 */
-  private class DeletedSnapshot(
+  /**
+   * 削除・統合の取り消しに必要な実体一式。消した行は元IDのまま再挿入し、
+   * 書き換えた行（統合で期間・メモが変わった残り1件）は [modifiedStops] で変更前に戻す。
+   */
+  private class StopChangeSnapshot(
     val stops: List<StopEntity>,
-    val places: List<PlaceEntity>,
-    val resolutions: List<PlaceResolutionEntity>,
-    val googlePlaces: List<GooglePlaceEntity>,
+    val places: List<PlaceEntity> = emptyList(),
+    val resolutions: List<PlaceResolutionEntity> = emptyList(),
+    val googlePlaces: List<GooglePlaceEntity> = emptyList(),
+    val modifiedStops: List<StopEntity> = emptyList(),
   )
 
   /** 検出候補と既存の立ち寄りの滞在時間帯が重なるか（重なれば同じ訪問とみなす）。 */

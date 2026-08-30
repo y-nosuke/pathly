@@ -4,11 +4,13 @@ import androidx.room.Dao
 import androidx.room.Insert
 import androidx.room.Query
 import androidx.room.Transaction
+import androidx.room.Update
 import com.pathly.data.local.entity.PlaceVisitRow
 import com.pathly.data.local.entity.StopEntity
 import com.pathly.data.local.entity.StopWithPlace
 import com.pathly.data.local.entity.TrackStopCount
 import kotlinx.coroutines.flow.Flow
+import java.util.Date
 
 @Dao
 interface StopDao {
@@ -44,6 +46,17 @@ interface StopDao {
   /** 立ち寄り（訪問）のメモを更新する（stop 単位。null/空=メモ無し）。 */
   @Query("UPDATE stops SET note = :note WHERE id = :stopId")
   suspend fun updateNote(stopId: Long, note: String?)
+
+  /**
+   * 滞在期間（到着・出発）を書き換える。GPS 点・補正後の点は触らない（→ adr/0024）。
+   * 他の立ち寄りとの重なり（入れ子を含む）は禁止しない。
+   */
+  @Query("UPDATE stops SET arrivalTime = :arrivalTime, departureTime = :departureTime WHERE id = :stopId")
+  suspend fun updateDuration(stopId: Long, arrivalTime: Date, departureTime: Date)
+
+  /** 実体をそのまま上書きする（統合の取り消しで、変更前の行に戻すのに使う）。 */
+  @Update
+  suspend fun update(stop: StopEntity)
 
   /** その立ち寄り（訪問）が指す場所を付け替える（誤検知の「この訪問だけ選び直し」）。 */
   @Query("UPDATE stops SET placeId = :placeId WHERE id = :stopId")

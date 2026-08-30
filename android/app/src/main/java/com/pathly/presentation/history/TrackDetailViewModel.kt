@@ -134,16 +134,37 @@ class TrackDetailViewModel @Inject constructor(
   /**
    * 立ち寄り（訪問）を削除する（1件でも複数でも同じ）。参照が無くなった場所は自動で場所ごと削除し、
    * 他の履歴で使われている／行きたい登録がある場所は「この訪問だけ」消して保持する。
-   * 確認ダイアログは出さず即時削除し、画面側のスナックバーから [undoDeletion] で取り消せる。
+   * 確認ダイアログは出さず即時削除し、画面側のスナックバーから [undoStopChange] で取り消せる。
    */
   fun deleteStops(stopIds: List<Long>) {
     if (stopIds.isEmpty()) return
     viewModelScope.launch { placeRepository.deleteStops(stopIds) }
   }
 
-  /** 直近の削除を取り消して元に戻す（スナックバーの「取り消す」）。 */
-  fun undoDeletion() {
-    viewModelScope.launch { placeRepository.undoLastDeletion() }
+  /**
+   * 立ち寄り（訪問）の滞在期間を手で直す。GPS 点・補正後の点は触らない（→ adr/0024）。
+   * 他の立ち寄りと期間が重なっても（入れ子でも）そのまま保存する。
+   */
+  fun updateStopDuration(stopId: Long, arrivalTime: Date, departureTime: Date) {
+    viewModelScope.launch { placeRepository.updateStopDuration(stopId, arrivalTime, departureTime) }
+  }
+
+  /**
+   * 選んだ立ち寄り（訪問）を1件にまとめる。同じ場所への訪問が2件以上あるときだけ成立し、
+   * 混ざっていれば何もしない。確認ダイアログは出さず即時実行し、画面側のスナックバーから
+   * [undoStopChange] で取り消せる（削除と同じ流儀）。
+   */
+  fun mergeStops(stopIds: List<Long>) {
+    if (stopIds.size < 2) return
+    viewModelScope.launch {
+      val result = placeRepository.mergeStops(stopIds)
+      if (result == null) _message.value = "同じ場所への立ち寄りだけまとめられます"
+    }
+  }
+
+  /** 直近の削除・統合を取り消して元に戻す（スナックバーの「取り消す」）。 */
+  fun undoStopChange() {
+    viewModelScope.launch { placeRepository.undoLastStopChange() }
   }
 
   /**

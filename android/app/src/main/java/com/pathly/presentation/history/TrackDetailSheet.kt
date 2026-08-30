@@ -135,6 +135,7 @@ internal fun TrackDetailSheet(
   onFocusStop: (Stop) -> Unit,
   onEditStop: (Stop) -> Unit,
   onEditStopNote: (Stop) -> Unit,
+  onEditStopDuration: (Stop) -> Unit,
   onReassignStop: (Stop) -> Unit,
   onDeleteStop: (Stop) -> Unit,
   onResolveNames: () -> Unit,
@@ -145,7 +146,10 @@ internal fun TrackDetailSheet(
   onSelectAll: () -> Unit,
   onCancelSelection: () -> Unit,
   onDeleteSelected: () -> Unit,
+  onMergeSelected: () -> Unit,
   modifier: Modifier = Modifier,
+  // 期間の編集は軌跡点のインデックスで調整するので、点が2つ以上ある経路でだけ出す。
+  canEditDuration: Boolean = true,
 ) {
   val listState = rememberLazyListState()
   // 地図のピン／行タップで選ばれた立ち寄りを、一覧の見える位置へ寄せる（地図↔一覧の連動）。
@@ -158,11 +162,16 @@ internal fun TrackDetailSheet(
   Column(modifier = modifier.fillMaxWidth()) {
     // 固定ヘッダー（スクロールしても消えない）。選択中は選択バーへ差し替える。
     if (selectionMode) {
+      // まとめられるのは同じ場所への訪問が2件以上のときだけ（違う場所が混ざると、
+      // どれが正か決められない → adr/0024）。
+      val selected = stops.filter { it.id in selectedStopIds }
       SelectionBar(
         selectedCount = selectedStopIds.size,
         totalCount = stops.size,
+        canMerge = selected.size >= 2 && selected.distinctBy { it.place.id }.size == 1,
         onSelectAll = onSelectAll,
         onDelete = onDeleteSelected,
+        onMerge = onMergeSelected,
         onCancel = onCancelSelection,
       )
     } else {
@@ -194,6 +203,8 @@ internal fun TrackDetailSheet(
           onFocus = { onFocusStop(stop) },
           onEdit = { onEditStop(stop) },
           onEditNote = { onEditStopNote(stop) },
+          onEditDuration = { onEditStopDuration(stop) },
+          canEditDuration = canEditDuration,
           onReassign = { onReassignStop(stop) },
           onDelete = { onDeleteStop(stop) },
           onToggleSelect = { onToggleSelect(stop) },
@@ -332,8 +343,10 @@ internal fun TrackSummaryHeader(
 internal fun SelectionBar(
   selectedCount: Int,
   totalCount: Int,
+  canMerge: Boolean,
   onSelectAll: () -> Unit,
   onDelete: () -> Unit,
+  onMerge: () -> Unit,
   onCancel: () -> Unit,
 ) {
   // 固定ヘッダー。地図・一覧と区別できるよう淡い背景を敷く。
@@ -357,6 +370,8 @@ internal fun SelectionBar(
         TextButton(onClick = onSelectAll) {
           Text(if (selectedCount == totalCount && totalCount > 0) "全解除" else "全選択")
         }
+        // 同じ場所への複数の訪問を1件にまとめる（到着は最も早い・出発は最も遅い・メモは連結）。
+        TextButton(onClick = onMerge, enabled = canMerge) { Text("まとめる") }
         TextButton(onClick = onDelete, enabled = selectedCount > 0) {
           Text("削除", color = MaterialTheme.colorScheme.error)
         }
@@ -377,6 +392,8 @@ internal fun StopRow(
   onFocus: () -> Unit,
   onEdit: () -> Unit,
   onEditNote: () -> Unit,
+  onEditDuration: () -> Unit,
+  canEditDuration: Boolean,
   onReassign: () -> Unit,
   onDelete: () -> Unit,
   onToggleSelect: () -> Unit,
@@ -468,6 +485,16 @@ internal fun StopRow(
               onEdit()
             },
           )
+          // 区切り方が実態とずれたとき用（信号待ちで切れる・屋内で座標が固まる）。
+          if (canEditDuration) {
+            DropdownMenuItem(
+              text = { Text("滞在時間を編集") },
+              onClick = {
+                menuOpen = false
+                onEditDuration()
+              },
+            )
+          }
           // 誤検知の訂正: この訪問だけ正しい場所へ付け替える。
           DropdownMenuItem(
             text = { Text("場所を選び直す") },

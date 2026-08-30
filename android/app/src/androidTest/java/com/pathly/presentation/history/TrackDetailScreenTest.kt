@@ -2,8 +2,10 @@ package com.pathly.presentation.history
 
 import androidx.compose.ui.test.assertHasClickAction
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.longClick
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -399,9 +401,93 @@ class TrackDetailScreenTest {
     verify { onDeleteStops(listOf(1L)) }
   }
 
+  @Test
+  fun trackDetailScreen_selectSamePlaceStops_mergeTriggersCallback() {
+    val onMergeStops = mockk<(List<Long>) -> Unit>(relaxed = true)
+    val track = createSampleTrack()
+    // 同じ場所（place 9）への2件。広い敷地で1回の外出に複数付いたのを想定。
+    val stops = listOf(
+      sampleStop(id = 1L, placeId = 9L, name = "動物園"),
+      sampleStop(id = 2L, placeId = 9L, name = "動物園"),
+    )
+
+    composeTestRule.setContent {
+      PathlyAndroidTheme {
+        TrackDetailScreen(
+          track = track,
+          onBackClick = mockOnBackClick,
+          mapContent = {},
+          stops = stops,
+          onMergeStops = onMergeStops,
+        )
+      }
+    }
+
+    // 長押しで選択モードに入り、全選択で2件そろえてから「まとめる」。
+    composeTestRule.onAllNodesWithText("動物園")[0].performTouchInput { longClick() }
+    composeTestRule.onNodeWithText("全選択").performClick()
+    composeTestRule.onNodeWithText("2件選択中").assertIsDisplayed()
+    composeTestRule.onNodeWithText("まとめる").performClick()
+
+    verify { onMergeStops(listOf(1L, 2L)) }
+  }
+
+  @Test
+  fun trackDetailScreen_selectDifferentPlaceStops_mergeIsDisabled() {
+    val track = createSampleTrack()
+    // 場所が違う2件は、どれが正か決められないのでまとめさせない（→ adr/0024）。
+    val stops = listOf(
+      sampleStop(id = 1L, placeId = 9L, name = "動物園"),
+      sampleStop(id = 2L, placeId = 10L, name = "売店"),
+    )
+
+    composeTestRule.setContent {
+      PathlyAndroidTheme {
+        TrackDetailScreen(
+          track = track,
+          onBackClick = mockOnBackClick,
+          mapContent = {},
+          stops = stops,
+        )
+      }
+    }
+
+    composeTestRule.onNodeWithText("動物園").performTouchInput { longClick() }
+    composeTestRule.onNodeWithText("全選択").performClick()
+    composeTestRule.onNodeWithText("まとめる").assertIsNotEnabled()
+  }
+
+  @Test
+  fun trackDetailScreen_editStopDuration_savesRangeFromTrackPoints() {
+    val onUpdateStopDuration = mockk<(Long, Date, Date) -> Unit>(relaxed = true)
+    val track = createSampleTrack()
+    val stops = listOf(sampleStop(placeId = 9L, name = "テストカフェ"))
+
+    composeTestRule.setContent {
+      PathlyAndroidTheme {
+        TrackDetailScreen(
+          track = track,
+          onBackClick = mockOnBackClick,
+          mapContent = {},
+          stops = stops,
+          onUpdateStopDuration = onUpdateStopDuration,
+        )
+      }
+    }
+
+    composeTestRule.onNodeWithContentDescription("操作").performClick()
+    composeTestRule.onNodeWithText("滞在時間を編集").performClick()
+    composeTestRule.onNodeWithText("保存").performClick()
+
+    // 触らずに保存すれば、保存済みの時刻に最も近い軌跡点の時刻がそのまま渡る。
+    val points = track.smoothedPoints
+    verify { onUpdateStopDuration(1L, points.first().timestamp, points.last().timestamp) }
+  }
+
   private fun sampleStop(
     placeId: Long = 1L,
     name: String? = null,
+    id: Long = 1L,
   ): Stop {
     val place = Place(
       id = placeId,
@@ -417,7 +503,7 @@ class TrackDetailScreenTest {
       updatedAt = Date(0L),
     )
     return Stop(
-      id = 1L,
+      id = id,
       place = place,
       trackId = 123L,
       arrivalTime = Date(1640995200000L),

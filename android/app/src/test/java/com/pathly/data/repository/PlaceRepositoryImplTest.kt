@@ -735,7 +735,7 @@ class PlaceRepositoryImplTest {
   }
 
   @Test
-  fun undoLastDeletion_restoresStopsAndOrphanedPlace() = runTest {
+  fun undoLastStopChange_afterDeletion_restoresStopsAndOrphanedPlace() = runTest {
     // 孤立 place を回収する削除 → 取り消しで place・Google データ・解決ログ・stop を元IDのまま復元。
     val stop = stopEntity(100L, 10L)
     val place = PlaceEntity(id = 10L, latitude = 35.0, longitude = 139.0, source = "DETECTED")
@@ -749,7 +749,7 @@ class PlaceRepositoryImplTest {
     coEvery { googlePlaceDao.getByPlace(10L) } returns google
 
     repository.deleteStops(listOf(100L))
-    val undone = repository.undoLastDeletion()
+    val undone = repository.undoLastStopChange()
 
     assertTrue(undone)
     coVerify { placeDao.insert(place) }
@@ -759,8 +759,105 @@ class PlaceRepositoryImplTest {
   }
 
   @Test
-  fun undoLastDeletion_withoutPriorDeletion_returnsFalse() = runTest {
-    assertFalse(repository.undoLastDeletion())
+  fun undoLastStopChange_withoutPriorChange_returnsFalse() = runTest {
+    assertFalse(repository.undoLastStopChange())
+  }
+
+  // --- 滞在期間の編集・立ち寄りの手動統合（adr/0024）---
+
+  private fun stopEntity(id: Long, placeId: Long, arrivalMillis: Long, departureMillis: Long, note: String? = null) = StopEntity(
+    id = id,
+    placeId = placeId,
+    trackId = 1L,
+    arrivalTime = Date(arrivalMillis),
+    departureTime = Date(departureMillis),
+    note = note,
+  )
+
+  @Test
+  fun updateStopDuration_writesGivenRange() = runTest {
+    repository.updateStopDuration(100L, Date(1_000L), Date(5_000L))
+
+    coVerify { stopDao.updateDuration(100L, Date(1_000L), Date(5_000L)) }
+  }
+
+  @Test
+  fun updateStopDuration_arrivalNotBeforeDeparture_isIgnored() = runTest {
+    // 到着＝出発（滞在0分）と逆転は押し間違いでしか作れないので書かない。
+    repository.updateStopDuration(100L, Date(5_000L), Date(5_000L))
+    repository.updateStopDuration(100L, Date(5_000L), Date(1_000L))
+
+    coVerify(exactly = 0) { stopDao.updateDuration(any(), any(), any()) }
+  }
+
+  @Test
+  fun mergeStops_samePlace_keepsEarliestAndCoversWholeRange() = runTest {
+    // 到着が最も早い 100 を残し、期間は 100 の到着〜101 の出発まで広げる。101 は消す。
+    val first = stopEntity(100L, 10L, 0L, 60_000L)
+    val second = stopEntity(101L, 10L, 120_000L, 300_000L)
+    coEvery { stopDao.getByIds(listOf(100L, 101L)) } returns listOf(second, first)
+
+    val result = repository.mergeStops(listOf(100L, 101L))
+
+    assertEquals(100L, result?.survivingStopId)
+    assertEquals(2, result?.mergedCount)
+    coVerify { stopDao.deleteByIds(listOf(101L)) }
+    coVerify { stopDao.update(first.copy(arrivalTime = Date(0L), departureTime = Date(300_000L))) }
+  }
+
+  @Test
+  fun mergeStops_concatenatesNotesInArrivalOrder() = runTest {
+    val first = stopEntity(100L, 10L, 0L, 60_000L, note = "入口")
+    val second = stopEntity(101L, 10L, 120_000L, 300_000L, note = "  ゾウ舎  ")
+    val third = stopEntity(102L, 10L, 400_000L, 500_000L, note = "   ")
+    coEvery { stopDao.getByIds(listOf(100L, 101L, 102L)) } returns listOf(third, second, first)
+
+    repository.mergeStops(listOf(100L, 101L, 102L))
+
+    // 空白だけのメモは落とし、残りを到着順に連結する。
+    coVerify {
+      stopDao.update(
+        first.copy(arrivalTime = Date(0L), departureTime = Date(500_000L), note = "入口\nゾウ舎"),
+      )
+    }
+  }
+
+  @Test
+  fun mergeStops_differentPlaces_isRefused() = runTest {
+    // 場所が混ざるとどれが正か決められないので、まとめずに null を返す。
+    coEvery { stopDao.getByIds(listOf(100L, 101L)) } returns listOf(
+      stopEntity(100L, 10L, 0L, 60_000L),
+      stopEntity(101L, 11L, 120_000L, 300_000L),
+    )
+
+    assertNull(repository.mergeStops(listOf(100L, 101L)))
+
+    coVerify(exactly = 0) { stopDao.deleteByIds(any()) }
+    coVerify(exactly = 0) { stopDao.update(any()) }
+  }
+
+  @Test
+  fun mergeStops_singleStop_isNoOp() = runTest {
+    assertNull(repository.mergeStops(listOf(100L)))
+
+    coVerify(exactly = 0) { stopDao.getByIds(any()) }
+    coVerify(exactly = 0) { stopDao.deleteByIds(any()) }
+  }
+
+  @Test
+  fun undoLastStopChange_afterMerge_restoresAbsorbedAndRevertsSurvivor() = runTest {
+    val first = stopEntity(100L, 10L, 0L, 60_000L)
+    val second = stopEntity(101L, 10L, 120_000L, 300_000L)
+    coEvery { stopDao.getByIds(listOf(100L, 101L)) } returns listOf(first, second)
+
+    repository.mergeStops(listOf(100L, 101L))
+    val undone = repository.undoLastStopChange()
+
+    assertTrue(undone)
+    coVerify { stopDao.insert(second) } // 吸収した側は元IDのまま戻す
+    coVerify { stopDao.update(first) } // 残した側は変更前の期間・メモへ戻す
+    // 場所は全員同じで残った1件が参照し続けるので、回収も復元も起きない。
+    coVerify(exactly = 0) { placeDao.insert(any()) }
   }
 
   @Test
