@@ -5,6 +5,7 @@ plugins {
   alias(libs.plugins.kotlin.compose)
   alias(libs.plugins.hilt)
   alias(libs.plugins.ksp)
+  alias(libs.plugins.room)
   alias(libs.plugins.spotless)
 }
 
@@ -83,30 +84,21 @@ android {
       isReturnDefaultValues = true
     }
   }
-
-  // Room のスキーマ JSON を instrumented test（MigrationTestHelper）から読めるように
-  // assets へ含める。出力先は下の ksp{} で指定した $projectDir/schemas。
-  sourceSets {
-    getByName("androidTest") {
-      assets.directories.add("$projectDir/schemas")
-    }
-  }
 }
 
 // Room のスキーマを $projectDir/schemas に書き出す（exportSchema=true と対で使う）。
 // マイグレーションの自動検証（MigrationTestHelper）とスキーマ差分レビューのため。
-ksp {
-  arg("room.schemaLocation", "$projectDir/schemas")
-}
-
-// 書き出し先はバリアント共通なので、debug と release の KSP が重なると
-// **同じ JSON を一方が書いている最中に他方が読む**。CI で kspDebugKotlin が
-// 書きかけの 15.json を読んで落ちた（JsonDecodingException: had 'EOF'）。
-// KSP は Worker API で非同期に走るため、単一プロジェクトでも重なりうる。
-// 新しいバージョンの JSON を初めて書き出すとき（＝DB を上げたとき）に踏む。
-// 順番を固定して重なりを無くす。
-tasks.matching { it.name == "kspReleaseKotlin" }.configureEach {
-  mustRunAfter(tasks.matching { it.name == "kspDebugKotlin" })
+//
+// **書き出しは Room Gradle Plugin に任せる。** KSP に `room.schemaLocation` を直接渡していた頃は
+// 出力先がバリアント共通で、debug と release の KSP が**同じ JSON を一方が書いている最中に他方が
+// 読み**、新しいバージョンを初めて書き出すときだけ CI が確率で落ちていた（JsonDecodingException:
+// had 'EOF'）。実行順の固定で回避していたが、プラグインは KSP にバリアントごとの build 内の
+// ディレクトリを渡し、`copyRoomSchemas` でここへまとめるので、そもそも重ならない。
+//
+// instrumented test の assets への取り込みも
+// `copyRoomSchemasToAndroidTestAssets…` が面倒を見るので、sourceSets の手当ては要らない。
+room {
+  schemaDirectory("$projectDir/schemas")
 }
 
 dependencies {
