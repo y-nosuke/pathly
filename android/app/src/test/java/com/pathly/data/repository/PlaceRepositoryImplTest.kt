@@ -33,6 +33,7 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
+import org.junit.Before
 import org.junit.Test
 import java.util.Date
 
@@ -48,6 +49,14 @@ class PlaceRepositoryImplTest {
   private val wishlistDao = mockk<WishlistDao>(relaxed = true)
   private val visitedPlaceDao = mockk<VisitedPlaceDao>(relaxed = true)
   private val resolver = mockk<PlacesNameResolver>(relaxed = true)
+
+  @Before
+  fun stubNullableLongs() {
+    // relaxed モックは nullable な Long にも 0L を返す。実 DAO は「持っている place が無ければ null」
+    // なので、既定を null にしておく（要るテストだけ上書きする）。
+    coEvery { googlePlaceDao.getPlaceIdByGoogleId(any()) } returns null
+  }
+
   private val repository = PlaceRepositoryImpl(
     placeDao,
     stopDao,
@@ -953,6 +962,26 @@ class PlaceRepositoryImplTest {
   }
 
   @Test
+  fun resolve_whenUntouchedUserPlaceHitsSameFacility_merges() = runTest {
+    // 地図の空き地点から手で足しただけの place は USER 由来だが、中身が空なら寄せてよい
+    // （USER は自動回収から守る印であって、施設の同一性で寄せない理由ではない → adr/0025）。
+    val place = PlaceEntity(id = 31L, latitude = 35.0, longitude = 139.0, source = PlaceSource.USER.name)
+    coEvery { placeDao.getUnresolvedPlaces() } returns listOf(place)
+    coEvery { placeDao.getById(31L) } returns place
+    coEvery { resolver.resolve(any(), any()) } returns
+      PlacesNameResolver.Outcome.Found("神社", "住所", null, "gp-same", 35.7, 139.7)
+    coEvery { googlePlaceDao.getPlaceIdByGoogleId("gp-same") } returns 7L
+
+    repository.resolveAllUnresolvedNames()
+
+    coVerify { stopDao.repointPlace(31L, 7L) }
+    coVerify { placeDao.deleteById(31L) }
+    // 寄せる側が USER なら寄せ先も USER に上げる（まとめた結果を自動回収に戻さない）。
+    coVerify { placeDao.updateSource(7L, PlaceSource.USER.name) }
+    coVerify(exactly = 0) { googlePlaceDao.upsert(any()) }
+  }
+
+  @Test
   fun resolve_whenPlaceWasTouchedByUser_doesNotMerge() = runTest {
     // 自分で名前を付けた place は、同じ施設に解決されても吸収しない（誤解決で融合させない）。
     coEvery { placeDao.getUnresolvedPlaces() } returns listOf(
@@ -966,7 +995,10 @@ class PlaceRepositoryImplTest {
 
     coVerify(exactly = 0) { stopDao.repointPlace(any(), any()) }
     coVerify(exactly = 0) { placeDao.deleteById(any()) }
-    coVerify { googlePlaceDao.upsert(match { it.placeId == 31L && it.googlePlaceId == "gp-same" }) }
+    // 寄せられないうえに同じ施設を2つ持たせるわけにもいかないので、施設情報は付けない（→ adr/0025）。
+    coVerify(exactly = 0) { googlePlaceDao.upsert(any()) }
+    // 同じ問い合わせを繰り返さないよう、解決記録は残す。
+    coVerify { placeResolutionDao.upsert(match { it.placeId == 31L }) }
   }
 
   @Test

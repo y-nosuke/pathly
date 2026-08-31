@@ -65,11 +65,11 @@
 - [x] 経路の名前・お気に入り・絞り込み／並べ替え
 - [x] 立ち寄りの手動追加・誤検知の付け替え・訪問メモ
 - [x] 立ち寄りの滞在期間の編集・手動統合（→ [ADR-0024](adr/0024-stop-duration-edit-and-manual-merge.md)）
-- [ ] **`google_places.googlePlaceId` に UNIQUE を付ける**（同じ施設の行が二重にできないよう DB で守る）。
-      前提3つのうち「既存重複の統合」は v15 で済み、残りは 2 つ。
-      (1) `GooglePlaceDao` の `@Insert(onConflict = REPLACE)` を外す、
-      (2) **強制新規（`forceNewPlace`）で作った place が、既に使われている施設に解決されたときの扱いを決める**
-      （落とす／統合する／許す。仕様の判断なので ADR に残す）。
+- [x] **`google_places.googlePlaceId` に UNIQUE を付ける**（v16 → [ADR-0025](adr/0025-one-place-per-google-facility.md)）。
+      あわせて自動統合の条件から由来（`source`）を外し、中身が空なら手動追加の place も寄せるようにした。
+- [ ] **場所を手でまとめる導線**（同じ施設の場所が 2 つ残ったとき、名前・メモ・行きたい・訪問済みを
+      引き継いで 1 つにする）。ADR-0025 で「衝突したら施設情報を付けずに残す」と決めたぶん、
+      あとから手で片付ける手立てが要る。
 - [ ] 統合・期間編集を**実 DB で確かめる instrumented test**（いまのユニットテストは DAO がモックなので、
       SQL と外部キーの挙動までは見ていない。`MigrationTest` と同じ流儀で、統合 → 期間・メモ・残った1件 →
       取り消しで完全復元、までを Room の実 DB で通す）

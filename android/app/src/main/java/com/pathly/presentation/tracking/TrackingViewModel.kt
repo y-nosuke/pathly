@@ -438,8 +438,9 @@ class TrackingViewModel @Inject constructor(
   ) {
     viewModelScope.launch {
       try {
-        placeEditUseCase.saveEdits(item, name, note, wishlist, priority, visited, link)
-        _uiState.update { it.copy(placeRegisteredMessage = "保存しました") }
+        val result = placeEditUseCase.saveEdits(item, name, note, wishlist, priority, visited, link)
+        val message = if (result.linkRefused) "同じ施設の場所が既にあるため、施設情報は紐付けませんでした（他は保存しました）" else "保存しました"
+        _uiState.update { it.copy(placeRegisteredMessage = message) }
       } catch (e: Exception) {
         _uiState.update { it.copy(errorMessage = "保存に失敗しました: ${e.message}") }
       }

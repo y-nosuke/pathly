@@ -132,9 +132,12 @@ class PlaceEditUseCase @Inject constructor(
     priority: Priority,
     visited: Boolean,
     link: PlaceSearchResult? = null,
-  ) {
+  ): SaveResult {
+    // 同じ施設を他の場所が既に持っていると紐付けは断られる（→ adr/0025）。名前・メモなど
+    // 他の編集はそのまま保存し、断られたことだけ呼び出し側へ返す。
+    var linkRefused = false
     if (link != null) {
-      wishlistRepository.linkPlaceToGoogle(item.place.id, link)
+      linkRefused = !wishlistRepository.linkPlaceToGoogle(item.place.id, link)
     }
     if (name.trim() != (item.place.name ?: "").trim()) {
       wishlistRepository.renamePlace(item.place.id, name.trim())
@@ -158,5 +161,12 @@ class PlaceEditUseCase @Inject constructor(
     if (item.visitCount == 0 && visited != item.isManuallyVisited) {
       wishlistRepository.setVisited(item.place.id, visited)
     }
+    return SaveResult(linkRefused = linkRefused)
   }
+
+  /** [saveEdits] の結果。保存そのものは常に行い、施設の紐付けだけが断られることがある。 */
+  data class SaveResult(
+    /** 同じ施設を他の場所が既に持っていたため、Google 施設の紐付けを行わなかった。 */
+    val linkRefused: Boolean,
+  )
 }

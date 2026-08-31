@@ -71,7 +71,14 @@ interface WishlistRepository {
    * 暫定の座標を施設の正確な座標へ置き換える。places.name（ユーザー名）は触らない。
    * オフライン記録の未解決・手動登録で ID の無い場所を、確実に Google と結びつける手段。
    */
-  suspend fun linkPlaceToGoogle(placeId: Long, result: PlaceSearchResult)
+  /**
+   * 場所に Google 施設を紐付ける（「Googleで情報を取得」）。
+   *
+   * **同じ施設を他の場所が既に持っていたら紐付けず false を返す。**同じ施設を 2 つの場所が持つと
+   * 「この施設の場所はどれか」の答えがブレるため（→ adr/0025）。まとめるかはユーザーの判断なので、
+   * 勝手には寄せない。呼び出し側は false のとき理由を伝えること。
+   */
+  suspend fun linkPlaceToGoogle(placeId: Long, result: PlaceSearchResult): Boolean
 
   /** 座標の近くの POI 候補を返す（場所詳細で「Googleで情報を取得」時の候補提示に使う）。 */
   suspend fun nearbyPois(latitude: Double, longitude: Double): List<PlaceSearchResult>

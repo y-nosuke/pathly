@@ -1,18 +1,24 @@
 package com.pathly.data.local.dao
 
 import androidx.room.Dao
-import androidx.room.Insert
-import androidx.room.OnConflictStrategy
 import androidx.room.Query
 import androidx.room.Transaction
+import androidx.room.Upsert
 import com.pathly.data.local.entity.GooglePlaceEntity
 import com.pathly.data.local.entity.GooglePlaceWithCategory
 
 @Dao
 interface GooglePlaceDao {
 
-  /** Google 由来データを追加／更新する（再取得で上書き）。 */
-  @Insert(onConflict = OnConflictStrategy.REPLACE)
+  /**
+   * Google 由来データを追加／更新する（再取得で上書き）。
+   *
+   * REPLACE は使わない。REPLACE は削除してから入れ直すので、`googlePlaceId` の UNIQUE に
+   * ぶつかった行を**黙って消して**別の place に付け替えてしまう。`@Upsert` は主キー（placeId）の
+   * 衝突だけを更新に読み替え、施設の重複はエラーにする。**呼ぶ前に
+   * [getPlaceIdByGoogleId] で他の place が持っていないか確かめること**（→ adr/0025）。
+   */
+  @Upsert
   suspend fun upsert(googlePlace: GooglePlaceEntity)
 
   @Query("SELECT * FROM google_places WHERE placeId = :placeId")
