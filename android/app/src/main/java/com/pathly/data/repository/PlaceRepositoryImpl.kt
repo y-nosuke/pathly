@@ -593,7 +593,7 @@ class PlaceRepositoryImpl @Inject constructor(
         // 施設の同一性でまとまる）。**upsert より先に**引くこと。後だと自分自身が当たる。
         val existing = googlePlaceDao.getPlaceIdByGoogleId(outcome.googlePlaceId)
         if (existing != null && existing != place.id) {
-          if (isUntouched(place)) {
+          if (isUntouchedDetected(place)) {
             mergeIntoExistingPlace(place.id, existing)
             return existing
           }
@@ -635,24 +635,20 @@ class PlaceRepositoryImpl @Inject constructor(
    * 付いた place、[PlaceSource.USER] 由来は、ID が同じでも吸収しない。
    */
   /**
-   * まだ誰も中身を入れていない place か（自分の名前・メモ・行きたい・訪問済みの印がどれも無い）。
+   * 自動でまとめてよい place か（**検出が作った**もので、まだ誰も中身を入れていない）。
    *
-   * **由来（[PlaceSource]）は見ない。** `USER` は「自動回収から守る」ための印であって、
-   * 同じ施設と分かったときに寄せない理由ではない。地図の空き地点から手で足した place は
-   * `USER` になるが、名前もメモも付けていなければ寄せてよい（→ adr/0025）。
+   * **由来は見る。** ユーザーが地図で指して作った place（`USER`）は、たとえ中身が空でも
+   * まとめない。**地点を指したこと自体が「ここを別の場所として残したい」という意思表示**
+   * だから（→ adr/0025）。同じ施設の別の入口を、別の場所として持っておきたいことがある。
    */
-  private suspend fun isUntouched(place: PlaceEntity): Boolean = place.name == null &&
+  private suspend fun isUntouchedDetected(place: PlaceEntity): Boolean = place.source == PlaceSource.DETECTED.name &&
+    place.name == null &&
     place.note == null &&
     wishlistDao.countByPlace(place.id) == 0 &&
     visitedPlaceDao.countByPlace(place.id) == 0
 
   /** 立ち寄りの参照を移してから、統合される側の place を消す（子は CASCADE で消える）。 */
   private suspend fun mergeIntoExistingPlace(fromPlaceId: Long, intoPlaceId: Long) {
-    // 寄せる側が USER（ユーザーが明示的に作った）なら、寄せ先も USER に昇格させる。
-    // 印を落とすと、まとめた結果が自動回収の対象に戻ってしまう。
-    if (placeDao.getById(fromPlaceId)?.source == PlaceSource.USER.name) {
-      placeDao.updateSource(intoPlaceId, PlaceSource.USER.name)
-    }
     stopDao.repointPlace(fromPlaceId, intoPlaceId)
     placeDao.deleteById(fromPlaceId)
     // 滞在中に覚えていたのが統合された側なら、寄せ先に差し替える（消えた id を使い続けない）。
