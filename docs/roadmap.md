@@ -34,12 +34,13 @@
 > これは実施時点の記録。**現在のバージョンは Gradle 定義（`gradle/libs.versions.toml` /
 > `gradle-wrapper.properties`）を正とする**（ここでは更新しない）。
 
-- [ ] **Room Gradle Plugin へ移行する**（KSP のスキーマ競合の根本対処）。`room.schemaLocation` は
-      バリアント共通なので debug と release の KSP が同じ `NN.json` を読み書きし、**新しいバージョンを
-      初めて書き出すときだけ** CI が確率で落ちる。いまは `app/build.gradle.kts` で
-      `kspReleaseKotlin` を `kspDebugKotlin` の後に固定して回避している。移行するとバリアントごとに
-      出力先が分かれるが、**スキーマの置き場所が変わる**のでコミット済みの JSON と androidTest の
-      assets 参照に波及する。
+- [x] **Room Gradle Plugin へ移行する**（KSP のスキーマ競合の根本対処）。KSP に
+      `room.schemaLocation` を直接渡していた頃は出力先がバリアント共通で、debug と release が
+      同じ `NN.json` を読み書きし、新しいバージョンを初めて書き出すときだけ CI が確率で落ちていた。
+      プラグインはバリアントごとの build 内ディレクトリに書かせ、`copyRoomSchemas` で
+      `app/schemas/` へまとめる。**置き場所は変わらず**、androidTest の assets 取り込みも
+      プラグインの `copyRoomSchemasToAndroidTestAssets…` に任せられた（実行順の固定と
+      `sourceSets` の手当ては削除）。
 
 ### コード品質の整理（2026-08-15 完了・PR #51）
 
