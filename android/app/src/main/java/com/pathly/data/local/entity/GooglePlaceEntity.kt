@@ -31,7 +31,12 @@ import androidx.room.PrimaryKey
     ),
   ],
   // FK の親を消すときの走査と、カテゴリ別の絞り込みのために索引を張る。
-  indices = [Index(value = ["categoryId"])],
+  // googlePlaceId は **UNIQUE**。同じ施設を 2 つの place が持つと「この施設の place はどれか」の
+  // 答えがブレるので、DB で作らせない（→ adr/0025）。
+  indices = [
+    Index(value = ["categoryId"]),
+    Index(value = ["googlePlaceId"], unique = true),
+  ],
 )
 data class GooglePlaceEntity(
   @PrimaryKey

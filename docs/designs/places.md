@@ -76,6 +76,14 @@ place 1 件 1 回のままで増えない（→ [ADR-0014](../adr/0014-place-nam
 自動命名は半径 50m の最寄り 1 件しか見ないので**別の場所が同じ施設に解決されることがあり**、
 融合してしまうと分け直せないため。
 
+`USER`（地図で指して作った place）を外すのは、**地点を指したこと自体が「ここを別の場所として
+残したい」という意思表示**だから（→ [ADR-0025](../adr/0025-one-place-per-google-facility.md)）。
+同じ施設でも、別の入口・別の棟を別の場所として持っておきたいことがある。
+
+**寄せられないときは、施設情報を付けずに place を残す。** 同じ施設を 2 つの place に持たせないため。
+自動の解決は黙って見送り（解決記録は残して同じ問い合わせを繰り返さない）、場所詳細の
+「Googleで情報を取得」は紐付けを断って理由を画面に出す。
+
 滞在中に place を確保するのは**ひとつの滞在につき 1 回**（[stops.md](stops.md)）。
 
 既にできてしまった重複は、**v15 のマイグレーションで同じ条件のまま 1 件にまとめる**
@@ -84,8 +92,14 @@ place 1 件 1 回のままで増えない（→ [ADR-0014](../adr/0014-place-nam
 ——`PRAGMA foreign_keys` はトランザクション内では黙って無視されるため、外部キーが効いていない
 状態で走ると `google_places` / `place_resolutions` が孤児として残る。
 
-`google_places.googlePlaceId` の一意制約は、既存データの統合と衝突方針（`REPLACE` をやめる）が
-決まってから入れる。それまでは統合ロジックで守る。
+**`google_places.googlePlaceId` は UNIQUE**（v16 → [ADR-0025](../adr/0025-one-place-per-google-facility.md)）。
+同じ施設を 2 つの place が持つと `getPlaceIdByGoogleId` の答えがブレ、同じ施設への訪問がばらけるため、
+DB で作らせない。v16 のマイグレーションは、重複している施設の行を**最も古い 1 件だけ残して**消す
+（place と立ち寄りは消さない＝記録は失わない）。
+
+書き込みは `@Upsert`。`@Insert(onConflict = REPLACE)` は使わない——REPLACE は削除してから入れ直すので、
+UNIQUE にぶつかった行を**黙って消して**別の place に付け替えてしまう。書く前に
+`getPlaceIdByGoogleId` で他の place が持っていないか確かめるのは呼び出し側の責任。
 
 ## 由来（source）と自動回収
 

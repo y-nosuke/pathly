@@ -5,6 +5,7 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.pathly.data.local.PathlyDatabase
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -305,6 +306,61 @@ class MigrationTest {
       assertTrue(cursor.moveToFirst())
       assertEquals(1, cursor.getInt(0))
     }
+    db.close()
+  }
+
+  @Test
+  fun migrate15To16_keepsOldestFacilityRowAndAddsUniqueIndex() {
+    // v15 で寄せられなかった重複（触られた place が2つ以上ある施設）を用意する。
+    helper.createDatabase(TEST_DB, 15).apply {
+      execSQL(
+        "INSERT INTO places (id, name, latitude, longitude, note, source, createdAt, updatedAt) " +
+          "VALUES (1, 'こっちが先', 35.7, 139.7, NULL, 'USER', 0, 0), " +
+          "(2, 'あとから登録', 35.8, 139.8, 'メモあり', 'USER', 0, 0), " +
+          "(3, '別の施設', 35.1, 139.1, NULL, 'USER', 0, 0)",
+      )
+      execSQL(
+        "INSERT INTO google_places (placeId, googlePlaceId, name, address, categoryId, latitude, longitude) " +
+          "VALUES (1, 'gp-same', '清瀧神社', NULL, NULL, 35.7, 139.7), " +
+          "(2, 'gp-same', '清瀧神社', NULL, NULL, 35.7, 139.7), " +
+          "(3, 'gp-other', '別の施設', NULL, NULL, 35.1, 139.1)",
+      )
+      close()
+    }
+
+    val db = helper.runMigrationsAndValidate(
+      TEST_DB,
+      16,
+      true,
+      DatabaseMigrations.MIGRATION_15_16,
+    )
+
+    // 施設情報は最も古い1件だけが残る。重複していない施設はそのまま。
+    db.query("SELECT placeId FROM google_places ORDER BY placeId").use { cursor ->
+      assertTrue(cursor.moveToFirst())
+      assertEquals(1L, cursor.getLong(0))
+      assertTrue(cursor.moveToNext())
+      assertEquals(3L, cursor.getLong(0))
+      assertFalse(cursor.moveToNext())
+    }
+
+    // place そのものは消さない（名前・メモを守る）。施設情報が落ちるだけ。
+    db.query("SELECT COUNT(*) FROM places").use { cursor ->
+      assertTrue(cursor.moveToFirst())
+      assertEquals(3, cursor.getInt(0))
+    }
+
+    // 以後は同じ施設を2つ持てない。
+    var rejected = false
+    try {
+      db.execSQL(
+        "INSERT INTO google_places (placeId, googlePlaceId, name, address, categoryId, latitude, longitude) " +
+          "VALUES (2, 'gp-same', '清瀧神社', NULL, NULL, 35.7, 139.7)",
+      )
+    } catch (e: android.database.sqlite.SQLiteConstraintException) {
+      rejected = true
+    }
+    assertTrue("同じ googlePlaceId は UNIQUE で弾かれること", rejected)
     db.close()
   }
 

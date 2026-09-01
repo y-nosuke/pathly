@@ -104,6 +104,25 @@ class WishlistRepositoryImplTest {
   }
 
   @Test
+  fun linkPlaceToGoogle_whenAnotherPlaceHoldsTheFacility_refusesAndWritesNothing() = runTest {
+    // 同じ施設を他の場所が既に持っていたら紐付けない（→ adr/0025）。まとめるかはユーザーの判断。
+    val result = PlaceSearchResult(
+      googlePlaceId = "gp-42",
+      name = "清瀧神社",
+      address = "千葉県浦安市…",
+      category = null,
+      latitude = 35.65,
+      longitude = 139.9,
+    )
+    coEvery { googlePlaceDao.getPlaceIdByGoogleId("gp-42") } returns 99L
+
+    assertFalse(repository.linkPlaceToGoogle(7L, result))
+
+    coVerify(exactly = 0) { googlePlaceDao.upsert(any()) }
+    coVerify(exactly = 0) { placeResolutionDao.upsert(any()) }
+  }
+
+  @Test
   fun linkPlaceToGoogle_writesGoogleDataResolutionAndAdoptsCoordinates() = runTest {
     val result = PlaceSearchResult(
       googlePlaceId = "gp-42",
@@ -114,8 +133,9 @@ class WishlistRepositoryImplTest {
       longitude = 139.9,
     )
     coEvery { googlePlaceCategoryDao.upsertAndGetId("shinto_shrine", "神社") } returns 5L
+    coEvery { googlePlaceDao.getPlaceIdByGoogleId("gp-42") } returns null
 
-    repository.linkPlaceToGoogle(7L, result)
+    assertTrue(repository.linkPlaceToGoogle(7L, result))
 
     // 施設情報を google_places に上書き保存する。
     coVerify {

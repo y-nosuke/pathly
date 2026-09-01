@@ -580,6 +580,34 @@ object DatabaseMigrations {
   /**
    * 現在利用可能な全てのマイグレーション
    */
+  val MIGRATION_15_16 = object : Migration(15, 16) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+      try {
+        logger.i("Starting migration from version 15 to 16")
+
+        // 同じ施設の行が 2 つ以上あれば、**最も古い 1 件だけ**を残して他は消す。
+        // v15 で「触られていない検出由来」は place ごと寄せたので、ここに残っているのは
+        // 触られた place が 2 つ以上ある施設。place そのものは消さない（名前・メモ・行きたいを
+        // 守る）。施設情報だけ落とし、以後は先にある場所が施設を持ち続ける（→ adr/0025）。
+        db.execSQL(
+          "DELETE FROM `google_places` WHERE `placeId` NOT IN (" +
+            "SELECT MIN(`placeId`) FROM `google_places` GROUP BY `googlePlaceId`)",
+        )
+        // 解決記録は消さない。消すと自動命名がまた同じ施設を引いて、また断られるだけになる。
+
+        db.execSQL(
+          "CREATE UNIQUE INDEX IF NOT EXISTS `index_google_places_googlePlaceId` " +
+            "ON `google_places` (`googlePlaceId`)",
+        )
+
+        logger.i("Migration from version 15 to 16 completed successfully")
+      } catch (e: Exception) {
+        logger.e("Migration from version 15 to 16 failed", e)
+        throw e
+      }
+    }
+  }
+
   val ALL_MIGRATIONS = arrayOf(
     MIGRATION_1_2,
     MIGRATION_2_3,
@@ -595,6 +623,7 @@ object DatabaseMigrations {
     MIGRATION_12_13,
     MIGRATION_13_14,
     MIGRATION_14_15,
+    MIGRATION_15_16,
     // 将来のマイグレーションをここに追加
   )
 

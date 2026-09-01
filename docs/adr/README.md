@@ -40,3 +40,4 @@
 | [0022](0022-do-not-bridge-gaps.md)                   | GPS が取れなかった区間は、線では繋がず距離では直線で補う                  | Accepted |
 | [0023](0023-place-identity-and-coordinate-anchor.md) | 場所の同一性は不変なアンカー座標と googlePlaceId で決める                 | Accepted |
 | [0024](0024-stop-duration-edit-and-manual-merge.md)  | 同じ場所への複数の立ち寄りは自動でまとめず、期間編集と手動統合に委ねる    | Accepted |
+| [0025](0025-one-place-per-google-facility.md)        | ひとつの Google 施設を持てる場所は 1 つだけにする（v16）                  | Accepted |

@@ -34,6 +34,13 @@
 > これは実施時点の記録。**現在のバージョンは Gradle 定義（`gradle/libs.versions.toml` /
 > `gradle-wrapper.properties`）を正とする**（ここでは更新しない）。
 
+- [ ] **Room Gradle Plugin へ移行する**（KSP のスキーマ競合の根本対処）。`room.schemaLocation` は
+      バリアント共通なので debug と release の KSP が同じ `NN.json` を読み書きし、**新しいバージョンを
+      初めて書き出すときだけ** CI が確率で落ちる。いまは `app/build.gradle.kts` で
+      `kspReleaseKotlin` を `kspDebugKotlin` の後に固定して回避している。移行するとバリアントごとに
+      出力先が分かれるが、**スキーマの置き場所が変わる**のでコミット済みの JSON と androidTest の
+      assets 参照に波及する。
+
 ### コード品質の整理（2026-08-15 完了・PR #51）
 
 - [x] 記録サービスの Android 依存を `TrackingController` へ、名前解決のキャッチアップを WorkManager へ
@@ -58,6 +65,11 @@
 - [x] 経路の名前・お気に入り・絞り込み／並べ替え
 - [x] 立ち寄りの手動追加・誤検知の付け替え・訪問メモ
 - [x] 立ち寄りの滞在期間の編集・手動統合（→ [ADR-0024](adr/0024-stop-duration-edit-and-manual-merge.md)）
+- [x] **`google_places.googlePlaceId` に UNIQUE を付ける**（v16 → [ADR-0025](adr/0025-one-place-per-google-facility.md)）。
+      自動でまとめるのは検出が作った place だけ（地図で指した place は別の場所として残す）。
+- [ ] **場所を手でまとめる導線**（同じ施設の場所が 2 つ残ったとき、名前・メモ・行きたい・訪問済みを
+      引き継いで 1 つにする）。ADR-0025 で「衝突したら施設情報を付けずに残す」と決めたぶん、
+      あとから手で片付ける手立てが要る。
 - [ ] 統合・期間編集を**実 DB で確かめる instrumented test**（いまのユニットテストは DAO がモックなので、
       SQL と外部キーの挙動までは見ていない。`MigrationTest` と同じ流儀で、統合 → 期間・メモ・残った1件 →
       取り消しで完全復元、までを Room の実 DB で通す）

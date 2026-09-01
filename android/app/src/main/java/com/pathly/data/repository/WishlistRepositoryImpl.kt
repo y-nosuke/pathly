@@ -122,7 +122,14 @@ class WishlistRepositoryImpl @Inject constructor(
     return PlaceRegistration(placeId, alreadyExisted)
   }
 
-  override suspend fun linkPlaceToGoogle(placeId: Long, result: PlaceSearchResult) {
+  override suspend fun linkPlaceToGoogle(placeId: Long, result: PlaceSearchResult): Boolean {
+    // 同じ施設を他の place が持っていたら紐付けない。ここで通すと「この施設の place はどれか」の
+    // 答えがブレる（→ adr/0025）。まとめるかどうかはユーザーの判断なので、勝手には寄せない。
+    val holder = googlePlaceDao.getPlaceIdByGoogleId(result.googlePlaceId)
+    if (holder != null && holder != placeId) {
+      logger.i("Refused to link place $placeId: ${result.googlePlaceId} is already held by place $holder")
+      return false
+    }
     // 施設情報を上書き保存（名前・住所・カテゴリ・place ID・施設の座標）。places は触らない
     // （名前も座標も）。座標を places に書くと同定の鍵が動く（→ adr/0023）。
     googlePlaceDao.upsert(
@@ -139,6 +146,7 @@ class WishlistRepositoryImpl @Inject constructor(
     // 解決記録を残す（以後は自動命名で Nearby を叩かない）。
     placeResolutionDao.upsert(PlaceResolutionEntity(placeId, Date()))
     logger.i("Linked place $placeId to google=${result.googlePlaceId}")
+    return true
   }
 
   override suspend fun nearbyPois(latitude: Double, longitude: Double): List<PlaceSearchResult> = placeRepository.nearbyPois(latitude, longitude)

@@ -199,7 +199,9 @@ class PlaceRepositoryImpl @Inject constructor(
       // 検出時に引いた Google データを、まだ解決記録の無い place にだけ焼き込む（Places を二度叩かない）。
       // 名前は Google 由来なので google_places に入れる（places.name はユーザー名専用）。
       if (placeResolutionDao.getByPlace(placeId) == null && candidate.googlePlaceId != null) {
-        if (googlePlaceDao.getByPlace(placeId) == null) {
+        // 施設を既に他の place が持っていたら焼き込まない（同じ施設を 2 つ持たせない → adr/0025）。
+        val holder = googlePlaceDao.getPlaceIdByGoogleId(candidate.googlePlaceId)
+        if (googlePlaceDao.getByPlace(placeId) == null && (holder == null || holder == placeId)) {
           googlePlaceDao.upsert(
             GooglePlaceEntity(
               placeId,
@@ -590,9 +592,16 @@ class PlaceRepositoryImpl @Inject constructor(
         // 同じ施設の place が既にあれば、そちらへ寄せる（座標で見つけられなくても
         // 施設の同一性でまとまる）。**upsert より先に**引くこと。後だと自分自身が当たる。
         val existing = googlePlaceDao.getPlaceIdByGoogleId(outcome.googlePlaceId)
-        if (existing != null && existing != place.id && isUntouchedDetected(place)) {
-          mergeIntoExistingPlace(place.id, existing)
-          return existing
+        if (existing != null && existing != place.id) {
+          if (isUntouchedDetected(place)) {
+            mergeIntoExistingPlace(place.id, existing)
+            return existing
+          }
+          // 触られている place は勝手に寄せられない。同じ施設を 2 つ持たせるわけにもいかないので、
+          // **施設情報を付けずに残す**（→ adr/0025）。解決記録は残して、同じ問い合わせを繰り返さない。
+          logger.i("Skipped linking place ${place.id}: ${outcome.googlePlaceId} is already held by place $existing")
+          placeResolutionDao.upsert(PlaceResolutionEntity(place.id, Date()))
+          return place.id
         }
         // 施設の座標は google_places に入れる（表示用）。places の座標＝同定のアンカーは
         // 触らない。ここで動かすと自分で作った place を次の確保で見失う（→ adr/0023）。
@@ -624,6 +633,13 @@ class PlaceRepositoryImpl @Inject constructor(
    * 自動命名は半径 50m の最寄り1件しか見ないので、別の場所が同じ施設に解決されることがある。
    * 融合すると分け直せないため、ユーザーが名前・メモを入れた place、行きたい・訪問済みの印が
    * 付いた place、[PlaceSource.USER] 由来は、ID が同じでも吸収しない。
+   */
+  /**
+   * 自動でまとめてよい place か（**検出が作った**もので、まだ誰も中身を入れていない）。
+   *
+   * **由来は見る。** ユーザーが地図で指して作った place（`USER`）は、たとえ中身が空でも
+   * まとめない。**地点を指したこと自体が「ここを別の場所として残したい」という意思表示**
+   * だから（→ adr/0025）。同じ施設の別の入口を、別の場所として持っておきたいことがある。
    */
   private suspend fun isUntouchedDetected(place: PlaceEntity): Boolean = place.source == PlaceSource.DETECTED.name &&
     place.name == null &&
