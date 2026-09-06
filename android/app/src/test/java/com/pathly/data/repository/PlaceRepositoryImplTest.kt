@@ -449,6 +449,45 @@ class PlaceRepositoryImplTest {
   }
 
   @Test
+  fun addStops_reusesExistingPlaceOfSameFacility() = runTest {
+    // 候補が施設 ID を持っているなら、座標が 30m 離れていても既存の place を再利用する
+    // （同じ施設の 2 つ目を作らない → adr/0025）。
+    coEvery { googlePlaceDao.getPlaceIdByGoogleId("gp-zoo") } returns 7L
+    coEvery { stopDao.insert(any()) } returns 100L
+    coEvery { placeResolutionDao.getByPlace(7L) } returns PlaceResolutionEntity(7L, Date(0))
+    coEvery { placeDao.getUnresolvedPlacesForTrack(1L) } returns emptyList()
+
+    val candidate = StopCandidate(
+      detected = DetectedStop(35.0, 139.0, Date(0), Date(240_000), pointCount = 5),
+      name = "動物園",
+      googlePlaceId = "gp-zoo",
+      googleLatitude = 35.7,
+      googleLongitude = 139.7,
+    )
+    val added = repository.addStops(1L, listOf(candidate))
+
+    assertEquals(1, added)
+    // 新しい place は作らず、訪問だけ足す。
+    coVerify(exactly = 0) { placeDao.insert(any()) }
+    coVerify { stopDao.insert(match { it.placeId == 7L }) }
+    // 既に解決済みの place なので、施設情報を焼き直さない。
+    coVerify(exactly = 0) { googlePlaceDao.upsert(any()) }
+  }
+
+  @Test
+  fun resolveUnresolvedNames_countsPlacesSkippedBecauseFacilityIsTaken() = runTest {
+    // 「押しても何も起きない」を画面で伝えられるよう、付けられなかった件数を返す（→ adr/0025）。
+    coEvery { placeDao.getPlacesWithoutGoogleIdForTrack(1L) } returns listOf(
+      PlaceEntity(id = 31L, name = "いつもの神社", latitude = 35.0, longitude = 139.0, source = PlaceSource.DETECTED.name),
+    )
+    coEvery { resolver.resolve(any(), any()) } returns
+      PlacesNameResolver.Outcome.Found("神社", "住所", null, "gp-same", 35.7, 139.7)
+    coEvery { googlePlaceDao.getPlaceIdByGoogleId("gp-same") } returns 7L
+
+    assertEquals(1, repository.resolveUnresolvedNames(1L))
+  }
+
+  @Test
   fun addStops_persistsSelectedAndBakesInName() = runTest {
     coEvery { placeDao.getInBounds(any(), any(), any(), any()) } returns emptyList()
     coEvery { placeDao.insert(any()) } returns 10L
