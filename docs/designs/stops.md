@@ -67,6 +67,10 @@
   選ばれた分を `addStops(trackId, 選択分)` で保存する。
   - 候補の名前は、近くに命名済み place があれば**再利用（無料）**、無ければオンライン時のみ Places を 1 回。
     追加時はその名前を焼き込むので **Places を二度叩かない**。
+  - **候補が施設 ID を持っていれば、place の同定もそれで行う**（`findOrCreateByGooglePlaceId`）。
+    座標だけで同定すると、同じ施設の別の位置で作った place が 30m を外れて 2 つ目になる
+    （→ [ADR-0025](../adr/0025-one-place-per-google-facility.md)）。新規作成になるときの
+    アンカーは**検出した重心**で、施設の代表点は表示用として `google_places` に入れる。
   - **記録中は候補を境界以前に絞る**。`detectMissingStops` は `detectionHighWaterMillis` に境界エントリが
     あれば `departure <= 境界` で絞り、ライブ検出が受け持つ末尾・滞在中を外して二重登録を防ぐ。
     終了済みの経路は境界エントリが無いので全点が対象。境界は削除で下がらないため、消した過去は候補に残る。

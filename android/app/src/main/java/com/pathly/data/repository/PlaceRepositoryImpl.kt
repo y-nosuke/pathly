@@ -187,7 +187,18 @@ class PlaceRepositoryImpl @Inject constructor(
     if (candidates.isEmpty()) return@withLock 0
     for (candidate in candidates) {
       val d = candidate.detected
-      val placeId = findOrCreatePlace(d.latitude, d.longitude)
+      // 候補は検出時に施設まで引けていることがある。**分かっているなら施設の同一性で同定する**
+      // （→ adr/0025）。座標だけで同定すると、同じ施設の別の位置で作った place が 30m を外れて
+      // 2 つ目になり、あとで「同じ施設なのに場所が 2 つ」になってしまう。Places の追加呼び出しは
+      // 要らない（候補が既に ID を持っている）。
+      val googlePlaceId = candidate.googlePlaceId
+      val placeId = if (googlePlaceId != null) {
+        // 新規作成になるときのアンカーは**検出した重心**（＝実際にいた場所）。施設の代表点は
+        // 表示用として google_places に入れる（→ adr/0023・StopCandidate の注記）。
+        findOrCreateByGooglePlaceId(googlePlaceId, d.latitude, d.longitude, PlaceSource.DETECTED).first
+      } else {
+        findOrCreatePlace(d.latitude, d.longitude)
+      }
       stopDao.insert(
         StopEntity(
           placeId = placeId,
@@ -352,16 +363,19 @@ class PlaceRepositoryImpl @Inject constructor(
     }
   }
 
-  override suspend fun resolveUnresolvedNames(trackId: Long) {
+  override suspend fun resolveUnresolvedNames(trackId: Long): Int {
     try {
-      mutex.withLock {
+      return mutex.withLock {
         // 手動再取得: googlePlaceId が無い place を対象に（NoMatch・過去失敗も）叩き直す。
+        var skipped = 0
         for (place in placeDao.getPlacesWithoutGoogleIdForTrack(trackId)) {
-          resolvePlace(place)
+          if (resolvePlace(place).skippedByConflict) skipped++
         }
+        skipped
       }
     } catch (e: Exception) {
       logger.e("resolveUnresolvedNames failed for track $trackId", e)
+      return 0
     }
   }
 
@@ -567,7 +581,7 @@ class PlaceRepositoryImpl @Inject constructor(
       ?: findOrCreatePlace(d.latitude, d.longitude).also { liveStopPlaces[trackId] = LiveStopPlace(d.arrivalTime.time, it) }
     if (placeResolutionDao.getByPlace(placeId) == null) {
       // 解決の結果、同じ施設の既存 place へ統合されることがある。生き残った方を使う。
-      placeDao.getById(placeId)?.let { placeId = resolvePlace(it) }
+      placeDao.getById(placeId)?.let { placeId = resolvePlace(it).placeId }
     }
     val place = placeDao.getById(placeId)!!.toPlace(googlePlaceDao.getWithCategoryByPlace(placeId))
     return Stop(id = 0, place = place, trackId = trackId, arrivalTime = d.arrivalTime, departureTime = d.departureTime)
@@ -586,7 +600,13 @@ class PlaceRepositoryImpl @Inject constructor(
    * place を Google で名前解決し、結果を google_places に記録する（place_resolutions は問い合わせlog）。
    * Google 由来の名前・住所は google_places に入れる。places.name（ユーザー名）は触らない。
    */
-  private suspend fun resolvePlace(place: PlaceEntity): Long {
+  /**
+   * 施設の解決の結果。[placeId] は以後その place として扱う id（統合されたら寄せ先の id）。
+   * [skippedByConflict] は「同じ施設を既に他の place が持っていたので施設情報を付けなかった」。
+   */
+  private data class ResolveResult(val placeId: Long, val skippedByConflict: Boolean = false)
+
+  private suspend fun resolvePlace(place: PlaceEntity): ResolveResult {
     when (val outcome = placesNameResolver.resolve(place.latitude, place.longitude)) {
       is PlacesNameResolver.Outcome.Found -> {
         // 同じ施設の place が既にあれば、そちらへ寄せる（座標で見つけられなくても
@@ -595,13 +615,13 @@ class PlaceRepositoryImpl @Inject constructor(
         if (existing != null && existing != place.id) {
           if (isUntouchedDetected(place)) {
             mergeIntoExistingPlace(place.id, existing)
-            return existing
+            return ResolveResult(existing)
           }
           // 触られている place は勝手に寄せられない。同じ施設を 2 つ持たせるわけにもいかないので、
           // **施設情報を付けずに残す**（→ adr/0025）。解決記録は残して、同じ問い合わせを繰り返さない。
           logger.i("Skipped linking place ${place.id}: ${outcome.googlePlaceId} is already held by place $existing")
           placeResolutionDao.upsert(PlaceResolutionEntity(place.id, Date()))
-          return place.id
+          return ResolveResult(place.id, skippedByConflict = true)
         }
         // 施設の座標は google_places に入れる（表示用）。places の座標＝同定のアンカーは
         // 触らない。ここで動かすと自分で作った place を次の確保で見失う（→ adr/0023）。
@@ -624,7 +644,7 @@ class PlaceRepositoryImpl @Inject constructor(
 
       PlacesNameResolver.Outcome.NotAttempted -> Unit // 行を作らず後でキャッチアップ
     }
-    return place.id
+    return ResolveResult(place.id)
   }
 
   /**

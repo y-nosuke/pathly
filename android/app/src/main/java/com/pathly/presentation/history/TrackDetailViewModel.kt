@@ -143,10 +143,20 @@ class TrackDetailViewModel @Inject constructor(
     viewModelScope.launch { placeRepository.updateStopNote(stopId, note) }
   }
 
-  /** 未取得の場所を Places で取り直す（手動・googlePlaceId 無しが対象）。 */
+  /**
+   * 未取得の場所を Places で取り直す（手動・googlePlaceId 無しが対象）。
+   *
+   * 同じ施設を既に他の場所が持っていると施設情報は付かない（→ adr/0025）。黙って見送ると
+   * 「押しても何も起きない」ように見えるので、その件数だけは伝える。
+   */
   fun resolveNames() {
     val trackId = loadedTrackId.value ?: return
-    viewModelScope.launch { placeRepository.resolveUnresolvedNames(trackId) }
+    viewModelScope.launch {
+      val skipped = placeRepository.resolveUnresolvedNames(trackId)
+      if (skipped > 0) {
+        _message.value = "${skipped}件は、同じ施設の場所が既にあるため施設情報を付けませんでした"
+      }
+    }
   }
 
   /**

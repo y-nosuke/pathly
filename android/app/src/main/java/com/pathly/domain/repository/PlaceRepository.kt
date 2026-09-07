@@ -110,8 +110,13 @@ interface PlaceRepository {
    */
   suspend fun reassignStopPlace(stopId: Long, chosen: PlaceSearchResult?, customName: String?)
 
-  /** その経路の未取得（googlePlaceId 無し）の place を Places で取り直す（手動「場所を取得」）。 */
-  suspend fun resolveUnresolvedNames(trackId: Long)
+  /**
+   * その経路の未取得（googlePlaceId 無し）の place を Places で取り直す（手動「場所を取得」）。
+   *
+   * 返すのは「**同じ施設を既に他の場所が持っていたため、施設情報を付けなかった**」件数
+   * （→ adr/0025）。押しても何も起きなかったように見えるので、呼び出し側で理由を伝えるために使う。
+   */
+  suspend fun resolveUnresolvedNames(trackId: Long): Int
 
   /**
    * 全経路で、まだ一度も解決していない立ち寄り場所をまとめて名前解決する（オンライン復帰後のキャッチアップ）。
