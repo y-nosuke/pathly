@@ -29,6 +29,7 @@
 | [specs/tracks.md](specs/tracks.md)       | 経路（名前・お気に入り・絞り込み・並べ替え） |
 | [specs/map.md](specs/map.md)             | 地図タップ（画面 × モード × 表示）           |
 | [specs/security.md](specs/security.md)   | データの扱いとプライバシー                   |
+| [specs/backup.md](specs/backup.md)       | データの書き出し・読み込み                   |
 | [specs/screens.md](specs/screens.md)     | 画面と遷移                                   |
 | [specs/model.md](specs/model.md)         | データモデル（概念モデル・ER図）             |
 | [specs/glossary.md](specs/glossary.md)   | 用語集（データ・処理の日英対応）             |

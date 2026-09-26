@@ -92,6 +92,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 app/src/main/java/com/pathly/
 ├── di/                     # 依存性注入（Hilt modules）
 ├── data/                   # データ層
+│   ├── backup/            # データの書き出し・読み込み（DB の写し＋設定の zip。差し替えは次の起動の最初）
 │   ├── local/             # Room database, DAOs, entities, migrations
 │   ├── repository/        # Repository実装
 │   ├── places/            # Google Places 連携（命名・テキスト検索）
@@ -145,6 +146,7 @@ app/src/main/java/com/pathly/
 - **場所・行きたいリスト** - 登録（地図/POI/キーワード検索）・優先度・メモ・訪問済み・関連経路一覧
 - **場所名の手動編集** - 未命名⇄命名。名前欄は「自分で付けた名前」専用で、Google の名前は別列（v7）
 - **経路一覧** - 名前・お気に入り・絞り込み／並べ替え
+- **データの書き出し・読み込み** - 設定タブから zip に書き出し／全部を入れ替えて読み込み（再起動して差し替え・読み込み前に戻せる。ADR-0027）。SharedPreferences を増やしたら `DataBackupManager.PREFS_NAMES` にも足す
 - **地図の上のUI** - 全画面の地図＋非モーダルのフローティングシートに統一（ADR-0010）
 
 ### 将来実装予定機能
