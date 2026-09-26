@@ -106,6 +106,8 @@ jobs:
           api-level: 36
           target: google_apis
           arch: x86_64
+          # 既定の端末は画面が小さく、UI テストで下のほうの要素が画面外になって落ちる。手元と同じく Pixel 相当にする
+          profile: pixel_7
           disable-animations: true
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
           working-directory: android
