@@ -20,7 +20,10 @@ jobs:
         working-directory: android
 
     steps:
+      # versionCode（コミット数）と versionName（直近のタグ）を git から決めるため、全履歴とタグを取る
       - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
 
       - name: Set up JDK 25
         uses: actions/setup-java@v5

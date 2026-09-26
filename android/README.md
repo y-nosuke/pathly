@@ -9,7 +9,7 @@ Pathly の Android アプリ（Kotlin + Jetpack Compose）。プロジェクト�
 
 - Android Studio（最新版）
 - Android SDK 37
-- JDK 17
+- JDK 25（Gradle が `gradle/gradle-daemon-jvm.properties` に従って選ぶ。無ければ自動で取得する）
 
 ### Google Maps API キー
 
@@ -27,9 +27,12 @@ GOOGLE_MAPS_API_KEY=your_google_maps_api_key_here
 # デバッグビルド
 ./gradlew assembleDebug
 
-# 実機/エミュレータへインストール
+# 実機/エミュレータへインストール（開発版 com.pathly.debug として入る）
 ./gradlew installDebug
 ```
+
+開発版は普段使いのリリース版（`com.pathly`）とは別アプリで、データも別です。
+版の付け方・リリースの手順は [docs/designs/release.md](../docs/designs/release.md) を参照。
 
 ## 🧪 テスト
 
