@@ -47,6 +47,12 @@
 | [designs/testing.md](designs/testing.md)           | —             | テスト戦略                               |
 | [designs/release.md](designs/release.md)           | —             | 版の付け方・開発版とリリース版・リリース |
 
+### 開発の進め方 — 作業の手順と約束ごと
+
+| ファイル                                                     | 内容                                       |
+| ------------------------------------------------------------ | ------------------------------------------ |
+| [development/branch-and-pr.md](development/branch-and-pr.md) | ブランチ名・コミットメッセージ・PR・マージ |
+
 ### 決定（Why this way）
 
 | ファイル     | 内容                                       |

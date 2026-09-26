@@ -254,6 +254,7 @@ app/src/main/java/com/pathly/
 - **ビルド環境：** AGP 9.4 / Gradle 9.8 / Kotlin 2.4（AGP内蔵Kotlin）。AGP は KGP を「最低 2.2.10」の実行時依存として持つだけで、実際の Kotlin は `libs.versions.toml` の `kotlin`（`kotlin.plugin.compose` 経由で classpath に乗る KGP）で決まる。上げるときは KSP・Hilt が追随しているかを `./gradlew build` と instrumented test で確かめること。正確な値は `gradle/libs.versions.toml` と `gradle-wrapper.properties` を見ること
 - **アノテーション処理：** KSP使用（Room/Hilt/WorkManager）。kaptは廃止
 - **バックグラウンドジョブ：** WorkManager（Hilt でワーカーを組み立てるため自動初期化はマニフェストで停止し、`PathlyApplication` が `Configuration.Provider` として担う）
+- **ブランチ・コミット・PR：** ブランチ名は `<種類>/<英語のケバブケース>`、コミットと PR タイトルは `<種類>(<範囲>): <日本語の要約>`（Conventional Commits。依存更新は `build(deps)`）。PR タイトルはリリースノートになる。マージはマージコミットのみ（squash 不可）。詳細は `docs/development/branch-and-pr.md`
 - **版とリリース：** versionName は git の `vX.Y.Z` タグ、versionCode はコミット数から決まる（手で書かない）。タグの push で CI が署名済み APK の GitHub Release を作る。リリース鍵はリポジトリに含めない。詳細は `docs/designs/release.md`
 - **整形：** spotless（ktlint）。`./gradlew build` に含まれるので、push 前は build を通すこと。崩れは `./gradlew spotlessApply`
 - **アイコン：** Material Iconsは非推奨のため不使用。`res/drawable`のベクター + `painterResource`で追加する
