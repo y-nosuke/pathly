@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.LinearProgressIndicator
@@ -130,6 +131,34 @@ fun SettingsScreen(
     )
 
     BackupSection(viewModel)
+
+    AboutSection()
+  }
+}
+
+/**
+ * このアプリの版。versionName は git のタグから、ビルド番号（versionCode）はコミット数から決まる
+ * （→ docs/designs/release.md）。不具合の報告に貼れるよう、選択してコピーできるようにする。
+ */
+@Composable
+private fun AboutSection() {
+  Text(
+    text = "このアプリについて",
+    style = MaterialTheme.typography.titleMedium,
+    modifier = Modifier.padding(top = 24.dp),
+  )
+  SelectionContainer {
+    Column {
+      Text(
+        text = "バージョン ${BuildConfig.VERSION_NAME}" + if (BuildConfig.DEBUG) "（開発版）" else "",
+        style = MaterialTheme.typography.bodyLarge,
+      )
+      Text(
+        text = "ビルド ${BuildConfig.VERSION_CODE}",
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+      )
+    }
   }
 }
 
