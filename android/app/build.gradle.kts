@@ -85,6 +85,11 @@ android {
   }
 
   buildTypes {
+    // 開発版は別アプリ（com.pathly.debug）として入れ、普段使いのリリース版とデータを分ける。
+    // 名前は src/debug/res の app_name で「開発版」と見分ける。
+    debug {
+      applicationIdSuffix = ".debug"
+    }
     release {
       isMinifyEnabled = false
       proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
