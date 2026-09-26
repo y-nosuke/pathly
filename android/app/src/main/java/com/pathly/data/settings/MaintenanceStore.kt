@@ -14,7 +14,7 @@ import javax.inject.Singleton
  */
 @Singleton
 class MaintenanceStore @Inject constructor(
-  @param:ApplicationContext context: Context,
+  @ApplicationContext context: Context,
 ) {
   private val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
 

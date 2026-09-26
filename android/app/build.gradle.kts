@@ -122,7 +122,7 @@ dependencies {
 
   // Hilt
   implementation(libs.hilt.android)
-  implementation(libs.hilt.navigation.compose)
+  implementation(libs.hilt.lifecycle.viewmodel.compose)
   ksp(libs.hilt.compiler)
 
   // WorkManager（オンライン復帰後の名前解決キャッチアップ）
@@ -146,7 +146,8 @@ dependencies {
   // kotlinx-serialization のバージョン統一（BOM）。
   // room-testing が json 1.8.1 を引く一方、consistent resolution で core が
   // 1.7.3 に固定され、MigrationTestHelper のスキーマ読み込みが版ずれで落ちる。
-  // BOM で core/json を 1.8.1 に揃える（androidTest 側も追従する）。
+  // BOM で core/json を同じ版に揃える（androidTest 側も追従する）。BOM は room-testing が
+  // 引く版以上であれば上げてよい（揃っていることが要点）。
   implementation(platform(libs.kotlinx.serialization.bom))
 
   testImplementation(libs.junit)
