@@ -104,7 +104,7 @@ android {
     }
     release {
       signingConfig = signingConfigs.findByName("release")
-      // 鍵を替えるときのデータ移行専用（docs/designs/release.md）。run-as で書き戻せるよう一時的に
+      // 鍵を替えるときのデータ移行専用（docs/adr/0026-release-versioning-and-signing.md の付録）。run-as で書き戻せるよう一時的に
       // debuggable にする。普段のリリースでは渡さない。
       isDebuggable = providers.gradleProperty("pathlyDebuggableRelease").orNull == "true"
       isMinifyEnabled = false

@@ -42,3 +42,52 @@
 - 開発版では実データを気にせず試せる。ただし API キーの制限に `com.pathly.debug` の登録が要る。
 - **リリース鍵を失うと、以後リリース版を上書きできない。** 鍵とパスワードの保管が新たな責任になる。
 - CI は全履歴を取得する必要がある（今の規模では数秒以内）。squash マージをすると versionCode が戻りうる。
+- リリース版は debuggable でないので、以後 adb から実データを退避できない。鍵を替え直すには
+  エクスポート機能が先に要る。
+
+## 付録: 鍵の切り替えで行ったデータ移行（2026-09-27）
+
+旧アプリ（`com.pathly`・デバッグ鍵・**debuggable**）から、v0.3.0（リリース鍵）へ移した記録。
+Git Bash から Wi-Fi 接続の実機に対して行った。
+
+1. 退避（アプリを止め、DB と設定を丸ごと取り出す）
+
+   ```bash
+   adb shell am force-stop com.pathly
+   adb exec-out run-as com.pathly tar -cf - databases shared_prefs > pathly-data.tar
+   ```
+
+   PC 側で展開して `pragma integrity_check` と件数を確かめ、別の場所にも控えた。
+
+2. 旧アプリを消す: `adb uninstall com.pathly`
+3. 新しい鍵で一時的に debuggable なリリース版を作って入れる（**起動しない**。空の DB ができるため）
+
+   ```bash
+   ./gradlew assembleRelease -PpathlyDebuggableRelease=true
+   adb install app/build/outputs/apk/release/app-release.apk
+   ```
+
+4. 書き戻す（端末に送ってから展開する）
+
+   ```bash
+   export MSYS_NO_PATHCONV=1
+   adb push pathly-data.tar /data/local/tmp/pathly-data.tar
+   adb shell chmod 644 /data/local/tmp/pathly-data.tar
+   adb shell run-as com.pathly tar -xf /data/local/tmp/pathly-data.tar
+   adb shell run-as com.pathly sha256sum databases/pathly_database databases/pathly_database-wal
+   ```
+
+   ハッシュが退避したファイルと一致することを確かめた。
+
+5. 正式な `pathly-v0.3.0.apk` を上書きする: `adb install -r pathly-v0.3.0.apk`（同じ鍵・同じ versionCode なので可）
+6. 一時ファイルを消す: `adb shell rm /data/local/tmp/pathly-data.tar`。起動して権限を許可し直し、件数を確かめた。
+
+開発版にも同じ tar を `run-as com.pathly.debug` で展開し、実データの写しを入れた。
+
+踏んだ落とし穴:
+
+- **標準入力での流し込み**（`adb shell "run-as com.pathly tar -xf -" < pathly-data.tar`）は
+  `Illegal seek` で失敗し、壊れた部分ファイルが残った。起動前だったので消してやり直した。
+- **Git Bash のパス変換**: `/data/local/tmp/...` が `C:/Program Files/Git/data/...` に書き換えられる。
+  `MSYS_NO_PATHCONV=1` で止める。逆に PC 側の `tar -xf D:/...` は `D:` をリモートと解釈するので `/d/...` と書く。
+- アンインストールで権限（位置情報・通知・電池の最適化の除外）は消える。設定値は `shared_prefs` と一緒に戻る。
