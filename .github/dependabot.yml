@@ -1,0 +1,28 @@
+# 依存の新しい版が出たら、更新の PR を自動で作る（→ docs/development/branch-and-pr.md）。
+# 月 1 回・種類ごとに 1 つの PR にまとめる。自動マージはしない
+# （Kotlin・KSP・Hilt のように連動して確かめるべき更新があるので、中身を見てからマージする）。
+version: 2
+updates:
+  # Android アプリの依存（android/gradle/libs.versions.toml と Gradle のプラグイン）
+  - package-ecosystem: "gradle"
+    directory: "/android"
+    schedule:
+      interval: "monthly"
+    groups:
+      android:
+        patterns: ["*"]
+    commit-message:
+      prefix: "build"
+      include: "scope"
+
+  # GitHub Actions のアクション（.github/workflows）
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "monthly"
+    groups:
+      actions:
+        patterns: ["*"]
+    commit-message:
+      prefix: "ci"
+      include: "scope"
