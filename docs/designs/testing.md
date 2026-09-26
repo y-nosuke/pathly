@@ -51,7 +51,8 @@ Repository をモックし、`StateFlow` の遷移を見る。**Android framewor
 
 `.github/workflows/android-build.yml` が main への push / PR で動き、**`./gradlew build` 一発**で
 ユニットテスト・lint・spotless（ktlint）・assemble(debug/release) をまとめて実行する。
-debug APK と lint/test レポートをアーティファクトに残す（同一ブランチの新 push で進行中の実行はキャンセル）。
+debug APK（開発版 `com.pathly.debug`）と lint/test レポートをアーティファクトに残す（同一ブランチの新 push で進行中の実行はキャンセル）。
+版を git から決めるため全履歴を取得する。リリース（タグの push）は別のワークフローで、[release.md](release.md) を参照。
 
 > **push 前は `./gradlew build` を通すこと。** `test` だけ／`lint` だけを回すと、整形
 > （`spotlessKotlinCheck`）や別のゲートを見逃して CI で落ちる。実際に両方で落としたことがある。

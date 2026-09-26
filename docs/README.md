@@ -45,6 +45,7 @@
 | [designs/security.md](designs/security.md)         | security      | 暗号化の可否・鍵・API キー・権限の持ち場 |
 | [designs/logging.md](designs/logging.md)           | —             | ログの規約                               |
 | [designs/testing.md](designs/testing.md)           | —             | テスト戦略                               |
+| [designs/release.md](designs/release.md)           | —             | 版の付け方・開発版とリリース版・リリース |
 
 ### 決定（Why this way）
 
