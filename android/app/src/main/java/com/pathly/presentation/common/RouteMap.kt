@@ -74,14 +74,23 @@ internal val MarkerWishlistAmber = Color(0xFFE08A00)
 @DrawableRes
 internal fun categoryGlyph(group: PlaceCategoryGroup): Int = when (group) {
   PlaceCategoryGroup.FOOD -> R.drawable.ic_category_food
+
   PlaceCategoryGroup.CAFE -> R.drawable.ic_category_cafe
+
   PlaceCategoryGroup.SHOPPING -> R.drawable.ic_category_shopping
+
   PlaceCategoryGroup.PARK -> R.drawable.ic_category_park
+
   PlaceCategoryGroup.CULTURE -> R.drawable.ic_category_culture
+
   PlaceCategoryGroup.ENTERTAINMENT -> R.drawable.ic_category_entertainment
+
   PlaceCategoryGroup.TRANSIT -> R.drawable.ic_category_transit
+
   PlaceCategoryGroup.LODGING -> R.drawable.ic_category_lodging
+
   PlaceCategoryGroup.SERVICE -> R.drawable.ic_category_service
+
   // 業種が分からない場所は、これまでどおりの場所ピン。
   PlaceCategoryGroup.OTHER -> R.drawable.ic_place
 }

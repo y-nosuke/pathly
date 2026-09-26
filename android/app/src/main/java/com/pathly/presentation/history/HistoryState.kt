@@ -78,9 +78,13 @@ data class HistoryState(
       // 元の tracks は開始が新しい順なので、同値のときはその並び（＝安定ソート）を保つ。
       val ascending: Comparator<GpsTrack> = when (sort) {
         TrackSort.DATE -> compareBy { it.startTime }
+
         TrackSort.STOP_COUNT -> compareBy { it.stopCount }
+
         TrackSort.DISTANCE -> compareBy { it.totalDistanceMeters }
+
         TrackSort.DURATION -> compareBy { durationMillisOf(it) }
+
         TrackSort.NAME -> {
           val collator = Collator.getInstance(Locale.JAPANESE)
           // 未命名は名前が無いので昇順で先頭・降順で末尾（null 相当）。

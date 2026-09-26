@@ -254,6 +254,7 @@ private fun number(n: Int): String = "%,d".format(n)
 
 private fun backupMessageText(message: BackupMessage): String = when (message) {
   is BackupMessage.Exported -> "書き出しました。\n\n" + countLines(message.counts)
+
   is BackupMessage.Failed -> when (message.reason) {
     BackupException.Reason.NOT_A_BACKUP -> "Pathly の書き出しファイルではないため、読み込めません。"
     BackupException.Reason.UNSUPPORTED_FORMAT -> "このアプリでは読めない形式のファイルです。アプリを最新にしてください。"

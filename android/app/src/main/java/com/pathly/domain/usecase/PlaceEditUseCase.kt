@@ -150,10 +150,12 @@ class PlaceEditUseCase @Inject constructor(
     when {
       // 新たに「行きたい」へ。
       wishlist && wishlistId == null -> wishlistRepository.addToWishlist(item.place.id, priority)
+
       // 既に「行きたい」。優先度の変更分だけ反映する。
       wishlist && wishlistId != null -> {
         if (priority != item.priority) wishlistRepository.updateWishlist(wishlistId, priority)
       }
+
       // 「行きたい」を外す（場所自体も訪問済みの印も残す）。
       !wishlist && wishlistId != null -> wishlistRepository.removeFromWishlist(wishlistId)
     }

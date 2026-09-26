@@ -78,6 +78,7 @@ fun PathlyAndroidTheme(
     }
 
     darkTheme -> DarkColorScheme
+
     else -> LightColorScheme
   }
 

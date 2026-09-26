@@ -542,8 +542,11 @@ private fun PlaceItemRow(
         // 現在の並び順に対応する日付だけを小さく出す（何で並んでいるか分かる・常時全部は出さない）。
         val sortDate: String? = when (sort) {
           PlaceSort.REGISTERED -> "登録 " + DateFormatters.shortDate(item.place.createdAt)
+
           PlaceSort.UPDATED -> "更新 " + DateFormatters.shortDate(item.place.updatedAt)
+
           PlaceSort.VISITED -> item.visitRecencyAt?.let { "訪問 " + DateFormatters.shortDate(it) }
+
           // 訪問回数は既存の「✓ 訪問N回」バッジで分かるので追加表示しない。
           PlaceSort.VISIT_COUNT, PlaceSort.PRIORITY, PlaceSort.NAME -> null
         }

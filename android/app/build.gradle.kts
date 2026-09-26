@@ -226,7 +226,7 @@ dependencies {
 spotless {
   kotlin {
     target("**/*.kt")
-    ktlint("1.5.0").editorConfigOverride(
+    ktlint("1.8.0").editorConfigOverride(
       mapOf(
         "indent_size" to "2",
         // @Composable関数はPascalCaseが慣例のため命名規則の対象外にする
@@ -236,7 +236,7 @@ spotless {
   }
   kotlinGradle {
     target("*.gradle.kts")
-    ktlint("1.5.0").editorConfigOverride(
+    ktlint("1.8.0").editorConfigOverride(
       mapOf(
         "indent_size" to "2",
       ),
