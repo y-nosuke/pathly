@@ -20,3 +20,6 @@
 .cxx
 local.properties
 .kotlin
+
+# リリース鍵（リポジトリに含めない。docs/designs/release.md）
+*.jks

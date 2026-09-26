@@ -82,6 +82,18 @@ android {
       keyAlias = "androiddebugkey"
       keyPassword = "android"
     }
+    // リリース鍵は**リポジトリに含めない**。Gradle プロパティで渡す
+    // （ローカルは ~/.gradle/gradle.properties、CI は ORG_GRADLE_PROJECT_* 環境変数）。
+    // 渡されていなければ作らず、リリース版は未署名で出る（手元の build や PR の CI はそれでよい）。
+    val releaseStoreFile = providers.gradleProperty("pathlyReleaseStoreFile").orNull
+    if (releaseStoreFile != null) {
+      create("release") {
+        storeFile = file(releaseStoreFile)
+        storePassword = providers.gradleProperty("pathlyReleaseStorePassword").get()
+        keyAlias = providers.gradleProperty("pathlyReleaseKeyAlias").get()
+        keyPassword = providers.gradleProperty("pathlyReleaseKeyPassword").get()
+      }
+    }
   }
 
   buildTypes {
@@ -91,6 +103,10 @@ android {
       applicationIdSuffix = ".debug"
     }
     release {
+      signingConfig = signingConfigs.findByName("release")
+      // 鍵を替えるときのデータ移行専用（docs/designs/release.md）。run-as で書き戻せるよう一時的に
+      // debuggable にする。普段のリリースでは渡さない。
+      isDebuggable = providers.gradleProperty("pathlyDebuggableRelease").orNull == "true"
       isMinifyEnabled = false
       proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
     }
