@@ -26,8 +26,9 @@ class MaintenanceStore @Inject constructor(
     get() = prefs.getInt(KEY_SMOOTHING_GENERATION, 0)
     set(value) = prefs.edit { putInt(KEY_SMOOTHING_GENERATION, value) }
 
-  private companion object {
+  companion object {
+    /** 書き出し（data/backup）にも含めるため公開する。データと一緒に戻さないと修復の要否がずれる。 */
     const val PREFS_NAME = "pathly_maintenance"
-    const val KEY_SMOOTHING_GENERATION = "smoothing_generation"
+    private const val KEY_SMOOTHING_GENERATION = "smoothing_generation"
   }
 }

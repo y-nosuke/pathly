@@ -66,7 +66,8 @@ class SettingsRepository @Inject constructor(
     /** 選択できる間隔（秒）。 */
     val GPS_INTERVAL_OPTIONS = listOf(5, 10, 30, 60)
 
-    private const val PREFS_NAME = "pathly_settings"
+    /** 書き出し（data/backup）にも含めるため公開する。 */
+    const val PREFS_NAME = "pathly_settings"
     private const val KEY_GPS_INTERVAL = "gps_interval_seconds"
     private const val KEY_LOCATION_ACCURACY = "location_accuracy"
 

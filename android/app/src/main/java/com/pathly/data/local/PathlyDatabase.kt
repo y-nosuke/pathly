@@ -43,7 +43,7 @@ import com.pathly.util.Logger
     WishlistEntity::class,
     VisitedPlaceEntity::class,
   ],
-  version = 16,
+  version = PathlyDatabase.VERSION,
   exportSchema = true,
 )
 @TypeConverters(DateConverter::class)
@@ -62,6 +62,9 @@ abstract class PathlyDatabase : RoomDatabase() {
 
   companion object {
     const val DATABASE_NAME = "pathly_database"
+
+    /** スキーマのバージョン。上げるときは DatabaseMigrations にマイグレーションを足す。 */
+    const val VERSION = 16
     private val logger = Logger("PathlyDatabase")
 
     @Volatile

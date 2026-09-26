@@ -7,6 +7,7 @@ import androidx.work.Configuration
 import com.google.android.gms.maps.MapsInitializer
 import com.google.android.gms.maps.OnMapsSdkInitializedCallback
 import com.google.android.libraries.places.api.Places
+import com.pathly.data.backup.DataBackupManager
 import com.pathly.data.settings.MaintenanceStore
 import com.pathly.data.work.PlaceNameCatchUpWorker
 import com.pathly.domain.model.TrackSmoother
@@ -47,6 +48,9 @@ class PathlyApplication :
       .build()
 
   override fun onCreate() {
+    // 予約された読み込み（データの入れ替え）を、DB を誰かが開く前に済ませる。
+    // super.onCreate() で Hilt が注入を始めるので、それより前でなければならない。
+    DataBackupManager.applyPendingImport(this)
     super.onCreate()
     MapsInitializer.initialize(applicationContext, MapsInitializer.Renderer.LATEST, this)
 

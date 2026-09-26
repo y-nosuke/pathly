@@ -22,6 +22,7 @@ object DateFormatters {
   private val SHORT_TIME = DateTimeFormatter.ofPattern("HH:mm")
   private val DATE = DateTimeFormatter.ofPattern("yyyy年MM月dd日")
   private val SHORT_DATE = DateTimeFormatter.ofPattern("yyyy/MM/dd")
+  private val FILE_STAMP = DateTimeFormatter.ofPattern("yyyyMMdd-HHmm")
 
   /** 時刻（HH:mm:ss）。 */
   fun time(date: Date): String = TIME.render(date)
@@ -34,6 +35,9 @@ object DateFormatters {
 
   /** 日付（yyyy/MM/dd）。 */
   fun shortDate(date: Date): String = SHORT_DATE.render(date)
+
+  /** ファイル名に入れる日時（yyyyMMdd-HHmm）。 */
+  fun fileStamp(date: Date): String = FILE_STAMP.render(date)
 
   private fun DateTimeFormatter.render(date: Date): String = withLocale(Locale.getDefault())
     .withZone(ZoneId.systemDefault())
