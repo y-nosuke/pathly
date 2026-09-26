@@ -619,7 +619,7 @@ fun TrackDetailScreen(
           focusNonce++
         },
         onConfirm = {
-          val picked = selectedCandidates.sorted().mapNotNull { reanalyzeCandidates?.getOrNull(it) }
+          val picked = selectedCandidates.sorted().mapNotNull { reanalyzeCandidates.getOrNull(it) }
           onAddStops(picked)
         },
         onCancel = onDismissReanalyze,

@@ -1,5 +1,6 @@
 package com.pathly.data.tracking
 
+import android.annotation.SuppressLint
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
@@ -209,7 +210,13 @@ class TrackingController @Inject constructor(
     return powerManager.isIgnoringBatteryOptimizations(context.packageName)
   }
 
-  /** 電池の最適化の無効化を要求するシステム画面を開く。 */
+  /**
+   * 電池の最適化の無効化を要求するシステム画面を開く。
+   *
+   * lint の BatteryLife は Play のポリシー上の用途制限を警告するが、長時間のバックグラウンド GPS 記録が
+   * アプリの中核で、記録が OS に止められないよう本人に依頼するのは仕様（docs/specs/screens.md）なので抑制する。
+   */
+  @SuppressLint("BatteryLife")
   fun requestDisableBatteryOptimization() {
     context.startActivity(
       Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {

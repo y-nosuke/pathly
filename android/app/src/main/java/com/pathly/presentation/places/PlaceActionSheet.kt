@@ -66,6 +66,7 @@ internal fun PlaceActionSheet(
   onFetchPoiDetails: suspend (googlePlaceId: String) -> PlaceSearchResult?,
   // 新規登録（空き地点/POI/検索結果）を確定する。近接確認（表示ON=新規/OFF=確認）は呼び出し側に委ねる。
   onRegisterNew: (lat: Double, lng: Double, name: String?, wishlist: Boolean, priority: Priority, visited: Boolean, memo: String?, googlePlaceId: String?, googleName: String?) -> Unit,
+  modifier: Modifier = Modifier,
   // 以下は [PlaceSheetTarget.Existing] を渡す画面だけが必要（新規登録専用の画面は既定のままでよい）。
   // 編集中に保存しても最新値を保てるよう、単一 place はリアクティブに購読する。
   onObservePlace: (placeId: Long) -> Flow<PlaceListItem?> = { emptyFlow() },
@@ -78,7 +79,6 @@ internal fun PlaceActionSheet(
   onFetchPrediction: suspend (placeId: String) -> PlaceSearchResult? = { null },
   // 既存 place に「立ち寄りに追加」（記録中のみ）。null なら出さない。
   onAddStop: ((item: PlaceListItem) -> Unit)? = null,
-  modifier: Modifier = Modifier,
   // 地図を見ながら操作できるよう、スクリムを持たない自前のシートで出す。
   // ModalBottomSheet はスクリムがタップを吸うため、色を透明にしても地図を動かせず、
   // 触ると閉じてしまう。ここでは地図のパン・ズーム・タップをそのまま生かす（ADR-0010）。

@@ -14,7 +14,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
@@ -51,10 +51,10 @@ fun StopDurationSheet(
   val lastIdx = (points.size - 1).coerceAtLeast(0)
   // 保存済みの時刻を、いちばん近い軌跡点に対応づけて始める。
   var arrivalIdx by remember(stop.id, points) {
-    mutableStateOf(nearestIndexByTime(points, stop.arrivalTime))
+    mutableIntStateOf(nearestIndexByTime(points, stop.arrivalTime))
   }
   var departureIdx by remember(stop.id, points) {
-    mutableStateOf(nearestIndexByTime(points, stop.departureTime).coerceAtLeast(arrivalIdx))
+    mutableIntStateOf(nearestIndexByTime(points, stop.departureTime).coerceAtLeast(arrivalIdx))
   }
   val arrival = points[arrivalIdx].timestamp
   val departure = points[departureIdx].timestamp

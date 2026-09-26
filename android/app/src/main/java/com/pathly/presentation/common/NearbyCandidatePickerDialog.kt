@@ -159,8 +159,8 @@ fun NearbyCandidatePickerDialog(
               HorizontalDivider()
               Spacer(modifier = Modifier.height(8.dp))
               PlaceNameSearchField(
-                onSearchPredictions = onSearchPredictions!!,
-                onFetchPrediction = onFetchPrediction!!,
+                onSearchPredictions = onSearchPredictions,
+                onFetchPrediction = onFetchPrediction,
                 onPicked = { result ->
                   // 検索で選んだ施設を候補の先頭に足して選択状態にする（そのまま紐付けできる）。
                   candidates = listOf(result) +

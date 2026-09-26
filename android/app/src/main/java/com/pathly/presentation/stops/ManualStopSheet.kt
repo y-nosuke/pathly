@@ -23,6 +23,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -112,10 +113,10 @@ fun ManualStopSheet(
   val hasRange = points.size >= 2
   val lastIdx = (points.size - 1).coerceAtLeast(0)
   var arrivalIdx by remember(origin, latitude, longitude, points) {
-    mutableStateOf(if (hasRange) nearestPointIndex(points, latitude, longitude) else 0)
+    mutableIntStateOf(if (hasRange) nearestPointIndex(points, latitude, longitude) else 0)
   }
   var departureIdx by remember(origin, latitude, longitude, points) {
-    mutableStateOf(if (hasRange) defaultDepartureIndex(points, arrivalIdx) else 0)
+    mutableIntStateOf(if (hasRange) defaultDepartureIndex(points, arrivalIdx) else 0)
   }
   val fallback = remember(latitude, longitude, points) { deriveStopWindow(points, latitude, longitude) }
   val arrival = if (hasRange) points[arrivalIdx].timestamp else fallback.first
