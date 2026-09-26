@@ -105,19 +105,35 @@ object BackupArchive {
         if (c.moveToFirst()) c.getString(0) else null
       }
       if (integrity != "ok") throw BackupException(BackupException.Reason.BROKEN)
-      val trackCount = runCatching { it.count("gps_tracks") }
-        .getOrElse { e -> throw BackupException(BackupException.Reason.NOT_A_BACKUP, e) }
-      val placeCount = runCatching { it.count("places") }
-        .getOrElse { e -> throw BackupException(BackupException.Reason.NOT_A_BACKUP, e) }
       BackupSummary(
         exportedAtMillis = manifest.optLong("exportedAt"),
         appVersionName = manifest.optString("versionName"),
         databaseVersion = version,
-        trackCount = trackCount,
-        placeCount = placeCount,
+        counts = counts(it),
       )
     }
   }
+
+  /**
+   * DB に入っている件数（確認画面・書き出し完了の表示用）。経路と場所の表が無ければ Pathly の DB ではない。
+   * それ以外の表は古い版には無いことがあるので、無ければ null。
+   */
+  fun counts(db: SQLiteDatabase): BackupCounts {
+    fun required(table: String) = runCatching { db.count(table) }
+      .getOrElse { throw BackupException(BackupException.Reason.NOT_A_BACKUP, it) }
+    fun optional(table: String) = runCatching { db.count(table) }.getOrNull()
+    return BackupCounts(
+      tracks = required("gps_tracks"),
+      points = optional("gps_points"),
+      stops = optional("stops"),
+      places = required("places"),
+      wishlist = optional("wishlist"),
+      visited = optional("visited_places"),
+    )
+  }
+
+  /** [file] の DB の件数を数える（書き出した写しの確認用）。 */
+  fun counts(file: File): BackupCounts = SQLiteDatabase.openDatabase(file.path, null, SQLiteDatabase.OPEN_READONLY).use { counts(it) }
 
   private fun SQLiteDatabase.count(table: String): Int = rawQuery("SELECT COUNT(*) FROM $table", null).use { c ->
     c.moveToFirst()
@@ -223,8 +239,17 @@ data class BackupSummary(
   val exportedAtMillis: Long,
   val appVersionName: String,
   val databaseVersion: Int,
-  val trackCount: Int,
-  val placeCount: Int,
+  val counts: BackupCounts,
+)
+
+/** 書き出しファイルに入っている件数。null はその表が無い（古い版で書き出した）。 */
+data class BackupCounts(
+  val tracks: Int,
+  val points: Int?,
+  val stops: Int?,
+  val places: Int,
+  val wishlist: Int?,
+  val visited: Int?,
 )
 
 /** 書き出し・読み込みの失敗。[reason] で利用者に見せる文言を分ける。 */

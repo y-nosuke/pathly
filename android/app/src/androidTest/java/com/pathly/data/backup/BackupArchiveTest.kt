@@ -102,7 +102,8 @@ class BackupArchiveTest {
 
     val candidate = extract(bytes, "candidate")
     val summary = BackupArchive.inspect(candidate, PathlyDatabase.VERSION)
-    assertEquals(2, summary.trackCount)
+    // 書き出した時点（経路 2 件）の件数。今の版にある表はすべて数えられる。
+    assertEquals(BackupCounts(tracks = 2, points = 0, stops = 0, places = 0, wishlist = 0, visited = 0), summary.counts)
     assertEquals(PathlyDatabase.VERSION, summary.databaseVersion)
     assertEquals(1_700_000_000_000, summary.exportedAtMillis)
 

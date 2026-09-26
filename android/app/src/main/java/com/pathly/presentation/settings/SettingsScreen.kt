@@ -29,6 +29,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.pathly.BuildConfig
+import com.pathly.data.backup.BackupCounts
 import com.pathly.data.backup.BackupException
 import com.pathly.data.settings.LocationAccuracy
 import com.pathly.util.DateFormatters
@@ -196,7 +197,7 @@ private fun BackupSection(viewModel: SettingsViewModel) {
         Text(
           "今のデータ（記録・場所・設定）をすべて、このファイルの内容に置き換えます。\n\n" +
             "・${if (confirm.isUndo) "退避" else "書き出し"}日時: ${formatDateTime(s.exportedAtMillis)}\n" +
-            "・経路 ${s.trackCount}件・場所 ${s.placeCount}件\n\n" +
+            countLines(s.counts) + "\n\n" +
             "今のデータはアプリ内に退避され、「読み込む前の状態に戻す」で戻せます。" +
             "置き換えるとアプリが再起動します。",
         )
@@ -235,8 +236,24 @@ private fun exportFileName(): String {
 
 private fun formatDateTime(millis: Long): String = Date(millis).let { "${DateFormatters.shortDate(it)} ${DateFormatters.shortTime(it)}" }
 
+/**
+ * 書き出しファイルに入っている件数を、確認画面と書き出し完了で同じ形に並べる。
+ * 古い版で書き出したファイルに無い表（null）は行ごと省く。
+ */
+private fun countLines(c: BackupCounts): String = buildList {
+  add("・経路 ${number(c.tracks)}件" + (c.points?.let { "（位置 ${number(it)}点）" } ?: ""))
+  c.stops?.let { add("・立ち寄り ${number(it)}件") }
+  val placeDetail = listOfNotNull(
+    c.wishlist?.let { "行きたい ${number(it)}件" },
+    c.visited?.let { "訪問済み ${number(it)}件" },
+  ).joinToString("・")
+  add("・場所 ${number(c.places)}件" + if (placeDetail.isNotEmpty()) "（$placeDetail）" else "")
+}.joinToString("\n")
+
+private fun number(n: Int): String = "%,d".format(n)
+
 private fun backupMessageText(message: BackupMessage): String = when (message) {
-  BackupMessage.Exported -> "書き出しました。"
+  is BackupMessage.Exported -> "書き出しました。\n\n" + countLines(message.counts)
   is BackupMessage.Failed -> when (message.reason) {
     BackupException.Reason.NOT_A_BACKUP -> "Pathly の書き出しファイルではないため、読み込めません。"
     BackupException.Reason.UNSUPPORTED_FORMAT -> "このアプリでは読めない形式のファイルです。アプリを最新にしてください。"

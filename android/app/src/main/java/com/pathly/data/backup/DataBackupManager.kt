@@ -34,16 +34,17 @@ class DataBackupManager @Inject constructor(
   private val beforeImportFile get() = File(context.filesDir, "backup/before-import.zip")
 
   /** 今のデータを [uri] に書き出す。記録中でも書き出せる（`VACUUM INTO` は一貫した写しを作る）。 */
-  suspend fun export(uri: Uri) = withContext(Dispatchers.IO) {
+  suspend fun export(uri: Uri): BackupCounts = withContext(Dispatchers.IO) {
     val output = context.contentResolver.openOutputStream(uri, "wt") ?: error("Cannot open $uri")
     output.use { writeSnapshot(it) }
   }
 
-  /** 今のデータを [output] に書き出す。 */
-  private fun writeSnapshot(output: java.io.OutputStream) {
+  /** 今のデータを [output] に書き出し、書き出した写しの件数を返す（何が入ったかをその場で見せるため）。 */
+  private fun writeSnapshot(output: java.io.OutputStream): BackupCounts {
     val snapshot = File(context.cacheDir, "backup-export.db")
     try {
       BackupArchive.snapshot(database.openHelper.writableDatabase, snapshot)
+      val counts = BackupArchive.counts(snapshot)
       val manifest = BackupArchive.manifest(
         applicationId = BuildConfig.APPLICATION_ID,
         versionName = BuildConfig.VERSION_NAME,
@@ -52,6 +53,7 @@ class DataBackupManager @Inject constructor(
         exportedAtMillis = System.currentTimeMillis(),
       )
       BackupArchive.write(output, manifest, snapshot, BackupArchive.settingsToJson(context, PREFS_NAMES))
+      return counts
     } finally {
       snapshot.delete()
       File(snapshot.path + "-journal").delete()

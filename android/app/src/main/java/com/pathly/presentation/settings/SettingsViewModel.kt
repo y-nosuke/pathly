@@ -3,6 +3,7 @@ package com.pathly.presentation.settings
 import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.pathly.data.backup.BackupCounts
 import com.pathly.data.backup.BackupException
 import com.pathly.data.backup.BackupSummary
 import com.pathly.data.backup.DataBackupManager
@@ -57,8 +58,8 @@ class SettingsViewModel @Inject constructor(
   }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
 
   fun export(uri: Uri) = runBusy {
-    backupManager.export(uri)
-    _backup.update { it.copy(message = BackupMessage.Exported) }
+    val counts = backupManager.export(uri)
+    _backup.update { it.copy(message = BackupMessage.Exported(counts)) }
   }
 
   /** 選ばれたファイルを確かめ、置き換えてよいかの確認に進む。 */
@@ -121,7 +122,8 @@ data class BackupUiState(
 data class BackupConfirm(val summary: BackupSummary, val isUndo: Boolean)
 
 sealed interface BackupMessage {
-  data object Exported : BackupMessage
+  /** 書き出した。[counts] は書き出したファイルに入った件数。 */
+  data class Exported(val counts: BackupCounts) : BackupMessage
 
   /** [reason] が null なら想定外の失敗。 */
   data class Failed(val reason: BackupException.Reason?) : BackupMessage
