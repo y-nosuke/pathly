@@ -35,13 +35,14 @@
 
 同じ端末に**別アプリとして**両方入る。データも別。
 
-|        | リリース版            | 開発版                                      |
-| ------ | --------------------- | ------------------------------------------- |
-| ID     | `com.pathly`          | `com.pathly.debug`（`applicationIdSuffix`） |
-| 表示名 | Pathly                | Pathly 開発版（`src/debug/res`）            |
-| 署名   | リリース鍵            | リポジトリのデバッグ鍵                      |
-| 入れ方 | GitHub Release の APK | `./gradlew installDebug`・CI の debug APK   |
-| 用途   | 普段使い（実データ）  | 自由に試す・データをいじる                  |
+|          | リリース版            | 開発版                                      |
+| -------- | --------------------- | ------------------------------------------- |
+| ID       | `com.pathly`          | `com.pathly.debug`（`applicationIdSuffix`） |
+| 表示名   | Pathly                | Pathly 開発版（`src/debug/res`）            |
+| アイコン | オレンジ              | 青緑（背景だけ `src/debug/res` で差し替え） |
+| 署名     | リリース鍵            | リポジトリのデバッグ鍵                      |
+| 入れ方   | GitHub Release の APK | `./gradlew installDebug`・CI の debug APK   |
+| 用途     | 普段使い（実データ）  | 自由に試す・データをいじる                  |
 
 Google Maps / Places の API キーは Cloud Console で**パッケージ名＋署名の SHA-1** に制限している
 （[security.md](security.md)）。**両方の組を登録すること**。登録が無い方は地図と場所検索が動かない。
@@ -78,11 +79,14 @@ keytool -genkeypair -v -keystore <保管場所>/pathly-release.jks -storetype PK
 
 パスワードと名前（CN など）を聞かれる。PKCS12 では鍵ストアと鍵のパスワードは同じになる。
 
-Secret に登録する base64 は PowerShell で作ってクリップボードへ送る:
+Secret に登録する base64 は Git Bash で作ってクリップボードへ送る（`-w 0` で改行を入れず 1 行にする。
+`clip` は Windows のクリップボード）:
 
-```powershell
-[Convert]::ToBase64String([IO.File]::ReadAllBytes("<保管場所>\pathly-release.jks")) | Set-Clipboard
+```bash
+base64 -w 0 <保管場所>/pathly-release.jks | clip
 ```
+
+base64 にした文字列は鍵そのものと同じ扱い。貼り付けたらクリップボードを別の内容で上書きする。
 
 ---
 
@@ -100,36 +104,22 @@ Secret に登録する base64 は PowerShell で作ってクリップボード�
 4. `.github/workflows/release.yml` が、リリース鍵で署名した `pathly-v0.3.0.apk` を作り、
    前のリリースからの PR のタイトルを変更点にして GitHub Release を作る。
    署名が無い・versionName がタグと合わないときは配らずに止まる。
-5. 端末に APK を上書きインストールする。
+5. 端末に APK を上書きインストールする（スマホで Release から入れても、PC から adb で入れてもよい）。
+
+   ```bash
+   gh release download v0.3.0 -p "*.apk"
+   adb install -r pathly-v0.3.0.apk
+   ```
 
 ---
 
-## 鍵を替えるときのデータ移行
+## データの持ち出し
 
-署名が変わると上書きインストールできない。**入れ直すと端末のデータが消える**ので、
-`run-as`（debuggable なアプリの中を adb から読み書きできる）で退避して戻す。
+リリース版は debuggable でないため、**adb からデータを読み書きできない**（`run-as` が使えない）。
+リリース版の実データを開発版に写す・バックアップするには、アプリのエクスポート機能が要る
+（[roadmap](../roadmap.md) の「データのエクスポート／インポート」）。
 
-1. **退避**（旧アプリが debuggable であること）。止めてから DB と設定を丸ごと取り出す。
-
-   ```bash
-   adb shell am force-stop com.pathly
-   adb exec-out run-as com.pathly tar -cf - databases shared_prefs > pathly-data.tar
-   ```
-
-   `tar -tvf pathly-data.tar` で `databases/pathly_database*` が入っていることを確かめ、
-   **このファイルを別の場所にも控える**（これがバックアップになる）。
-
-2. **旧アプリを消す**: `adb uninstall com.pathly`
-3. **新しい鍵で、一時的に debuggable なリリース版を入れる**（起動はしない）。
-
-   ```bash
-   ./gradlew assembleRelease -PpathlyDebuggableRelease=true
-   adb install app/build/outputs/apk/release/app-release.apk
-   ```
-
-4. **書き戻す**: `adb shell "run-as com.pathly tar -xf -" < pathly-data.tar`
-5. **通常のリリース版を上書きする**（同じ鍵なので上書きでき、データは残る）: `adb install -r pathly-vX.Y.Z.apk`
-6. 起動して記録・場所が揃っていることを確かめる。
-
-開発版にも同じデータを入れておくと、実データの写しで自由に試せる:
-`./gradlew installDebug` のあと `adb shell "run-as com.pathly.debug tar -xf -" < pathly-data.tar`。
+リリース鍵へ切り替えたとき（2026-09）のデータ移行の手順と落とし穴は
+[ADR-0026](../adr/0026-release-versioning-and-signing.md#付録-鍵の切り替えで行ったデータ移行2026-09-27) に残している。
+あの手順は旧アプリが debuggable だったから使えた。今のリリース版からは退避できないので、
+**鍵を替え直すならエクスポート機能が先に要る**。
