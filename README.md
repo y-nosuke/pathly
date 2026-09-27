@@ -33,6 +33,8 @@
 
 - [x] 🧹 GPSノイズ除去（位置補正）
 - [x] 📍 立ち寄り場所の自動検出
+- [x] ✏️ 立ち寄りの手動追加・付け替え・滞在期間の編集・メモ
+- [x] 🏷️ 経路の名前・お気に入り・絞り込み／並べ替え
 - [ ] 📸 写真・動画記録
 - [ ] ⭐ 場所の評価・コメント追加
 - [ ] 🏷️ タグ付け機能
@@ -42,6 +44,10 @@
 - [x] 📌 場所の登録・一覧（地図タップ・POIタップ・キーワード検索）
 - [x] 🗒️ 行きたい場所リスト（優先度・メモ・訪問済み管理）
 - [x] 🔗 場所から関連するお出掛け（経路）の一覧
+
+**データ**
+
+- [x] 📤 記録・場所・設定の書き出し・読み込み（端末の故障・機種変更への備え）
 
 **事前計画・詳細機能**
 
@@ -70,8 +76,8 @@
 - **DI:** Hilt (Dagger)
 - **Annotation Processing:** KSP
 - **Testing:** JUnit4, MockK, Turbine, Compose Testing
-- **Build:** AGP 9.2 / Gradle 9.6 / Kotlin 2.3（AGP内蔵）
-- **CI/CD:** GitHub Actions
+- **Build:** AGP / Gradle / Kotlin（AGP 内蔵）。版は [`libs.versions.toml`](android/gradle/libs.versions.toml) と [`gradle-wrapper.properties`](android/gradle/wrapper/gradle-wrapper.properties) を参照
+- **CI/CD:** GitHub Actions（PR ごとのビルド・テスト、タグでのリリース）・Dependabot
 
 ## 📋 プロジェクト構造
 
@@ -80,13 +86,15 @@ pathly/
 ├── android/            # Android アプリ（Kotlin + Jetpack Compose）→ android/README.md
 │   ├── app/            # アプリモジュール（ソース・ビルド設定）
 │   └── gradle/         # Gradle wrapper・バージョンカタログ
-├── docs/               # ドキュメント（要望 → 仕様 → 設計）
+├── docs/               # ドキュメント（要望 → 仕様 → 設計）。一覧は docs/README.md
 │   ├── requirements.md # 要望書（★肝）
 │   ├── roadmap.md      # ロードマップ
-│   ├── specs/          # 仕様（features / screens / model）
-│   ├── designs/        # 設計（architecture / performance / security / logging / gps-smoothing / places-and-stops / wishlist / testing / cloud-database / glossary）
+│   ├── specs/          # 仕様（何が起きるか）
+│   ├── designs/        # 設計（どう作るか）
+│   ├── development/    # 開発の進め方（ブランチ・コミット・PR）
+│   ├── adr/            # 決定の記録（なぜそうしたか・没案）
 │   └── assets/         # 画像・ロゴ
-├── .github/            # GitHub Actions（CI）
+├── .github/            # GitHub Actions（CI・リリース）・Dependabot・PR テンプレート
 ├── .githooks/          # Git フック（Markdown 整形）
 ├── .vscode/            # エディタ設定（Prettier など）
 ├── CLAUDE.md           # 開発ガイド
@@ -108,7 +116,7 @@ pathly/
 
 - [要望書](docs/requirements.md) — 実現したいこと（★肝）
 - [ロードマップ](docs/roadmap.md) — フェーズ・優先度・進捗
-- [ドキュメント索引](docs/README.md) — 仕様（specs/）・設計（designs/）
+- [ドキュメント索引](docs/README.md) — 仕様（specs/）・設計（designs/）・開発の進め方（development/）・決定（adr/）
 - [CLAUDE.md](CLAUDE.md) — 開発ガイド（規約・詳細コマンド）
 
 ## 📄 ライセンス
