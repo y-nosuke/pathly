@@ -48,6 +48,7 @@ Claude Code がこのリポジトリで作業するときの前提と約束。**
 - 作業は **Issue** から。「#12 をやって」と言われたら `gh issue view 12` で読み、[Project](https://github.com/users/y-nosuke/projects/3) で In Progress に移してから着手する。やる順番は Project の並び順。未決の案は Claude のメモリに置かず Issue にする（[development/issues-and-adr.md](docs/development/issues-and-adr.md)）。
 - ブランチ名は `<種類>/<英語のケバブケース>`、コミットと PR タイトルは `<種類>(<範囲>): <日本語の要約>`。PR 本文に `Closes #12`。PR タイトルはリリースノートになる（[development/branch-and-pr.md](docs/development/branch-and-pr.md)）。
 - 設計の判断（なぜ・没案）は ADR、今の姿は specs / designs に書く。終わった作業の記録は設計書に残さない（[docs/README.md](docs/README.md) の運用ルール）。
+- 繰り返す手順はスキル（`.claude/skills/`）にある: `start-issue`（Issue の着手〜PR）・`emulator-check`（エミュレータでのテスト・確認）・`release`（リリースとスマホの更新）。
 - **commit・push・タグ・マージ・GitHub の設定変更は、ユーザーの確認を取ってから**行う。
 - ユーザーへの返答は**日本語**で書く（途中経過の一言も）。
 
