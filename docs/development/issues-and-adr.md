@@ -55,3 +55,17 @@
 
 PR の本文に `Closes #12` と書くと、マージで Issue が閉じる。1 つの PR で複数閉じるなら `Closes #12, closes #13`。
 Issue の一部だけ済ませる PR は `Refs #12` にして、Issue は閉じない。
+
+## Project（やる順番）
+
+[Project「Pathly」](https://github.com/users/y-nosuke/projects/3) に Issue を入れ、**やる順番は並び順で表す**（上から着手する）。
+優先度や期日などの項目は足さない。roadmap には順番を書かない（二重管理にしない）。
+
+| ビュー         | 中身                                                         |
+| -------------- | ------------------------------------------------------------ |
+| ボード         | Status（Todo／In Progress／Done）の列。全体を見渡す          |
+| 着手できるもの | 開いていて `idea` でないもの（仕様が決まっていて始められる） |
+
+- 着手したら In Progress に移す。Issue が閉じる（PR のマージで `Closes`）と Done に移る（Project の自動化）。
+- 新しい Issue は Project の自動化（Auto-add）で自動で入る。並び順は手で整える。
+- AI に頼むときは「Project の『着手できるもの』のいちばん上をやって」のように指せる。
