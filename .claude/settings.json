@@ -25,6 +25,7 @@
       "mcp__aws-mcp__aws___read_documentation",
       "mcp__Claude_Browser__read_page",
       "Bash(gh project item-list *)",
+      "Bash(gh pr merge *)",
       "mcp__Claude_Browser__read_console_messages",
       "mcp__aws-mcp__aws___search_documentation",
       "mcp__Claude_Browser__read_network_requests",

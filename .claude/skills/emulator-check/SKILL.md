@@ -29,6 +29,27 @@ done
 
 Bash ツールで起動するときは、起動と待ちを 1 回の呼び出しにまとめる（`&` で残したまま次の呼び出しに進める）。
 
+### 固まる・「応答していません」が続くとき
+
+起動に 2 分近くかかる、System UI・電話・Pathly などが次々「応答していません」になる、`system_server` が
+再起動する、といった症状は、**Windows の電源調整（効率モード）でエミュレータに CPU が回っていない**のが
+原因だった（2026-09-27）。ウィンドウが前面に無いと効率モードにされ、混成 CPU（P＋E コア）では特に効く。
+メモリ不足に見えるが、メモリを増やしても直らない。
+
+- 確かめ方: PC の CPU 使用率は低いのに、エミュレータの中の負荷（`$ADB -s emulator-5554 shell cat /proc/loadavg`）が
+  コア数（4）を大きく超え、`qemu-system-x86_64` の CPU 時間がほとんど増えない
+  （PowerShell で `(Get-Process qemu-system-x86_64).TotalProcessorTime` を 10 秒あけて 2 回見る）。
+- 直し方: **ユーザーに**管理者の PowerShell で次を実行してもらう（システムの設定なので Claude は実行しない）。
+  設定済み（2026-09-27）。戻すときは `disable` を `reset` に。
+
+  ```powershell
+  powercfg /powerthrottling disable /path "C:\Users\yoichi\AppData\Local\Android\Sdk\emulator\qemu\windows-x86_64\qemu-system-x86_64.exe"
+  ```
+
+- AVD（`D:\dev\avd\Pixel_10_API36.avd\config.ini`）は `hw.ramSize=4096M`・`hw.gpu.enabled=yes`・`hw.gpu.mode=host`。
+  2G・GPU なしだった頃はスクリーンショットが真っ白になることがあった。
+- 効いていれば、起動（`boot_completed` まで）は 30 秒前後、落ち着いた後の負荷は 2 前後。
+
 ## instrumented test
 
 ```bash
@@ -77,3 +98,4 @@ $ADB -s emulator-5554 emu kill
 ```
 
 「応答していません（No response to onStartJob）」はエミュレータの負荷が高いときに出る。`logcat` で原因を見て、アプリの不具合でなければ「待つ」でよい。
+何度も続くなら、「起動」の「固まる・「応答していません」が続くとき」を見る。
