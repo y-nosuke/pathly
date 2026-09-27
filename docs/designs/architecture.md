@@ -137,6 +137,15 @@ DB スキーマの都合が presentation に漏れないようにするため。
 Navigation-Compose（`presentation/navigation/`）でボトムナビ4タブ＋詳細画面を構成する。
 「場所」タブはネストグラフでグラフスコープの ViewModel を共有する。画面仕様は [screens.md](../specs/screens.md)。
 
+- **「場所」タブはネストグラフ `places`**（一覧・地図で追加・検索して追加・詳細）。`PlacesViewModel` を
+  グラフのバックスタックエントリにスコープして（`hiltViewModel(getBackStackEntry("places"))`）、4 つの画面で共有する。
+- **経路詳細 `track_detail/{trackId}` は上に積む。** 場所詳細から経路詳細へ行って戻ると、場所詳細に戻る（一覧まで戻らない）。
+- **`TrackingViewModel` は Activity スコープ**で作って NavHost に渡す。ナビのエントリにスコープすると別のインスタンスになり、
+  権限の許可の結果が画面に届かない。
+- **タブの切り替えは状態を保つ**（`popUpTo(start){ saveState = true }`・`launchSingleTop`・`restoreState`）。
+- **遷移アニメーションは付けない**（瞬時に切り替える）。**システムの戻るは標準のまま**（どのタブでも戻る → 記録タブ、記録タブで戻る → 終了）。
+  「直前のタブに戻る」は標準から外れるので採らない（ユーザーと合意）。
+
 ---
 
 ## 関連ドキュメント
