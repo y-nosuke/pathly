@@ -45,10 +45,8 @@ Google Maps / Places の API キーは `local.properties` の `GOOGLE_MAPS_API_K
 APK に埋まる以上キー自体は秘匿できない。守りは **Cloud Console 側のアプリ制限**
 （パッケージ名＋署名証明書のフィンガープリント）と API 制限（Maps SDK for Android・Places API (New) だけ）で行う。
 
-キーと制限は Google Cloud のプロジェクト `pathly-470012` で管理している。
-
-- [プロジェクトのコンソール](https://console.cloud.google.com/welcome?project=pathly-470012)
-- [認証情報（API キーと制限）](https://console.cloud.google.com/apis/credentials?project=pathly-470012)
+キーと制限は Google Cloud のプロジェクト `pathly-470012`（コンソールへのリンクはルートの README）の
+[認証情報](https://console.cloud.google.com/apis/credentials?project=pathly-470012) で管理している。
 
 **キーは 1 つだけ使う。** 手元の `local.properties` と CI の Secret `GOOGLE_MAPS_API_KEY` に同じ値を入れる。
 どこでビルドしても開発版・リリース版の両方にキーが入りうるので、キーを分けても制限は同じになり、

@@ -98,6 +98,10 @@ pathly/
 - **Android アプリ**: セットアップ・ビルド・テストは [android/README.md](android/README.md) を参照
 - **Web 管理画面（Next.js）**: 将来追加予定
 
+## 🔗 関連サービス
+
+- **Google Cloud**（プロジェクト `pathly-470012`）: [コンソール](https://console.cloud.google.com/welcome?project=pathly-470012) — Google Maps / Places の API キーと制限を管理（運用は [docs/designs/security.md](docs/designs/security.md)）
+
 ## 📖 ドキュメント
 
 詳細は [`docs/`](docs/) に集約しています。
