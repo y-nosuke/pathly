@@ -6,6 +6,7 @@ import com.pathly.data.places.PlacesTextSearcher
 import com.pathly.data.settings.MapSurface
 import com.pathly.data.settings.SettingsRepository
 import com.pathly.domain.model.NearbyRegisterPrompt
+import com.pathly.domain.model.PlaceCategoryFacet
 import com.pathly.domain.model.PlaceListItem
 import com.pathly.domain.model.PlacePrediction
 import com.pathly.domain.model.PlaceSearchResult
@@ -13,6 +14,7 @@ import com.pathly.domain.model.PlaceVisit
 import com.pathly.domain.model.Priority
 import com.pathly.domain.repository.WishlistRepository
 import com.pathly.domain.usecase.PlaceEditUseCase
+import com.pathly.presentation.common.toggled
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -87,12 +89,18 @@ class PlacesViewModel @Inject constructor(
     _uiState.update { it.copy(visitedFilter = filter) }
   }
 
-  /** 絞り込みを全解除する（行きたい・訪問状況をまとめて指定なしに戻す）。並べ替えは保持。 */
+  /** 業種の絞り込みで、その業種を選ぶ／外す（複数選べる）。 */
+  fun toggleCategoryFilter(facet: PlaceCategoryFacet) {
+    _uiState.update { it.copy(categoryFilter = it.categoryFilter.toggled(facet)) }
+  }
+
+  /** 絞り込みを全解除する（行きたい・訪問状況・業種をまとめて指定なしに戻す）。並べ替えは保持。 */
   fun clearFilters() {
     _uiState.update {
       it.copy(
         wishlistFilter = WishlistFilter.ANY,
         visitedFilter = VisitedFilter.ANY,
+        categoryFilter = emptySet(),
       )
     }
   }

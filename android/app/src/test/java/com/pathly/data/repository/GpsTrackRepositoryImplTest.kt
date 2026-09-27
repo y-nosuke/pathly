@@ -8,9 +8,11 @@ import com.pathly.data.local.dao.StopDao
 import com.pathly.data.local.entity.GpsPointEntity
 import com.pathly.data.local.entity.GpsTrackEntity
 import com.pathly.data.local.entity.TrackListRow
+import com.pathly.data.local.entity.TrackStopCategory
 import com.pathly.data.local.entity.TrackStopCount
 import com.pathly.domain.model.GpsPoint
 import com.pathly.domain.model.GpsTrack
+import com.pathly.domain.model.PlaceCategoryFacet
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
@@ -50,9 +52,10 @@ class GpsTrackRepositoryImplTest {
   @Before
   fun setup() {
     Dispatchers.setMain(testDispatcher)
-    // getAllTracks は tracks と立ち寄り件数を combine する。件数側が emit しないと combine が
-    // 一度も流れないため、既定は空件数を返しておく（件数テストでは上書きする）。
+    // getAllTracks は tracks と立ち寄り件数・業種を combine する。どれかが emit しないと combine が
+    // 一度も流れないため、既定は空を返しておく（件数・業種のテストでは上書きする）。
     every { mockStopDao.observeStopCountsByTrack() } returns flowOf(emptyList())
+    every { mockStopDao.observeStopCategoriesByTrack() } returns flowOf(emptyList())
     repository = GpsTrackRepositoryImpl(
       mockGpsTrackDao,
       mockGpsPointDao,
@@ -239,6 +242,34 @@ class GpsTrackRepositoryImplTest {
     // Then
     assertEquals("track1の立ち寄り件数", 3, result.first { it.id == 1L }.stopCount)
     assertEquals("track2は集計に無いので0件", 0, result.first { it.id == 2L }.stopCount)
+  }
+
+  @Test
+  fun `getAllTracks_立ち寄った場所の業種がstopCategoriesに反映される`() = runTest {
+    // Given
+    val rows = listOf(
+      TrackListRow(createGpsTrackEntity(id = 1L, isActive = false), pointCount = 0),
+      TrackListRow(createGpsTrackEntity(id = 2L, isActive = false), pointCount = 0),
+    )
+    coEvery { mockGpsTrackDao.getTrackListRows() } returns flowOf(rows)
+    // track1 はカフェ 2 か所（どちらもカフェにまとまる）と施設情報の無い場所に立ち寄った。track2 は立ち寄りなし。
+    every { mockStopDao.observeStopCategoriesByTrack() } returns flowOf(
+      listOf(
+        TrackStopCategory(trackId = 1L, hasGoogleInfo = true, categoryCode = "cafe"),
+        TrackStopCategory(trackId = 1L, hasGoogleInfo = true, categoryCode = "coffee_shop"),
+        TrackStopCategory(trackId = 1L, hasGoogleInfo = false, categoryCode = null),
+      ),
+    )
+
+    // When
+    val result = repository.getAllTracks().first()
+
+    // Then
+    assertEquals(
+      setOf(PlaceCategoryFacet.CAFE, PlaceCategoryFacet.UNCATEGORIZED),
+      result.first { it.id == 1L }.stopCategories,
+    )
+    assertEquals(emptySet<PlaceCategoryFacet>(), result.first { it.id == 2L }.stopCategories)
   }
 
   @Test

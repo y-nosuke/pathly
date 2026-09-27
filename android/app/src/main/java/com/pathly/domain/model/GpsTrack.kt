@@ -13,6 +13,8 @@ data class GpsTrack(
   val isFavorite: Boolean = false,
   /** この経路の立ち寄り件数（一覧の件数表示・並べ替え用。リポジトリが集計して渡す）。 */
   val stopCount: Int = 0,
+  /** この経路で立ち寄った場所の業種（一覧の絞り込み用。リポジトリが集計して渡す。一覧以外では空）。 */
+  val stopCategories: Set<PlaceCategoryFacet> = emptySet(),
   val points: List<GpsPoint> = emptyList(),
   /**
    * この経路の生GPS点の件数。履歴一覧は点をロードしないので集計値を受け取る。

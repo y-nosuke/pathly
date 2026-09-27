@@ -3,7 +3,9 @@ package com.pathly.presentation.history
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.pathly.domain.model.GpsTrack
+import com.pathly.domain.model.PlaceCategoryFacet
 import com.pathly.domain.repository.GpsTrackRepository
+import com.pathly.presentation.common.toggled
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -66,13 +68,19 @@ class HistoryViewModel @Inject constructor(
     _uiState.update { it.copy(stopFilter = filter) }
   }
 
-  /** 絞り込みを全解除する（3軸まとめて指定なしに戻す）。並べ替えは保持。 */
+  /** 業種の絞り込みで、その業種を選ぶ／外す（複数選べる）。 */
+  fun toggleCategoryFilter(facet: PlaceCategoryFacet) {
+    _uiState.update { it.copy(categoryFilter = it.categoryFilter.toggled(facet)) }
+  }
+
+  /** 絞り込みを全解除する（4軸まとめて指定なしに戻す）。並べ替えは保持。 */
   fun clearFilters() {
     _uiState.update {
       it.copy(
         favoriteFilter = TrackFavoriteFilter.ANY,
         namedFilter = TrackNamedFilter.ANY,
         stopFilter = TrackStopFilter.ANY,
+        categoryFilter = emptySet(),
       )
     }
   }

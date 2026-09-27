@@ -43,6 +43,8 @@ import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.pathly.R
 import com.pathly.domain.model.GpsTrack
+import com.pathly.domain.model.PlaceCategoryFacet
+import com.pathly.presentation.common.CategoryFilterChip
 import com.pathly.util.DateFormatters
 import kotlin.math.roundToInt
 
@@ -79,6 +81,7 @@ fun HistoryScreen(
         onFavoriteFilterChange = viewModel::setFavoriteFilter,
         onNamedFilterChange = viewModel::setNamedFilter,
         onStopFilterChange = viewModel::setStopFilter,
+        onToggleCategoryFilter = viewModel::toggleCategoryFilter,
         onSortChange = viewModel::setSort,
         onToggleSortDirection = viewModel::toggleSortDirection,
       )
@@ -115,7 +118,12 @@ fun HistoryScreen(
           verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
           item {
-            StatisticsSummaryCard(tracks = uiState.tracks)
+            // 統計は一覧と同じく絞り込み後の経路で数える。絞っているときは全体の件数も添える。
+            StatisticsSummaryCard(
+              tracks = visibleTracks,
+              totalCount = uiState.tracks.size,
+              isFiltered = !uiState.noFilter,
+            )
             Spacer(modifier = Modifier.height(16.dp))
           }
 
@@ -205,12 +213,13 @@ private fun FilterSortBar(
   onFavoriteFilterChange: (TrackFavoriteFilter) -> Unit,
   onNamedFilterChange: (TrackNamedFilter) -> Unit,
   onStopFilterChange: (TrackStopFilter) -> Unit,
+  onToggleCategoryFilter: (PlaceCategoryFacet) -> Unit,
   onSortChange: (TrackSort) -> Unit,
   onToggleSortDirection: () -> Unit,
   modifier: Modifier = Modifier,
 ) {
   Column(modifier = modifier) {
-    // 絞り込みは3軸独立（お気に入り / 命名 / 立ち寄り）。横に収まらない端末向けに横スクロール可。
+    // 絞り込みは4軸独立（お気に入り / 命名 / 立ち寄り / 業種）。横に収まらない端末向けに横スクロール可。
     Row(
       modifier = Modifier
         .fillMaxWidth()
@@ -249,6 +258,12 @@ private fun FilterSortBar(
         },
         label = { Text(state.stopFilter.chipLabel) },
       )
+      // 業種は立ち寄った場所の業種。複数選べる（どれかに立ち寄った経路を残す）。
+      CategoryFilterChip(
+        selected = state.categoryFilter,
+        counts = state.categoryCounts,
+        onToggle = onToggleCategoryFilter,
+      )
     }
 
     // 並べ替え（軸メニュー ＋ 昇順/降順トグル）。
@@ -280,6 +295,8 @@ private fun FilterSortBar(
 @Composable
 private fun StatisticsSummaryCard(
   tracks: List<GpsTrack>,
+  totalCount: Int,
+  isFiltered: Boolean,
   modifier: Modifier = Modifier,
 ) {
   val totalTracks = tracks.size
@@ -302,7 +319,7 @@ private fun StatisticsSummaryCard(
       verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
       Text(
-        text = "📊 お出掛け統計",
+        text = statisticsTitle(shownCount = tracks.size, totalCount = totalCount, isFiltered = isFiltered),
         style = MaterialTheme.typography.titleMedium,
         fontWeight = FontWeight.Bold,
         color = MaterialTheme.colorScheme.onPrimaryContainer,
@@ -568,4 +585,11 @@ private fun TrackItem(
       }
     }
   }
+}
+
+/** 統計カードの見出し。絞り込み中は、絞った数字を全体と取り違えないよう「n / 全体 回」を添える。 */
+internal fun statisticsTitle(shownCount: Int, totalCount: Int, isFiltered: Boolean): String = if (isFiltered) {
+  "📊 お出掛け統計（絞り込み中 $shownCount / $totalCount 回）"
+} else {
+  "📊 お出掛け統計"
 }

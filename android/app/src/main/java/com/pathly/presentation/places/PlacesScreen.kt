@@ -79,6 +79,7 @@ import com.pathly.R
 import com.pathly.domain.model.NearbyRegisterPrompt
 import com.pathly.domain.model.Place
 import com.pathly.domain.model.PlaceCategory
+import com.pathly.domain.model.PlaceCategoryFacet
 import com.pathly.domain.model.PlaceCategoryGroup
 import com.pathly.domain.model.PlaceListItem
 import com.pathly.domain.model.PlacePrediction
@@ -86,6 +87,7 @@ import com.pathly.domain.model.PlaceSearchResult
 import com.pathly.domain.model.PlaceVisit
 import com.pathly.domain.model.Priority
 import com.pathly.domain.model.RegisteredPlace
+import com.pathly.presentation.common.CategoryFilterChip
 import com.pathly.presentation.common.CloseInfoWindowWithSheet
 import com.pathly.presentation.common.FloatingSheet
 import com.pathly.presentation.common.MapMarker
@@ -143,6 +145,7 @@ fun PlacesListRoute(
       onClearFilters = viewModel::clearFilters,
       onWishlistFilterChange = viewModel::setWishlistFilter,
       onVisitedFilterChange = viewModel::setVisitedFilter,
+      onToggleCategoryFilter = viewModel::toggleCategoryFilter,
       onSortChange = viewModel::setSort,
       onToggleSortDirection = viewModel::toggleSortDirection,
       onItemClick = { onItemClick(it.place.id) },
@@ -306,6 +309,7 @@ private fun PlacesListContent(
   onClearFilters: () -> Unit,
   onWishlistFilterChange: (WishlistFilter) -> Unit,
   onVisitedFilterChange: (VisitedFilter) -> Unit,
+  onToggleCategoryFilter: (PlaceCategoryFacet) -> Unit,
   onSortChange: (PlaceSort) -> Unit,
   onToggleSortDirection: () -> Unit,
   onItemClick: (PlaceListItem) -> Unit,
@@ -355,7 +359,7 @@ private fun PlacesListContent(
 
     Spacer(modifier = Modifier.height(12.dp))
 
-    // 絞り込みは2軸独立（行きたい / 訪問状況）。横に収まらない端末向けに横スクロール可。
+    // 絞り込みは3軸独立（行きたい / 訪問状況 / 業種）。横に収まらない端末向けに横スクロール可。
     Row(
       modifier = Modifier
         .fillMaxWidth()
@@ -386,6 +390,12 @@ private fun PlacesListContent(
           onVisitedFilterChange(next)
         },
         label = { Text(state.visitedFilter.chipLabel) },
+      )
+      // 業種は複数選べる（選んだどれかに当たる場所を残す）。
+      CategoryFilterChip(
+        selected = state.categoryFilter,
+        counts = state.categoryCounts,
+        onToggle = onToggleCategoryFilter,
       )
     }
 
@@ -427,7 +437,8 @@ private fun PlacesListContent(
       state.visibleItems.isEmpty() -> {
         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
           Text(
-            text = "場所がありません\n「追加」から登録できます",
+            // 場所はあるのに絞り込みで消えたときは、追加を促さず条件のせいだと分かる文言にする。
+            text = if (state.items.isEmpty()) "場所がありません\n「追加」から登録できます" else "条件に合う場所がありません",
             style = MaterialTheme.typography.bodyLarge,
             textAlign = TextAlign.Center,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -439,7 +450,7 @@ private fun PlacesListContent(
         val listState = rememberLazyListState()
         // 絞り込み・並べ替えを変えたとき、または先頭が変わったとき（＝追加時）に先頭へ戻す。
         val topItemId = state.visibleItems.firstOrNull()?.place?.id
-        LaunchedEffect(state.wishlistFilter, state.visitedFilter, state.sort, state.sortDescending, topItemId) {
+        LaunchedEffect(state.wishlistFilter, state.visitedFilter, state.categoryFilter, state.sort, state.sortDescending, topItemId) {
           listState.scrollToItem(0)
         }
         LazyColumn(
