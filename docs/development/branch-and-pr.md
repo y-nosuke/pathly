@@ -74,6 +74,7 @@ PR の中のコミットは、それぞれの中身に合った種類で分け�
   **PR タイトルはそのままリリースノートの 1 行になる**（[release.md](../designs/release.md)）ので、
   後から読んで何が変わったか分かる書き方にする。
 - 本文は [PR テンプレート](../../.github/pull_request_template.md) に沿って、概要・変更内容・検証を書く。
+  対応する Issue があれば `Closes #番号` で結ぶ（→ [issues-and-adr.md](issues-and-adr.md)）。
 - **push 前に `./gradlew build` を通す**（[testing.md](../designs/testing.md#ci-と-push-前のゲート)）。
 - 1 つの PR は 1 つの目的に絞る。
 

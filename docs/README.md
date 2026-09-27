@@ -50,9 +50,10 @@
 
 ### 開発の進め方 — 作業の手順と約束ごと
 
-| ファイル                                                     | 内容                                       |
-| ------------------------------------------------------------ | ------------------------------------------ |
-| [development/branch-and-pr.md](development/branch-and-pr.md) | ブランチ名・コミットメッセージ・PR・マージ |
+| ファイル                                                       | 内容                                       |
+| -------------------------------------------------------------- | ------------------------------------------ |
+| [development/branch-and-pr.md](development/branch-and-pr.md)   | ブランチ名・コミットメッセージ・PR・マージ |
+| [development/issues-and-adr.md](development/issues-and-adr.md) | Issue・ADR・ドキュメントの住み分け         |
 
 ### 決定（Why this way）
 
