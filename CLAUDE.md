@@ -19,17 +19,7 @@ Claude Code がこのリポジトリで作業するときの前提と約束。**
 
 ## コードの構成
 
-```text
-android/app/src/main/java/com/pathly/
-├── di/            # Hilt modules
-├── data/          # local（Room: DAO・entity・migration）/ repository / places（Google Places）/
-│                  # settings（SharedPreferences）/ tracking（TrackingController）/ work（WorkManager）/ backup（書き出し・読み込み）
-├── domain/        # model / repository（interface）/ usecase（複数画面で共有する手順）
-├── presentation/  # 画面ごとの ViewModel・State・Screen（tracking / history / places / stops / common / settings / navigation）
-├── service/       # LocationTrackingService（記録）
-├── util/          # Logger・権限・日時フォーマット
-└── ui/theme/      # PathlyAndroidTheme
-```
+パッケージ構成の図は [android/README.md](android/README.md)、レイヤーと「なぜこの構成か」は [designs/architecture.md](docs/designs/architecture.md)。ここには図から読めない約束だけを書く。
 
 - 依存の向き: Screen ← StateFlow ← ViewModel → Repository interface（重複する手順は UseCase）→ 実装 → Room。詳細は [designs/architecture.md](docs/designs/architecture.md)。
 - **ViewModel は Service を直接触らない。** 記録サービスの起動・バインドと端末状態（権限・位置情報 ON/OFF）は `data/tracking/TrackingController`。
