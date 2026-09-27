@@ -75,6 +75,14 @@ git checkout -b <種類>/<英語のケバブケース>
 
 ## 8. マージ（ユーザーの確認を取ってから）
 
+- **マージの前に、Issue の完了の条件にチェックを付ける**（GitHub は自動では付けない）。確かめられた項目だけ `- [x]` にし、
+  満たせなかった・マージ後にしか確かめられない項目は `- [ ]` のまま、理由と次の手をコメントに書く。
+
+  ```bash
+  gh issue view <番号> --json body --jq .body > <scratchpad>/body.md   # 確かめた項目を - [x] に書き換える
+  gh issue edit <番号> --body-file <scratchpad>/body.md
+  ```
+
 - 必須チェック（`build` と `instrumented-test`）が通ってから。`gh pr merge <PR> --merge`（マージコミットのみ）。
 - マージ後: `git checkout main && git pull --ff-only && git branch -d <ブランチ> && git fetch --prune`。
-- Issue が閉じて Project で Done になったことを確かめる。
+- Issue が閉じて Project で Done になったことを確かめる。マージ後にしか確かめられない項目があれば、確かめてからチェックを付ける。
