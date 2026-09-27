@@ -68,7 +68,7 @@
 - [x] 立ち寄りの滞在期間の編集・手動統合（→ [ADR-0024](adr/0024-stop-duration-edit-and-manual-merge.md)）
 - [x] **データの書き出し・読み込み**（→ [specs/backup.md](specs/backup.md)・[ADR-0027](adr/0027-data-export-import.md)）。
       クラウド同期までの間、端末の故障・機種変更に備える。開発版に実データの写しを入れるのにも使う。
-- [ ] **アプリのバージョンを画面で確認できるようにする**（設定タブに versionName などを出す）
+- [x] **アプリのバージョンを画面で確認できるようにする**（設定タブの「このアプリについて」）
 - [x] **`google_places.googlePlaceId` に UNIQUE を付ける**（v16 → [ADR-0025](adr/0025-one-place-per-google-facility.md)）。
       自動でまとめるのは検出が作った place だけ（地図で指した place は別の場所として残す）。
 - [ ] **地図マーカーの当たり判定を見た目に合わせる**。登録済みの場所や立ち寄りの**近く**をタップした
