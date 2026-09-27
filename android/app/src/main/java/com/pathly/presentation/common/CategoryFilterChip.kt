@@ -5,6 +5,7 @@ import androidx.compose.material3.Checkbox
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -17,13 +18,15 @@ import com.pathly.domain.model.PlaceCategoryFacet
  * 一覧の絞り込みバーに置く「業種」のチップ。タップで業種の一覧を開き、複数選べる（選んだどれかに当たれば残す）。
  *
  * 選択肢は件数のある業種だけ（[counts] に無い業種は出さない）。ただし選択中の業種は、件数が 0 になっても
- * 外せるように残す。選べる業種が 1 つも無ければチップごと出さない。
+ * 外せるように残す。選べる業種が 1 つも無ければチップごと出さない。先頭の「すべて外す」で選択をまとめて外せる
+ * （「すべて」チップはほかの軸も解除するので、業種だけ戻したいとき用）。
  */
 @Composable
 fun CategoryFilterChip(
   selected: Set<PlaceCategoryFacet>,
   counts: Map<PlaceCategoryFacet, Int>,
   onToggle: (PlaceCategoryFacet) -> Unit,
+  onClear: () -> Unit,
 ) {
   val options = PlaceCategoryFacet.entries.filter { it in counts || it in selected }
   if (options.isEmpty()) return
@@ -36,6 +39,12 @@ fun CategoryFilterChip(
       label = { Text(categoryChipLabel(selected)) },
     )
     DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+      DropdownMenuItem(
+        text = { Text("すべて外す") },
+        enabled = selected.isNotEmpty(),
+        onClick = onClear,
+      )
+      HorizontalDivider()
       options.forEach { facet ->
         // 複数選ぶので、選んでもメニューは閉じない。
         DropdownMenuItem(

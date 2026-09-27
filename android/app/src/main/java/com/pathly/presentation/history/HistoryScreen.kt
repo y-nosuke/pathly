@@ -82,6 +82,7 @@ fun HistoryScreen(
         onNamedFilterChange = viewModel::setNamedFilter,
         onStopFilterChange = viewModel::setStopFilter,
         onToggleCategoryFilter = viewModel::toggleCategoryFilter,
+        onClearCategoryFilter = viewModel::clearCategoryFilter,
         onSortChange = viewModel::setSort,
         onToggleSortDirection = viewModel::toggleSortDirection,
       )
@@ -214,6 +215,7 @@ private fun FilterSortBar(
   onNamedFilterChange: (TrackNamedFilter) -> Unit,
   onStopFilterChange: (TrackStopFilter) -> Unit,
   onToggleCategoryFilter: (PlaceCategoryFacet) -> Unit,
+  onClearCategoryFilter: () -> Unit,
   onSortChange: (TrackSort) -> Unit,
   onToggleSortDirection: () -> Unit,
   modifier: Modifier = Modifier,
@@ -263,6 +265,7 @@ private fun FilterSortBar(
         selected = state.categoryFilter,
         counts = state.categoryCounts,
         onToggle = onToggleCategoryFilter,
+        onClear = onClearCategoryFilter,
       )
     }
 

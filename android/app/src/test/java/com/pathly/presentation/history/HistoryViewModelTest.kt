@@ -199,6 +199,26 @@ class HistoryViewModelTest {
   }
 
   @Test
+  fun `clearCategoryFilter_業種だけ外してほかの軸は残す`() = runTest {
+    // Given
+    coEvery { mockRepository.getAllTracks() } returns flowOf(listOf(createTrack(id = 1, endTime = Date())))
+    coEvery { mockRepository.getActiveTrackRealtime() } returns flowOf(null)
+    viewModel = HistoryViewModel(mockRepository)
+    testDispatcher.scheduler.advanceUntilIdle()
+    viewModel.setFavoriteFilter(TrackFavoriteFilter.FAVORITE)
+    viewModel.toggleCategoryFilter(PlaceCategoryFacet.FOOD)
+    viewModel.toggleCategoryFilter(PlaceCategoryFacet.CAFE)
+
+    // When
+    viewModel.clearCategoryFilter()
+
+    // Then
+    val state = viewModel.uiState.value
+    assertTrue("業種は指定なし", state.categoryFilter.isEmpty())
+    assertEquals("お気に入りは残る", TrackFavoriteFilter.FAVORITE, state.favoriteFilter)
+  }
+
+  @Test
   fun `clearFilters_業種の絞り込みも解除する`() = runTest {
     // Given
     coEvery { mockRepository.getAllTracks() } returns flowOf(listOf(createTrack(id = 1, endTime = Date())))

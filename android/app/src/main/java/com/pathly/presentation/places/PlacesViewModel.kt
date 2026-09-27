@@ -94,6 +94,11 @@ class PlacesViewModel @Inject constructor(
     _uiState.update { it.copy(categoryFilter = it.categoryFilter.toggled(facet)) }
   }
 
+  /** 業種の絞り込みだけをまとめて外す（ほかの軸はそのまま）。 */
+  fun clearCategoryFilter() {
+    _uiState.update { it.copy(categoryFilter = emptySet()) }
+  }
+
   /** 絞り込みを全解除する（行きたい・訪問状況・業種をまとめて指定なしに戻す）。並べ替えは保持。 */
   fun clearFilters() {
     _uiState.update {

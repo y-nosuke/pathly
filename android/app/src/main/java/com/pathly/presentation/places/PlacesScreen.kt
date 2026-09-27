@@ -146,6 +146,7 @@ fun PlacesListRoute(
       onWishlistFilterChange = viewModel::setWishlistFilter,
       onVisitedFilterChange = viewModel::setVisitedFilter,
       onToggleCategoryFilter = viewModel::toggleCategoryFilter,
+      onClearCategoryFilter = viewModel::clearCategoryFilter,
       onSortChange = viewModel::setSort,
       onToggleSortDirection = viewModel::toggleSortDirection,
       onItemClick = { onItemClick(it.place.id) },
@@ -310,6 +311,7 @@ private fun PlacesListContent(
   onWishlistFilterChange: (WishlistFilter) -> Unit,
   onVisitedFilterChange: (VisitedFilter) -> Unit,
   onToggleCategoryFilter: (PlaceCategoryFacet) -> Unit,
+  onClearCategoryFilter: () -> Unit,
   onSortChange: (PlaceSort) -> Unit,
   onToggleSortDirection: () -> Unit,
   onItemClick: (PlaceListItem) -> Unit,
@@ -396,6 +398,7 @@ private fun PlacesListContent(
         selected = state.categoryFilter,
         counts = state.categoryCounts,
         onToggle = onToggleCategoryFilter,
+        onClear = onClearCategoryFilter,
       )
     }
 
