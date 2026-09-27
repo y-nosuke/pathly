@@ -43,7 +43,7 @@ class TrackingController {
 
 ### 座標・位置に紐づく値
 
-**最優先の禁止事項**。リリースビルドで R8 を有効にしていない（`isMinifyEnabled = false`）ため、
+**最優先の禁止事項**。リリースビルドでも `i` / `w` / `e` は出力され（R8 はログを消さない）、
 出力した文字列はそのまま logcat に残る。
 
 ```kotlin

@@ -107,7 +107,11 @@ android {
       // 鍵を替えるときのデータ移行専用（docs/adr/0026-release-versioning-and-signing.md の付録）。run-as で書き戻せるよう一時的に
       // debuggable にする。普段のリリースでは渡さない。
       isDebuggable = providers.gradleProperty("pathlyDebuggableRelease").orNull == "true"
-      isMinifyEnabled = false
+      // R8 で使っていないコード・リソースを削り、名前を短くする（APK を小さくする）。
+      // 各ライブラリは自前の keep ルールを同梱しているので、proguard-rules.pro は空で足りている。
+      // 名前が変わるので、リリース版のスタックトレースは mapping.txt で読み解く（docs/designs/release.md）。
+      isMinifyEnabled = true
+      isShrinkResources = true
       proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
     }
   }

@@ -72,6 +72,8 @@ jobs:
             exit 1
           fi
           cp "$apk" "$RUNNER_TEMP/pathly-$GITHUB_REF_NAME.apk"
+          # R8 で名前を短くしているので、スタックトレースを読み解く対応表も一緒に残す
+          cp app/build/outputs/mapping/release/mapping.txt "$RUNNER_TEMP/mapping-$GITHUB_REF_NAME.txt"
 
       # 変更点は前のリリースからの PR のタイトルで自動生成する。v1.0.0-rc.1 のような版はプレリリース扱い
       - name: Create GitHub Release
@@ -80,5 +82,5 @@ jobs:
         run: |
           prerelease=""
           case "$GITHUB_REF_NAME" in *-*) prerelease="--prerelease" ;; esac
-          gh release create "$GITHUB_REF_NAME" "$RUNNER_TEMP/pathly-$GITHUB_REF_NAME.apk" \
+          gh release create "$GITHUB_REF_NAME" "$RUNNER_TEMP/pathly-$GITHUB_REF_NAME.apk" "$RUNNER_TEMP/mapping-$GITHUB_REF_NAME.txt" \
             --title "$GITHUB_REF_NAME" --generate-notes --verify-tag $prerelease
