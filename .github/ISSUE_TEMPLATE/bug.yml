@@ -1,0 +1,39 @@
+name: 不具合
+description: 思ったとおりに動かない・落ちる
+labels: ["fix"]
+body:
+  - type: textarea
+    id: steps
+    attributes:
+      label: 手順
+      description: どうすると起きるか
+      placeholder: |
+        1. 記録タブで記録を開始する
+        2. …
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: 期待する動き
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: 実際の動き
+      description: スクリーンショットや、エラーの内容があれば貼る
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: バージョン
+      description: 設定タブの「このアプリについて」（例: 0.4.0 / 0.4.0+dev.3.abc1234（開発版））
+    validations:
+      required: true
+  - type: textarea
+    id: notes
+    attributes:
+      label: 補足
+      description: 毎回起きるか、端末・Android の版、記録中だったか など

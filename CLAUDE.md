@@ -257,6 +257,7 @@ app/src/main/java/com/pathly/
 - **アノテーション処理：** KSP使用（Room/Hilt/WorkManager）。kaptは廃止
 - **バックグラウンドジョブ：** WorkManager（Hilt でワーカーを組み立てるため自動初期化はマニフェストで停止し、`PathlyApplication` が `Configuration.Provider` として担う）
 - **ブランチ・コミット・PR：** ブランチ名は `<種類>/<英語のケバブケース>`、コミットと PR タイトルは `<種類>(<範囲>): <日本語の要約>`（Conventional Commits。依存更新は `build(deps)`）。PR タイトルはリリースノートになる。マージはマージコミットのみ（squash 不可）。詳細は `docs/development/branch-and-pr.md`
+- **Issue・ADR：** 作業は GitHub Issues（背景・やること・完了の条件）、判断の理由は ADR、今の姿は specs/designs。roadmap は Issue へのリンクだけ。「#12 をやって」と頼まれたら `gh issue view 12` で読み、PR 本文に `Closes #12`。未決の案を Claude のメモリだけに置かず Issue にする。詳細は `docs/development/issues-and-adr.md`
 - **版とリリース：** versionName は git の `vX.Y.Z` タグ、versionCode はコミット数から決まる（手で書かない）。タグの push で CI が署名済み APK の GitHub Release を作る。リリース鍵はリポジトリに含めない。詳細は `docs/designs/release.md`
 - **整形：** spotless（ktlint）。`./gradlew build` に含まれるので、push 前は build を通すこと。崩れは `./gradlew spotlessApply`
 - **アイコン：** Material Iconsは非推奨のため不使用。`res/drawable`のベクター + `painterResource`で追加する

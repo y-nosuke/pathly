@@ -1,0 +1,33 @@
+name: やりたいこと
+description: 機能の追加・改善・作業（仕様が固まっていなければ idea ラベルを付ける）
+labels: ["feat"]
+body:
+  - type: textarea
+    id: background
+    attributes:
+      label: 背景
+      description: なぜやりたいか。困っていること・要望（docs/requirements.md の項目があればリンク）
+    validations:
+      required: true
+  - type: textarea
+    id: what
+    attributes:
+      label: やること
+      description: 何をどう変えるか。決まっていないことは「未定」と書く
+    validations:
+      required: true
+  - type: textarea
+    id: done
+    attributes:
+      label: 完了の条件
+      description: どうなったら終わりか（確かめ方も）
+      placeholder: |
+        - [ ] …できる
+        - [ ] instrumented test で …を確かめる
+    validations:
+      required: true
+  - type: textarea
+    id: related
+    attributes:
+      label: 関連
+      description: 関係する仕様・設計・ADR・Issue・PR
