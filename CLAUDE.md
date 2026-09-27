@@ -1,286 +1,94 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+Claude Code がこのリポジトリで作業するときの前提と約束。**詳細はリンク先が正**で、ここには守ること・落とし穴・確かめ方だけを書く。
 
-## プロジェクト概要
+## プロジェクト
 
-**アプリ名：** Pathly（お出掛け記録アプリ）  
-**目的：** お出掛けの記録・計画・振り返りを行う  
-**主要ユーザー：** 出掛けるのが好きな人（Android + iPhone環境）  
-**開発方針：** 段階的開発（リアルタイム記録 → 事後振り返り → 事前計画）  
-**開発体制：** 一人開発、アジャイル手法、Claude Code活用
+**Pathly** — お出掛けの記録・振り返り・計画をする Android アプリ。一人開発で、Claude Code に開発を進めてもらっている。
 
-## 技術スタック
+- 何をしたいか: [docs/requirements.md](docs/requirements.md)（要望）
+- どの順でやるか: [docs/roadmap.md](docs/roadmap.md) と [Project](https://github.com/users/y-nosuke/projects/3)（やる順番）・[Issues](https://github.com/y-nosuke/pathly/issues)（個々の作業）
+- 何が起きるか・どう作るか: [docs/README.md](docs/README.md) の索引（specs / designs / adr / development）
+- 実装済みの機能の一覧: [README.md](README.md)
 
-### メインプラットフォーム
+## いまの構成（実在するもの）
 
-- **Android：** Kotlin + コルーチン + Jetpack Compose
-- **状態管理：** ViewModel + StateFlow（コルーチン対応）
-- **アーキテクチャ：** MVVM + Clean Architecture
-- **依存性注入：** Hilt (Dagger)
-- **データベース：** Room (SQLite)
-- **非同期処理：** Kotlin Coroutines + StateFlow
+- **Android アプリだけ**（`android/`）。Kotlin・Jetpack Compose・MVVM + Clean Architecture・Hilt・Room・Coroutines + StateFlow・Navigation-Compose・WorkManager・Google Maps / Places。
+- **データは端末の中だけ**（Room の SQLite。暗号化なし）。設定は SharedPreferences。持ち出しはアプリの書き出し・読み込み（[specs/backup.md](docs/specs/backup.md)）。
+- **まだ無いもの**: クラウド（Supabase）・認証・同期・Web（Next.js）・iPhone 版。Phase 3 の構想で、[roadmap](docs/roadmap.md) の「温めている案」にある。**あるものとして扱わない**。
 
-### バックエンド・インフラ
+## コードの構成
 
-- **BaaS：** Supabase（PostgreSQL + Edge Functions）
-- **Web：** Next.js + Vercel
-- **地図：** Google Maps SDK
-- **アーキテクチャ：** サーバーレス構成（常駐サーバーなし）
-
-### データ管理
-
-- **データベース：** PostgreSQL（Supabase）
-- **ローカル保存：** Room (SQLite)。端末内のみで完結し、暗号化はしていない（クラウド同期は Phase 3）
-- **同期：** リアルタイム同期（Supabase Realtime）
-
-## 現在の開発フェーズ
-
-### Phase 1: リアルタイム記録（MVP）- 完了
-
-**確定機能：**
-
-1. ✅ GPS経路の自動記録・保存
-2. ✅ 記録したデータの基本的な一覧表示
-3. ✅ 地図上での軌跡表示
-4. ✅ ローカルデータ保存
-5. ✅ リアルタイム経路表示・記録中ステータス表示（US010/US011）
-
-**Phase 2 で実装済みの機能（先行着手含む）：**
-
-- ✅ GPSノイズ除去（位置補正・スムージング）
-- ✅ 立ち寄り場所の自動検出（50m圏内+3分滞在）・永続化・自動命名（Places）
-- ✅ 場所・行きたい（wishlist）管理（登録・優先度・メモ・訪問済み・キーワード検索・関連経路一覧）
-- ✅ 手動での場所記録（記録画面の「今ここ」・地図タップからの場所登録／立ち寄り追加）
-- ✅ 立ち寄りの手動追加・誤検知の付け替え・訪問メモ・再解析（追加提案）
-- ✅ 経路の名前・お気に入り・絞り込み／並べ替え
-- ✅ 登録済みの場所を地図に表示・近接確認
-
-**Phase 2以降に先送りされた機能：**
-
-- 外出の自動検知→記録開始
-- 写真撮影機能
-- 記録の詳細編集（評価・コメント・費用・タグ）
-- クラウド同期（複数人での共有）
-
-## データベース構造（PostgreSQL）
-
-### 主要テーブル
-
-- **users** - ユーザー情報
-- **outings** - お出掛け情報（計画・実行済み）
-- **outing_participants** - お出掛け参加者（複数人）
-- **tracks** - GPS軌跡データ
-- **gps_points** - GPS座標点（原データ・補正後）
-- **stops** - 立ち寄り場所
-- **media** - 写真・動画・音声メモ
-- **stop_media** - 場所とメディアの関連
-- **tags** - タグ情報
-- **stop_tags** - 場所とタグの関連
-
-### 重要な設計思想
-
-- GPS座標は原データと補正後データの両方を保存
-- メディアファイルは位置情報付きで管理
-- タグシステムによる柔軟な分類
-
-## アーキテクチャ構造
-
-### Clean Architecture レイヤー構成
-
-```bash
-app/src/main/java/com/pathly/
-├── di/                     # 依存性注入（Hilt modules）
-├── data/                   # データ層
-│   ├── backup/            # データの書き出し・読み込み（DB の写し＋設定の zip。差し替えは次の起動の最初）
-│   ├── local/             # Room database, DAOs, entities, migrations
-│   ├── repository/        # Repository実装
-│   ├── places/            # Google Places 連携（命名・テキスト検索）
-│   ├── settings/          # SharedPreferences（GPS間隔・地図の表示設定）
-│   ├── tracking/          # 記録サービスの制御・端末状態（TrackingController）
-│   └── work/              # WorkManager ジョブ（名前解決のキャッチアップ）
-├── domain/                # ドメイン層
-│   ├── model/             # ドメインモデル
-│   ├── repository/        # Repository interface
-│   └── usecase/           # 複数画面で共有する手順（場所の登録・立ち寄りの手動追加）
-├── presentation/          # プレゼンテーション層（画面別のViewModel, State, Screen）
-│   ├── tracking/          # 記録画面
-│   ├── history/           # 履歴・経路詳細
-│   ├── places/            # 場所・行きたい（wishlist）・場所シート
-│   ├── stops/             # 立ち寄りの追加・付け替えUI（画面横断）
-│   ├── common/            # 画面横断の部品（FloatingSheet・地図描画・確認ダイアログ）
-│   ├── settings/          # 設定
-│   └── navigation/        # ボトムナビ・NavHost（Navigation-Compose）
-├── service/               # Androidサービス（GPS追跡など）
-├── util/                  # Logger・権限判定・日時フォーマット
-└── ui/theme/             # Compose UIテーマ
+```text
+android/app/src/main/java/com/pathly/
+├── di/            # Hilt modules
+├── data/          # local（Room: DAO・entity・migration）/ repository / places（Google Places）/
+│                  # settings（SharedPreferences）/ tracking（TrackingController）/ work（WorkManager）/ backup（書き出し・読み込み）
+├── domain/        # model / repository（interface）/ usecase（複数画面で共有する手順）
+├── presentation/  # 画面ごとの ViewModel・State・Screen（tracking / history / places / stops / common / settings / navigation）
+├── service/       # LocationTrackingService（記録）
+├── util/          # Logger・権限・日時フォーマット
+└── ui/theme/      # PathlyAndroidTheme
 ```
 
-### データフロー
+- 依存の向き: Screen ← StateFlow ← ViewModel → Repository interface（重複する手順は UseCase）→ 実装 → Room。詳細は [designs/architecture.md](docs/designs/architecture.md)。
+- **ViewModel は Service を直接触らない。** 記録サービスの起動・バインドと端末状態（権限・位置情報 ON/OFF）は `data/tracking/TrackingController`。
 
-1. **UI (Compose Screen)** ← StateFlow ← **ViewModel**
-2. **ViewModel** → Repository Interface（複数画面で重複する手順は UseCase 経由）→ **Repository Implementation**
-3. **Repository** → Room DAO → **Local Database**
-4. **Service** → Repository / DAO → GPS位置データの永続化。サービスの起動・バインドと端末状態（権限・位置情報ON/OFF）は `data/tracking/TrackingController` が持ち、ViewModel は Service を直接触らない
+## 守ること
 
-### 重要な実装パターン
+### コード
 
-- **依存性注入：** `@AndroidEntryPoint`, `@HiltViewModel`使用
-- **状態管理：** StateFlow + collectAsState()でリアクティブUI
-- **データ変換：** Entity ↔ Domain Model の変換層
-- **権限管理：** Compose + ActivityResultLauncher統合
+- DI は Hilt（`@HiltViewModel` / `@AndroidEntryPoint`）。状態は StateFlow（LiveData は使わない）。非同期は Coroutines。
+- テーマは `PathlyAndroidTheme`。**Material Icons は使わない**（`res/drawable` のベクター + `painterResource`）。
+- ログは `com.pathly.util.Logger`。**座標・住所・施設名はログに出さない**（リリース版でも `i`/`w`/`e` は残る。[designs/logging.md](docs/designs/logging.md)）。
+- **DB のスキーマを変えたら `DatabaseMigrations` に正式なマイグレーションを足す**（破壊的フォールバックは無効）。版は `PathlyDatabase.VERSION`。変更の経緯は各 ADR と `schemas/*.json`。
+  - **version を上げる前にコンパイルしない**。前の版の `schemas/N.json` が上書きされて壊れる（build では気づけない）。
+- SharedPreferences のファイルを増やしたら、書き出しの対象 `DataBackupManager.PREFS_NAMES` にも足す。
+- WorkManager は Hilt でワーカーを組み立てるため自動初期化を止めてあり、`PathlyApplication`（`Configuration.Provider`）が担う。
 
-## 主要機能概要
+### ビルド・依存
 
-### Phase 1（MVP）機能
+- AGP・Gradle・Kotlin（AGP 内蔵）・KSP。版は `android/gradle/libs.versions.toml` と `gradle-wrapper.properties` が正。
+- Kotlin の版は `libs.versions.toml` の `kotlin`（`kotlin.plugin.compose` が引く KGP）で決まる。上げるときは KSP・Hilt の追随を `./gradlew build` と instrumented test で確かめる。
+- minSdk 34 / compileSdk・targetSdk 37。ビルド用の JDK は 25（`gradle-daemon-jvm.properties`）、アプリのバイトコードは 17。
+- 依存の更新は Dependabot が月 1 回 PR を作る。中身を見てからマージする（[development/branch-and-pr.md](docs/development/branch-and-pr.md)）。
 
-1. **GPS軌跡記録** - バックグラウンド動作、10秒間隔取得
-2. **軌跡一覧表示** - 日付別の記録一覧
-3. **地図表示** - Google Maps上での軌跡表示
-4. **ローカル保存** - オフライン対応
+### 進め方
 
-### 実装済みの主な機能（Phase 2・先行着手）
+- 作業は **Issue** から。「#12 をやって」と言われたら `gh issue view 12` で読み、[Project](https://github.com/users/y-nosuke/projects/3) で In Progress に移してから着手する。やる順番は Project の並び順。未決の案は Claude のメモリに置かず Issue にする（[development/issues-and-adr.md](docs/development/issues-and-adr.md)）。
+- ブランチ名は `<種類>/<英語のケバブケース>`、コミットと PR タイトルは `<種類>(<範囲>): <日本語の要約>`。PR 本文に `Closes #12`。PR タイトルはリリースノートになる（[development/branch-and-pr.md](docs/development/branch-and-pr.md)）。
+- 設計の判断（なぜ・没案）は ADR、今の姿は specs / designs に書く。終わった作業の記録は設計書に残さない（[docs/README.md](docs/README.md) の運用ルール）。
+- **commit・push・タグ・マージ・GitHub の設定変更は、ユーザーの確認を取ってから**行う。
+- ユーザーへの返答は**日本語**で書く（途中経過の一言も）。
 
-- **立ち寄り判定** - 50m圏内+3分滞在の自動検出・永続化・自動命名（Places）
-- **立ち寄りの手動操作** - 手動追加（「立ち寄りを追加」）・誤検知の付け替え・再解析（追加提案）・訪問メモ
-- **場所・行きたいリスト** - 登録（地図/POI/キーワード検索）・優先度・メモ・訪問済み・関連経路一覧
-- **場所名の手動編集** - 未命名⇄命名。名前欄は「自分で付けた名前」専用で、Google の名前は別列（v7）
-- **経路一覧** - 名前・お気に入り・絞り込み／並べ替え
-- **データの書き出し・読み込み** - 設定タブから zip に書き出し／全部を入れ替えて読み込み（再起動して差し替え・読み込み前に戻せる。ADR-0027）。SharedPreferences を増やしたら `DataBackupManager.PREFS_NAMES` にも足す
-- **地図の上のUI** - 全画面の地図＋非モーダルのフローティングシートに統一（ADR-0010）
+## 確かめ方
 
-### 将来実装予定機能
+| いつ                     | 何をする                                                                                                                                       |
+| ------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| push 前                  | `./gradlew build`（spotless・lint・ユニットテスト・assemble をまとめて見る。部分タスクだけでは見逃す）                                         |
+| UI・DB を変えたとき      | `ANDROID_SERIAL=emulator-5554 ./gradlew connectedDebugAndroidTest`（Wi-Fi でつないだスマホを巻き込まない。AVD は `Pixel_10_API36`）            |
+| マージ前                 | CI の `build` と `instrumented-test`（どちらも必須）。マージはマージコミットのみ                                                               |
+| リリース前               | R8 はリリース版にしかかからない。`./gradlew assembleRelease` をエミュレータに入れて一通り触る（[designs/release.md](docs/designs/release.md)） |
+| 実機でしか見られないもの | GPS の長時間記録など。ユーザーに頼む（Issue の完了の条件に書く）                                                                               |
 
-- **写真・動画記録** - 位置情報付きメディア管理
-- **事後編集** - 評価・コメント・費用・タグの追加
-- **事前計画** - ルート計画・予算
-- **データ共有** - 複数人でのリアルタイム同期
+## 手元の環境（Windows + Git Bash）の落とし穴
 
-## 開発環境・コマンド
+- adb に端末側のパス（`/data/local/tmp/...`）を渡すときは `MSYS_NO_PATHCONV=1` を付ける。付けないと Git Bash が Windows のパスに書き換える。
+- `adb` が PATH に無いシェルでは `C:/Users/yoichi/AppData/Local/Android/Sdk/platform-tools/adb` を使う。Wi-Fi の接続が切れたら `adb mdns services` で見つけ直す。
+- `sed -i` は CRLF を LF に変えて spotless を落とすことがある。使ったら `./gradlew spotlessApply`。
+- エミュレータの UI を adb で操作するときは、1 操作ごとに画面を待つ（メニューが開き切る前に次を押すと空振りする）。
 
-### Android開発コマンド
-
-```bash
-# プロジェクトビルド
-./gradlew build
-
-# デバッグAPKビルド
-./gradlew assembleDebug
-
-# リリースAPKビルド
-./gradlew assembleRelease
-
-# アプリインストール（開発版 com.pathly.debug。普段使いのリリース版 com.pathly とは別アプリ・別データ）
-./gradlew installDebug
-
-# テスト実行
-./gradlew test                    # ユニットテスト
-./gradlew connectedAndroidTest    # インストルメンテーションテスト
-
-# リント・静的解析
-./gradlew lint
-./gradlew lintDebug
-
-# プロジェクトクリーン
-./gradlew clean
-```
-
-### 将来追加予定のセットアップ
+## よく使うコマンド（`android/` で実行）
 
 ```bash
-# TODO: Supabaseクライアント設定
-# TODO: Google Maps SDK設定
-# TODO: Next.jsプロジェクト初期化（Web管理画面）
-# TODO: Vercelデプロイ設定
+./gradlew build                      # push 前の確認（全部入り）
+./gradlew installDebug               # 開発版 com.pathly.debug を入れる（リリース版 com.pathly とは別アプリ・別データ）
+./gradlew spotlessApply              # 整形の崩れを直す
+./gradlew assembleRelease            # リリース版（リリース鍵は `$GRADLE_USER_HOME/gradle.properties` から。無ければ未署名）
 ```
 
-## セキュリティ・パフォーマンス考慮事項
+## 方針
 
-### セキュリティ
-
-- **認証：** Supabase Auth（ID+パスワード）※ Phase 3・未着手
-- **データ暗号化：** Supabase自動暗号化 + 機密データはアプリレベル暗号化 ※ Phase 3・未着手
-- **通信：** HTTPS/TLS必須
-- **ローカル：** 暗号化なし。Room の DB は平文で、設定は SharedPreferences。将来 DB を暗号化するなら SQLCipher 等の導入が必要（Jetpack Security は Deprecated）
-- 何を持ち何を持たないかの約束は `docs/specs/security.md`、その実現方法は `docs/designs/security.md`（`allowBackup` が既定のままで DB が Auto Backup に乗る点も記載）
-
-### パフォーマンス
-
-- **GPS取得：** 設定で変更可（既定10秒、5/10/30/60秒）＋バッチ許容、PRIORITY_BALANCED_POWER_ACCURACY
-- **データ同期：** 差分同期、バッチ処理
-- **画像：** 最大2MB圧縮
-- **オフライン：** ローカル保存→後で同期
-
-### エラー対応
-
-- **GPS失敗：** 権限要求、設定案内、最後の既知位置使用
-- **ネットワーク：** 自動リトライ（指数バックオフ）、オフライン対応
-- **クラッシュ：** Supabase Error Tracking、graceful degradation
-
-## UI設計方針
-
-### ナビゲーション構造
-
-- **タブ型：** [記録] [履歴] [場所] [設定]（地図は各画面に全画面で内包。計画タブは Phase 3 で追加予定）
-- **記録開始：** ホーム画面の大きなボタン + 通知バーのクイックアクセス
-
-### お出掛け中操作（Phase 2以降）
-
-- ワンタップ操作重視
-- 大きなボタン設計
-- ステータス表示
-- リアルタイム情報更新
-
-## 料金・コスト管理
-
-### 控えめ利用（月額$0-5）
-
-- Supabase: $0（無料枠内）
-- Vercel: $0（Hobbyプラン）
-- Google Maps: $0-5（無料枠内）
-
-### 中程度利用（月額$35-45）
-
-- Supabase: $25（Proプラン）
-- Vercel: $0（Hobbyプラン）
-- Google Maps: $10-20
-
-## 開発時の重要事項
-
-### プロジェクト固有の考慮事項
-
-- **位置権限：** ACCESS_FINE_LOCATION + ACCESS_COARSE_LOCATION必須
-- **バックグラウンド実行：** LocationTrackingService使用
-- **データベースバージョン：** Room v16（v2: places/stops、v3: smoothed_points、v4: place_resolutions、v5: wishlist、v6: stops.note＝立ち寄りメモ、v7: 場所データをGoogle由来[google_places]とユーザー入力[places]に分離・メモをplaces.noteへ一本化、v8: gps_tracksにname/isFavorite＝経路の名前・お気に入り、v9: gps_pointsにLocation付随情報＝provider/各種精度/MSL高度/elapsedRealtimeNanos/isMock/extrasJson、v10: placesにsource＝場所の由来[DETECTED/USER]・自動回収はDETECTEDのみ、v11: gps_tracksにtotalDistanceMeters＝確定時に焼き込む総移動距離[一覧が全点をロードして再平滑化しないため]・既存分は起動時にバックフィル、v12: placesの座標に索引＝近傍検索[同一場所30m判定・近接確認50m]が全表走査にならないように、v13: 場所の業種を google_place_categories に正規化＝機械可読な code[Googleのprimary type]を正とし表示名は別列・google_places.category は categoryId の外部キーに置換[ADR-0017]、v14: 手動の訪問済みを wishlist から visited_places に分離＝行の存在が訪問済み・列名は markedAt[印を付けた日時であって訪問日ではない]・行きたいと独立に付け外しできる[ADR-0020]、v15: Google の座標を google_places に分離＝places の座標は同定用のアンカーで作成時に確定し以後動かさない・表示は COALESCE(google_places, places) で解決[同じ場所の大量重複の原因だった・ADR-0023]・既にできた重複は同じ施設なら統合する、v16: google_places.googlePlaceId に UNIQUE＝ひとつの Google 施設を持てる場所を1つに限る[同じ施設を2つの place が持つと「この施設の場所はどれか」の答えがブレる]・寄せられないときは施設情報を付けずに場所を残す・地図で指して作った場所[USER]は同じ施設でも自動でまとめない[ADR-0025]）。破壊的フォールバックは無効。スキーマ変更時は `DatabaseMigrations` に正式なマイグレーションを追加すること
-- **最小SDK：** API 34（Android 14）以上 / compileSdk 37・targetSdk 37（Android 17）
-- **ビルド環境：** AGP 9.4 / Gradle 9.8 / Kotlin 2.4（AGP内蔵Kotlin）。AGP は KGP を「最低 2.2.10」の実行時依存として持つだけで、実際の Kotlin は `libs.versions.toml` の `kotlin`（`kotlin.plugin.compose` 経由で classpath に乗る KGP）で決まる。上げるときは KSP・Hilt が追随しているかを `./gradlew build` と instrumented test で確かめること。正確な値は `gradle/libs.versions.toml` と `gradle-wrapper.properties` を見ること
-- **アノテーション処理：** KSP使用（Room/Hilt/WorkManager）。kaptは廃止
-- **バックグラウンドジョブ：** WorkManager（Hilt でワーカーを組み立てるため自動初期化はマニフェストで停止し、`PathlyApplication` が `Configuration.Provider` として担う）
-- **ブランチ・コミット・PR：** ブランチ名は `<種類>/<英語のケバブケース>`、コミットと PR タイトルは `<種類>(<範囲>): <日本語の要約>`（Conventional Commits。依存更新は `build(deps)`）。PR タイトルはリリースノートになる。マージはマージコミットのみ（squash 不可）。詳細は `docs/development/branch-and-pr.md`
-- **Issue・ADR：** 作業は GitHub Issues（背景・やること・完了の条件）、判断の理由は ADR、今の姿は specs/designs。roadmap は Issue へのリンクだけ。「#12 をやって」と頼まれたら `gh issue view 12` で読み、Project（users/y-nosuke/projects/3）で In Progress に移してから着手し、PR 本文に `Closes #12`。やる順番は Project の並び順。未決の案を Claude のメモリだけに置かず Issue にする。詳細は `docs/development/issues-and-adr.md`
-- **版とリリース：** versionName は git の `vX.Y.Z` タグ、versionCode はコミット数から決まる（手で書かない）。タグの push で CI が署名済み APK の GitHub Release を作る。リリース鍵はリポジトリに含めない。詳細は `docs/designs/release.md`
-- **整形：** spotless（ktlint）。`./gradlew build` に含まれるので、push 前は build を通すこと。崩れは `./gradlew spotlessApply`
-- **アイコン：** Material Iconsは非推奨のため不使用。`res/drawable`のベクター + `painterResource`で追加する
-- **コルーチン：** すべての非同期処理でKotlin Coroutines使用
-
-### コーディング規約
-
-- **パッケージ構造：** Clean Architecture厳守
-- **DIパターン：** Hilt使用、手動DIは避ける
-- **State管理：** StateFlow使用、LiveData非推奨
-- **Composeテーマ：** PathlyAndroidTheme統一使用
-- **ログ管理：** `com.pathly.util.Logger`使用、詳細は`docs/designs/logging.md`参照
-
-### テストアプローチ
-
-- **ユニットテスト：** JUnit4 (app/src/test/)
-- **UIテスト：** Compose Testing + Espresso (app/src/androidTest/)
-- **ViewModel：** Repository をモック化してテスト
-
-## その他重要な開発指針
-
-- **通知機能：** なし（自動動作を優先）
-- **学習目標：** Kotlinコルーチンの習得
-- **コスト重視：** 無料枠最大活用、段階的スケールアップ
-- **実装方針：** 詳細設計は実装時に決定（アジャイル）
-- **プライバシー：** 位置情報削除は個人に委ね、自動削除なし
+- 通知で知らせる機能は作らない（自動で動くことを優先。記録中の常駐通知は Android の要件なので例外）。
+- 位置情報の削除は本人に委ね、自動削除はしない。
+- 無料枠を最大限使い、段階的に広げる。詳細な仕様・設計は着手時に決める。
