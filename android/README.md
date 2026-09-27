@@ -54,12 +54,30 @@ GOOGLE_MAPS_API_KEY=your_google_maps_api_key_here
 
 ```text
 app/src/main/java/com/pathly/
-├── di/            # 依存性注入（Hilt modules）
-├── data/          # データ層（local: Room DAO・entity / repository: 実装）
-├── domain/        # ドメイン層（model・Repository interface）
-├── presentation/  # プレゼン層（画面別 ViewModel/State/Screen）
-├── service/       # バックグラウンドGPSサービス
-└── ui/theme/      # Compose テーマ
+├── di/                # 依存性注入（Hilt modules）
+├── data/              # データ層
+│   ├── local/         # Room（database・DAO・entity・migration）
+│   ├── repository/    # Repository の実装
+│   ├── places/        # Google Places 連携（命名・テキスト検索）
+│   ├── settings/      # SharedPreferences（記録間隔・位置の取り方・地図の表示）
+│   ├── tracking/      # 記録サービスの制御と端末の状態（TrackingController）
+│   ├── work/          # WorkManager のジョブ（名前解決のキャッチアップ）
+│   └── backup/        # データの書き出し・読み込み
+├── domain/            # ドメイン層
+│   ├── model/         # ドメインモデル
+│   ├── repository/    # Repository の interface
+│   └── usecase/       # 複数画面で共有する手順（場所の登録・立ち寄りの手動追加など）
+├── presentation/      # プレゼン層（画面ごとの ViewModel・State・Screen）
+│   ├── tracking/      # 記録
+│   ├── history/       # 履歴・経路詳細
+│   ├── places/        # 場所・行きたい
+│   ├── stops/         # 立ち寄りの追加・付け替え（画面をまたいで使う）
+│   ├── common/        # 画面をまたぐ部品（フローティングシート・地図の描画・確認ダイアログ）
+│   ├── settings/      # 設定
+│   └── navigation/    # ボトムナビ・NavHost
+├── service/           # 記録サービス（LocationTrackingService）
+├── util/              # Logger・権限・日時フォーマット
+└── ui/theme/          # Compose テーマ（PathlyAndroidTheme）
 ```
 
 アーキテクチャの詳細は [docs/designs/architecture.md](../docs/designs/architecture.md) を参照。
