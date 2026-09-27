@@ -58,7 +58,10 @@ debug APK（開発版 `com.pathly.debug`）と lint/test レポートをアー�
 > （`spotlessKotlinCheck`）や別のゲートを見逃して CI で落ちる。実際に両方で落としたことがある。
 > 整形の崩れは `./gradlew spotlessApply` で直る。
 
-インストルメンテーションテストはエミュレータが要るため **CI では回さない**。実機／ローカルのエミュレータで確認する。
+インストルメンテーションテストは、同じワークフローの別ジョブ（`instrumented-test`）が **CI のエミュレータ（API 36）で回す**。
+`build` と並行で走るので待ち時間は延びない。レポートはアーティファクト（`instrumented-test-reports`）に残る。
+手元で回すときは、Wi-Fi でつないだスマホを巻き込まないよう `ANDROID_SERIAL=emulator-5554` を付けて
+`./gradlew connectedDebugAndroidTest` を実行する。
 
 ## 実機でしか確かめられないもの
 

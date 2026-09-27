@@ -63,3 +63,60 @@ jobs:
           name: build-reports
           path: android/app/build/reports/
           if-no-files-found: ignore
+
+  # 実機相当のテスト（instrumented test）をエミュレータで回す。build とは並行で走らせ、
+  # DB のマイグレーション・書き出しと読み込みなど、JVM のユニットテストでは見られないものを PR ごとに確かめる。
+  instrumented-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      # versionCode（コミット数）と versionName（直近のタグ）を git から決めるため、全履歴とタグを取る
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Set up JDK 25
+        uses: actions/setup-java@v5
+        with:
+          java-version: "25"
+          distribution: "temurin"
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v4
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v6
+
+      - name: Create local.properties
+        working-directory: android
+        run: |
+          chmod +x gradlew
+          echo "GOOGLE_MAPS_API_KEY=${{ secrets.GOOGLE_MAPS_API_KEY }}" > local.properties
+
+      # エミュレータをハードウェア支援（KVM）で動かす。無いと起動もテストも極端に遅い
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: Run instrumented tests
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 36
+          target: google_apis
+          arch: x86_64
+          # 既定の端末は画面が小さく、UI テストで下のほうの要素が画面外になって落ちる。手元と同じく Pixel 相当にする
+          profile: pixel_7
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+          working-directory: android
+          script: ./gradlew connectedDebugAndroidTest
+
+      - name: Upload instrumented test reports
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: instrumented-test-reports
+          path: android/app/build/reports/androidTests/
+          if-no-files-found: ignore
