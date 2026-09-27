@@ -248,8 +248,10 @@ fun ManualStopSheet(
         Text(
           when {
             origin is ManualStopOrigin.ExistingPlace -> "この場所に追加"
+
             // 名前欄が空でも、施設の名前が使われるなら「名前なし」ではない。
             googleName == null && name.isBlank() -> "名前なしで追加"
+
             else -> "追加"
           },
         )

@@ -179,6 +179,7 @@ class PlaceRepositoryImpl @Inject constructor(
           outcome.latitude,
           outcome.longitude,
         )
+
       PlacesNameResolver.Outcome.NoMatch, PlacesNameResolver.Outcome.NotAttempted -> StopCandidate(d)
     }
   }
@@ -329,6 +330,7 @@ class PlaceRepositoryImpl @Inject constructor(
         if (placeResolutionDao.getByPlace(pid) == null) placeResolutionDao.upsert(PlaceResolutionEntity(pid, Date()))
         pid
       }
+
       // 名前だけ手入力: 元の場所の座標で、新しい USER 場所を作る（座標同定せず隣接と分離）。
       trimmedName != null -> {
         val old = placeDao.getById(oldPlaceId)
@@ -343,6 +345,7 @@ class PlaceRepositoryImpl @Inject constructor(
         placeResolutionDao.upsert(PlaceResolutionEntity(pid, Date()))
         pid
       }
+
       // 何も選ばれていなければ何もしない。
       else -> return@withLock
     }
@@ -597,15 +600,15 @@ class PlaceRepositoryImpl @Inject constructor(
   private class LiveStopPlace(val arrivalMillis: Long, val placeId: Long)
 
   /**
-   * place を Google で名前解決し、結果を google_places に記録する（place_resolutions は問い合わせlog）。
-   * Google 由来の名前・住所は google_places に入れる。places.name（ユーザー名）は触らない。
-   */
-  /**
    * 施設の解決の結果。[placeId] は以後その place として扱う id（統合されたら寄せ先の id）。
    * [skippedByConflict] は「同じ施設を既に他の place が持っていたので施設情報を付けなかった」。
    */
   private data class ResolveResult(val placeId: Long, val skippedByConflict: Boolean = false)
 
+  /**
+   * place を Google で名前解決し、結果を google_places に記録する（place_resolutions は問い合わせlog）。
+   * Google 由来の名前・住所は google_places に入れる。places.name（ユーザー名）は触らない。
+   */
   private suspend fun resolvePlace(place: PlaceEntity): ResolveResult {
     when (val outcome = placesNameResolver.resolve(place.latitude, place.longitude)) {
       is PlacesNameResolver.Outcome.Found -> {
@@ -648,16 +651,13 @@ class PlaceRepositoryImpl @Inject constructor(
   }
 
   /**
-   * 自動で統合してよい place か。**まだ誰も触っていない検出由来だけ**（→ adr/0023）。
+   * 自動でまとめてよい place か（**検出が作った**もので、まだ誰も中身を入れていない → adr/0023）。
    *
    * 自動命名は半径 50m の最寄り1件しか見ないので、別の場所が同じ施設に解決されることがある。
    * 融合すると分け直せないため、ユーザーが名前・メモを入れた place、行きたい・訪問済みの印が
-   * 付いた place、[PlaceSource.USER] 由来は、ID が同じでも吸収しない。
-   */
-  /**
-   * 自動でまとめてよい place か（**検出が作った**もので、まだ誰も中身を入れていない）。
+   * 付いた place は、ID が同じでも吸収しない。
    *
-   * **由来は見る。** ユーザーが地図で指して作った place（`USER`）は、たとえ中身が空でも
+   * **由来も見る。** ユーザーが地図で指して作った place（`USER`）は、たとえ中身が空でも
    * まとめない。**地点を指したこと自体が「ここを別の場所として残したい」という意思表示**
    * だから（→ adr/0025）。同じ施設の別の入口を、別の場所として持っておきたいことがある。
    */

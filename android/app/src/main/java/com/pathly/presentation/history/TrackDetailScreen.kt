@@ -359,12 +359,18 @@ fun TrackDetailScreen(
           contentPadding = PaddingValues(
             bottom = when {
               candidateMode -> candidateOverlayHeight
+
               manualMode && manualPick != null -> sheetState.heightOf(SheetDetent.PEEK)
+
               manualMode -> 96.dp
+
               durationEditMode -> durationSheetState.heightOf(durationSheetState.detent)
+
               tuningMode -> tuningSheetPeekHeight
+
               // 場所シートを開いている間は立ち寄り一覧を引っ込めるので、そちらの高さで空ける。
               placeSheetTarget != null -> placeSheetState.heightOf(placeSheetState.detent)
+
               else -> sheetState.heightOf(detent)
             },
           ),

@@ -161,10 +161,12 @@ class LocationTrackingService : Service() {
   override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
     when (intent?.action) {
       ACTION_START_TRACKING -> startLocationTracking()
+
       ACTION_RESUME_TRACKING -> {
         val trackId = intent.getLongExtra(EXTRA_TRACK_ID, -1L).takeIf { it > 0 }
         startLocationTracking(resumeTrackId = trackId)
       }
+
       ACTION_STOP_TRACKING -> {
         stopLocationTracking()
         // 停止を受けたあとは OS にサービスを作り直させない。確定処理の途中でプロセスが死ぬと、
@@ -173,6 +175,7 @@ class LocationTrackingService : Service() {
         // 復活する）。最後の onStartCommand の戻り値が採用されるので、ここで打ち切る。
         return START_NOT_STICKY
       }
+
       // intent が null＝START_STICKY による再起動（OSにkillされた後など）。
       // アクティブなトラックがあれば記録を再開して自己回復する。
       null -> restoreTrackingIfNeeded()
