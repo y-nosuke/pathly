@@ -18,6 +18,7 @@
   },
   "permissions": {
     "allow": [
+      "Bash(./gradlew build)",
       "mcp__github__pull_request_read",
       "Bash(adb devices)",
       "Bash(adb logcat -d *)",
