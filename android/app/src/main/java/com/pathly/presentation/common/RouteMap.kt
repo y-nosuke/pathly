@@ -230,6 +230,10 @@ internal fun RegisteredPlaceMarkers(
  * 業種をグリフに使うようになって、旗をグリフで示せなくなったため別の場所へ逃がした。
  * 余白を左右対称に取り、下端をバッジの下端に揃えているのは、**マーカーの基準点（下端中央）を
  * ずらさない**ため。ここを崩すとピンが指す座標が実際の場所からずれる。
+ *
+ * 旗は丸のフチに半分かぶせ、余白を最小（4dp）にしている。マーカーは画像の矩形でタップを拾う
+ * （形で当たり判定を切り抜く API は無い）ので、透明な余白が広いと丸の外側のタップまで
+ * マーカーに取られるため。
  */
 @Composable
 internal fun RegisteredPlaceMarker(bg: Color, @DrawableRes glyph: Int, wishlisted: Boolean) {
@@ -238,12 +242,11 @@ internal fun RegisteredPlaceMarker(bg: Color, @DrawableRes glyph: Int, wishliste
     return
   }
   Box(contentAlignment = Alignment.TopEnd) {
-    Box(modifier = Modifier.padding(start = 8.dp, end = 8.dp, top = 8.dp)) {
+    Box(modifier = Modifier.padding(start = 4.dp, end = 4.dp, top = 4.dp)) {
       RouteBadgeMarker(bg = bg) { MarkerGlyph(glyph) }
     }
     Box(
       modifier = Modifier
-        .padding(end = 2.dp)
         .size(16.dp)
         .background(MarkerWishlistAmber, CircleShape)
         .border(1.5.dp, Color.White, CircleShape),
