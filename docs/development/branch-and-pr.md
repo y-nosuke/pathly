@@ -85,3 +85,20 @@ PR の中のコミットは、それぞれの中身に合った種類で分け�
   versionCode は main のコミット数から決まるため、squash するとブランチ上でビルドした版より
   マージ後の main の版が小さくなりうる（[release.md](../designs/release.md)）。
 - マージしたブランチは GitHub 上で自動で消える。手元は `git branch -d <ブランチ>` と `git fetch --prune` で消す。
+
+---
+
+## 依存の更新（Dependabot）
+
+`.github/dependabot.yml` により、**月に 1 回**、新しい版が出た依存の更新 PR が自動で作られる。
+
+| 対象                         | PR タイトル   | まとめ方             |
+| ---------------------------- | ------------- | -------------------- |
+| Android の依存（`android/`） | `build(deps)` | 1 回につき 1 つの PR |
+| GitHub Actions のアクション  | `ci(deps)`    | 1 回につき 1 つの PR |
+
+- ブランチ名は Dependabot が決める（`dependabot/…`）。ブランチ名の規則の例外として扱う。
+- **自動マージはしない。** CI が通っても、中身を見てからマージする。とくに次は連動して確かめる:
+  - Kotlin（`kotlin`）を上げる → KSP・Hilt が追随しているか、`./gradlew build` と instrumented test で確かめる
+  - `compileSdk` / `targetSdk` が上がる更新 → behavior changes を読み、実機で記録を確かめる
+- 見送る更新は、PR に理由を書いて閉じる（Dependabot はその版をもう提案しない）。
