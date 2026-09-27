@@ -81,6 +81,25 @@ main のブランチ保護で **`build` と `instrumented-test` の両方が必�
   ユニットテストが通っても androidTest が通るとは限らない。
 - **腐ったテスト**は落ちるまで気づけない。UI を作り替えたら、そのテストも同時に直す
   （`TrackDetailScreen` の分割時に実際に取り残した）。
+- **Room のスキーマの上書き**: エンティティを変えたあと **version を上げる前にコンパイルすると**、KSP が
+  「今の version」の `schemas/<N>.json` を新しい内容で上書きする。実行時の Room は最新のスキーマとしか照らし合わせないので
+  アプリは動き、ユニットテストでも `./gradlew build` でも気づけない（`MigrationTest` でだけ落ちる）。
+  → 順番は「エンティティを変える → version を上げる → コンパイル」。先にコンパイルしたら
+  `git checkout <前のコミット> -- app/schemas/.../<前の版>.json` で戻す。コミット前に **過去の版の `schemas/*.json` が変わっていないか** `git status` で見る。
+- **整形の検査が増分ビルドで飛ばされる**: 手元の `./gradlew build` が通っても、spotless が up-to-date で飛ばされ、
+  CI（毎回まっさらに動く）で初めて落ちることがある。Kotlin を触ったら `./gradlew spotlessCheck --rerun-tasks` で強制的に検査する。
+  部分タスク（compile だけ・test だけ）もそれぞれ別のゲートを見逃す（コンストラクタを変えてテストのコンパイルが落ちた例あり）。
+- **地図を描く UI テストはクラッシュする**（Play 開発者サービスの地図が、テスト環境で必要なクラスを欠く）。地図は
+  `mapContent` のスロットにしてあり、テストでは空を渡す。本番の見た目は変わらない。
+- **CI のエミュレータの既定は画面が小さい**: 下のほうの要素が画面外になり、UI テストが「表示されていない」「タップできない」で落ちた。
+  CI は `profile: pixel_7` にしている。
+
+## エミュレータの準備（Windows）
+
+- SDK は `C:\Users\yoichi\AppData\Local\Android\Sdk`。手元の AVD は `Pixel_10_API36`（android-36・google_apis_playstore・x86_64）。
+- `avdmanager` / `sdkmanager` は JDK 25 だと「Java 17 以上が必要」と誤って止まる。`JAVA_HOME` を Android Studio の JBR
+  （`C:\Program Files\Android\Android Studio\jbr`）に向けると動く。Gradle は自前の JDK で動くので影響しない。
+- 起動・テスト・APK を入れて触る手順は、Claude のスキル `.claude/skills/emulator-check/` にまとめてある。
 
 ## テスト実行
 

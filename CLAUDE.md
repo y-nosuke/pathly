@@ -54,14 +54,14 @@ Claude Code がこのリポジトリで作業するときの前提と約束。**
 
 ## 確かめ方
 
-| いつ                     | 何をする                                                                                                                                       |
-| ------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------- |
-| push 前                  | `./gradlew build`（spotless・lint・ユニットテスト・assemble をまとめて見る。部分タスクだけでは見逃す）                                         |
-| UI・DB を変えたとき      | `ANDROID_SERIAL=emulator-5554 ./gradlew connectedDebugAndroidTest`（Wi-Fi でつないだスマホを巻き込まない。AVD は `Pixel_10_API36`）            |
-| PR を出す前              | コードを変えたら `code-review` スキルで自分の変更をレビューし、指摘を直す（ドキュメントだけなら省く）                                          |
-| マージ前                 | CI の `build` と `instrumented-test`（どちらも必須）。マージはマージコミットのみ                                                               |
-| リリース前               | R8 はリリース版にしかかからない。`./gradlew assembleRelease` をエミュレータに入れて一通り触る（[designs/release.md](docs/designs/release.md)） |
-| 実機でしか見られないもの | GPS の長時間記録など。ユーザーに頼む（Issue の完了の条件に書く）                                                                               |
+| いつ                     | 何をする                                                                                                                                                                                          |
+| ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| push 前                  | `./gradlew build`（spotless・lint・ユニットテスト・assemble をまとめて見る。部分タスクだけでは見逃す）。Kotlin を触ったら `spotlessCheck --rerun-tasks`（増分ビルドで検査が飛ばされることがある） |
+| UI・DB を変えたとき      | `ANDROID_SERIAL=emulator-5554 ./gradlew connectedDebugAndroidTest`（Wi-Fi でつないだスマホを巻き込まない。AVD は `Pixel_10_API36`）                                                               |
+| PR を出す前              | コードを変えたら `code-review` スキルで自分の変更をレビューし、指摘を直す（ドキュメントだけなら省く）                                                                                             |
+| マージ前                 | CI の `build` と `instrumented-test`（どちらも必須）。マージはマージコミットのみ                                                                                                                  |
+| リリース前               | R8 はリリース版にしかかからない。`./gradlew assembleRelease` をエミュレータに入れて一通り触る（[designs/release.md](docs/designs/release.md)）                                                    |
+| 実機でしか見られないもの | GPS の長時間記録など。ユーザーに頼む（Issue の完了の条件に書く）                                                                                                                                  |
 
 ## 手元の環境（Windows + Git Bash）の落とし穴
 

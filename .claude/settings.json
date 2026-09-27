@@ -15,5 +15,29 @@
         ]
       }
     ]
+  },
+  "permissions": {
+    "allow": [
+      "Bash(./gradlew build)",
+      "mcp__github__pull_request_read",
+      "Bash(adb devices)",
+      "Bash(adb logcat -d *)",
+      "mcp__aws-mcp__aws___read_documentation",
+      "mcp__Claude_Browser__read_page",
+      "Bash(gh project item-list *)",
+      "mcp__Claude_Browser__read_console_messages",
+      "mcp__aws-mcp__aws___search_documentation",
+      "mcp__Claude_Browser__read_network_requests",
+      "mcp__visualize__read_me",
+      "mcp__Claude_Browser__preview_logs",
+      "mcp__github__get_me",
+      "mcp__Claude_in_Chrome__read_network_requests",
+      "mcp__ccd_pr__get_status",
+      "Bash(gh run watch *)",
+      "Bash(gh label list *)",
+      "mcp__Claude_Browser__find",
+      "mcp__Claude_in_Chrome__list_connected_browsers",
+      "mcp__Claude_in_Chrome__tabs_context_mcp"
+    ]
   }
 }
