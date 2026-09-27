@@ -1,6 +1,7 @@
 package com.pathly.presentation.history
 
 import com.pathly.domain.model.GpsTrack
+import com.pathly.domain.model.PlaceCategoryFacet
 import java.text.Collator
 import java.util.Locale
 
@@ -37,10 +38,12 @@ enum class TrackSort(val label: String, val defaultDescending: Boolean) {
 data class HistoryState(
   val tracks: List<GpsTrack> = emptyList(),
   val activeTrack: GpsTrack? = null,
-  // 絞り込みは3軸独立（お気に入り / 命名 / 立ち寄り）。それぞれ3状態。
+  // 絞り込みは4軸独立（お気に入り / 命名 / 立ち寄り / 業種）。業種以外はそれぞれ3状態。
   val favoriteFilter: TrackFavoriteFilter = TrackFavoriteFilter.ANY,
   val namedFilter: TrackNamedFilter = TrackNamedFilter.ANY,
   val stopFilter: TrackStopFilter = TrackStopFilter.ANY,
+  // 立ち寄った場所の業種。複数選べて、選んだどれかに立ち寄っていれば残す（OR）。空＝指定なし。
+  val categoryFilter: Set<PlaceCategoryFacet> = emptySet(),
   val sort: TrackSort = TrackSort.DATE,
   val sortDescending: Boolean = TrackSort.DATE.defaultDescending,
   val isLoading: Boolean = false,
@@ -50,7 +53,12 @@ data class HistoryState(
   val noFilter: Boolean
     get() = favoriteFilter == TrackFavoriteFilter.ANY &&
       namedFilter == TrackNamedFilter.ANY &&
-      stopFilter == TrackStopFilter.ANY
+      stopFilter == TrackStopFilter.ANY &&
+      categoryFilter.isEmpty()
+
+  /** 業種ごとの、その業種に立ち寄った経路の件数（絞り込みの選択肢に添える）。0 件の業種は入らない。 */
+  val categoryCounts: Map<PlaceCategoryFacet, Int>
+    get() = tracks.flatMap { it.stopCategories }.groupingBy { it }.eachCount()
 
   /** 現在の絞り込み・並べ替えを適用した経路一覧。 */
   val visibleTracks: List<GpsTrack>
@@ -71,7 +79,8 @@ data class HistoryState(
           TrackStopFilter.HAS_STOPS -> track.stopCount > 0
           TrackStopFilter.NO_STOPS -> track.stopCount == 0
         }
-        favoriteOk && namedOk && stopOk
+        val categoryOk = categoryFilter.isEmpty() || track.stopCategories.any { it in categoryFilter }
+        favoriteOk && namedOk && stopOk && categoryOk
       }
 
       // 各軸は昇順の比較器で定義し、降順ならまとめて反転する。

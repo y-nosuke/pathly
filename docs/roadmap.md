@@ -102,6 +102,7 @@ Phase 3 の「行きたい場所リスト」を先行して着手する。既存
 - [x] 登録済みの場所を地図に表示・近接確認
 - [ ] 立ち寄り場所からの「また行きたい」ワンタップ追加 → [#92](https://github.com/y-nosuke/pathly/issues/92)
 - [ ] 「また行きたい」と「行って満足」の区別 → [#93](https://github.com/y-nosuke/pathly/issues/93)
+- [x] 場所・経路の一覧を業種で絞り込む（タグの前に、自動の業種で分類を試す） → [#105](https://github.com/y-nosuke/pathly/issues/105)
 - [ ] タグ（複数）での整理（`tags` を記録側と共有・後段） → [#94](https://github.com/y-nosuke/pathly/issues/94)
 
 ---

@@ -1,6 +1,7 @@
 package com.pathly.presentation.places
 
 import com.pathly.domain.model.NearbyRegisterPrompt
+import com.pathly.domain.model.PlaceCategoryFacet
 import com.pathly.domain.model.PlaceListItem
 import com.pathly.domain.model.PlacePrediction
 import com.pathly.domain.model.PlaceSearchResult
@@ -42,9 +43,11 @@ data class SearchState(
 
 data class PlacesState(
   val items: List<PlaceListItem> = emptyList(),
-  // 絞り込みは2軸独立（行きたい / 訪問状況）。それぞれ3状態。
+  // 絞り込みは3軸独立（行きたい / 訪問状況 / 業種）。行きたい・訪問状況はそれぞれ3状態。
   val wishlistFilter: WishlistFilter = WishlistFilter.ANY,
   val visitedFilter: VisitedFilter = VisitedFilter.ANY,
+  // 業種は複数選べて、選んだどれかに当たれば残す（OR）。空＝指定なし。
+  val categoryFilter: Set<PlaceCategoryFacet> = emptySet(),
   val sort: PlaceSort = PlaceSort.REGISTERED,
   val sortDescending: Boolean = PlaceSort.REGISTERED.defaultDescending,
   val isLoading: Boolean = false,
@@ -63,7 +66,11 @@ data class PlacesState(
 ) {
   /** 絞り込みを一切かけていないか（「すべて」チップの選択表示に使う）。 */
   val noFilter: Boolean
-    get() = wishlistFilter == WishlistFilter.ANY && visitedFilter == VisitedFilter.ANY
+    get() = wishlistFilter == WishlistFilter.ANY && visitedFilter == VisitedFilter.ANY && categoryFilter.isEmpty()
+
+  /** 業種ごとの場所の件数（絞り込みの選択肢に添える）。0 件の業種は入らない。 */
+  val categoryCounts: Map<PlaceCategoryFacet, Int>
+    get() = items.groupingBy { PlaceCategoryFacet.of(it.place) }.eachCount()
 
   /** 現在の絞り込み・並べ替えを適用した一覧。 */
   val visibleItems: List<PlaceListItem>
@@ -79,7 +86,8 @@ data class PlacesState(
           VisitedFilter.VISITED -> item.isVisited
           VisitedFilter.UNVISITED -> !item.isVisited
         }
-        wishlistOk && visitedOk
+        val categoryOk = categoryFilter.isEmpty() || PlaceCategoryFacet.of(item.place) in categoryFilter
+        wishlistOk && visitedOk && categoryOk
       }
 
       // 各軸は昇順の比較器で定義し、降順ならまとめて反転する。

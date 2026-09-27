@@ -8,6 +8,7 @@ import androidx.room.Update
 import com.pathly.data.local.entity.PlaceVisitRow
 import com.pathly.data.local.entity.StopEntity
 import com.pathly.data.local.entity.StopWithPlace
+import com.pathly.data.local.entity.TrackStopCategory
 import com.pathly.data.local.entity.TrackStopCount
 import kotlinx.coroutines.flow.Flow
 import java.util.Date
@@ -24,6 +25,17 @@ interface StopDao {
   /** 経路ごとの立ち寄り件数（一覧の件数表示・並べ替え用）。立ち寄り0件の経路は行が出ない。 */
   @Query("SELECT trackId, COUNT(*) AS count FROM stops GROUP BY trackId")
   fun observeStopCountsByTrack(): Flow<List<TrackStopCount>>
+
+  /**
+   * 経路ごとに、立ち寄った場所の業種（一覧の業種での絞り込み用）。同じ経路・同じ業種は 1 行にまとめる。
+   * 施設情報が無い場所は hasGoogleInfo が false で出る（未分類）。
+   */
+  @Query(
+    "SELECT DISTINCT s.trackId AS trackId, (g.placeId IS NOT NULL) AS hasGoogleInfo, c.code AS categoryCode " +
+      "FROM stops s LEFT JOIN google_places g ON g.placeId = s.placeId " +
+      "LEFT JOIN google_place_categories c ON c.id = g.categoryId",
+  )
+  fun observeStopCategoriesByTrack(): Flow<List<TrackStopCategory>>
 
   @Query("DELETE FROM stops WHERE trackId = :trackId")
   suspend fun deleteByTrack(trackId: Long)
