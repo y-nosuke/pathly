@@ -54,6 +54,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -452,9 +453,13 @@ private fun PlacesListContent(
       else -> {
         val listState = rememberLazyListState()
         // 絞り込み・並べ替えを変えたとき、または先頭が変わったとき（＝追加時）に先頭へ戻す。
-        val topItemId = state.visibleItems.firstOrNull()?.place?.id
-        LaunchedEffect(state.wishlistFilter, state.visitedFilter, state.categoryFilter, state.sort, state.sortDescending, topItemId) {
-          listState.scrollToItem(0)
+        // 詳細から戻って一覧を出し直したときは戻さない（前に見ていた位置のまま）。そのため、最後に
+        // 先頭へ戻したときの条件を画面の状態として取っておき、条件が変わったときだけ動かす。
+        val scrollKey = state.scrollResetKey
+        var scrolledFor by rememberSaveable { mutableStateOf<String?>(null) }
+        LaunchedEffect(scrollKey) {
+          if (scrolledFor != null && scrolledFor != scrollKey) listState.scrollToItem(0)
+          scrolledFor = scrollKey
         }
         LazyColumn(
           state = listState,

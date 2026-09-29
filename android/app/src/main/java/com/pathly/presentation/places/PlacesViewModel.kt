@@ -1,5 +1,6 @@
 package com.pathly.presentation.places
 
+import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.pathly.data.places.PlacesTextSearcher
@@ -32,9 +33,11 @@ class PlacesViewModel @Inject constructor(
   private val placesTextSearcher: PlacesTextSearcher,
   private val settingsRepository: SettingsRepository,
   private val placeEditUseCase: PlaceEditUseCase,
+  private val savedStateHandle: SavedStateHandle,
 ) : ViewModel() {
 
-  private val _uiState = MutableStateFlow(PlacesState())
+  // 絞り込み・並べ替えはアプリが裏で落とされても戻せるよう savedStateHandle から始める。
+  private val _uiState = MutableStateFlow(PlacesState().withListOptionsFrom(savedStateHandle))
   val uiState: StateFlow<PlacesState> = _uiState.asStateFlow()
 
   init {
@@ -81,27 +84,27 @@ class PlacesViewModel @Inject constructor(
 
   /** 行きたいの絞り込み（指定なし/行きたい/行きたい以外）。 */
   fun setWishlistFilter(filter: WishlistFilter) {
-    _uiState.update { it.copy(wishlistFilter = filter) }
+    updateListOptions { it.copy(wishlistFilter = filter) }
   }
 
   /** 訪問状況の絞り込み（指定なし/訪問済み/未訪問）。 */
   fun setVisitedFilter(filter: VisitedFilter) {
-    _uiState.update { it.copy(visitedFilter = filter) }
+    updateListOptions { it.copy(visitedFilter = filter) }
   }
 
   /** 業種の絞り込みで、その業種を選ぶ／外す（複数選べる）。 */
   fun toggleCategoryFilter(facet: PlaceCategoryFacet) {
-    _uiState.update { it.copy(categoryFilter = it.categoryFilter.toggled(facet)) }
+    updateListOptions { it.copy(categoryFilter = it.categoryFilter.toggled(facet)) }
   }
 
   /** 業種の絞り込みだけをまとめて外す（ほかの軸はそのまま）。 */
   fun clearCategoryFilter() {
-    _uiState.update { it.copy(categoryFilter = emptySet()) }
+    updateListOptions { it.copy(categoryFilter = emptySet()) }
   }
 
   /** 絞り込みを全解除する（行きたい・訪問状況・業種をまとめて指定なしに戻す）。並べ替えは保持。 */
   fun clearFilters() {
-    _uiState.update {
+    updateListOptions {
       it.copy(
         wishlistFilter = WishlistFilter.ANY,
         visitedFilter = VisitedFilter.ANY,
@@ -112,12 +115,12 @@ class PlacesViewModel @Inject constructor(
 
   /** 並べ替え軸の変更。軸ごとの既定の向き（新しい/多い/高いが先）に合わせる。 */
   fun setSort(sort: PlaceSort) {
-    _uiState.update { it.copy(sort = sort, sortDescending = sort.defaultDescending) }
+    updateListOptions { it.copy(sort = sort, sortDescending = sort.defaultDescending) }
   }
 
   /** 並べ替えの昇順/降順を反転する。 */
   fun toggleSortDirection() {
-    _uiState.update { it.copy(sortDescending = !it.sortDescending) }
+    updateListOptions { it.copy(sortDescending = !it.sortDescending) }
   }
 
   /** その場所を含むお出掛け（経路）の一覧。詳細画面で購読する。 */
@@ -439,5 +442,11 @@ class PlacesViewModel @Inject constructor(
 
   fun clearError() {
     _uiState.update { it.copy(errorMessage = null) }
+  }
+
+  /** 絞り込み・並べ替えを変えて、savedStateHandle にも残す。 */
+  private fun updateListOptions(transform: (PlacesState) -> PlacesState) {
+    _uiState.update(transform)
+    _uiState.value.saveListOptionsTo(savedStateHandle)
   }
 }

@@ -1,5 +1,6 @@
 package com.pathly.presentation.navigation
 
+import androidx.activity.compose.BackHandler
 import androidx.annotation.DrawableRes
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
@@ -98,14 +99,7 @@ fun PathlyNavHost(
             val selected = currentDestination?.hierarchy?.any { it.route == item.route } == true
             NavigationBarItem(
               selected = selected,
-              onClick = {
-                navController.navigate(item.route) {
-                  // タブごとに状態を保存・復元し、バックスタックを起点まで畳む。
-                  popUpTo(navController.graph.findStartDestination().id) { saveState = true }
-                  launchSingleTop = true
-                  restoreState = true
-                }
-              },
+              onClick = { navController.navigateToTab(item.route) },
               label = { Text(item.title) },
               icon = { Icon(painterResource(item.icon), contentDescription = item.title) },
             )
@@ -133,12 +127,14 @@ fun PathlyNavHost(
       }
 
       composable(Routes.HISTORY) {
+        BackToStartTab(navController)
         HistoryScreen(
           onTrackClick = { track -> navController.navigate(Routes.trackDetail(track.id)) },
         )
       }
 
       composable(Routes.SETTINGS) {
+        BackToStartTab(navController)
         SettingsScreen()
       }
 
@@ -163,6 +159,7 @@ fun PathlyNavHost(
 private fun NavGraphBuilder.placesGraph(navController: NavController) {
   navigation(startDestination = Routes.PLACES_LIST, route = Routes.PLACES_GRAPH) {
     composable(Routes.PLACES_LIST) { entry ->
+      BackToStartTab(navController)
       PlacesListRoute(
         viewModel = entry.sharedPlacesViewModel(navController),
         onAddByMap = { navController.navigate(Routes.PLACE_ADD) },
@@ -198,6 +195,28 @@ private fun NavGraphBuilder.placesGraph(navController: NavController) {
       )
     }
   }
+}
+
+/**
+ * 下のタブへ移る。タブごとに状態を保存・復元し、バックスタックを起点（記録タブ）まで畳む。
+ * 離れたタブの画面（ViewModel・スクロール位置）は捨てずに取っておき、戻ったときに元の状態で出す。
+ */
+private fun NavController.navigateToTab(route: String) {
+  navigate(route) {
+    popUpTo(graph.findStartDestination().id) { saveState = true }
+    launchSingleTop = true
+    restoreState = true
+  }
+}
+
+/**
+ * 記録タブ以外のタブの最初の画面で、戻るキーを「記録タブへ移る」にする。
+ * 既定の戻るはこのタブの画面を保存せずに捨てるので、入り直すと絞り込みなどが初期状態に戻ってしまう。
+ * タブを押したときと同じく状態を取っておく。画面の中のシートなど、後から登録された戻るの処理が先に効く。
+ */
+@Composable
+private fun BackToStartTab(navController: NavController) {
+  BackHandler { navController.navigateToTab(Routes.TRACKING) }
 }
 
 /** places グラフのエントリにスコープした共有 PlacesViewModel を取得する。 */
