@@ -1,6 +1,7 @@
 package com.pathly.presentation.history
 
 import androidx.arch.core.executor.testing.InstantTaskExecutorRule
+import androidx.lifecycle.SavedStateHandle
 import com.pathly.domain.model.GpsTrack
 import com.pathly.domain.model.PlaceCategoryFacet
 import com.pathly.domain.repository.GpsTrackRepository
@@ -55,7 +56,7 @@ class HistoryViewModelTest {
     coEvery { mockRepository.getActiveTrackRealtime() } returns flowOf(null)
 
     // When
-    viewModel = HistoryViewModel(mockRepository)
+    viewModel = HistoryViewModel(mockRepository, SavedStateHandle())
     testDispatcher.scheduler.advanceUntilIdle()
 
     // Then
@@ -72,7 +73,7 @@ class HistoryViewModelTest {
     coEvery { mockRepository.getActiveTrackRealtime() } returns flowOf(null)
 
     // When
-    viewModel = HistoryViewModel(mockRepository)
+    viewModel = HistoryViewModel(mockRepository, SavedStateHandle())
     testDispatcher.scheduler.advanceUntilIdle()
 
     // Then
@@ -89,7 +90,7 @@ class HistoryViewModelTest {
     coEvery { mockRepository.getActiveTrackRealtime() } returns flowOf(null)
     coEvery { mockRepository.deleteTrack(track) } returns Unit
 
-    viewModel = HistoryViewModel(mockRepository)
+    viewModel = HistoryViewModel(mockRepository, SavedStateHandle())
     testDispatcher.scheduler.advanceUntilIdle()
 
     // When
@@ -107,7 +108,7 @@ class HistoryViewModelTest {
     val notFav = createTrack(id = 2, isActive = false, endTime = Date(), isFavorite = false)
     coEvery { mockRepository.getAllTracks() } returns flowOf(listOf(fav, notFav))
     coEvery { mockRepository.getActiveTrackRealtime() } returns flowOf(null)
-    viewModel = HistoryViewModel(mockRepository)
+    viewModel = HistoryViewModel(mockRepository, SavedStateHandle())
     testDispatcher.scheduler.advanceUntilIdle()
 
     // When
@@ -126,7 +127,7 @@ class HistoryViewModelTest {
     val many = createTrack(id = 2, isActive = false, endTime = Date(), stopCount = 5)
     coEvery { mockRepository.getAllTracks() } returns flowOf(listOf(few, many))
     coEvery { mockRepository.getActiveTrackRealtime() } returns flowOf(null)
-    viewModel = HistoryViewModel(mockRepository)
+    viewModel = HistoryViewModel(mockRepository, SavedStateHandle())
     testDispatcher.scheduler.advanceUntilIdle()
 
     // When
@@ -146,7 +147,7 @@ class HistoryViewModelTest {
     val noStops = createTrack(id = 4, endTime = Date())
     coEvery { mockRepository.getAllTracks() } returns flowOf(listOf(cafe, parkAndFood, shopping, noStops))
     coEvery { mockRepository.getActiveTrackRealtime() } returns flowOf(null)
-    viewModel = HistoryViewModel(mockRepository)
+    viewModel = HistoryViewModel(mockRepository, SavedStateHandle())
     testDispatcher.scheduler.advanceUntilIdle()
 
     // When
@@ -164,7 +165,7 @@ class HistoryViewModelTest {
     // Given
     coEvery { mockRepository.getAllTracks() } returns flowOf(listOf(createTrack(id = 1, endTime = Date())))
     coEvery { mockRepository.getActiveTrackRealtime() } returns flowOf(null)
-    viewModel = HistoryViewModel(mockRepository)
+    viewModel = HistoryViewModel(mockRepository, SavedStateHandle())
     testDispatcher.scheduler.advanceUntilIdle()
 
     // When
@@ -188,7 +189,7 @@ class HistoryViewModelTest {
     coEvery { mockRepository.getActiveTrackRealtime() } returns flowOf(null)
 
     // When
-    viewModel = HistoryViewModel(mockRepository)
+    viewModel = HistoryViewModel(mockRepository, SavedStateHandle())
     testDispatcher.scheduler.advanceUntilIdle()
 
     // Then
@@ -203,7 +204,7 @@ class HistoryViewModelTest {
     // Given
     coEvery { mockRepository.getAllTracks() } returns flowOf(listOf(createTrack(id = 1, endTime = Date())))
     coEvery { mockRepository.getActiveTrackRealtime() } returns flowOf(null)
-    viewModel = HistoryViewModel(mockRepository)
+    viewModel = HistoryViewModel(mockRepository, SavedStateHandle())
     testDispatcher.scheduler.advanceUntilIdle()
     viewModel.setFavoriteFilter(TrackFavoriteFilter.FAVORITE)
     viewModel.toggleCategoryFilter(PlaceCategoryFacet.FOOD)
@@ -223,7 +224,7 @@ class HistoryViewModelTest {
     // Given
     coEvery { mockRepository.getAllTracks() } returns flowOf(listOf(createTrack(id = 1, endTime = Date())))
     coEvery { mockRepository.getActiveTrackRealtime() } returns flowOf(null)
-    viewModel = HistoryViewModel(mockRepository)
+    viewModel = HistoryViewModel(mockRepository, SavedStateHandle())
     testDispatcher.scheduler.advanceUntilIdle()
     viewModel.toggleCategoryFilter(PlaceCategoryFacet.FOOD)
 
@@ -236,13 +237,48 @@ class HistoryViewModelTest {
   }
 
   @Test
+  fun `絞り込みと並べ替え_savedStateHandleに残り新しいViewModelで戻る`() = runTest {
+    // Given: アプリが裏で落とされる前の ViewModel で条件を変える
+    coEvery { mockRepository.getAllTracks() } returns flowOf(emptyList())
+    coEvery { mockRepository.getActiveTrackRealtime() } returns flowOf(null)
+    val handle = SavedStateHandle()
+    val before = HistoryViewModel(mockRepository, handle)
+    before.setFavoriteFilter(TrackFavoriteFilter.FAVORITE)
+    before.toggleCategoryFilter(PlaceCategoryFacet.CAFE)
+    before.setSort(TrackSort.DISTANCE)
+    before.toggleSortDirection()
+
+    // When: 同じ handle から作り直す（プロセスが落ちて戻ったとき）
+    val after = HistoryViewModel(mockRepository, handle)
+
+    // Then
+    val state = after.uiState.value
+    assertEquals(TrackFavoriteFilter.FAVORITE, state.favoriteFilter)
+    assertEquals(setOf(PlaceCategoryFacet.CAFE), state.categoryFilter)
+    assertEquals(TrackSort.DISTANCE, state.sort)
+    assertFalse("反転した向きも残る", state.sortDescending)
+  }
+
+  @Test
+  fun `savedStateHandleが空_既定の絞り込みと並べ替え`() = runTest {
+    coEvery { mockRepository.getAllTracks() } returns flowOf(emptyList())
+    coEvery { mockRepository.getActiveTrackRealtime() } returns flowOf(null)
+
+    val state = HistoryViewModel(mockRepository, SavedStateHandle()).uiState.value
+
+    assertTrue(state.noFilter)
+    assertEquals(TrackSort.DATE, state.sort)
+    assertTrue(state.sortDescending)
+  }
+
+  @Test
   fun `toggleFavorite_反転した値でrepositoryを呼ぶ`() = runTest {
     // Given
     val track = createTrack(id = 1, isActive = false, endTime = Date(), isFavorite = false)
     coEvery { mockRepository.getAllTracks() } returns flowOf(listOf(track))
     coEvery { mockRepository.getActiveTrackRealtime() } returns flowOf(null)
     coEvery { mockRepository.setFavorite(1L, true) } returns Unit
-    viewModel = HistoryViewModel(mockRepository)
+    viewModel = HistoryViewModel(mockRepository, SavedStateHandle())
     testDispatcher.scheduler.advanceUntilIdle()
 
     // When
@@ -259,7 +295,7 @@ class HistoryViewModelTest {
     coEvery { mockRepository.getAllTracks() } returns flowOf(emptyList())
     coEvery { mockRepository.getActiveTrackRealtime() } returns flowOf(null)
     coEvery { mockRepository.renameTrack(1L, "鎌倉さんぽ") } returns Unit
-    viewModel = HistoryViewModel(mockRepository)
+    viewModel = HistoryViewModel(mockRepository, SavedStateHandle())
     testDispatcher.scheduler.advanceUntilIdle()
 
     // When
@@ -275,7 +311,7 @@ class HistoryViewModelTest {
     // Given
     coEvery { mockRepository.getAllTracks() } returns flowOf(emptyList())
     coEvery { mockRepository.getActiveTrackRealtime() } returns flowOf(null)
-    viewModel = HistoryViewModel(mockRepository)
+    viewModel = HistoryViewModel(mockRepository, SavedStateHandle())
     testDispatcher.scheduler.advanceUntilIdle()
 
     // When

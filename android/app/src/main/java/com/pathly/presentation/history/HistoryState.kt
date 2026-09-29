@@ -1,7 +1,12 @@
 package com.pathly.presentation.history
 
+import androidx.lifecycle.SavedStateHandle
 import com.pathly.domain.model.GpsTrack
 import com.pathly.domain.model.PlaceCategoryFacet
+import com.pathly.presentation.common.getEnum
+import com.pathly.presentation.common.getEnumSet
+import com.pathly.presentation.common.putEnum
+import com.pathly.presentation.common.putEnumSet
 import java.text.Collator
 import java.util.Locale
 
@@ -106,3 +111,33 @@ data class HistoryState(
 
 /** 経路の所要時間（ミリ秒）。終了時刻が無ければ 0（並べ替えの安定用）。 */
 private fun durationMillisOf(track: GpsTrack): Long = track.endTime?.let { it.time - track.startTime.time }?.coerceAtLeast(0L) ?: 0L
+
+private const val KEY_FAVORITE = "history.favoriteFilter"
+private const val KEY_NAMED = "history.namedFilter"
+private const val KEY_STOP = "history.stopFilter"
+private const val KEY_CATEGORY = "history.categoryFilter"
+private const val KEY_SORT = "history.sort"
+private const val KEY_SORT_DESCENDING = "history.sortDescending"
+
+/** [handle] に保存した絞り込み・並べ替えを反映した状態。保存が無ければ既定のまま。 */
+fun HistoryState.withListOptionsFrom(handle: SavedStateHandle): HistoryState {
+  val sort = handle.getEnum(KEY_SORT, sort)
+  return copy(
+    favoriteFilter = handle.getEnum(KEY_FAVORITE, favoriteFilter),
+    namedFilter = handle.getEnum(KEY_NAMED, namedFilter),
+    stopFilter = handle.getEnum(KEY_STOP, stopFilter),
+    categoryFilter = handle.getEnumSet<PlaceCategoryFacet>(KEY_CATEGORY),
+    sort = sort,
+    sortDescending = handle.get<Boolean>(KEY_SORT_DESCENDING) ?: sort.defaultDescending,
+  )
+}
+
+/** 絞り込み・並べ替えを [handle] に保存する（アプリが裏で落とされても戻せるように）。 */
+fun HistoryState.saveListOptionsTo(handle: SavedStateHandle) {
+  handle.putEnum(KEY_FAVORITE, favoriteFilter)
+  handle.putEnum(KEY_NAMED, namedFilter)
+  handle.putEnum(KEY_STOP, stopFilter)
+  handle.putEnumSet(KEY_CATEGORY, categoryFilter)
+  handle.putEnum(KEY_SORT, sort)
+  handle[KEY_SORT_DESCENDING] = sortDescending
+}

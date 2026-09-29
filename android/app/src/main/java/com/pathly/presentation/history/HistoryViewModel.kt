@@ -1,5 +1,6 @@
 package com.pathly.presentation.history
 
+import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.pathly.domain.model.GpsTrack
@@ -17,9 +18,11 @@ import javax.inject.Inject
 @HiltViewModel
 class HistoryViewModel @Inject constructor(
   private val gpsTrackRepository: GpsTrackRepository,
+  private val savedStateHandle: SavedStateHandle,
 ) : ViewModel() {
 
-  private val _uiState = MutableStateFlow(HistoryState())
+  // 絞り込み・並べ替えはアプリが裏で落とされても戻せるよう savedStateHandle から始める。
+  private val _uiState = MutableStateFlow(HistoryState().withListOptionsFrom(savedStateHandle))
   val uiState: StateFlow<HistoryState> = _uiState.asStateFlow()
 
   init {
@@ -55,32 +58,32 @@ class HistoryViewModel @Inject constructor(
 
   /** お気に入りの絞り込み（指定なし/お気に入り/お気に入り以外）。 */
   fun setFavoriteFilter(filter: TrackFavoriteFilter) {
-    _uiState.update { it.copy(favoriteFilter = filter) }
+    updateListOptions { it.copy(favoriteFilter = filter) }
   }
 
   /** 命名状況の絞り込み（指定なし/名前あり/未命名）。 */
   fun setNamedFilter(filter: TrackNamedFilter) {
-    _uiState.update { it.copy(namedFilter = filter) }
+    updateListOptions { it.copy(namedFilter = filter) }
   }
 
   /** 立ち寄りの有無の絞り込み（指定なし/あり/なし）。 */
   fun setStopFilter(filter: TrackStopFilter) {
-    _uiState.update { it.copy(stopFilter = filter) }
+    updateListOptions { it.copy(stopFilter = filter) }
   }
 
   /** 業種の絞り込みで、その業種を選ぶ／外す（複数選べる）。 */
   fun toggleCategoryFilter(facet: PlaceCategoryFacet) {
-    _uiState.update { it.copy(categoryFilter = it.categoryFilter.toggled(facet)) }
+    updateListOptions { it.copy(categoryFilter = it.categoryFilter.toggled(facet)) }
   }
 
   /** 業種の絞り込みだけをまとめて外す（ほかの軸はそのまま）。 */
   fun clearCategoryFilter() {
-    _uiState.update { it.copy(categoryFilter = emptySet()) }
+    updateListOptions { it.copy(categoryFilter = emptySet()) }
   }
 
   /** 絞り込みを全解除する（4軸まとめて指定なしに戻す）。並べ替えは保持。 */
   fun clearFilters() {
-    _uiState.update {
+    updateListOptions {
       it.copy(
         favoriteFilter = TrackFavoriteFilter.ANY,
         namedFilter = TrackNamedFilter.ANY,
@@ -92,12 +95,12 @@ class HistoryViewModel @Inject constructor(
 
   /** 並べ替え軸の変更。軸ごとの既定の向き（新しい/多い/長いが先）に合わせる。 */
   fun setSort(sort: TrackSort) {
-    _uiState.update { it.copy(sort = sort, sortDescending = sort.defaultDescending) }
+    updateListOptions { it.copy(sort = sort, sortDescending = sort.defaultDescending) }
   }
 
   /** 並べ替えの昇順/降順を反転する。 */
   fun toggleSortDirection() {
-    _uiState.update { it.copy(sortDescending = !it.sortDescending) }
+    updateListOptions { it.copy(sortDescending = !it.sortDescending) }
   }
 
   /** お気に入り登録を切り替える。 */
@@ -154,5 +157,11 @@ class HistoryViewModel @Inject constructor(
         _uiState.update { it.copy(activeTrack = activeTrack) }
       }
     }
+  }
+
+  /** 絞り込み・並べ替えを変えて、savedStateHandle にも残す。 */
+  private fun updateListOptions(transform: (HistoryState) -> HistoryState) {
+    _uiState.update(transform)
+    _uiState.value.saveListOptionsTo(savedStateHandle)
   }
 }

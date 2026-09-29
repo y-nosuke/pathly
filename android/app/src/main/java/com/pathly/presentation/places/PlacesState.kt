@@ -1,10 +1,15 @@
 package com.pathly.presentation.places
 
+import androidx.lifecycle.SavedStateHandle
 import com.pathly.domain.model.NearbyRegisterPrompt
 import com.pathly.domain.model.PlaceCategoryFacet
 import com.pathly.domain.model.PlaceListItem
 import com.pathly.domain.model.PlacePrediction
 import com.pathly.domain.model.PlaceSearchResult
+import com.pathly.presentation.common.getEnum
+import com.pathly.presentation.common.getEnumSet
+import com.pathly.presentation.common.putEnum
+import com.pathly.presentation.common.putEnumSet
 import java.text.Collator
 import java.util.Locale
 
@@ -68,6 +73,20 @@ data class PlacesState(
   val noFilter: Boolean
     get() = wishlistFilter == WishlistFilter.ANY && visitedFilter == VisitedFilter.ANY && categoryFilter.isEmpty()
 
+  /**
+   * 一覧を先頭へ戻す条件（絞り込み・並べ替え・先頭の場所）をまとめた値。これが変わったときだけ先頭へ戻す。
+   * 画面の状態として保存するので文字列にする。
+   */
+  val scrollResetKey: String
+    get() = listOf(
+      wishlistFilter.name,
+      visitedFilter.name,
+      categoryFilter.map { it.name }.sorted().joinToString(","),
+      sort.name,
+      sortDescending.toString(),
+      visibleItems.firstOrNull()?.place?.id?.toString().orEmpty(),
+    ).joinToString("|")
+
   /** 業種ごとの場所の件数（絞り込みの選択肢に添える）。0 件の業種は入らない。 */
   val categoryCounts: Map<PlaceCategoryFacet, Int>
     get() = items.groupingBy { PlaceCategoryFacet.of(it.place) }.eachCount()
@@ -112,4 +131,31 @@ data class PlacesState(
       }
       return filtered.sortedWith(if (sortDescending) ascending.reversed() else ascending)
     }
+}
+
+private const val KEY_WISHLIST = "places.wishlistFilter"
+private const val KEY_VISITED = "places.visitedFilter"
+private const val KEY_CATEGORY = "places.categoryFilter"
+private const val KEY_SORT = "places.sort"
+private const val KEY_SORT_DESCENDING = "places.sortDescending"
+
+/** [handle] に保存した絞り込み・並べ替えを反映した状態。保存が無ければ既定のまま。 */
+fun PlacesState.withListOptionsFrom(handle: SavedStateHandle): PlacesState {
+  val sort = handle.getEnum(KEY_SORT, sort)
+  return copy(
+    wishlistFilter = handle.getEnum(KEY_WISHLIST, wishlistFilter),
+    visitedFilter = handle.getEnum(KEY_VISITED, visitedFilter),
+    categoryFilter = handle.getEnumSet<PlaceCategoryFacet>(KEY_CATEGORY),
+    sort = sort,
+    sortDescending = handle.get<Boolean>(KEY_SORT_DESCENDING) ?: sort.defaultDescending,
+  )
+}
+
+/** 絞り込み・並べ替えを [handle] に保存する（アプリが裏で落とされても戻せるように）。 */
+fun PlacesState.saveListOptionsTo(handle: SavedStateHandle) {
+  handle.putEnum(KEY_WISHLIST, wishlistFilter)
+  handle.putEnum(KEY_VISITED, visitedFilter)
+  handle.putEnumSet(KEY_CATEGORY, categoryFilter)
+  handle.putEnum(KEY_SORT, sort)
+  handle[KEY_SORT_DESCENDING] = sortDescending
 }
