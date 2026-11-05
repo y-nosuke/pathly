@@ -127,7 +127,7 @@ class WishlistRepositoryImpl @Inject constructor(
     // 答えがブレる（→ adr/0025）。まとめるかどうかはユーザーの判断なので、勝手には寄せない。
     val holder = googlePlaceDao.getPlaceIdByGoogleId(result.googlePlaceId)
     if (holder != null && holder != placeId) {
-      logger.i("Refused to link place $placeId: ${result.googlePlaceId} is already held by place $holder")
+      logger.i("Refused to link place $placeId: the same Google place is already held by place $holder")
       return false
     }
     // 施設情報を上書き保存（名前・住所・カテゴリ・place ID・施設の座標）。places は触らない
@@ -145,7 +145,7 @@ class WishlistRepositoryImpl @Inject constructor(
     )
     // 解決記録を残す（以後は自動命名で Nearby を叩かない）。
     placeResolutionDao.upsert(PlaceResolutionEntity(placeId, Date()))
-    logger.i("Linked place $placeId to google=${result.googlePlaceId}")
+    logger.i("Linked place $placeId to a Google place")
     return true
   }
 
