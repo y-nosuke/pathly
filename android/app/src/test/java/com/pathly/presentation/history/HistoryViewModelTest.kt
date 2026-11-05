@@ -322,9 +322,13 @@ class HistoryViewModelTest {
     assertNull("エラーメッセージがクリア", state.errorMessage)
   }
 
+  // 既定の並びは開始時刻の新しい順。Date() だと作るたびにミリ秒がずれて並びが実行ごとに変わるので、
+  // 時刻を指定しない経路は同じ時刻にそろえ、渡した順のまま並ぶようにする。
+  private val fixedStartTime = Date(1_700_000_000_000L)
+
   private fun createTrack(
     id: Long,
-    startTime: Date = Date(),
+    startTime: Date = fixedStartTime,
     endTime: Date? = null,
     isActive: Boolean = false,
     name: String? = null,
