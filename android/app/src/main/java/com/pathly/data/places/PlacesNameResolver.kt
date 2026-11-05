@@ -77,7 +77,7 @@ class PlacesNameResolver @Inject constructor(
       val loc = place.location
       Outcome.Found(name, address, category, googlePlaceId, loc?.latitude, loc?.longitude)
     } catch (e: Exception) {
-      logger.w("searchNearby failed for ($latitude, $longitude)", e)
+      logger.w("searchNearby failed", e)
       Outcome.NotAttempted
     }
   }
@@ -115,7 +115,7 @@ class PlacesNameResolver @Inject constructor(
         )
       }
     } catch (e: Exception) {
-      logger.w("searchNearby candidates failed for ($latitude, $longitude)", e)
+      logger.w("searchNearby candidates failed", e)
       emptyList()
     }
   }

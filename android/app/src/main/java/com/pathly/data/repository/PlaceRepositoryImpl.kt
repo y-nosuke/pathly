@@ -622,7 +622,7 @@ class PlaceRepositoryImpl @Inject constructor(
           }
           // 触られている place は勝手に寄せられない。同じ施設を 2 つ持たせるわけにもいかないので、
           // **施設情報を付けずに残す**（→ adr/0025）。解決記録は残して、同じ問い合わせを繰り返さない。
-          logger.i("Skipped linking place ${place.id}: ${outcome.googlePlaceId} is already held by place $existing")
+          logger.i("Skipped linking place ${place.id}: the same Google place is already held by place $existing")
           placeResolutionDao.upsert(PlaceResolutionEntity(place.id, Date()))
           return ResolveResult(place.id, skippedByConflict = true)
         }

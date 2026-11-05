@@ -57,7 +57,8 @@ logger.d("Saved ${points.size} points to track $trackId")
 logger.e("Failed to handle ${command::class.simpleName}", e)
 ```
 
-住所・施設名も「どこにいたか」が分かるので同じ扱いにする。
+住所・施設名も「どこにいたか」が分かるので同じ扱いにする。Google の place ID（引けば施設が分かる）と、
+場所の検索語（施設名そのものになりやすい）も同じ。アプリの中の ID（`placeId`・`trackId` など）は出してよい。
 
 ### 高頻度で呼ばれる箇所
 

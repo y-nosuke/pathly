@@ -73,7 +73,8 @@ class PlacesTextSearcher @Inject constructor(
         )
       }
     } catch (e: Exception) {
-      logger.w("findAutocompletePredictions failed for \"$query\"", e)
+      // 検索語は施設名そのものになりやすいので出さない（→ designs/logging.md）。
+      logger.w("findAutocompletePredictions failed (query length=${query.length})", e)
       emptyList()
     }
   }
@@ -100,7 +101,7 @@ class PlacesTextSearcher @Inject constructor(
         longitude = latLng.longitude,
       ).also { lastFetch = placeId to it }
     } catch (e: Exception) {
-      logger.w("fetchPlace failed for $placeId", e)
+      logger.w("fetchPlace failed", e)
       null
     } finally {
       // セッション終了（次回は新しいトークン）。
