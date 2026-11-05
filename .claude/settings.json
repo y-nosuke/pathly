@@ -32,6 +32,7 @@
       "mcp__Claude_Browser__preview_logs",
       "mcp__Claude_in_Chrome__read_network_requests",
       "mcp__ccd_pr__get_status",
+      "mcp__ccd_pr__set_monitor",
       "Bash(gh run watch *)",
       "Bash(gh label list *)",
       "mcp__Claude_Browser__find",
