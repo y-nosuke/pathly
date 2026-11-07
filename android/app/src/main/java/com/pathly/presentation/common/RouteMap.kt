@@ -242,14 +242,14 @@ internal fun RegisteredPlaceMarkers(
   val boundsPaddingPx = with(LocalDensity.current) { ClusterBoundsPadding.roundToPx() }
 
   // 立ち寄りと同じ理由で 1 件ずつ独立させる（登録・削除・絞り込み・まとめ直しで並びが変わる）。
+  // key は when の外に置く。分岐の中に置くと、Compose は分岐の並びの位置でマーカーを見分けるので、
+  // まとめ直しで 1 件とまとまりの並びが変わると、残っているマーカーまで作り直されて吹き出しが消える。
   entries.forEach { entry ->
-    when (entry) {
-      is PlaceMapEntry.Single -> key(entry.place.placeId) {
-        RegisteredPlaceSingleMarker(entry.place, icons, infoWindow, onRegisteredPlaceClick)
-      }
+    key(entry.mapKey) {
+      when (entry) {
+        is PlaceMapEntry.Single -> RegisteredPlaceSingleMarker(entry.place, icons, infoWindow, onRegisteredPlaceClick)
 
-      is PlaceMapEntry.Cluster -> key(entry.key) {
-        RegisteredPlaceClusterMarker(entry, icons) {
+        is PlaceMapEntry.Cluster -> RegisteredPlaceClusterMarker(entry, icons) {
           // 吹き出しの出ていたマーカーがまとまりに隠れることがあるので、先に閉じる。
           infoWindow.close()
           onClusterExpand()
@@ -288,9 +288,10 @@ private fun RegisteredPlaceSingleMarker(
   val placeMarkerState = remember(place.latitude, place.longitude) {
     MarkerState(position = LatLng(place.latitude, place.longitude))
   }
-  // 色＝訪問状態、グリフ＝業種、右上の旗＝行きたい。見た目はこの 3 つだけで決まるので、それを画像のキーにする。
+  // 色＝訪問状態、グリフ＝業種、右上の旗＝行きたい。バッジの見た目はこの 3 つだけで決まるので、それを画像のキーにする。
+  // バッジの下に名前を添える（→ specs/map.md）。名前は場所ごとに違うので、キャッシュが Canvas で書き足す。
   val group = place.categoryGroup
-  val icon = icons.get(RegisteredPlaceIconKey(place.isVisited, group, place.isWishlisted)) {
+  val icon = icons.getLabeled(RegisteredPlaceIconKey(place.isVisited, group, place.isWishlisted), place.displayName) {
     RegisteredPlaceMarker(
       bg = if (place.isVisited) MarkerVisitedGreen else MarkerUnvisitedGray,
       glyph = categoryGlyph(group),
@@ -298,11 +299,12 @@ private fun RegisteredPlaceSingleMarker(
     )
   }
   MapMarker(
-    icon = icon,
+    icon = icon.icon,
     infoWindow = infoWindow,
     state = placeMarkerState,
     title = place.displayName,
     snippet = place.statusLabel,
+    anchor = icon.anchor,
     zIndex = REGISTERED_PLACE_Z_INDEX,
     onClick = { onRegisteredPlaceClick(place) },
   )
