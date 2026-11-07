@@ -9,6 +9,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.UiComposable
+import androidx.compose.ui.geometry.Offset
 import com.google.android.gms.maps.model.BitmapDescriptor
 import com.google.maps.android.compose.GoogleMapComposable
 import com.google.maps.android.compose.Marker
@@ -141,6 +142,8 @@ internal fun MapMarker(
   state: MarkerState,
   title: String? = null,
   snippet: String? = null,
+  // マーカーが指す点。画像の幅・高さに対する割合で、既定は下端中央。
+  anchor: Offset = Offset(0.5f, 1f),
   zIndex: Float = 0f,
   onClick: () -> Unit = {},
 ) {
@@ -152,6 +155,7 @@ internal fun MapMarker(
     icon = icon,
     title = title,
     snippet = snippet,
+    anchor = anchor,
     zIndex = zIndex,
     onClick = {
       infoWindow.onMarkerClick(state)
