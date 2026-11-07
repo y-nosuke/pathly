@@ -750,7 +750,14 @@ private fun TrackingMapView(
       val stopPlaceIds = remember(stops, currentStop) {
         (stops.map { it.place.id } + listOfNotNull(currentStop?.place?.id)).toSet()
       }
-      RegisteredPlaceMarkers(registeredPlaces.filter { it.placeId !in stopPlaceIds }, infoWindow, onRegisteredPlaceClick)
+      // まとまりをタップして寄ったら追従を止める。止めないと次の現在地の更新でカメラが引き戻される
+      // （寄せたのはジェスチャーではないので、手で動かしたときの判定には掛からない）。
+      RegisteredPlaceMarkers(
+        registeredPlaces.filter { it.placeId !in stopPlaceIds },
+        infoWindow,
+        onClusterExpand = { followUser = false },
+        onRegisteredPlaceClick = onRegisteredPlaceClick,
+      )
     }
 
     // 現在地ボタン：追従中は活性（色付き）、固定中は非活性（グレー）。タップで追従再開＆リセンター。

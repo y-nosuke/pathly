@@ -101,6 +101,7 @@ internal fun MapMarker(
   state: MarkerState,
   title: String? = null,
   snippet: String? = null,
+  zIndex: Float = 0f,
   dismissWithBack: Boolean = true,
   onClick: () -> Unit = {},
   // MarkerComposable と同じく、中身は地図ではなく通常の UI として描く（ビットマップに焼く）。
@@ -114,6 +115,7 @@ internal fun MapMarker(
     state = state,
     title = title,
     snippet = snippet,
+    zIndex = zIndex,
     onClick = {
       if (dismissWithBack) infoWindow.onMarkerClick(state)
       onClick()

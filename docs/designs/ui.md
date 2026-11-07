@@ -53,6 +53,25 @@ B を取りこぼし、バックで閉じられなくなる。
 3 軸で描き分け、訪問・行きたいの判定は「場所」タブの `PlaceListItem` と揃える。立ち寄りと重なった
 ときは立ち寄りを前面にする。
 
+`RegisteredPlaceMarkers` は、画面上で近い場所を**件数入りの丸（まとまり）**にまとめて描く
+（→ [ADR-0028](../adr/0028-cluster-registered-place-markers.md)、仕様は [specs/map.md](../specs/map.md)）。
+まとめる計算は `presentation/common/PlaceClustering.kt` の `clusterPlaces` で、地図にも Android にも
+依存しない純粋な関数（ユニットテストあり）。
+
+- まとめ直すのは**ズームが 0.5 段変わったときだけ**（`clusterZoomLevel`）。連続値で計算すると、
+  ピンチ操作の 1 フレームごとにマーカーを作り直すことになる。地図を動かしただけではまとまりは変わらない。
+- 1 件ずつに戻ったマーカーは、これまでどおり `key(placeId)` で `MapMarker` を置く。まとまりから外れても
+  タップの意味（編集／紐付け）と吹き出しのバックでの閉じ方は変わらない。
+- まとまりは吹き出しを出さないので、`MapMarker` ではなく `MarkerComposable` を直に置き、クリックで
+  `true` を返して地図の既定の挙動（吹き出し・カメラ寄せ）を止める。寄せ方は自前で
+  `newLatLngBounds` に animate する。
+- 登録済みの場所（1 件・まとまり）は `REGISTERED_PLACE_Z_INDEX`（-1） で他のマーカーより奥に描く。ズームの段が変わるたびに
+  作り直すので、描く順だけに頼ると、後から足されたこちらが立ち寄りの前に出てしまう。
+- 記録画面は現在地に追従している間、位置の更新ごとにカメラを現在地へ戻す。まとまりのタップで寄せたら
+  追従を止める（`onClusterExpand`）。寄せたのはジェスチャーではないので、手で動かしたときの判定には掛からない。
+- まとまりが、吹き出しの出ていたマーカーを飲み込むことがあるので、まとまりのタップで吹き出しを閉じる。
+  ズームアウトでマーカーが消えたときは `MapInfoWindowState.onMarkerDisposed` が拾う。
+
 業種のグリフは `PlaceCategoryGroup`（Google の `primaryType` を束ねた分類）から引く。対応付けを
 DB に持たないのは、`R.drawable` の ID を DB に入れられず結局コードで分岐するため
 （→ [ADR-0017](../adr/0017-normalize-place-category.md)）。旗を右上へ逃がしているのは業種が
