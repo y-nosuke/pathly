@@ -13,11 +13,14 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.derivedStateOf
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.shadow
@@ -37,7 +40,7 @@ import com.google.android.gms.maps.model.Gap
 import com.google.android.gms.maps.model.LatLng
 import com.google.android.gms.maps.model.LatLngBounds
 import com.google.maps.android.compose.GoogleMapComposable
-import com.google.maps.android.compose.MarkerComposable
+import com.google.maps.android.compose.Marker
 import com.google.maps.android.compose.MarkerState
 import com.google.maps.android.compose.Polyline
 import com.google.maps.android.compose.currentCameraPositionState
@@ -50,6 +53,7 @@ import com.pathly.domain.model.Stop
 import com.pathly.domain.model.TrackSegments
 import com.pathly.ui.theme.TrackLineOrange
 import com.pathly.util.DateFormatters
+import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.launch
 import java.util.Date
 
@@ -211,24 +215,41 @@ internal fun RegisteredPlaceMarkers(
   onClusterExpand: () -> Unit = {},
   onRegisteredPlaceClick: (RegisteredPlace) -> Unit = {},
 ) {
-  // 画面上で近い場所は 1 つにまとめる（→ adr/0028）。まとめ直すのはズームが 0.5 段変わったときだけ。
+  // 画面上で近い場所は 1 つにまとめる（→ adr/0028）。
+  //
+  // **まとめ直すのは地図が止まったときだけ。** まとめ直すとマーカーを数十個作り直す。ピンチや
+  // まとまりのタップで寄せている途中にこれが何度も走ると、地図の動きがもっさりする。
+  // 止まった時点のズームを 0.5 段に丸めて使う。
+  //
+  // マーカーの画像は見た目ごとに 1 回だけ描いて使い回す（[MarkerIconCache]）。マーカーごとに
+  // Compose で描くと、作り直しのたびに地図が 1 秒近く止まる。
   val cameraPositionState = currentCameraPositionState
-  val zoomLevel by remember(cameraPositionState) {
-    derivedStateOf { clusterZoomLevel(cameraPositionState.position.zoom) }
+  var zoomLevel by remember(cameraPositionState) {
+    mutableFloatStateOf(clusterZoomLevel(cameraPositionState.position.zoom))
+  }
+  // 動いている間は null にして読み飛ばす。止まっている間のズームの変化（アニメーションなしの
+  // 瞬間移動）も拾えるよう、isMoving の切り替わりではなく「止まっているときの段」を見る。
+  LaunchedEffect(cameraPositionState) {
+    snapshotFlow {
+      if (cameraPositionState.isMoving) null else clusterZoomLevel(cameraPositionState.position.zoom)
+    }
+      .filterNotNull()
+      .collect { zoomLevel = it }
   }
   val entries = remember(registeredPlaces, zoomLevel) { clusterPlaces(registeredPlaces, zoomLevel) }
   val scope = rememberCoroutineScope()
+  val icons = rememberMarkerIconCache()
   val boundsPaddingPx = with(LocalDensity.current) { ClusterBoundsPadding.roundToPx() }
 
   // 立ち寄りと同じ理由で 1 件ずつ独立させる（登録・削除・絞り込み・まとめ直しで並びが変わる）。
   entries.forEach { entry ->
     when (entry) {
       is PlaceMapEntry.Single -> key(entry.place.placeId) {
-        RegisteredPlaceSingleMarker(entry.place, infoWindow, onRegisteredPlaceClick)
+        RegisteredPlaceSingleMarker(entry.place, icons, infoWindow, onRegisteredPlaceClick)
       }
 
       is PlaceMapEntry.Cluster -> key(entry.key) {
-        RegisteredPlaceClusterMarker(entry) {
+        RegisteredPlaceClusterMarker(entry, icons) {
           // 吹き出しの出ていたマーカーがまとまりに隠れることがあるので、先に閉じる。
           infoWindow.close()
           onClusterExpand()
@@ -260,66 +281,68 @@ private val ClusterBoundsPadding = 64.dp
 @GoogleMapComposable
 private fun RegisteredPlaceSingleMarker(
   place: RegisteredPlace,
+  icons: MarkerIconCache,
   infoWindow: MapInfoWindowState,
   onRegisteredPlaceClick: (RegisteredPlace) -> Unit,
 ) {
   val placeMarkerState = remember(place.latitude, place.longitude) {
     MarkerState(position = LatLng(place.latitude, place.longitude))
   }
-  // 色＝訪問状態、グリフ＝業種、右上の旗＝行きたい。状態が変わったら描き直す。
-  val badgeColor = if (place.isVisited) MarkerVisitedGreen else MarkerUnvisitedGray
+  // 色＝訪問状態、グリフ＝業種、右上の旗＝行きたい。見た目はこの 3 つだけで決まるので、それを画像のキーにする。
   val group = place.categoryGroup
+  val icon = icons.get(RegisteredPlaceIconKey(place.isVisited, group, place.isWishlisted)) {
+    RegisteredPlaceMarker(
+      bg = if (place.isVisited) MarkerVisitedGreen else MarkerUnvisitedGray,
+      glyph = categoryGlyph(group),
+      wishlisted = place.isWishlisted,
+    )
+  }
   MapMarker(
-    "registered",
-    place.placeId,
-    place.isWishlisted,
-    place.isVisited,
-    group,
+    icon = icon,
     infoWindow = infoWindow,
     state = placeMarkerState,
     title = place.displayName,
     snippet = place.statusLabel,
     zIndex = REGISTERED_PLACE_Z_INDEX,
     onClick = { onRegisteredPlaceClick(place) },
-  ) {
-    RegisteredPlaceMarker(bg = badgeColor, glyph = categoryGlyph(group), wishlisted = place.isWishlisted)
-  }
+  )
 }
+
+// 登録済みの場所のマーカー画像のキー（[MarkerIconCache]）。見た目を決める値をすべて持つ。
+private data class RegisteredPlaceIconKey(val visited: Boolean, val group: PlaceCategoryGroup, val wishlisted: Boolean)
+
+private data class ClusterIconKey(val label: String, val wishlisted: Boolean)
 
 /**
  * 近い登録済みの場所のまとまり。タップでまとまりの中の場所が全部入るまで寄る（[onClick]）。
  *
- * 吹き出しを出さないので [MapMarker] ではなく [MarkerComposable] で置き、クリックで `true` を返して
+ * 吹き出しを出さないので [MapMarker] ではなく素の [Marker] で置き、クリックで `true` を返して
  * 地図の既定の挙動（吹き出し・カメラを寄せる）を止める。寄せ方は [onClick] 側の animate に任せる。
  * タップの意味はモード（編集／紐付け）に依らず同じ。まとまりのままでは 1 件を選べないため。
  */
 @Composable
 @GoogleMapComposable
-private fun RegisteredPlaceClusterMarker(cluster: PlaceMapEntry.Cluster, onClick: () -> Unit) {
+private fun RegisteredPlaceClusterMarker(cluster: PlaceMapEntry.Cluster, icons: MarkerIconCache, onClick: () -> Unit) {
   val markerState = remember(cluster.latitude, cluster.longitude) {
     MarkerState(position = LatLng(cluster.latitude, cluster.longitude))
   }
-  MarkerComposable(
-    cluster.places.size,
-    cluster.hasWishlisted,
+  val label = if (cluster.places.size > 99) "99+" else cluster.places.size.toString()
+  val icon = icons.get(ClusterIconKey(label, cluster.hasWishlisted)) {
+    WithWishlistFlag(cluster.hasWishlisted) {
+      RouteBadgeMarker(bg = MarkerClusterSlate, size = ClusterBadgeSize) {
+        Text(text = label, color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+      }
+    }
+  }
+  Marker(
     state = markerState,
+    icon = icon,
     zIndex = REGISTERED_PLACE_Z_INDEX,
     onClick = {
       onClick()
       true
     },
-  ) {
-    WithWishlistFlag(cluster.hasWishlisted) {
-      RouteBadgeMarker(bg = MarkerClusterSlate, size = ClusterBadgeSize) {
-        Text(
-          text = if (cluster.places.size > 99) "99+" else cluster.places.size.toString(),
-          color = Color.White,
-          fontSize = 14.sp,
-          fontWeight = FontWeight.Bold,
-        )
-      }
-    }
-  }
+  )
 }
 
 // まとまりの丸。1 件ずつの丸（34dp）より一回り大きくし、訪問状態の緑・グレーと被らない濃い色にする。
