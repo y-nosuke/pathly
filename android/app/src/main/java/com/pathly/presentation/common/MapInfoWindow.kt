@@ -9,7 +9,9 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.UiComposable
+import com.google.android.gms.maps.model.BitmapDescriptor
 import com.google.maps.android.compose.GoogleMapComposable
+import com.google.maps.android.compose.Marker
 import com.google.maps.android.compose.MarkerComposable
 import com.google.maps.android.compose.MarkerState
 
@@ -122,5 +124,40 @@ internal fun MapMarker(
     },
     onInfoWindowClose = { infoWindow.onInfoWindowClose(state) },
     content = content,
+  )
+}
+
+/**
+ * 描き済みの画像（[icon]）で置く [MapMarker]。吹き出しの扱いは同じ。
+ *
+ * 数が多く、作り直しの多いマーカー（登録済みの場所）は、[MarkerIconCache] で見た目ごとに 1 回だけ
+ * 描いた画像を渡す。中身を毎回 Compose で描くと、作り直すたびに地図が止まる。
+ */
+@Composable
+@GoogleMapComposable
+internal fun MapMarker(
+  icon: BitmapDescriptor,
+  infoWindow: MapInfoWindowState,
+  state: MarkerState,
+  title: String? = null,
+  snippet: String? = null,
+  zIndex: Float = 0f,
+  onClick: () -> Unit = {},
+) {
+  DisposableEffect(state) {
+    onDispose { infoWindow.onMarkerDisposed(state) }
+  }
+  Marker(
+    state = state,
+    icon = icon,
+    title = title,
+    snippet = snippet,
+    zIndex = zIndex,
+    onClick = {
+      infoWindow.onMarkerClick(state)
+      onClick()
+      false
+    },
+    onInfoWindowClose = { infoWindow.onInfoWindowClose(state) },
   )
 }
