@@ -213,6 +213,8 @@ internal fun RegisteredPlaceMarkers(
   // まとまりをタップして地図を寄せるとき。現在地に追従する画面は、ここで追従を止める。
   // onRegisteredPlaceClick より前に置き、末尾ラムダが今までどおり onRegisteredPlaceClick に付くようにする。
   onClusterExpand: () -> Unit = {},
+  // 同じ地図で他のマーカーも画像のキャッシュを使うときは、それを渡して 1 つにまとめる。
+  icons: MarkerIconCache = rememberMarkerIconCache(),
   onRegisteredPlaceClick: (RegisteredPlace) -> Unit = {},
 ) {
   // 画面上で近い場所は 1 つにまとめる（→ adr/0028）。
@@ -238,7 +240,6 @@ internal fun RegisteredPlaceMarkers(
   }
   val entries = remember(registeredPlaces, zoomLevel) { clusterPlaces(registeredPlaces, zoomLevel) }
   val scope = rememberCoroutineScope()
-  val icons = rememberMarkerIconCache()
   val boundsPaddingPx = with(LocalDensity.current) { ClusterBoundsPadding.roundToPx() }
 
   // 立ち寄りと同じ理由で 1 件ずつ独立させる（登録・削除・絞り込み・まとめ直しで並びが変わる）。
@@ -555,8 +556,15 @@ internal fun RouteMapContent(
     }
   }
 
+  // マーカーの画像のキャッシュは GoogleMap 1 つにつき 1 つ。登録済みの場所と立ち寄りで共有する。
+  val icons = rememberMarkerIconCache()
+
   // 登録済みの場所（トグルON時）。立ち寄りマーカーの下に敷き、重なりでは立ち寄りを前面にする。
-  RegisteredPlaceMarkers(registeredPlaces, infoWindow, onRegisteredPlaceClick = onRegisteredPlaceClick)
+  RegisteredPlaceMarkers(registeredPlaces, infoWindow, icons = icons, onRegisteredPlaceClick = onRegisteredPlaceClick)
+
+  // 立ち寄りのマーカーも、登録済みの場所と同じくバッジの下に名前を添える（→ specs/map.md）。
+  // 確定した立ち寄りのバッジは番号ごとに 1 回だけ描き、名前はキャッシュが Canvas で書き足す。
+  // 立ち寄り中は滞在時間で見た目が変わり続けるので、キャッシュに入れずに描く（下）。
 
   // 立ち寄り場所（訪問順の番号つき紫バッジ）。番号でルートの順序が読める。
   //
@@ -569,71 +577,83 @@ internal fun RouteMapContent(
       val stopMarkerState = androidx.compose.runtime.remember(stop.place.latitude, stop.place.longitude) {
         MarkerState(position = LatLng(stop.place.latitude, stop.place.longitude))
       }
-      MapMarker(
-        "stop",
-        stop.id,
-        index,
-        infoWindow = infoWindow,
-        state = stopMarkerState,
-        title = stop.place.name ?: stop.place.googleName ?: "立ち寄り",
-        snippet = "${DateFormatters.shortTime(stop.arrivalTime)} ・ 滞在${stop.durationMinutes}分",
-        onClick = { onStopClick(stop) },
-      ) {
+      val number = index + 1
+      val icon = icons.getLabeled(StopIconKey(number), stop.place.displayName) {
         RouteBadgeMarker(bg = MarkerStopViolet) {
           Text(
-            text = "${index + 1}",
+            text = "$number",
             color = Color.White,
             fontWeight = FontWeight.Bold,
             fontSize = 14.sp,
           )
         }
       }
+      MapMarker(
+        icon = icon.icon,
+        infoWindow = infoWindow,
+        state = stopMarkerState,
+        // 吹き出しの見出しは、マーカーの下の名前と揃える。
+        title = stop.place.displayName,
+        snippet = "${DateFormatters.shortTime(stop.arrivalTime)} ・ 滞在${stop.durationMinutes}分",
+        anchor = icon.anchor,
+        onClick = { onStopClick(stop) },
+      )
     }
   }
 
   // 立ち寄り中（ライブ）: ティールのバッジ＋滞在時間ラベルを常時表示（緯度経度はタップで）。
+  // 名前は分かるときだけ下に添える。滞在中は名前を引く前のことが多く、座標を出しても読めないため
+  // （座標は吹き出しに出している）。
   currentStop?.let { stop ->
     val liveMarkerState = androidx.compose.runtime.remember(stop.place.latitude, stop.place.longitude) {
       MarkerState(position = LatLng(stop.place.latitude, stop.place.longitude))
     }
+    val name = stop.place.name ?: stop.place.googleName ?: stop.place.googleAddress
+    // 滞在時間が 1 分ごとに変わるので、キャッシュには入れず、変わったときだけ描き直す。
+    val icon = remember(icons, stop.durationMinutes, name) { icons.createLabeled(name) { CurrentStopBadge(stop.durationMinutes) } }
     MapMarker(
-      "current-stop",
-      stop.place.latitude,
-      stop.place.longitude,
-      stop.durationMinutes,
+      icon = icon.icon,
       infoWindow = infoWindow,
       state = liveMarkerState,
-      title = stop.place.name ?: stop.place.googleName ?: "立ち寄り中",
+      title = name ?: "立ち寄り中",
       snippet = "%.5f, %.5f ・ 滞在%d分".format(stop.place.latitude, stop.place.longitude, stop.durationMinutes),
+      anchor = icon.anchor,
+    )
+  }
+}
+
+// 立ち寄りのマーカー画像のキー（[MarkerIconCache]）。見た目を決める値をすべて持つ。
+private data class StopIconKey(val number: Int)
+
+/** 立ち寄り中のバッジ。上に滞在時間のラベル、下にティールの丸。 */
+@Composable
+private fun CurrentStopBadge(durationMinutes: Int) {
+  // ラベルはバッジの「上」に出す。マーカーは既定で点が下端（バッジ）に来るので、
+  // 端末の現在地ドット（青）や現在地マーカーと重ならず読める。白フチ＋影でコントラストも確保する。
+  Column(horizontalAlignment = Alignment.CenterHorizontally) {
+    Box(
+      modifier = Modifier
+        .shadow(3.dp, RoundedCornerShape(8.dp))
+        .background(MarkerCurrentStopTeal, RoundedCornerShape(8.dp))
+        .border(1.dp, Color.White, RoundedCornerShape(8.dp))
+        .padding(horizontal = 8.dp, vertical = 2.dp),
     ) {
-      // ラベルはバッジの「上」に出す。マーカーは既定で点が下端（バッジ）に来るので、
-      // 端末の現在地ドット（青）や現在地マーカーと重ならず読める。白フチ＋影でコントラストも確保する。
-      Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        Box(
-          modifier = Modifier
-            .shadow(3.dp, RoundedCornerShape(8.dp))
-            .background(MarkerCurrentStopTeal, RoundedCornerShape(8.dp))
-            .border(1.dp, Color.White, RoundedCornerShape(8.dp))
-            .padding(horizontal = 8.dp, vertical = 2.dp),
-        ) {
-          Text(
-            text = "滞在${stop.durationMinutes}分",
-            color = Color.White,
-            fontWeight = FontWeight.Bold,
-            fontSize = 11.sp,
-          )
-        }
-        Box(modifier = Modifier.padding(top = 2.dp)) {
-          RouteBadgeMarker(bg = MarkerCurrentStopTeal) {
-            // 「今ここに滞在中」が一目で分かるよう、白の場所ピンのグリフにする（ただの白丸より識別しやすい）。
-            Icon(
-              painter = painterResource(R.drawable.ic_location_on),
-              contentDescription = null,
-              tint = Color.White,
-              modifier = Modifier.size(20.dp),
-            )
-          }
-        }
+      Text(
+        text = "滞在${durationMinutes}分",
+        color = Color.White,
+        fontWeight = FontWeight.Bold,
+        fontSize = 11.sp,
+      )
+    }
+    Box(modifier = Modifier.padding(top = 2.dp)) {
+      RouteBadgeMarker(bg = MarkerCurrentStopTeal) {
+        // 「今ここに滞在中」が一目で分かるよう、白の場所ピンのグリフにする（ただの白丸より識別しやすい）。
+        Icon(
+          painter = painterResource(R.drawable.ic_location_on),
+          contentDescription = null,
+          tint = Color.White,
+          modifier = Modifier.size(20.dp),
+        )
       }
     }
   }

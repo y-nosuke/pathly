@@ -58,6 +58,15 @@ internal class MarkerIconCache(
     return labeledIcons[cacheKey] ?: drawLabeled(bitmap(key, content), label).also { labeledIcons.put(cacheKey, it) }
   }
 
+  /**
+   * キャッシュに入れずに描く [getLabeled]。見た目がすぐ変わって使い回せないもの（立ち寄り中の滞在時間）用。
+   * キャッシュに入れると、変わるたびに画像が溜まり続ける。呼び出し側で `remember` して描き直しを抑える。
+   */
+  fun createLabeled(label: String?, content: @Composable () -> Unit): LabeledMarkerIcon {
+    val badge = render(content)
+    return if (label == null) LabeledMarkerIcon(BitmapDescriptorFactory.fromBitmap(badge), Offset(0.5f, 1f)) else drawLabeled(badge, label)
+  }
+
   private fun bitmap(key: Any, content: @Composable () -> Unit): Bitmap = bitmaps.getOrPut(key) { render(content) }
 
   // maps-compose の rememberComposeBitmapDescriptor と同じ描き方。描いている間だけ画面のルートに
