@@ -99,6 +99,8 @@ import com.pathly.presentation.common.MarkerVisitedGreen
 import com.pathly.presentation.common.NearbyPlaceConfirmDialog
 import com.pathly.presentation.common.RegisteredPlaceMarker
 import com.pathly.presentation.common.RegisteredPlaceMarkers
+import com.pathly.presentation.common.ScrollToTopButton
+import com.pathly.presentation.common.ScrollToTopButtonClearance
 import com.pathly.presentation.common.categoryGlyph
 import com.pathly.presentation.common.heightOf
 import com.pathly.presentation.common.rememberFloatingSheetState
@@ -461,19 +463,27 @@ private fun PlacesListContent(
           if (scrolledFor != null && scrolledFor != scrollKey) listState.scrollToItem(0)
           scrolledFor = scrollKey
         }
-        LazyColumn(
-          state = listState,
-          verticalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-          items(state.visibleItems, key = { it.place.id }) { item ->
-            PlaceItemRow(
-              item = item,
-              sort = state.sort,
-              onClick = { onItemClick(item) },
-              onToggleWishlist = { onToggleWishlist(item) },
-              onDelete = { onDeleteRequest(item) },
-            )
+        Box(modifier = Modifier.fillMaxSize()) {
+          LazyColumn(
+            state = listState,
+            // 最後の行が先頭へ戻るボタンの上まで上がるよう、下に余白を足す（右端の操作が隠れないように）。
+            contentPadding = PaddingValues(bottom = ScrollToTopButtonClearance),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+          ) {
+            items(state.visibleItems, key = { it.place.id }) { item ->
+              PlaceItemRow(
+                item = item,
+                sort = state.sort,
+                onClick = { onItemClick(item) },
+                onToggleWishlist = { onToggleWishlist(item) },
+                onDelete = { onDeleteRequest(item) },
+              )
+            }
           }
+          ScrollToTopButton(
+            listState = listState,
+            modifier = Modifier.align(Alignment.BottomEnd).padding(bottom = 8.dp),
+          )
         }
       }
     }

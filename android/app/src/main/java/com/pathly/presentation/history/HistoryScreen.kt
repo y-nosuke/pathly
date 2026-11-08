@@ -4,6 +4,7 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -12,6 +13,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
@@ -45,6 +47,8 @@ import com.pathly.R
 import com.pathly.domain.model.GpsTrack
 import com.pathly.domain.model.PlaceCategoryFacet
 import com.pathly.presentation.common.CategoryFilterChip
+import com.pathly.presentation.common.ScrollToTopButton
+import com.pathly.presentation.common.ScrollToTopButtonClearance
 import com.pathly.util.DateFormatters
 import kotlin.math.roundToInt
 
@@ -115,53 +119,63 @@ fun HistoryScreen(
 
       else -> {
         val visibleTracks = uiState.visibleTracks
-        LazyColumn(
-          verticalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-          item {
-            // 統計は一覧と同じく絞り込み後の経路で数える。絞っているときは全体の件数も添える。
-            StatisticsSummaryCard(
-              tracks = visibleTracks,
-              totalCount = uiState.tracks.size,
-              isFiltered = !uiState.noFilter,
-            )
-            Spacer(modifier = Modifier.height(16.dp))
-          }
-
-          // 記録中のアクティブトラックを表示
-          uiState.activeTrack?.let { activeTrack ->
+        val listState = rememberLazyListState()
+        Box(modifier = Modifier.fillMaxSize()) {
+          LazyColumn(
+            state = listState,
+            // 最後の行が先頭へ戻るボタンの上まで上がるよう、下に余白を足す（右端の操作が隠れないように）。
+            contentPadding = PaddingValues(bottom = ScrollToTopButtonClearance),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+          ) {
             item {
-              ActiveTrackItem(
-                track = activeTrack,
-                onTrackClick = { onTrackClick(activeTrack) },
+              // 統計は一覧と同じく絞り込み後の経路で数える。絞っているときは全体の件数も添える。
+              StatisticsSummaryCard(
+                tracks = visibleTracks,
+                totalCount = uiState.tracks.size,
+                isFiltered = !uiState.noFilter,
               )
-              Spacer(modifier = Modifier.height(8.dp))
+              Spacer(modifier = Modifier.height(16.dp))
+            }
+
+            // 記録中のアクティブトラックを表示
+            uiState.activeTrack?.let { activeTrack ->
+              item {
+                ActiveTrackItem(
+                  track = activeTrack,
+                  onTrackClick = { onTrackClick(activeTrack) },
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+              }
+            }
+
+            if (visibleTracks.isEmpty()) {
+              item {
+                Text(
+                  text = "条件に合う記録がありません",
+                  style = MaterialTheme.typography.bodyMedium,
+                  color = MaterialTheme.colorScheme.onSurfaceVariant,
+                  modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 24.dp),
+                  textAlign = TextAlign.Center,
+                )
+              }
+            }
+
+            items(visibleTracks) { track ->
+              TrackItem(
+                track = track,
+                onTrackClick = { onTrackClick(track) },
+                onToggleFavorite = { viewModel.toggleFavorite(track) },
+                onRenameClick = { renameTarget = track },
+                onDeleteClick = { deleteTarget = track },
+              )
             }
           }
-
-          if (visibleTracks.isEmpty()) {
-            item {
-              Text(
-                text = "条件に合う記録がありません",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier
-                  .fillMaxWidth()
-                  .padding(vertical = 24.dp),
-                textAlign = TextAlign.Center,
-              )
-            }
-          }
-
-          items(visibleTracks) { track ->
-            TrackItem(
-              track = track,
-              onTrackClick = { onTrackClick(track) },
-              onToggleFavorite = { viewModel.toggleFavorite(track) },
-              onRenameClick = { renameTarget = track },
-              onDeleteClick = { deleteTarget = track },
-            )
-          }
+          ScrollToTopButton(
+            listState = listState,
+            modifier = Modifier.align(Alignment.BottomEnd).padding(bottom = 8.dp),
+          )
         }
       }
     }
