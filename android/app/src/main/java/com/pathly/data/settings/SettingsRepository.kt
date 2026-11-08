@@ -62,29 +62,30 @@ class SettingsRepository @Inject constructor(
     showRegisteredPlacesFlows.getValue(surface).value = show
   }
 
-  // 地図に出す「登録済みの場所」の絞り込み。3 つの地図（記録／履歴詳細／場所詳細）で 1 つを共有し、
-  // 場所一覧の絞り込みとは別に持つ。表示のトグルと同じく、アプリを閉じても残す。
-  private val _mapPlaceFilter = MutableStateFlow(readMapPlaceFilter())
+  // 地図に出す「登録済みの場所」の絞り込み。表示のトグルと同じく画面（記録／履歴詳細／場所詳細）ごとに
+  // 独立して持ち、場所一覧の絞り込みとも別。アプリを閉じても残す。
+  private val mapPlaceFilterFlows: Map<MapSurface, MutableStateFlow<MapPlaceFilter>> =
+    MapSurface.entries.associateWith { surface -> MutableStateFlow(readMapPlaceFilter(surface)) }
 
-  /** 地図の「登録済みの場所」の絞り込み。UI が購読する。既定は絞り込みなし。 */
-  val mapPlaceFilter: StateFlow<MapPlaceFilter> = _mapPlaceFilter.asStateFlow()
+  /** その画面の地図の「登録済みの場所」の絞り込み。UI が購読する。既定は絞り込みなし。 */
+  fun mapPlaceFilter(surface: MapSurface): StateFlow<MapPlaceFilter> = mapPlaceFilterFlows.getValue(surface).asStateFlow()
 
-  fun setMapPlaceFilter(filter: MapPlaceFilter) {
+  fun setMapPlaceFilter(surface: MapSurface, filter: MapPlaceFilter) {
     prefs.edit {
-      putString(KEY_MAP_FILTER_WISHLISTED, filter.wishlisted.toTriStateKey())
-      putString(KEY_MAP_FILTER_VISITED, filter.visited.toTriStateKey())
+      putString(keyMapFilterWishlisted(surface), filter.wishlisted.toTriStateKey())
+      putString(keyMapFilterVisited(surface), filter.visited.toTriStateKey())
       // 書き出し（BackupArchive）が StringSet を扱わないので、名前をカンマでつないだ文字列で持つ。
-      putString(KEY_MAP_FILTER_CATEGORIES, filter.categories.joinToString(",") { it.name })
+      putString(keyMapFilterCategories(surface), filter.categories.joinToString(",") { it.name })
     }
-    _mapPlaceFilter.value = filter
+    mapPlaceFilterFlows.getValue(surface).value = filter
   }
 
   // 知らない値（版が変わって名前が無くなった業種など）は読み飛ばし、指定なしとして扱う。
-  private fun readMapPlaceFilter(): MapPlaceFilter {
-    val categoryNames = prefs.getString(KEY_MAP_FILTER_CATEGORIES, null).orEmpty().split(",").toSet()
+  private fun readMapPlaceFilter(surface: MapSurface): MapPlaceFilter {
+    val categoryNames = prefs.getString(keyMapFilterCategories(surface), null).orEmpty().split(",").toSet()
     return MapPlaceFilter(
-      wishlisted = prefs.getString(KEY_MAP_FILTER_WISHLISTED, null).fromTriStateKey(),
-      visited = prefs.getString(KEY_MAP_FILTER_VISITED, null).fromTriStateKey(),
+      wishlisted = prefs.getString(keyMapFilterWishlisted(surface), null).fromTriStateKey(),
+      visited = prefs.getString(keyMapFilterVisited(surface), null).fromTriStateKey(),
       categories = PlaceCategoryFacet.entries.filter { it.name in categoryNames }.toSet(),
     )
   }
@@ -102,9 +103,9 @@ class SettingsRepository @Inject constructor(
 
     private fun keyShowPlaces(surface: MapSurface): String = "show_registered_places_${surface.key}"
 
-    private const val KEY_MAP_FILTER_WISHLISTED = "map_place_filter_wishlisted"
-    private const val KEY_MAP_FILTER_VISITED = "map_place_filter_visited"
-    private const val KEY_MAP_FILTER_CATEGORIES = "map_place_filter_categories"
+    private fun keyMapFilterWishlisted(surface: MapSurface): String = "map_place_filter_wishlisted_${surface.key}"
+    private fun keyMapFilterVisited(surface: MapSurface): String = "map_place_filter_visited_${surface.key}"
+    private fun keyMapFilterCategories(surface: MapSurface): String = "map_place_filter_categories_${surface.key}"
 
     private fun Boolean?.toTriStateKey(): String = when (this) {
       null -> "any"

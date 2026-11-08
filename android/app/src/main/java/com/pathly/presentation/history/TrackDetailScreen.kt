@@ -150,7 +150,7 @@ fun TrackDetailScreen(
   registeredPlaces: List<RegisteredPlace> = emptyList(),
   showRegisteredPlaces: Boolean = false,
   onToggleRegisteredPlaces: () -> Unit = {},
-  // 地図の「登録済みの場所」の絞り込み（3 つの地図で共有。場所一覧とは別）。
+  // この画面の地図の「登録済みの場所」の絞り込み（地図ごとに独立。場所一覧とも別）。
   mapPlaceFilter: MapPlaceFilter = MapPlaceFilter(),
   onMapPlaceFilterChange: (MapPlaceFilter) -> Unit = {},
   // 手動追加モードで登録済みマーカーをタップ → その既存 place にこの訪問を紐付ける（②）。

@@ -71,11 +71,11 @@ class TrackDetailViewModel @Inject constructor(
     settingsRepository.setShowRegisteredPlaces(MapSurface.HISTORY, !showRegisteredPlaces.value)
   }
 
-  /** 地図の「登録済みの場所」の絞り込み（3 つの地図で共有。場所一覧とは別）。 */
-  val mapPlaceFilter: StateFlow<MapPlaceFilter> = settingsRepository.mapPlaceFilter
+  /** この画面の地図の「登録済みの場所」の絞り込み（地図ごとに独立。場所一覧とも別）。 */
+  val mapPlaceFilter: StateFlow<MapPlaceFilter> = settingsRepository.mapPlaceFilter(MapSurface.HISTORY)
 
   fun setMapPlaceFilter(filter: MapPlaceFilter) {
-    settingsRepository.setMapPlaceFilter(filter)
+    settingsRepository.setMapPlaceFilter(MapSurface.HISTORY, filter)
   }
 
   // 近接確認で「見えている」とみなす場所（表示 ON で、地図の絞り込みに合うか、この経路の立ち寄りとして

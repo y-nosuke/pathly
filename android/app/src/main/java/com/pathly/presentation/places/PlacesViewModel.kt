@@ -60,11 +60,11 @@ class PlacesViewModel @Inject constructor(
     settingsRepository.setShowRegisteredPlaces(MapSurface.PLACE_DETAIL, !_uiState.value.showRegisteredPlaces)
   }
 
-  /** 地図の「登録済みの場所」の絞り込み（3 つの地図で共有。場所一覧の絞り込みとは別）。 */
-  val mapPlaceFilter: StateFlow<MapPlaceFilter> = settingsRepository.mapPlaceFilter
+  /** この画面の地図の「登録済みの場所」の絞り込み（地図ごとに独立。場所一覧とも別）。 */
+  val mapPlaceFilter: StateFlow<MapPlaceFilter> = settingsRepository.mapPlaceFilter(MapSurface.PLACE_DETAIL)
 
   fun setMapPlaceFilter(filter: MapPlaceFilter) {
-    settingsRepository.setMapPlaceFilter(filter)
+    settingsRepository.setMapPlaceFilter(MapSurface.PLACE_DETAIL, filter)
   }
 
   // 近接確認で「見えている」とみなす場所（表示 ON で、地図の絞り込みに合うか、[mainPlaceId]＝場所詳細の

@@ -56,7 +56,7 @@ class TrackingViewModelTest {
   private val mockPlacesTextSearcher = mockk<PlacesTextSearcher>(relaxed = true)
   private val mockSettingsRepository = mockk<SettingsRepository>(relaxed = true).also {
     every { it.showRegisteredPlaces(any()) } returns MutableStateFlow(false)
-    every { it.mapPlaceFilter } returns MutableStateFlow(MapPlaceFilter())
+    every { it.mapPlaceFilter(any()) } returns MutableStateFlow(MapPlaceFilter())
   }
 
   /** 保存（確定）中かをテストから切り替えるための入口。 */

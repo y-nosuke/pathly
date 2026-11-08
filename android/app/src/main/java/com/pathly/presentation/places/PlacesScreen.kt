@@ -840,7 +840,7 @@ private fun PlaceDetailContent(
   registeredPlaces: List<RegisteredPlace> = emptyList(),
   showRegisteredPlaces: Boolean = false,
   onToggleRegisteredPlaces: () -> Unit = {},
-  // 地図の「登録済みの場所」の絞り込み（3 つの地図で共有。場所一覧の絞り込みとは別）。
+  // この画面の地図の「登録済みの場所」の絞り込み（地図ごとに独立。場所一覧とも別）。
   mapPlaceFilter: MapPlaceFilter = MapPlaceFilter(),
   onMapPlaceFilterChange: (MapPlaceFilter) -> Unit = {},
   // 地図タップでの場所登録（POI・空き地点とも）。近接確認の要否は ViewModel 側で判断する。
