@@ -102,13 +102,19 @@ class PlacesViewModel @Inject constructor(
     updateListOptions { it.copy(categoryFilter = emptySet()) }
   }
 
-  /** 絞り込みを全解除する（行きたい・訪問状況・業種をまとめて指定なしに戻す）。並べ替えは保持。 */
+  /** 名前の検索語を変える（入力のたびに一覧を絞る）。 */
+  fun setNameQuery(query: String) {
+    updateListOptions { it.copy(nameQuery = query) }
+  }
+
+  /** 絞り込みを全解除する（行きたい・訪問状況・業種・名前の検索語をまとめて指定なしに戻す）。並べ替えは保持。 */
   fun clearFilters() {
     updateListOptions {
       it.copy(
         wishlistFilter = WishlistFilter.ANY,
         visitedFilter = VisitedFilter.ANY,
         categoryFilter = emptySet(),
+        nameQuery = "",
       )
     }
   }

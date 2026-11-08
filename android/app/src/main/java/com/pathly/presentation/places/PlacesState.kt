@@ -8,6 +8,7 @@ import com.pathly.domain.model.PlacePrediction
 import com.pathly.domain.model.PlaceSearchResult
 import com.pathly.presentation.common.getEnum
 import com.pathly.presentation.common.getEnumSet
+import com.pathly.presentation.common.matchesNameQuery
 import com.pathly.presentation.common.putEnum
 import com.pathly.presentation.common.putEnumSet
 import java.text.Collator
@@ -53,6 +54,8 @@ data class PlacesState(
   val visitedFilter: VisitedFilter = VisitedFilter.ANY,
   // 業種は複数選べて、選んだどれかに当たれば残す（OR）。空＝指定なし。
   val categoryFilter: Set<PlaceCategoryFacet> = emptySet(),
+  // 名前の検索語（表示名に含むものだけ残す）。空＝指定なし。ほかの絞り込みとは AND。
+  val nameQuery: String = "",
   val sort: PlaceSort = PlaceSort.REGISTERED,
   val sortDescending: Boolean = PlaceSort.REGISTERED.defaultDescending,
   val isLoading: Boolean = false,
@@ -71,7 +74,10 @@ data class PlacesState(
 ) {
   /** 絞り込みを一切かけていないか（「すべて」チップの選択表示に使う）。 */
   val noFilter: Boolean
-    get() = wishlistFilter == WishlistFilter.ANY && visitedFilter == VisitedFilter.ANY && categoryFilter.isEmpty()
+    get() = wishlistFilter == WishlistFilter.ANY &&
+      visitedFilter == VisitedFilter.ANY &&
+      categoryFilter.isEmpty() &&
+      nameQuery.isBlank()
 
   /**
    * 一覧を先頭へ戻す条件（絞り込み・並べ替え・先頭の場所）をまとめた値。これが変わったときだけ先頭へ戻す。
@@ -82,6 +88,7 @@ data class PlacesState(
       wishlistFilter.name,
       visitedFilter.name,
       categoryFilter.map { it.name }.sorted().joinToString(","),
+      nameQuery.trim(),
       sort.name,
       sortDescending.toString(),
       visibleItems.firstOrNull()?.place?.id?.toString().orEmpty(),
@@ -106,7 +113,8 @@ data class PlacesState(
           VisitedFilter.UNVISITED -> !item.isVisited
         }
         val categoryOk = categoryFilter.isEmpty() || PlaceCategoryFacet.of(item.place) in categoryFilter
-        wishlistOk && visitedOk && categoryOk
+        val nameOk = matchesNameQuery(item.displayName, nameQuery)
+        wishlistOk && visitedOk && categoryOk && nameOk
       }
 
       // 各軸は昇順の比較器で定義し、降順ならまとめて反転する。
@@ -136,6 +144,7 @@ data class PlacesState(
 private const val KEY_WISHLIST = "places.wishlistFilter"
 private const val KEY_VISITED = "places.visitedFilter"
 private const val KEY_CATEGORY = "places.categoryFilter"
+private const val KEY_NAME_QUERY = "places.nameQuery"
 private const val KEY_SORT = "places.sort"
 private const val KEY_SORT_DESCENDING = "places.sortDescending"
 
@@ -146,6 +155,7 @@ fun PlacesState.withListOptionsFrom(handle: SavedStateHandle): PlacesState {
     wishlistFilter = handle.getEnum(KEY_WISHLIST, wishlistFilter),
     visitedFilter = handle.getEnum(KEY_VISITED, visitedFilter),
     categoryFilter = handle.getEnumSet<PlaceCategoryFacet>(KEY_CATEGORY),
+    nameQuery = handle.get<String>(KEY_NAME_QUERY).orEmpty(),
     sort = sort,
     sortDescending = handle.get<Boolean>(KEY_SORT_DESCENDING) ?: sort.defaultDescending,
   )
@@ -156,6 +166,7 @@ fun PlacesState.saveListOptionsTo(handle: SavedStateHandle) {
   handle.putEnum(KEY_WISHLIST, wishlistFilter)
   handle.putEnum(KEY_VISITED, visitedFilter)
   handle.putEnumSet(KEY_CATEGORY, categoryFilter)
+  handle[KEY_NAME_QUERY] = nameQuery
   handle.putEnum(KEY_SORT, sort)
   handle[KEY_SORT_DESCENDING] = sortDescending
 }

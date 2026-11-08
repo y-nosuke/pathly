@@ -8,6 +8,7 @@ import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performTextInput
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.pathly.domain.model.GpsPoint
 import com.pathly.domain.model.GpsTrack
@@ -427,6 +428,65 @@ class HistoryScreenTest {
     composeTestRule
       .onNodeWithText("記録がありません")
       .assertDoesNotExist()
+  }
+
+  @Test
+  fun historyScreen_nameQuery_showsOnlyMatchingTracks() {
+    uiStateFlow.value = HistoryState(
+      tracks = listOf(
+        createSampleTrack(id = 1L).copy(name = "秋の鎌倉さんぽ"),
+        createSampleTrack(id = 2L).copy(name = "江ノ島"),
+      ),
+      nameQuery = "鎌倉",
+    )
+
+    composeTestRule.setContent {
+      PathlyAndroidTheme {
+        HistoryScreen(viewModel = mockViewModel, onTrackClick = mockOnTrackClick)
+      }
+    }
+
+    composeTestRule.onNodeWithText("秋の鎌倉さんぽ").assertIsDisplayed()
+    composeTestRule.onNodeWithText("江ノ島").assertDoesNotExist()
+  }
+
+  @Test
+  fun historyScreen_nameQuery_typingAndClearingUpdatesQuery() {
+    uiStateFlow.value = HistoryState(tracks = listOf(createSampleTrack(id = 1L).copy(name = "秋の鎌倉さんぽ")))
+
+    composeTestRule.setContent {
+      PathlyAndroidTheme {
+        HistoryScreen(viewModel = mockViewModel, onTrackClick = mockOnTrackClick)
+      }
+    }
+
+    composeTestRule.onNodeWithText("名前・日付で検索").performTextInput("鎌")
+    verify { mockViewModel.setNameQuery("鎌") }
+
+    // 検索語があるときだけ × が出て、押すと検索語を消す。
+    composeTestRule.onNodeWithContentDescription("検索語を消す").assertDoesNotExist()
+    uiStateFlow.value = uiStateFlow.value.copy(nameQuery = "鎌")
+    composeTestRule.onNodeWithContentDescription("検索語を消す").performClick()
+    verify { mockViewModel.setNameQuery("") }
+  }
+
+  @Test
+  fun historyScreen_nameQueryWithNoMatch_showsNoMatchMessage() {
+    uiStateFlow.value = HistoryState(
+      tracks = listOf(createSampleTrack(id = 1L).copy(name = "秋の鎌倉さんぽ")),
+      nameQuery = "箱根",
+    )
+
+    composeTestRule.setContent {
+      PathlyAndroidTheme {
+        HistoryScreen(viewModel = mockViewModel, onTrackClick = mockOnTrackClick)
+      }
+    }
+
+    composeTestRule.onNodeWithText("条件に合う記録がありません").assertIsDisplayed()
+    // 絞り込み中なので「すべて」は選ばれていない（押せば検索語も消える）。
+    composeTestRule.onNodeWithText("すべて").performClick()
+    verify { mockViewModel.clearFilters() }
   }
 
   private fun createSampleTrack(
