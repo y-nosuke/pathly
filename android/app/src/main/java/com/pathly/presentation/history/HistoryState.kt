@@ -5,8 +5,10 @@ import com.pathly.domain.model.GpsTrack
 import com.pathly.domain.model.PlaceCategoryFacet
 import com.pathly.presentation.common.getEnum
 import com.pathly.presentation.common.getEnumSet
+import com.pathly.presentation.common.matchesNameQuery
 import com.pathly.presentation.common.putEnum
 import com.pathly.presentation.common.putEnumSet
+import com.pathly.util.DateFormatters
 import java.text.Collator
 import java.util.Locale
 
@@ -49,6 +51,8 @@ data class HistoryState(
   val stopFilter: TrackStopFilter = TrackStopFilter.ANY,
   // 立ち寄った場所の業種。複数選べて、選んだどれかに立ち寄っていれば残す（OR）。空＝指定なし。
   val categoryFilter: Set<PlaceCategoryFacet> = emptySet(),
+  // 名前の検索語（経路の名前、未命名なら一覧の見出しの日付に含むものだけ残す）。空＝指定なし。ほかの絞り込みとは AND。
+  val nameQuery: String = "",
   val sort: TrackSort = TrackSort.DATE,
   val sortDescending: Boolean = TrackSort.DATE.defaultDescending,
   val isLoading: Boolean = false,
@@ -59,7 +63,8 @@ data class HistoryState(
     get() = favoriteFilter == TrackFavoriteFilter.ANY &&
       namedFilter == TrackNamedFilter.ANY &&
       stopFilter == TrackStopFilter.ANY &&
-      categoryFilter.isEmpty()
+      categoryFilter.isEmpty() &&
+      nameQuery.isBlank()
 
   /** 業種ごとの、その業種に立ち寄った経路の件数（絞り込みの選択肢に添える）。0 件の業種は入らない。 */
   val categoryCounts: Map<PlaceCategoryFacet, Int>
@@ -85,7 +90,8 @@ data class HistoryState(
           TrackStopFilter.NO_STOPS -> track.stopCount == 0
         }
         val categoryOk = categoryFilter.isEmpty() || track.stopCategories.any { it in categoryFilter }
-        favoriteOk && namedOk && stopOk && categoryOk
+        val nameOk = matchesNameQuery(listTitleOf(track), nameQuery)
+        favoriteOk && namedOk && stopOk && categoryOk && nameOk
       }
 
       // 各軸は昇順の比較器で定義し、降順ならまとめて反転する。
@@ -109,6 +115,9 @@ data class HistoryState(
     }
 }
 
+/** 一覧のカードの見出し（名前。未命名なら日付）。名前の検索はこれに当てる。 */
+internal fun listTitleOf(track: GpsTrack): String = track.name?.takeIf { track.hasName } ?: DateFormatters.shortDate(track.startTime)
+
 /** 経路の所要時間（ミリ秒）。終了時刻が無ければ 0（並べ替えの安定用）。 */
 private fun durationMillisOf(track: GpsTrack): Long = track.endTime?.let { it.time - track.startTime.time }?.coerceAtLeast(0L) ?: 0L
 
@@ -116,6 +125,7 @@ private const val KEY_FAVORITE = "history.favoriteFilter"
 private const val KEY_NAMED = "history.namedFilter"
 private const val KEY_STOP = "history.stopFilter"
 private const val KEY_CATEGORY = "history.categoryFilter"
+private const val KEY_NAME_QUERY = "history.nameQuery"
 private const val KEY_SORT = "history.sort"
 private const val KEY_SORT_DESCENDING = "history.sortDescending"
 
@@ -127,6 +137,7 @@ fun HistoryState.withListOptionsFrom(handle: SavedStateHandle): HistoryState {
     namedFilter = handle.getEnum(KEY_NAMED, namedFilter),
     stopFilter = handle.getEnum(KEY_STOP, stopFilter),
     categoryFilter = handle.getEnumSet<PlaceCategoryFacet>(KEY_CATEGORY),
+    nameQuery = handle.get<String>(KEY_NAME_QUERY).orEmpty(),
     sort = sort,
     sortDescending = handle.get<Boolean>(KEY_SORT_DESCENDING) ?: sort.defaultDescending,
   )
@@ -138,6 +149,7 @@ fun HistoryState.saveListOptionsTo(handle: SavedStateHandle) {
   handle.putEnum(KEY_NAMED, namedFilter)
   handle.putEnum(KEY_STOP, stopFilter)
   handle.putEnumSet(KEY_CATEGORY, categoryFilter)
+  handle[KEY_NAME_QUERY] = nameQuery
   handle.putEnum(KEY_SORT, sort)
   handle[KEY_SORT_DESCENDING] = sortDescending
 }

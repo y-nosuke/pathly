@@ -47,6 +47,7 @@ import com.pathly.R
 import com.pathly.domain.model.GpsTrack
 import com.pathly.domain.model.PlaceCategoryFacet
 import com.pathly.presentation.common.CategoryFilterChip
+import com.pathly.presentation.common.ListNameSearchField
 import com.pathly.presentation.common.ScrollToTopButton
 import com.pathly.presentation.common.ScrollToTopButtonClearance
 import com.pathly.util.DateFormatters
@@ -82,6 +83,7 @@ fun HistoryScreen(
       FilterSortBar(
         state = uiState,
         onClearFilters = viewModel::clearFilters,
+        onNameQueryChange = viewModel::setNameQuery,
         onFavoriteFilterChange = viewModel::setFavoriteFilter,
         onNamedFilterChange = viewModel::setNamedFilter,
         onStopFilterChange = viewModel::setStopFilter,
@@ -225,6 +227,7 @@ fun HistoryScreen(
 private fun FilterSortBar(
   state: HistoryState,
   onClearFilters: () -> Unit,
+  onNameQueryChange: (String) -> Unit,
   onFavoriteFilterChange: (TrackFavoriteFilter) -> Unit,
   onNamedFilterChange: (TrackNamedFilter) -> Unit,
   onStopFilterChange: (TrackStopFilter) -> Unit,
@@ -235,6 +238,13 @@ private fun FilterSortBar(
   modifier: Modifier = Modifier,
 ) {
   Column(modifier = modifier) {
+    // 名前の検索（名前、未命名なら見出しの日付に含むものだけ残す）。ほかの絞り込みとは AND で、「すべて」で消える。
+    ListNameSearchField(
+      query = state.nameQuery,
+      onQueryChange = onNameQueryChange,
+      placeholder = "名前・日付で検索",
+    )
+    Spacer(modifier = Modifier.height(8.dp))
     // 絞り込みは4軸独立（お気に入り / 命名 / 立ち寄り / 業種）。横に収まらない端末向けに横スクロール可。
     Row(
       modifier = Modifier

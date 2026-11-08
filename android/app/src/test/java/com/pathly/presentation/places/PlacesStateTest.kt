@@ -88,6 +88,32 @@ class PlacesStateTest {
     assertNotEquals("先頭（登録が新しい id 4）が消えた", base.scrollResetKey, base.copy(items = items.filter { it.place.id != 4L }).scrollResetKey)
   }
 
+  @Test
+  fun nameQuery_keepsPlacesWhoseDisplayNameContainsIt() {
+    val state = PlacesState(items = items, nameQuery = "場所3")
+
+    assertEquals(listOf(3L), state.visibleItems.map { it.place.id })
+    assertFalse(state.noFilter)
+  }
+
+  @Test
+  fun nameQuery_isAndWithOtherAxes() {
+    // 「場所」は全部に当たるが、行きたいで絞ると行きたいのものだけ残る。
+    val state = PlacesState(items = items, nameQuery = "場所", wishlistFilter = WishlistFilter.WISHLISTED)
+
+    assertEquals(setOf(2L, 3L), state.visibleItems.map { it.place.id }.toSet())
+  }
+
+  @Test
+  fun nameQuery_roundTripsAndResetsScroll() {
+    val handle = SavedStateHandle()
+    PlacesState(nameQuery = "カフェ").saveListOptionsTo(handle)
+    assertEquals("カフェ", PlacesState().withListOptionsFrom(handle).nameQuery)
+
+    val base = PlacesState(items = items)
+    assertNotEquals(base.scrollResetKey, base.copy(nameQuery = "場所").scrollResetKey)
+  }
+
   private fun item(id: Long, googlePlaceId: String?, code: String?, wishlisted: Boolean = false) = PlaceListItem(
     place = Place(
       id = id,

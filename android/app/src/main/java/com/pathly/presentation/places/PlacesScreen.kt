@@ -91,6 +91,7 @@ import com.pathly.domain.model.RegisteredPlace
 import com.pathly.presentation.common.CategoryFilterChip
 import com.pathly.presentation.common.CloseInfoWindowWithSheet
 import com.pathly.presentation.common.FloatingSheet
+import com.pathly.presentation.common.ListNameSearchField
 import com.pathly.presentation.common.MapMarker
 import com.pathly.presentation.common.MapPinMarker
 import com.pathly.presentation.common.MarkerPickBlue
@@ -146,6 +147,7 @@ fun PlacesListRoute(
       onAddByMap = onAddByMap,
       onAddBySearch = onAddBySearch,
       onClearFilters = viewModel::clearFilters,
+      onNameQueryChange = viewModel::setNameQuery,
       onWishlistFilterChange = viewModel::setWishlistFilter,
       onVisitedFilterChange = viewModel::setVisitedFilter,
       onToggleCategoryFilter = viewModel::toggleCategoryFilter,
@@ -311,6 +313,7 @@ private fun PlacesListContent(
   onAddByMap: () -> Unit,
   onAddBySearch: () -> Unit,
   onClearFilters: () -> Unit,
+  onNameQueryChange: (String) -> Unit,
   onWishlistFilterChange: (WishlistFilter) -> Unit,
   onVisitedFilterChange: (VisitedFilter) -> Unit,
   onToggleCategoryFilter: (PlaceCategoryFacet) -> Unit,
@@ -363,6 +366,15 @@ private fun PlacesListContent(
     }
 
     Spacer(modifier = Modifier.height(12.dp))
+
+    // 名前の検索（表示名に含むものだけ残す）。ほかの絞り込みとは AND で、「すべて」で消える。
+    ListNameSearchField(
+      query = state.nameQuery,
+      onQueryChange = onNameQueryChange,
+      placeholder = "名前で検索",
+    )
+
+    Spacer(modifier = Modifier.height(8.dp))
 
     // 絞り込みは3軸独立（行きたい / 訪問状況 / 業種）。横に収まらない端末向けに横スクロール可。
     Row(
