@@ -59,6 +59,12 @@ internal class MapInfoWindowState {
   }
 }
 
+/**
+ * マーカーの重なり順の既定。登録済みの場所（0。いちばん奥）より 1 つ上に置く。
+ * 地図は負の zIndex を効かせないので、奥に置きたいものを 0 にし、他をこれで上げる。
+ */
+internal const val DEFAULT_MARKER_Z_INDEX = 1f
+
 /** 吹き出しの状態を作り、システムバックで閉じられるようにする。GoogleMap を置く側で呼ぶ。 */
 @Composable
 internal fun rememberMapInfoWindowState(): MapInfoWindowState {
@@ -105,6 +111,7 @@ internal fun MapMarker(
   title: String? = null,
   snippet: String? = null,
   dismissWithBack: Boolean = true,
+  zIndex: Float = DEFAULT_MARKER_Z_INDEX,
   onClick: () -> Unit = {},
   // MarkerComposable と同じく、中身は地図ではなく通常の UI として描く（ビットマップに焼く）。
   content: @Composable @UiComposable () -> Unit,
@@ -117,6 +124,7 @@ internal fun MapMarker(
     state = state,
     title = title,
     snippet = snippet,
+    zIndex = zIndex,
     onClick = {
       if (dismissWithBack) infoWindow.onMarkerClick(state)
       onClick()
@@ -144,7 +152,7 @@ internal fun MapMarker(
   snippet: String? = null,
   // マーカーが指す点。画像の幅・高さに対する割合で、既定は下端中央。
   anchor: Offset = Offset(0.5f, 1f),
-  zIndex: Float = 0f,
+  zIndex: Float = DEFAULT_MARKER_Z_INDEX,
   onClick: () -> Unit = {},
 ) {
   DisposableEffect(state) {
