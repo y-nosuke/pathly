@@ -13,15 +13,20 @@ import kotlin.math.sin
 
 /** 地図に 1 つのマーカーとして描くもの。1 件の場所か、近い場所のまとまり。 */
 internal sealed interface PlaceMapEntry {
-  data class Single(val place: RegisteredPlace) : PlaceMapEntry
+  /** 地図のマーカーを見分けるキー（Compose の key()）。1 件は場所の ID、まとまりは中の場所の ID の並び。 */
+  val mapKey: Any
+
+  data class Single(val place: RegisteredPlace) : PlaceMapEntry {
+    override val mapKey: Any get() = place.placeId
+  }
 
   /** 近い場所のまとまり。位置はまとめた場所の座標の平均。 */
   data class Cluster(val places: List<RegisteredPlace>) : PlaceMapEntry {
     val latitude: Double = places.sumOf { it.latitude } / places.size
     val longitude: Double = places.sumOf { it.longitude } / places.size
 
-    /** Compose の key。中身が同じなら同じマーカーとして扱う。 */
-    val key: String = places.joinToString(",", prefix = "cluster:") { it.placeId.toString() }
+    // 中身が同じなら同じマーカーとして扱う。
+    override val mapKey: Any = places.joinToString(",", prefix = "cluster:") { it.placeId.toString() }
 
     /** 中に「行きたい」が 1 件でもあるか。1 件ずつのマーカーと同じ旗で示す。 */
     val hasWishlisted: Boolean = places.any { it.isWishlisted }
