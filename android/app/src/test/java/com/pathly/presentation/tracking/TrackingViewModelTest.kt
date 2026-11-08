@@ -4,6 +4,7 @@ import com.pathly.data.places.PlacesTextSearcher
 import com.pathly.data.settings.SettingsRepository
 import com.pathly.data.tracking.TrackingController
 import com.pathly.domain.model.GpsTrack
+import com.pathly.domain.model.MapPlaceFilter
 import com.pathly.domain.model.Priority
 import com.pathly.domain.model.RegisteredPlace
 import com.pathly.domain.repository.GpsTrackRepository
@@ -55,6 +56,7 @@ class TrackingViewModelTest {
   private val mockPlacesTextSearcher = mockk<PlacesTextSearcher>(relaxed = true)
   private val mockSettingsRepository = mockk<SettingsRepository>(relaxed = true).also {
     every { it.showRegisteredPlaces(any()) } returns MutableStateFlow(false)
+    every { it.mapPlaceFilter(any()) } returns MutableStateFlow(MapPlaceFilter())
   }
 
   /** 保存（確定）中かをテストから切り替えるための入口。 */

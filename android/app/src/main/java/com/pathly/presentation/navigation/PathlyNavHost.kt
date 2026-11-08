@@ -253,6 +253,7 @@ private fun TrackDetailRoute(
   val reanalyzeCandidates by viewModel.reanalyzeCandidates.collectAsStateWithLifecycle()
   val registeredPlaces by viewModel.registeredPlaces.collectAsStateWithLifecycle()
   val showRegisteredPlaces by viewModel.showRegisteredPlaces.collectAsStateWithLifecycle()
+  val mapPlaceFilter by viewModel.mapPlaceFilter.collectAsStateWithLifecycle()
   val nearbyRegisterPrompt by viewModel.nearbyRegisterPrompt.collectAsStateWithLifecycle()
   val nearbyStopPrompt by viewModel.nearbyStopPrompt.collectAsStateWithLifecycle()
   val placeDeleteUndo by viewModel.deleteUndo.collectAsStateWithLifecycle()
@@ -305,6 +306,8 @@ private fun TrackDetailRoute(
     registeredPlaces = registeredPlaces,
     showRegisteredPlaces = showRegisteredPlaces,
     onToggleRegisteredPlaces = { viewModel.toggleShowRegisteredPlaces() },
+    mapPlaceFilter = mapPlaceFilter,
+    onMapPlaceFilterChange = viewModel::setMapPlaceFilter,
     onAddManualStopForPlace = { placeId, arrival, departure ->
       viewModel.addManualStopForPlace(placeId, arrival, departure)
     },

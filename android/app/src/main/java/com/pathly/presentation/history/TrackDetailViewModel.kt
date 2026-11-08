@@ -6,6 +6,7 @@ import com.pathly.data.places.PlacesTextSearcher
 import com.pathly.data.settings.MapSurface
 import com.pathly.data.settings.SettingsRepository
 import com.pathly.domain.model.GpsTrack
+import com.pathly.domain.model.MapPlaceFilter
 import com.pathly.domain.model.NearbyRegisterPrompt
 import com.pathly.domain.model.NearbyStopPrompt
 import com.pathly.domain.model.PlaceListItem
@@ -68,6 +69,23 @@ class TrackDetailViewModel @Inject constructor(
 
   fun toggleShowRegisteredPlaces() {
     settingsRepository.setShowRegisteredPlaces(MapSurface.HISTORY, !showRegisteredPlaces.value)
+  }
+
+  /** この画面の地図の「登録済みの場所」の絞り込み（地図ごとに独立。場所一覧とも別）。 */
+  val mapPlaceFilter: StateFlow<MapPlaceFilter> = settingsRepository.mapPlaceFilter(MapSurface.HISTORY)
+
+  fun setMapPlaceFilter(filter: MapPlaceFilter) {
+    settingsRepository.setMapPlaceFilter(MapSurface.HISTORY, filter)
+  }
+
+  // 近接確認で「見えている」とみなす場所（表示 ON で、地図の絞り込みに合うか、この経路の立ち寄りとして
+  // マーカーが出ている）。立ち寄りの場所は登録済みのマーカーには出さないが、番号のマーカーで見えている。
+  // 押した時点の条件で判断する。
+  private fun shownOnMap(): (RegisteredPlace) -> Boolean {
+    val show = showRegisteredPlaces.value
+    val filter = mapPlaceFilter.value
+    val stopPlaceIds = (stops.value.map { it.place.id } + listOfNotNull(currentStop.value?.place?.id)).toSet()
+    return { place -> show && (place.placeId in stopPlaceIds || filter.matches(place)) }
   }
 
   // 保存済みの補正後点列を反映したトラック。読み込み時に一度だけ設定する。
@@ -251,7 +269,7 @@ class TrackDetailViewModel @Inject constructor(
           visited,
           memo,
           googlePlaceId,
-          nearbyAlreadyVisible = showRegisteredPlaces.value,
+          isShownOnMap = shownOnMap(),
           googleName = googleName,
         )
         when (result) {
@@ -467,7 +485,7 @@ class TrackDetailViewModel @Inject constructor(
           departureTime,
           name,
           googlePlaceId,
-          nearbyAlreadyVisible = showRegisteredPlaces.value,
+          isShownOnMap = shownOnMap(),
           googleName = googleName,
         )
         when (result) {

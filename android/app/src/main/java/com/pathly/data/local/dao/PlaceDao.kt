@@ -125,7 +125,7 @@ interface PlaceDao {
       "(SELECT COUNT(*) FROM wishlist w WHERE w.placeId = p.id) AS wishlistCount, " +
       "(SELECT COUNT(*) FROM stops s WHERE s.placeId = p.id) AS visitCount, " +
       "(SELECT v.markedAt FROM visited_places v WHERE v.placeId = p.id LIMIT 1) AS markedVisitedAt, " +
-      "c.code AS categoryCode " +
+      "c.code AS categoryCode, (g.placeId IS NOT NULL) AS hasGoogleInfo " +
       "FROM places p LEFT JOIN google_places g ON g.placeId = p.id " +
       "LEFT JOIN google_place_categories c ON c.id = g.categoryId",
   )
@@ -146,7 +146,7 @@ interface PlaceDao {
       "(SELECT COUNT(*) FROM wishlist w WHERE w.placeId = p.id) AS wishlistCount, " +
       "(SELECT COUNT(*) FROM stops s WHERE s.placeId = p.id) AS visitCount, " +
       "(SELECT v.markedAt FROM visited_places v WHERE v.placeId = p.id LIMIT 1) AS markedVisitedAt, " +
-      "c.code AS categoryCode " +
+      "c.code AS categoryCode, (g.placeId IS NOT NULL) AS hasGoogleInfo " +
       "FROM places p LEFT JOIN google_places g ON g.placeId = p.id " +
       "LEFT JOIN google_place_categories c ON c.id = g.categoryId " +
       "WHERE COALESCE(g.latitude, p.latitude) BETWEEN :minLatitude AND :maxLatitude " +

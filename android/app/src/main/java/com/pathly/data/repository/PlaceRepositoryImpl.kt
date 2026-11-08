@@ -91,7 +91,7 @@ class PlaceRepositoryImpl @Inject constructor(
     rows.map { it.toRegisteredPlace() }
   }
 
-  override suspend fun findNearbyPlace(latitude: Double, longitude: Double): RegisteredPlace? {
+  override suspend fun findNearbyPlaces(latitude: Double, longitude: Double): List<RegisteredPlace> {
     // まず矩形（座標索引が効く）で絞り、そのうえで正確な距離で判定する。
     val bounds = Geo.boundsAround(latitude, longitude, StopDetector.RADIUS_METERS)
     return placeDao.getRegisteredPlacesInBounds(
@@ -102,8 +102,8 @@ class PlaceRepositoryImpl @Inject constructor(
     )
       .map { it.toRegisteredPlace() to distanceMeters(it.latitude, it.longitude, latitude, longitude) }
       .filter { it.second <= StopDetector.RADIUS_METERS }
-      .minByOrNull { it.second }
-      ?.first
+      .sortedBy { it.second }
+      .map { it.first }
   }
 
   private fun RegisteredPlaceRow.toRegisteredPlace(): RegisteredPlace = RegisteredPlace(
@@ -115,6 +115,7 @@ class PlaceRepositoryImpl @Inject constructor(
     // 「場所」タブと同じ判定: 立ち寄り記録があるか、手動で訪問済みにしたら訪問済み。
     isVisited = visitCount > 0 || markedVisitedAt != null,
     categoryCode = categoryCode,
+    hasGoogleInfo = hasGoogleInfo,
   )
 
   override fun unresolvedCountForTrack(trackId: Long): Flow<Int> = placeDao.countPlacesWithoutGoogleIdForTrack(trackId)

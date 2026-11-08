@@ -6,6 +6,7 @@ import com.pathly.data.places.PlacesTextSearcher
 import com.pathly.data.settings.MapSurface
 import com.pathly.data.settings.SettingsRepository
 import com.pathly.data.tracking.TrackingController
+import com.pathly.domain.model.MapPlaceFilter
 import com.pathly.domain.model.NearbyRegisterPrompt
 import com.pathly.domain.model.NearbyStopPrompt
 import com.pathly.domain.model.PlaceListItem
@@ -13,6 +14,7 @@ import com.pathly.domain.model.PlacePrediction
 import com.pathly.domain.model.PlaceSearchResult
 import com.pathly.domain.model.PlaceVisit
 import com.pathly.domain.model.Priority
+import com.pathly.domain.model.RegisteredPlace
 import com.pathly.domain.repository.GpsTrackRepository
 import com.pathly.domain.repository.PlaceRepository
 import com.pathly.domain.repository.WishlistRepository
@@ -121,6 +123,23 @@ class TrackingViewModel @Inject constructor(
 
   fun toggleShowRegisteredPlaces() {
     settingsRepository.setShowRegisteredPlaces(MapSurface.RECORDING, !_uiState.value.showRegisteredPlaces)
+  }
+
+  /** この画面の地図の「登録済みの場所」の絞り込み（地図ごとに独立。場所一覧とも別）。 */
+  val mapPlaceFilter: StateFlow<MapPlaceFilter> = settingsRepository.mapPlaceFilter(MapSurface.RECORDING)
+
+  fun setMapPlaceFilter(filter: MapPlaceFilter) {
+    settingsRepository.setMapPlaceFilter(MapSurface.RECORDING, filter)
+  }
+
+  // 近接確認で「見えている」とみなす場所（表示 ON で、地図の絞り込みに合うか、記録中の経路の立ち寄りとして
+  // マーカーが出ている）。立ち寄りの場所は登録済みのマーカーには出さないが、番号のマーカーで見えている。
+  // 押した時点の条件で判断する。
+  private fun shownOnMap(): (RegisteredPlace) -> Boolean {
+    val state = _uiState.value
+    val filter = mapPlaceFilter.value
+    val stopPlaceIds = (state.stops.map { it.place.id } + listOfNotNull(state.currentStop?.place?.id)).toSet()
+    return { place -> state.showRegisteredPlaces && (place.placeId in stopPlaceIds || filter.matches(place)) }
   }
 
   private fun observeCurrentStop() {
@@ -341,7 +360,7 @@ class TrackingViewModel @Inject constructor(
           visited,
           memo,
           googlePlaceId,
-          nearbyAlreadyVisible = _uiState.value.showRegisteredPlaces,
+          isShownOnMap = shownOnMap(),
           googleName = googleName,
         )
         when (result) {
@@ -526,7 +545,7 @@ class TrackingViewModel @Inject constructor(
           departureTime,
           name,
           googlePlaceId,
-          nearbyAlreadyVisible = _uiState.value.showRegisteredPlaces,
+          isShownOnMap = shownOnMap(),
           googleName = googleName,
         )
         when (result) {

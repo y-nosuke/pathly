@@ -40,9 +40,10 @@ class PlaceEditUseCase @Inject constructor(
    * 地図タップからの場所登録。**近接確認の要否まで含めて判断する**。
    *
    * - POI（[googlePlaceId] あり）は施設の同一性で同定するので確認しない
-   * - [nearbyAlreadyVisible] が true（登録済みの場所を地図に表示中）なら、ユーザーは
-   *   近くの既存をその目で見たうえで空き地点をタップしているので確認しない
-   * - それ以外は近くの既存を探し、あれば [RegisterResult.NearbyFound] を返して判断を委ねる
+   * - 近くの既存のうち、地図に見えているもの（[isShownOnMap] が true）は、ユーザーがその目で見たうえで
+   *   空き地点をタップしているので確認しない
+   * - 見えていないもの（表示 OFF、または地図の絞り込みで隠れている）が近くにあれば、最寄りのそれを
+   *   [RegisterResult.NearbyFound] で返して判断を委ねる（同じ場所の重複登録を防ぐ）
    *
    * この分岐はもともと TrackingScreen と TrackDetailScreen の Composable に同じものが
    * 書かれていた（ドメインの判断が UI 層にあり、画面ごとにずれる余地があった）。
@@ -56,7 +57,7 @@ class PlaceEditUseCase @Inject constructor(
     visited: Boolean,
     memo: String?,
     googlePlaceId: String?,
-    nearbyAlreadyVisible: Boolean,
+    isShownOnMap: (RegisteredPlace) -> Boolean,
     knownDetails: PlaceSearchResult? = null,
     googleName: String? = null,
   ): RegisterResult {
@@ -76,9 +77,9 @@ class PlaceEditUseCase @Inject constructor(
         googleName = googleName,
       )
     }
-    if (!nearbyAlreadyVisible) {
-      wishlistRepository.findNearbyPlace(latitude, longitude)?.let { return RegisterResult.NearbyFound(it) }
-    }
+    wishlistRepository.findNearbyPlaces(latitude, longitude)
+      .firstOrNull { !isShownOnMap(it) }
+      ?.let { return RegisterResult.NearbyFound(it) }
     return register(latitude, longitude, name, wishlist, priority, visited, memo, googlePlaceId = null, forceNewPlace = true)
   }
 

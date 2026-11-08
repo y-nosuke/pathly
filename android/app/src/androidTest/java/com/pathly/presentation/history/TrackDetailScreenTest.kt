@@ -1,5 +1,8 @@
 package com.pathly.presentation.history
 
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.test.assertHasClickAction
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsNotEnabled
@@ -14,6 +17,7 @@ import androidx.compose.ui.test.performTouchInput
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.pathly.domain.model.GpsPoint
 import com.pathly.domain.model.GpsTrack
+import com.pathly.domain.model.MapPlaceFilter
 import com.pathly.domain.model.Place
 import com.pathly.domain.model.PlacePrediction
 import com.pathly.domain.model.PlaceSearchResult
@@ -21,6 +25,7 @@ import com.pathly.domain.model.Stop
 import com.pathly.ui.theme.PathlyAndroidTheme
 import io.mockk.mockk
 import io.mockk.verify
+import org.junit.Assert.assertEquals
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
@@ -38,6 +43,55 @@ class TrackDetailScreenTest {
   @Before
   fun setup() {
     mockOnBackClick = mockk(relaxed = true)
+  }
+
+  @Test
+  fun trackDetailScreen_mapPlaceFilter_buttonOnlyWhenShowingRegisteredPlaces() {
+    val track = createSampleTrack()
+    var show by mutableStateOf(false)
+
+    composeTestRule.setContent {
+      PathlyAndroidTheme {
+        TrackDetailScreen(track = track, onBackClick = mockOnBackClick, showRegisteredPlaces = show, mapContent = {})
+      }
+    }
+
+    // 表示 OFF のときは絞り込みボタンを出さない。
+    composeTestRule.onNodeWithContentDescription("登録済みの場所を絞り込む").assertDoesNotExist()
+    show = true
+    composeTestRule.onNodeWithContentDescription("登録済みの場所を絞り込む").assertIsDisplayed()
+  }
+
+  @Test
+  fun trackDetailScreen_mapPlaceFilter_chipsChangeFilterAndActiveStateIsShown() {
+    val track = createSampleTrack()
+    var filter by mutableStateOf(MapPlaceFilter())
+
+    composeTestRule.setContent {
+      PathlyAndroidTheme {
+        TrackDetailScreen(
+          track = track,
+          onBackClick = mockOnBackClick,
+          showRegisteredPlaces = true,
+          mapPlaceFilter = filter,
+          onMapPlaceFilterChange = { filter = it },
+          mapContent = {},
+        )
+      }
+    }
+
+    composeTestRule.onNodeWithContentDescription("登録済みの場所を絞り込む").performClick()
+    // 行きたいのチップ: 指定なし → 行きたい → 行きたい以外。
+    composeTestRule.onNodeWithText("行きたい").performClick()
+    assertEquals(MapPlaceFilter(wishlisted = true), filter)
+    composeTestRule.onNodeWithText("行きたい").performClick()
+    assertEquals(MapPlaceFilter(wishlisted = false), filter)
+    composeTestRule.onNodeWithText("行きたい以外").assertIsDisplayed()
+    // 絞り込み中はボタンの説明が変わる（塗りつぶしの状態）。
+    composeTestRule.onNodeWithContentDescription("登録済みの場所を絞り込み中").assertExists()
+
+    composeTestRule.onNodeWithText("すべて外す").performClick()
+    assertEquals(MapPlaceFilter(), filter)
   }
 
   @Test

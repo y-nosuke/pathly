@@ -20,9 +20,14 @@ data class RegisteredPlace(
   val isWishlisted: Boolean = false,
   val isVisited: Boolean = false,
   val categoryCode: String? = null,
+  /** Google の施設情報があるか。業種の絞り込みで「未分類」と「その他」を分けるのに使う（一覧と同じ判定）。 */
+  val hasGoogleInfo: Boolean = categoryCode != null,
 ) {
   /** マーカーのグリフを選ぶための分類。業種が無ければ [PlaceCategoryGroup.OTHER]。 */
   val categoryGroup: PlaceCategoryGroup get() = PlaceCategoryGroup.of(categoryCode)
+
+  /** 業種の絞り込みの選択肢（一覧の [PlaceCategoryFacet.of] と同じ分け方）。 */
+  val categoryFacet: PlaceCategoryFacet get() = PlaceCategoryFacet.of(hasGoogleInfo, categoryCode)
 
   /** 表示名。名前（ユーザー名／Google名／住所のいずれか）が無ければ座標。 */
   val displayName: String
