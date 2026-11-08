@@ -2,6 +2,8 @@ package com.pathly.data.settings
 
 import android.content.Context
 import androidx.core.content.edit
+import com.pathly.domain.model.MapPlaceFilter
+import com.pathly.domain.model.PlaceCategoryFacet
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -60,6 +62,33 @@ class SettingsRepository @Inject constructor(
     showRegisteredPlacesFlows.getValue(surface).value = show
   }
 
+  // 地図に出す「登録済みの場所」の絞り込み。3 つの地図（記録／履歴詳細／場所詳細）で 1 つを共有し、
+  // 場所一覧の絞り込みとは別に持つ。表示のトグルと同じく、アプリを閉じても残す。
+  private val _mapPlaceFilter = MutableStateFlow(readMapPlaceFilter())
+
+  /** 地図の「登録済みの場所」の絞り込み。UI が購読する。既定は絞り込みなし。 */
+  val mapPlaceFilter: StateFlow<MapPlaceFilter> = _mapPlaceFilter.asStateFlow()
+
+  fun setMapPlaceFilter(filter: MapPlaceFilter) {
+    prefs.edit {
+      putString(KEY_MAP_FILTER_WISHLISTED, filter.wishlisted.toTriStateKey())
+      putString(KEY_MAP_FILTER_VISITED, filter.visited.toTriStateKey())
+      // 書き出し（BackupArchive）が StringSet を扱わないので、名前をカンマでつないだ文字列で持つ。
+      putString(KEY_MAP_FILTER_CATEGORIES, filter.categories.joinToString(",") { it.name })
+    }
+    _mapPlaceFilter.value = filter
+  }
+
+  // 知らない値（版が変わって名前が無くなった業種など）は読み飛ばし、指定なしとして扱う。
+  private fun readMapPlaceFilter(): MapPlaceFilter {
+    val categoryNames = prefs.getString(KEY_MAP_FILTER_CATEGORIES, null).orEmpty().split(",").toSet()
+    return MapPlaceFilter(
+      wishlisted = prefs.getString(KEY_MAP_FILTER_WISHLISTED, null).fromTriStateKey(),
+      visited = prefs.getString(KEY_MAP_FILTER_VISITED, null).fromTriStateKey(),
+      categories = PlaceCategoryFacet.entries.filter { it.name in categoryNames }.toSet(),
+    )
+  }
+
   companion object {
     const val DEFAULT_GPS_INTERVAL_SECONDS = 10
 
@@ -72,6 +101,22 @@ class SettingsRepository @Inject constructor(
     private const val KEY_LOCATION_ACCURACY = "location_accuracy"
 
     private fun keyShowPlaces(surface: MapSurface): String = "show_registered_places_${surface.key}"
+
+    private const val KEY_MAP_FILTER_WISHLISTED = "map_place_filter_wishlisted"
+    private const val KEY_MAP_FILTER_VISITED = "map_place_filter_visited"
+    private const val KEY_MAP_FILTER_CATEGORIES = "map_place_filter_categories"
+
+    private fun Boolean?.toTriStateKey(): String = when (this) {
+      null -> "any"
+      true -> "yes"
+      false -> "no"
+    }
+
+    private fun String?.fromTriStateKey(): Boolean? = when (this) {
+      "yes" -> true
+      "no" -> false
+      else -> null
+    }
   }
 }
 

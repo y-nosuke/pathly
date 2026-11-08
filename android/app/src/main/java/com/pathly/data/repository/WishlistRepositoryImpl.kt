@@ -151,7 +151,7 @@ class WishlistRepositoryImpl @Inject constructor(
 
   override suspend fun nearbyPois(latitude: Double, longitude: Double): List<PlaceSearchResult> = placeRepository.nearbyPois(latitude, longitude)
 
-  override suspend fun findNearbyPlace(latitude: Double, longitude: Double): RegisteredPlace? = placeRepository.findNearbyPlace(latitude, longitude)
+  override suspend fun findNearbyPlaces(latitude: Double, longitude: Double): List<RegisteredPlace> = placeRepository.findNearbyPlaces(latitude, longitude)
 
   override suspend fun renamePlace(placeId: Long, name: String) {
     placeDao.updateName(placeId, name.trim().ifBlank { null }, Date())

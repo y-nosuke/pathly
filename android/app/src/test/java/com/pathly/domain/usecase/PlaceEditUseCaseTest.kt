@@ -50,14 +50,14 @@ class PlaceEditUseCaseTest {
       visited = false,
       memo = null,
       googlePlaceId = "gp-1",
-      nearbyAlreadyVisible = false,
+      isShownOnMap = { false },
     )
 
     assertTrue(result is PlaceEditUseCase.RegisterResult.Registered)
     // 施設の同一性で同定するので forceNewPlace は false。
     coVerify { wishlistRepository.registerPlace(35.0, 139.0, "カフェ", null, "gp-1", false, null) }
     // POI は確認不要なので近くの既存は探さない。
-    coVerify(exactly = 0) { wishlistRepository.findNearbyPlace(any(), any()) }
+    coVerify(exactly = 0) { wishlistRepository.findNearbyPlaces(any(), any()) }
   }
 
   @Test
@@ -80,7 +80,7 @@ class PlaceEditUseCaseTest {
       visited = false,
       memo = null,
       googlePlaceId = "gp-1",
-      nearbyAlreadyVisible = false,
+      isShownOnMap = { false },
       knownDetails = known,
     )
 
@@ -89,7 +89,10 @@ class PlaceEditUseCaseTest {
   }
 
   @Test
-  fun `登録済みを地図表示中なら近接確認せず新規で登録する`() = runTest {
+  fun `近くの既存が地図に見えていれば近接確認せず新規で登録する`() = runTest {
+    val nearby = RegisteredPlace(placeId = 5L, name = "隣の店", latitude = 35.0, longitude = 139.0)
+    coEvery { wishlistRepository.findNearbyPlaces(any(), any()) } returns listOf(nearby)
+
     val result = useCase.registerWithNearbyCheck(
       latitude = 35.0,
       longitude = 139.0,
@@ -99,18 +102,40 @@ class PlaceEditUseCaseTest {
       visited = false,
       memo = null,
       googlePlaceId = null,
-      nearbyAlreadyVisible = true,
+      isShownOnMap = { true },
     )
 
     assertTrue(result is PlaceEditUseCase.RegisterResult.Registered)
-    coVerify(exactly = 0) { wishlistRepository.findNearbyPlace(any(), any()) }
     coVerify { wishlistRepository.registerPlace(35.0, 139.0, null, null, null, true, null) }
+  }
+
+  @Test
+  fun `地図の絞り込みで隠れた既存が近くにあれば登録せず確認を返す`() = runTest {
+    // 最寄りは見えている。2 番目に近いものが絞り込みで隠れている。
+    val visible = RegisteredPlace(placeId = 5L, name = "見えている店", latitude = 35.0, longitude = 139.0, isWishlisted = true)
+    val hidden = RegisteredPlace(placeId = 6L, name = "隠れた店", latitude = 35.0001, longitude = 139.0)
+    coEvery { wishlistRepository.findNearbyPlaces(any(), any()) } returns listOf(visible, hidden)
+
+    val result = useCase.registerWithNearbyCheck(
+      latitude = 35.0,
+      longitude = 139.0,
+      name = null,
+      wishlist = false,
+      priority = Priority.MEDIUM,
+      visited = false,
+      memo = null,
+      googlePlaceId = null,
+      isShownOnMap = { it.isWishlisted },
+    )
+
+    assertEquals(PlaceEditUseCase.RegisterResult.NearbyFound(hidden), result)
+    coVerify(exactly = 0) { wishlistRepository.registerPlace(any(), any(), any(), any(), any(), any(), any(), any()) }
   }
 
   @Test
   fun `近くに既存があれば登録せず確認を返す`() = runTest {
     val nearby = RegisteredPlace(placeId = 5L, name = "隣の店", latitude = 35.0, longitude = 139.0)
-    coEvery { wishlistRepository.findNearbyPlace(any(), any()) } returns nearby
+    coEvery { wishlistRepository.findNearbyPlaces(any(), any()) } returns listOf(nearby)
 
     val result = useCase.registerWithNearbyCheck(
       latitude = 35.0,
@@ -121,7 +146,7 @@ class PlaceEditUseCaseTest {
       visited = false,
       memo = null,
       googlePlaceId = null,
-      nearbyAlreadyVisible = false,
+      isShownOnMap = { false },
     )
 
     assertEquals(PlaceEditUseCase.RegisterResult.NearbyFound(nearby), result)
@@ -131,7 +156,7 @@ class PlaceEditUseCaseTest {
 
   @Test
   fun `近くに既存が無ければそのまま新規で登録する`() = runTest {
-    coEvery { wishlistRepository.findNearbyPlace(any(), any()) } returns null
+    coEvery { wishlistRepository.findNearbyPlaces(any(), any()) } returns emptyList()
 
     val result = useCase.registerWithNearbyCheck(
       latitude = 35.0,
@@ -142,7 +167,7 @@ class PlaceEditUseCaseTest {
       visited = false,
       memo = null,
       googlePlaceId = null,
-      nearbyAlreadyVisible = false,
+      isShownOnMap = { false },
     )
 
     assertTrue(result is PlaceEditUseCase.RegisterResult.Registered)

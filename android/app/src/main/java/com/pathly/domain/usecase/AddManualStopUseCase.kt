@@ -34,9 +34,10 @@ class AddManualStopUseCase @Inject constructor(
    * 立ち寄りを追加する。近接確認の要否まで含めて判断する。
    *
    * - POI（[googlePlaceId] あり）は施設の同一性で同定するので確認しない
-   * - [nearbyAlreadyVisible] が true（登録済みの場所を地図に表示中）なら、ユーザーは
-   *   近くの既存をその目で見たうえで地点を指しているので確認しない
-   * - それ以外は近くの既存を探し、あれば [AddResult.NearbyFound] を返して判断を委ねる
+   * - 近くの既存のうち、地図に見えているもの（[isShownOnMap] が true）は、ユーザーがその目で見たうえで
+   *   地点を指しているので確認しない
+   * - 見えていないもの（表示 OFF、または地図の絞り込みで隠れている）が近くにあれば、最寄りのそれを
+   *   [AddResult.NearbyFound] で返して判断を委ねる（同じ場所の重複登録を防ぐ）
    */
   suspend fun addWithNearbyCheck(
     trackId: Long,
@@ -46,11 +47,13 @@ class AddManualStopUseCase @Inject constructor(
     departureTime: Date,
     name: String?,
     googlePlaceId: String?,
-    nearbyAlreadyVisible: Boolean,
+    isShownOnMap: (RegisteredPlace) -> Boolean,
     googleName: String? = null,
   ): AddResult {
-    if (googlePlaceId == null && !nearbyAlreadyVisible) {
-      placeRepository.findNearbyPlace(latitude, longitude)?.let { return AddResult.NearbyFound(it) }
+    if (googlePlaceId == null) {
+      placeRepository.findNearbyPlaces(latitude, longitude)
+        .firstOrNull { !isShownOnMap(it) }
+        ?.let { return AddResult.NearbyFound(it) }
     }
     val stopId = placeRepository.addManualStop(
       trackId,

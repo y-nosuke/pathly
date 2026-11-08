@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import com.pathly.data.places.PlacesTextSearcher
 import com.pathly.data.settings.MapSurface
 import com.pathly.data.settings.SettingsRepository
+import com.pathly.domain.model.MapPlaceFilter
 import com.pathly.domain.model.NearbyRegisterPrompt
 import com.pathly.domain.model.PlaceCategoryFacet
 import com.pathly.domain.model.PlaceListItem
@@ -13,6 +14,7 @@ import com.pathly.domain.model.PlacePrediction
 import com.pathly.domain.model.PlaceSearchResult
 import com.pathly.domain.model.PlaceVisit
 import com.pathly.domain.model.Priority
+import com.pathly.domain.model.RegisteredPlace
 import com.pathly.domain.repository.WishlistRepository
 import com.pathly.domain.usecase.PlaceEditUseCase
 import com.pathly.presentation.common.toggled
@@ -56,6 +58,21 @@ class PlacesViewModel @Inject constructor(
 
   fun toggleShowRegisteredPlaces() {
     settingsRepository.setShowRegisteredPlaces(MapSurface.PLACE_DETAIL, !_uiState.value.showRegisteredPlaces)
+  }
+
+  /** 地図の「登録済みの場所」の絞り込み（3 つの地図で共有。場所一覧の絞り込みとは別）。 */
+  val mapPlaceFilter: StateFlow<MapPlaceFilter> = settingsRepository.mapPlaceFilter
+
+  fun setMapPlaceFilter(filter: MapPlaceFilter) {
+    settingsRepository.setMapPlaceFilter(filter)
+  }
+
+  // 近接確認で「見えている」とみなす場所（表示 ON で、地図の絞り込みに合うか、[mainPlaceId]＝場所詳細の
+  // 主マーカーとして出ている）。押した時点の条件で判断する。
+  private fun shownOnMap(mainPlaceId: Long?): (RegisteredPlace) -> Boolean {
+    val show = _uiState.value.showRegisteredPlaces
+    val filter = mapPlaceFilter.value
+    return { place -> show && (place.placeId == mainPlaceId || filter.matches(place)) }
   }
 
   private fun observePlaces() {
@@ -191,6 +208,8 @@ class PlacesViewModel @Inject constructor(
     googlePlaceId: String?,
     googleName: String? = null,
     knownDetails: PlaceSearchResult? = null,
+    // 場所詳細の地図から登録するときの、その場所（主マーカーで見えているので近接確認の対象にしない）。
+    mainPlaceId: Long? = null,
   ) {
     viewModelScope.launch {
       try {
@@ -203,7 +222,7 @@ class PlacesViewModel @Inject constructor(
           visited,
           memo,
           googlePlaceId,
-          nearbyAlreadyVisible = _uiState.value.showRegisteredPlaces,
+          isShownOnMap = shownOnMap(mainPlaceId),
           knownDetails = knownDetails,
           googleName = googleName,
         )

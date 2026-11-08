@@ -24,4 +24,6 @@ data class RegisteredPlaceRow(
    * マーカーのグリフを業種で出し分けるために引く。表示名は要らない（地図に文字は出さない）ので取らない。
    */
   val categoryCode: String?,
+  /** Google の施設情報（google_places の行）があるか。業種の絞り込みで「未分類」を分けるのに使う。 */
+  val hasGoogleInfo: Boolean,
 )

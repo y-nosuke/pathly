@@ -77,6 +77,7 @@ import com.pathly.presentation.common.CloseInfoWindowWithSheet
 import com.pathly.presentation.common.MapInfoWindowState
 import com.pathly.presentation.common.MapMarker
 import com.pathly.presentation.common.MapPinMarker
+import com.pathly.presentation.common.MapPlaceFilterButton
 import com.pathly.presentation.common.MarkerPickBlue
 import com.pathly.presentation.common.NearbyPlaceConfirmDialog
 import com.pathly.presentation.common.RegisteredPlaceMarkers
@@ -112,6 +113,7 @@ fun TrackingScreen(
   mapContent: (@Composable () -> Unit)? = null,
 ) {
   val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+  val mapPlaceFilter by viewModel.mapPlaceFilter.collectAsStateWithLifecycle()
   val snackbarHostState = remember { SnackbarHostState() }
 
   // 場所を削除したら「取り消す」を出す（場所一覧・経路詳細と同じ出し方）。
@@ -212,7 +214,8 @@ fun TrackingScreen(
         // 立ち寄りマーカーのタップで「場所を選び直す」（誤検知の訂正）。
         onStopClick = { reassignTarget = it },
         modifier = Modifier.fillMaxSize(),
-        registeredPlaces = if (uiState.showRegisteredPlaces) uiState.registeredPlaces else emptyList(),
+        // 表示 ON のとき、地図の絞り込みに合う場所だけを出す（まとまり・ラベルも絞った後で作られる）。
+        registeredPlaces = if (uiState.showRegisteredPlaces) uiState.registeredPlaces.filter(mapPlaceFilter::matches) else emptyList(),
         // 登録済みマーカーのタップ: 手動追加モード＝既存placeへ紐付け／通常＝場所シート（その場で編集）。
         manualHighlight = manualTarget?.let { _ ->
           val pts = uiState.currentTrack?.smoothedPoints.orEmpty()
@@ -246,23 +249,34 @@ fun TrackingScreen(
       )
     }
 
-    // 登録済みの場所を地図に出すトグル（記録画面・画面別）。上部右に置く。
-    Surface(
-      onClick = { viewModel.toggleShowRegisteredPlaces() },
-      shape = CircleShape,
-      color = if (uiState.showRegisteredPlaces) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surface,
-      shadowElevation = 4.dp,
+    // 登録済みの場所を地図に出すトグル（記録画面・画面別）。上部右に置き、ON のときは下に絞り込みボタンを出す。
+    Column(
       modifier = Modifier
         .align(Alignment.TopEnd)
         .statusBarsPadding()
         .padding(12.dp),
+      verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-      Icon(
-        painter = painterResource(R.drawable.ic_place),
-        contentDescription = if (uiState.showRegisteredPlaces) "登録済みの場所を隠す" else "登録済みの場所を表示",
-        tint = if (uiState.showRegisteredPlaces) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface,
-        modifier = Modifier.padding(8.dp),
-      )
+      Surface(
+        onClick = { viewModel.toggleShowRegisteredPlaces() },
+        shape = CircleShape,
+        color = if (uiState.showRegisteredPlaces) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surface,
+        shadowElevation = 4.dp,
+      ) {
+        Icon(
+          painter = painterResource(R.drawable.ic_place),
+          contentDescription = if (uiState.showRegisteredPlaces) "登録済みの場所を隠す" else "登録済みの場所を表示",
+          tint = if (uiState.showRegisteredPlaces) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface,
+          modifier = Modifier.padding(8.dp),
+        )
+      }
+      if (uiState.showRegisteredPlaces) {
+        MapPlaceFilterButton(
+          filter = mapPlaceFilter,
+          places = uiState.registeredPlaces,
+          onFilterChange = viewModel::setMapPlaceFilter,
+        )
+      }
     }
 
     // 記録中の左上操作（縦積み）: 「立ち寄りを追加」モード切替 と 「今ここ」ショートカット。

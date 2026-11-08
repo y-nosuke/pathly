@@ -62,8 +62,11 @@ interface WishlistRepository {
     googleName: String? = null,
   ): PlaceRegistration
 
-  /** 手動登録の近接確認用: 近く（検出半径 50m）に既存の場所があれば最寄り1件を返す（無ければ null）。 */
-  suspend fun findNearbyPlace(latitude: Double, longitude: Double): RegisteredPlace?
+  /**
+   * 手動登録の近接確認用: 近く（検出半径 50m）の既存の場所を、近い順に全部返す（無ければ空）。
+   * 地図に見えていない（表示 OFF・絞り込みで隠れた）ものが近接確認の対象になる。
+   */
+  suspend fun findNearbyPlaces(latitude: Double, longitude: Double): List<RegisteredPlace>
 
   /**
    * 既存の場所を、検索で選んだ Google 施設に紐付ける（`googlePlaceId` を持たない場所の情報補完）。

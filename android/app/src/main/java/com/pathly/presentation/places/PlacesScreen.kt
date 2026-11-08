@@ -77,6 +77,7 @@ import com.google.maps.android.compose.MapUiSettings
 import com.google.maps.android.compose.MarkerState
 import com.google.maps.android.compose.rememberCameraPositionState
 import com.pathly.R
+import com.pathly.domain.model.MapPlaceFilter
 import com.pathly.domain.model.NearbyRegisterPrompt
 import com.pathly.domain.model.Place
 import com.pathly.domain.model.PlaceCategory
@@ -94,6 +95,7 @@ import com.pathly.presentation.common.FloatingSheet
 import com.pathly.presentation.common.ListNameSearchField
 import com.pathly.presentation.common.MapMarker
 import com.pathly.presentation.common.MapPinMarker
+import com.pathly.presentation.common.MapPlaceFilterButton
 import com.pathly.presentation.common.MarkerPickBlue
 import com.pathly.presentation.common.MarkerUnvisitedGray
 import com.pathly.presentation.common.MarkerVisitedGreen
@@ -253,6 +255,7 @@ fun PlaceDetailRoute(
 
   val visitsFlow = remember(placeId) { viewModel.visitsFor(placeId) }
   val visits by visitsFlow.collectAsStateWithLifecycle(emptyList())
+  val mapPlaceFilter by viewModel.mapPlaceFilter.collectAsStateWithLifecycle()
 
   PlaceDetailContent(
     modifier = modifier,
@@ -282,12 +285,30 @@ fun PlaceDetailRoute(
           longitude = it.place.longitude,
           isWishlisted = it.isWishlisted,
           isVisited = it.isVisited,
+          // 業種のグリフと、地図の絞り込みの業種（未分類／その他の分け方）に使う。
+          categoryCode = it.place.category?.code,
+          hasGoogleInfo = it.place.googlePlaceId != null,
         )
       },
     showRegisteredPlaces = uiState.showRegisteredPlaces,
     onToggleRegisteredPlaces = { viewModel.toggleShowRegisteredPlaces() },
+    mapPlaceFilter = mapPlaceFilter,
+    onMapPlaceFilterChange = viewModel::setMapPlaceFilter,
     // 地図タップでの場所登録（POI・空き地点とも）。近接確認の要否は ViewModel が判断する。
-    onRegisterPlaceAtPoint = viewModel::registerPlaceWithNearbyCheck,
+    onRegisterPlaceAtPoint = { lat, lng, name, wishlist, priority, visited, memo, googlePlaceId, googleName ->
+      viewModel.registerPlaceWithNearbyCheck(
+        lat,
+        lng,
+        name,
+        wishlist,
+        priority,
+        visited,
+        memo,
+        googlePlaceId,
+        googleName,
+        mainPlaceId = placeId,
+      )
+    },
     nearbyRegisterPrompt = uiState.nearbyRegisterPrompt,
     onConfirmNearbyLink = viewModel::confirmNearbyLink,
     onConfirmNearbyNew = viewModel::confirmNearbyNew,
@@ -819,6 +840,9 @@ private fun PlaceDetailContent(
   registeredPlaces: List<RegisteredPlace> = emptyList(),
   showRegisteredPlaces: Boolean = false,
   onToggleRegisteredPlaces: () -> Unit = {},
+  // 地図の「登録済みの場所」の絞り込み（3 つの地図で共有。場所一覧の絞り込みとは別）。
+  mapPlaceFilter: MapPlaceFilter = MapPlaceFilter(),
+  onMapPlaceFilterChange: (MapPlaceFilter) -> Unit = {},
   // 地図タップでの場所登録（POI・空き地点とも）。近接確認の要否は ViewModel 側で判断する。
   onRegisterPlaceAtPoint: (lat: Double, lng: Double, name: String?, wishlist: Boolean, priority: Priority, visited: Boolean, memo: String?, googlePlaceId: String?, googleName: String?) -> Unit =
     { _, _, _, _, _, _, _, _, _ -> },
@@ -896,26 +920,40 @@ private fun PlaceDetailContent(
       // 登録済みの場所（トグルON）。この場所自身は主マーカーと重なるので除外済みのリストを描く。
       // タップで統一シート（この画面の詳細と同じ編集ができる）。
       if (showRegisteredPlaces) {
-        RegisteredPlaceMarkers(registeredPlaces, infoWindow) { placeSheetTarget = PlaceSheetTarget.Existing(it.placeId) }
+        // 地図の絞り込みに合う場所だけを出す（まとまり・ラベルも絞った後で作られる）。
+        RegisteredPlaceMarkers(registeredPlaces.filter(mapPlaceFilter::matches), infoWindow) {
+          placeSheetTarget = PlaceSheetTarget.Existing(it.placeId)
+        }
       }
     }
 
-    // 登録済みの場所を出すトグル（場所詳細・画面別）。戻るボタンの下に置く。
-    Surface(
-      onClick = onToggleRegisteredPlaces,
-      shape = CircleShape,
-      color = if (showRegisteredPlaces) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surface,
-      shadowElevation = 4.dp,
+    // 登録済みの場所を出すトグル（場所詳細・画面別）。右上に置き、ON のときは下に絞り込みボタンを出す。
+    Column(
       modifier = Modifier
         .align(Alignment.TopEnd)
         .padding(12.dp),
+      verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-      Icon(
-        painter = painterResource(R.drawable.ic_place),
-        contentDescription = if (showRegisteredPlaces) "登録済みの場所を隠す" else "登録済みの場所を表示",
-        tint = if (showRegisteredPlaces) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface,
-        modifier = Modifier.padding(8.dp),
-      )
+      Surface(
+        onClick = onToggleRegisteredPlaces,
+        shape = CircleShape,
+        color = if (showRegisteredPlaces) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surface,
+        shadowElevation = 4.dp,
+      ) {
+        Icon(
+          painter = painterResource(R.drawable.ic_place),
+          contentDescription = if (showRegisteredPlaces) "登録済みの場所を隠す" else "登録済みの場所を表示",
+          tint = if (showRegisteredPlaces) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface,
+          modifier = Modifier.padding(8.dp),
+        )
+      }
+      if (showRegisteredPlaces) {
+        MapPlaceFilterButton(
+          filter = mapPlaceFilter,
+          places = registeredPlaces,
+          onFilterChange = onMapPlaceFilterChange,
+        )
+      }
     }
 
     FilledTonalIconButton(

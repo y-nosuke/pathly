@@ -47,6 +47,7 @@ import com.google.android.gms.maps.model.LatLng
 import com.pathly.BuildConfig
 import com.pathly.R
 import com.pathly.domain.model.GpsTrack
+import com.pathly.domain.model.MapPlaceFilter
 import com.pathly.domain.model.NearbyRegisterPrompt
 import com.pathly.domain.model.NearbyStopPrompt
 import com.pathly.domain.model.PlaceListItem
@@ -61,6 +62,7 @@ import com.pathly.domain.model.StopCandidate
 import com.pathly.domain.model.TrackSmoother
 import com.pathly.presentation.common.CloseInfoWindowWithSheet
 import com.pathly.presentation.common.FloatingSheet
+import com.pathly.presentation.common.MapPlaceFilterButton
 import com.pathly.presentation.common.NearbyPlaceConfirmDialog
 import com.pathly.presentation.common.SheetDetent
 import com.pathly.presentation.common.heightOf
@@ -148,6 +150,9 @@ fun TrackDetailScreen(
   registeredPlaces: List<RegisteredPlace> = emptyList(),
   showRegisteredPlaces: Boolean = false,
   onToggleRegisteredPlaces: () -> Unit = {},
+  // 地図の「登録済みの場所」の絞り込み（3 つの地図で共有。場所一覧とは別）。
+  mapPlaceFilter: MapPlaceFilter = MapPlaceFilter(),
+  onMapPlaceFilterChange: (MapPlaceFilter) -> Unit = {},
   // 手動追加モードで登録済みマーカーをタップ → その既存 place にこの訪問を紐付ける（②）。
   onAddManualStopForPlace: (placeId: Long, arrival: Date, departure: Date) -> Unit = { _, _, _ -> },
   // 地図スロット。null（既定）は実マップ（GoogleMap）を描画する。
@@ -348,7 +353,8 @@ fun TrackDetailScreen(
           // この経路の立ち寄り（確定＝紫番号／滞在中＝ティール）と同じ場所は登録済みピンを二重に出さない。
           registeredPlaces = if (showRegisteredPlaces) {
             val stopPlaceIds = (stops.map { it.place.id } + listOfNotNull(liveCurrentStop?.place?.id)).toSet()
-            registeredPlaces.filter { it.placeId !in stopPlaceIds }
+            // 地図の絞り込みに合う場所だけを出す（まとまり・ラベルも絞った後で作られる）。
+            registeredPlaces.filter { it.placeId !in stopPlaceIds && mapPlaceFilter.matches(it) }
           } else {
             emptyList()
           },
@@ -467,6 +473,15 @@ fun TrackDetailScreen(
           contentDescription = if (showRegisteredPlaces) "登録済みの場所を隠す" else "登録済みの場所を表示",
           tint = if (showRegisteredPlaces) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface,
           modifier = Modifier.padding(8.dp),
+        )
+      }
+
+      // 表示 ON のときだけ、隣に絞り込みボタンを出す。
+      if (showRegisteredPlaces) {
+        MapPlaceFilterButton(
+          filter = mapPlaceFilter,
+          places = registeredPlaces,
+          onFilterChange = onMapPlaceFilterChange,
         )
       }
 

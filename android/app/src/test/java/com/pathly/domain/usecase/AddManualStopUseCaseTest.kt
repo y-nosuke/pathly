@@ -43,16 +43,19 @@ class AddManualStopUseCaseTest {
       departureTime = departure,
       name = "カフェ",
       googlePlaceId = "gp-1",
-      nearbyAlreadyVisible = false,
+      isShownOnMap = { false },
     )
 
     assertEquals(AddManualStopUseCase.AddResult.Added(55L), result)
-    coVerify(exactly = 0) { placeRepository.findNearbyPlace(any(), any()) }
+    coVerify(exactly = 0) { placeRepository.findNearbyPlaces(any(), any()) }
     coVerify { placeRepository.addManualStop(1L, 35.0, 139.0, arrival, departure, "カフェ", "gp-1", false) }
   }
 
   @Test
-  fun `登録済みを地図表示中なら近接確認しない`() = runTest {
+  fun `近くの既存が地図に見えていれば近接確認しない`() = runTest {
+    val nearby = RegisteredPlace(placeId = 5L, name = "隣の店", latitude = 35.0, longitude = 139.0)
+    coEvery { placeRepository.findNearbyPlaces(any(), any()) } returns listOf(nearby)
+
     val result = useCase.addWithNearbyCheck(
       trackId = 1L,
       latitude = 35.0,
@@ -61,17 +64,37 @@ class AddManualStopUseCaseTest {
       departureTime = departure,
       name = null,
       googlePlaceId = null,
-      nearbyAlreadyVisible = true,
+      isShownOnMap = { true },
     )
 
     assertEquals(AddManualStopUseCase.AddResult.Added(55L), result)
-    coVerify(exactly = 0) { placeRepository.findNearbyPlace(any(), any()) }
+  }
+
+  @Test
+  fun `地図の絞り込みで隠れた既存が近くにあれば確認を返す`() = runTest {
+    // 最寄りは見えている。2 番目に近いものが絞り込みで隠れている。
+    val visible = RegisteredPlace(placeId = 5L, name = "見えている店", latitude = 35.0, longitude = 139.0, isWishlisted = true)
+    val hidden = RegisteredPlace(placeId = 6L, name = "隠れた店", latitude = 35.0001, longitude = 139.0)
+    coEvery { placeRepository.findNearbyPlaces(any(), any()) } returns listOf(visible, hidden)
+
+    val result = useCase.addWithNearbyCheck(
+      trackId = 1L,
+      latitude = 35.0,
+      longitude = 139.0,
+      arrivalTime = arrival,
+      departureTime = departure,
+      name = null,
+      googlePlaceId = null,
+      isShownOnMap = { it.isWishlisted },
+    )
+
+    assertEquals(AddManualStopUseCase.AddResult.NearbyFound(hidden), result)
   }
 
   @Test
   fun `近くに既存があれば追加せず確認を返す`() = runTest {
     val nearby = RegisteredPlace(placeId = 5L, name = "隣の店", latitude = 35.0, longitude = 139.0)
-    coEvery { placeRepository.findNearbyPlace(any(), any()) } returns nearby
+    coEvery { placeRepository.findNearbyPlaces(any(), any()) } returns listOf(nearby)
 
     val result = useCase.addWithNearbyCheck(
       trackId = 1L,
@@ -81,7 +104,7 @@ class AddManualStopUseCaseTest {
       departureTime = departure,
       name = null,
       googlePlaceId = null,
-      nearbyAlreadyVisible = false,
+      isShownOnMap = { false },
     )
 
     assertEquals(AddManualStopUseCase.AddResult.NearbyFound(nearby), result)
@@ -91,7 +114,7 @@ class AddManualStopUseCaseTest {
 
   @Test
   fun `近くに既存が無ければそのまま追加する`() = runTest {
-    coEvery { placeRepository.findNearbyPlace(any(), any()) } returns null
+    coEvery { placeRepository.findNearbyPlaces(any(), any()) } returns emptyList()
 
     val result = useCase.addWithNearbyCheck(
       trackId = 1L,
@@ -101,7 +124,7 @@ class AddManualStopUseCaseTest {
       departureTime = departure,
       name = "名無し",
       googlePlaceId = null,
-      nearbyAlreadyVisible = false,
+      isShownOnMap = { false },
     )
 
     assertEquals(AddManualStopUseCase.AddResult.Added(55L), result)
