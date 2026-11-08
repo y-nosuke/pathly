@@ -272,7 +272,9 @@ internal fun RegisteredPlaceMarkers(
 
 // 登録済みの場所（1 件・まとまり）は、他のマーカー（立ち寄り・場所詳細の主マーカーなど）より奥に描く。
 // ズームの段が変わるたびに作り直すので、描く順だけに頼ると後から足されたこちらが前に出てしまう。
-private const val REGISTERED_PLACE_Z_INDEX = -1f
+// 他のマーカーは [MapMarker] の既定（[DEFAULT_MARKER_Z_INDEX]）で 1 つ上に置く。
+// **負の値にしない。** 地図（LATEST レンダラー）は負の zIndex を効かせず、0 と同じ扱いで後から足した方を前に出す。
+private const val REGISTERED_PLACE_Z_INDEX = 0f
 
 // まとまりをタップして寄ったとき、端の場所が画面の縁に貼り付かないための余白。
 private val ClusterBoundsPadding = 64.dp
