@@ -570,7 +570,7 @@ class TrackDetailScreenTest {
 
     // 一覧のカードと同じ見せ方: 名前が見出し、日付は副題。チップは「名前を編集」に変わる。
     composeTestRule.onNodeWithText("鎌倉さんぽ").assertIsDisplayed()
-    composeTestRule.onNodeWithText("2022年01月01日").assertIsDisplayed()
+    composeTestRule.onNodeWithText("2022年01月01日(土)").assertIsDisplayed()
     composeTestRule.onNodeWithText("名前を編集").assertIsDisplayed()
   }
 
