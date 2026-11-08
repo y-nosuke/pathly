@@ -57,7 +57,8 @@ class HistoryStateTest {
 
   @Test
   fun `名前の検索_ほかの絞り込みとはAND`() {
-    val state = HistoryState(tracks = tracks, nameQuery = "の", favoriteFilter = TrackFavoriteFilter.NOT_FAVORITE)
+    // 「鎌倉」に当たるのはお気に入りの経路だけなので、お気に入り以外で絞ると残らない。
+    val state = HistoryState(tracks = tracks, nameQuery = "鎌倉", favoriteFilter = TrackFavoriteFilter.NOT_FAVORITE)
 
     assertTrue(state.visibleTracks.isEmpty())
   }

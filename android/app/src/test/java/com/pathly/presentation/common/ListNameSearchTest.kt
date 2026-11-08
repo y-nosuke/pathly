@@ -37,8 +37,21 @@ class ListNameSearchTest {
   }
 
   @Test
-  fun `ひらがなとカタカナは同じとみなさない`() {
-    assertFalse(matchesNameQuery("カフェ", "かふぇ"))
+  fun `ひらがなとカタカナを区別しない`() {
+    assertTrue(matchesNameQuery("カフェ", "かふぇ"))
+    assertTrue(matchesNameQuery("かまくら", "カマクラ"))
+    assertTrue(matchesNameQuery("ｶﾌｪ", "かふぇ"))
+    assertTrue(matchesNameQuery("ヴィレッジ", "ゔぃれっじ"))
+  }
+
+  @Test
+  fun `長音はひらがなでもカタカナでも当たる`() {
+    assertTrue(matchesNameQuery("コーヒー", "こーひー"))
+  }
+
+  @Test
+  fun `漢字の読みでは探さない`() {
+    assertFalse(matchesNameQuery("鎌倉", "かまくら"))
   }
 
   @Test
