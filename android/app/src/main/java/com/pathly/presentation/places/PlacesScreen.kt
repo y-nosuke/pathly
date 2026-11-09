@@ -5,6 +5,7 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -61,6 +62,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
@@ -360,130 +362,142 @@ internal fun PlacesListContent(
   // （その間に絞り込みの結果が変わっていれば、戻ったときに合わせ直す）。
   val mapCamera = rememberPlacesMapCamera()
 
-  // 地図表示: 地図をタブいっぱいに広げ、見出し・検索欄・絞り込みは地図の上に重ねる。
-  if (state.viewMode == PlacesViewMode.MAP) {
-    PlacesMapLayout(
-      state = state,
-      onAddByMap = onAddByMap,
-      onAddBySearch = onAddBySearch,
-      onClearFilters = onClearFilters,
-      onNameQueryChange = onNameQueryChange,
-      onWishlistFilterChange = onWishlistFilterChange,
-      onVisitedFilterChange = onVisitedFilterChange,
-      onToggleCategoryFilter = onToggleCategoryFilter,
-      onClearCategoryFilter = onClearCategoryFilter,
-      onViewModeChange = onViewModeChange,
-      onControlsCollapsedChange = onControlsCollapsedChange,
-      onPlaceClick = onMapPlaceClick,
-      camera = mapCamera,
-      modifier = modifier,
-      mapContent = mapContent,
-    )
-    return
-  }
+  val isMap = state.viewMode == PlacesViewMode.MAP
+  // 地図は一度開いたら、一覧表示に切り替えても捨てずに一覧の裏に残す。作り直すと、地図の絵が読み込まれる
+  // までの一瞬、何も描かれていない面が見えてちらつくため。
+  var keepMap by rememberSaveable { mutableStateOf(false) }
+  LaunchedEffect(isMap) { if (isMap) keepMap = true }
 
-  Column(
-    modifier = modifier
-      .fillMaxSize()
-      .padding(16.dp),
-  ) {
-    PlacesHeader(
-      viewMode = state.viewMode,
-      onViewModeChange = onViewModeChange,
-      onAddByMap = onAddByMap,
-      onAddBySearch = onAddBySearch,
-    )
-
-    Spacer(modifier = Modifier.height(12.dp))
-
-    PlacesFilterControls(
-      state = state,
-      onClearFilters = onClearFilters,
-      onNameQueryChange = onNameQueryChange,
-      onWishlistFilterChange = onWishlistFilterChange,
-      onVisitedFilterChange = onVisitedFilterChange,
-      onToggleCategoryFilter = onToggleCategoryFilter,
-      onClearCategoryFilter = onClearCategoryFilter,
-    )
-
-    Spacer(modifier = Modifier.height(8.dp))
-
-    // 並べ替え（軸メニュー ＋ 昇順/降順トグル）。地図表示では並びに意味が無いので出さない。
-    Row(verticalAlignment = Alignment.CenterVertically) {
-      Box {
-        var sortOpen by remember { mutableStateOf(false) }
-        TextButton(onClick = { sortOpen = true }) {
-          Text(text = "並べ替え: ${state.sort.label} ▾")
-        }
-        DropdownMenu(expanded = sortOpen, onDismissRequest = { sortOpen = false }) {
-          PlaceSort.entries.forEach { sort ->
-            DropdownMenuItem(
-              text = { Text(sort.label) },
-              onClick = {
-                sortOpen = false
-                onSortChange(sort)
-              },
-            )
-          }
-        }
-      }
-      TextButton(onClick = onToggleSortDirection) {
-        Text(text = if (state.sortDescending) "降順 ↓" else "昇順 ↑")
-      }
+  Box(modifier = modifier.fillMaxSize()) {
+    // 地図表示: 地図をタブいっぱいに広げ、見出し・検索欄・絞り込みは地図の上に重ねる。
+    if (isMap || keepMap) {
+      PlacesMapLayout(
+        state = state,
+        visible = isMap,
+        onAddByMap = onAddByMap,
+        onAddBySearch = onAddBySearch,
+        onClearFilters = onClearFilters,
+        onNameQueryChange = onNameQueryChange,
+        onWishlistFilterChange = onWishlistFilterChange,
+        onVisitedFilterChange = onVisitedFilterChange,
+        onToggleCategoryFilter = onToggleCategoryFilter,
+        onClearCategoryFilter = onClearCategoryFilter,
+        onViewModeChange = onViewModeChange,
+        onControlsCollapsedChange = onControlsCollapsedChange,
+        onPlaceClick = onMapPlaceClick,
+        camera = mapCamera,
+        mapContent = mapContent,
+      )
     }
 
-    Spacer(modifier = Modifier.height(8.dp))
+    if (!isMap) {
+      Column(
+        modifier = Modifier
+          .fillMaxSize()
+          // 裏に残した地図を隠し、触っても地図に届かないようにする。
+          .background(MaterialTheme.colorScheme.background)
+          .pointerInput(Unit) {}
+          .padding(16.dp),
+      ) {
+        PlacesHeader(
+          viewMode = state.viewMode,
+          onViewModeChange = onViewModeChange,
+          onAddByMap = onAddByMap,
+          onAddBySearch = onAddBySearch,
+        )
 
-    when {
-      state.isLoading -> {
-        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-          CircularProgressIndicator()
-        }
-      }
+        Spacer(modifier = Modifier.height(12.dp))
 
-      state.visibleItems.isEmpty() -> {
-        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-          Text(
-            text = state.emptyMessage(),
-            style = MaterialTheme.typography.bodyLarge,
-            textAlign = TextAlign.Center,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-          )
-        }
-      }
+        PlacesFilterControls(
+          state = state,
+          onClearFilters = onClearFilters,
+          onNameQueryChange = onNameQueryChange,
+          onWishlistFilterChange = onWishlistFilterChange,
+          onVisitedFilterChange = onVisitedFilterChange,
+          onToggleCategoryFilter = onToggleCategoryFilter,
+          onClearCategoryFilter = onClearCategoryFilter,
+        )
 
-      else -> {
-        val listState = rememberLazyListState()
-        // 絞り込み・並べ替えを変えたとき、または先頭が変わったとき（＝追加時）に先頭へ戻す。
-        // 詳細から戻って一覧を出し直したときは戻さない（前に見ていた位置のまま）。そのため、最後に
-        // 先頭へ戻したときの条件を画面の状態として取っておき、条件が変わったときだけ動かす。
-        val scrollKey = state.scrollResetKey
-        var scrolledFor by rememberSaveable { mutableStateOf<String?>(null) }
-        LaunchedEffect(scrollKey) {
-          if (scrolledFor != null && scrolledFor != scrollKey) listState.scrollToItem(0)
-          scrolledFor = scrollKey
+        Spacer(modifier = Modifier.height(8.dp))
+
+        // 並べ替え（軸メニュー ＋ 昇順/降順トグル）。地図表示では並びに意味が無いので出さない。
+        Row(verticalAlignment = Alignment.CenterVertically) {
+          Box {
+            var sortOpen by remember { mutableStateOf(false) }
+            TextButton(onClick = { sortOpen = true }) {
+              Text(text = "並べ替え: ${state.sort.label} ▾")
+            }
+            DropdownMenu(expanded = sortOpen, onDismissRequest = { sortOpen = false }) {
+              PlaceSort.entries.forEach { sort ->
+                DropdownMenuItem(
+                  text = { Text(sort.label) },
+                  onClick = {
+                    sortOpen = false
+                    onSortChange(sort)
+                  },
+                )
+              }
+            }
+          }
+          TextButton(onClick = onToggleSortDirection) {
+            Text(text = if (state.sortDescending) "降順 ↓" else "昇順 ↑")
+          }
         }
-        Box(modifier = Modifier.fillMaxSize()) {
-          LazyColumn(
-            state = listState,
-            // 最後の行が先頭へ戻るボタンの上まで上がるよう、下に余白を足す（右端の操作が隠れないように）。
-            contentPadding = PaddingValues(bottom = ScrollToTopButtonClearance),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-          ) {
-            items(state.visibleItems, key = { it.place.id }) { item ->
-              PlaceItemRow(
-                item = item,
-                sort = state.sort,
-                onClick = { onItemClick(item) },
-                onToggleWishlist = { onToggleWishlist(item) },
-                onDelete = { onDeleteRequest(item) },
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        when {
+          state.isLoading -> {
+            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+              CircularProgressIndicator()
+            }
+          }
+
+          state.visibleItems.isEmpty() -> {
+            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+              Text(
+                text = state.emptyMessage(),
+                style = MaterialTheme.typography.bodyLarge,
+                textAlign = TextAlign.Center,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
               )
             }
           }
-          ScrollToTopButton(
-            listState = listState,
-            modifier = Modifier.align(Alignment.BottomEnd).padding(bottom = 8.dp),
-          )
+
+          else -> {
+            val listState = rememberLazyListState()
+            // 絞り込み・並べ替えを変えたとき、または先頭が変わったとき（＝追加時）に先頭へ戻す。
+            // 詳細から戻って一覧を出し直したときは戻さない（前に見ていた位置のまま）。そのため、最後に
+            // 先頭へ戻したときの条件を画面の状態として取っておき、条件が変わったときだけ動かす。
+            val scrollKey = state.scrollResetKey
+            var scrolledFor by rememberSaveable { mutableStateOf<String?>(null) }
+            LaunchedEffect(scrollKey) {
+              if (scrolledFor != null && scrolledFor != scrollKey) listState.scrollToItem(0)
+              scrolledFor = scrollKey
+            }
+            Box(modifier = Modifier.fillMaxSize()) {
+              LazyColumn(
+                state = listState,
+                // 最後の行が先頭へ戻るボタンの上まで上がるよう、下に余白を足す（右端の操作が隠れないように）。
+                contentPadding = PaddingValues(bottom = ScrollToTopButtonClearance),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+              ) {
+                items(state.visibleItems, key = { it.place.id }) { item ->
+                  PlaceItemRow(
+                    item = item,
+                    sort = state.sort,
+                    onClick = { onItemClick(item) },
+                    onToggleWishlist = { onToggleWishlist(item) },
+                    onDelete = { onDeleteRequest(item) },
+                  )
+                }
+              }
+              ScrollToTopButton(
+                listState = listState,
+                modifier = Modifier.align(Alignment.BottomEnd).padding(bottom = 8.dp),
+              )
+            }
+          }
         }
       }
     }
@@ -1519,6 +1533,8 @@ private fun PlacesFilterControls(
 @Composable
 private fun PlacesMapLayout(
   state: PlacesState,
+  // false のときは一覧表示の裏に地図だけを残している（重ねるものは出さない）。
+  visible: Boolean,
   onAddByMap: () -> Unit,
   onAddBySearch: () -> Unit,
   onClearFilters: () -> Unit,
@@ -1548,57 +1564,62 @@ private fun PlacesMapLayout(
       // 0 件でも地図を出し、文言を上に重ねる。
       PlacesMapView(
         items = state.visibleItems,
-        emptyMessage = if (state.visibleItems.isEmpty()) state.emptyMessage() else null,
+        emptyMessage = if (visible && state.visibleItems.isEmpty()) state.emptyMessage() else null,
         onPlaceClick = onPlaceClick,
+        visible = visible,
         camera = camera,
         contentPadding = PaddingValues(top = overlayHeight),
         mapContent = mapContent,
       )
     }
 
-    Box(
-      modifier = Modifier
-        .align(Alignment.TopCenter)
-        .fillMaxWidth()
-        .onSizeChanged { overlayHeight = with(density) { it.height.toDp() } },
-    ) {
-      if (state.controlsCollapsed) {
-        PlacesCollapsedBar(
-          state = state,
-          onViewModeChange = onViewModeChange,
-          onExpand = { onControlsCollapsedChange(false) },
-          modifier = Modifier.padding(12.dp),
-        )
-      } else {
-        Surface(
-          // 地図の文字が透けると読みにくいので、重ねたものは不透明にする。
-          color = MaterialTheme.colorScheme.surface,
-          shape = RoundedCornerShape(bottomStart = 16.dp, bottomEnd = 16.dp),
-          shadowElevation = 2.dp,
-        ) {
-          // 余白は一覧表示と揃え、切り替えても見出しの位置が動かないようにする。
-          Column(modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 12.dp)) {
-            PlacesHeader(
-              viewMode = state.viewMode,
-              onViewModeChange = onViewModeChange,
-              onAddByMap = onAddByMap,
-              onAddBySearch = onAddBySearch,
-              onCollapse = {
-                // 検索欄に入力中なら、キーボードも閉じる。
-                focusManager.clearFocus()
-                onControlsCollapsedChange(true)
-              },
-            )
-            Spacer(modifier = Modifier.height(12.dp))
-            PlacesFilterControls(
-              state = state,
-              onClearFilters = onClearFilters,
-              onNameQueryChange = onNameQueryChange,
-              onWishlistFilterChange = onWishlistFilterChange,
-              onVisitedFilterChange = onVisitedFilterChange,
-              onToggleCategoryFilter = onToggleCategoryFilter,
-              onClearCategoryFilter = onClearCategoryFilter,
-            )
+    // 一覧表示の裏にいる間は重ねない。高さは前に測った値のままにし、戻ったときに地図の余白が変わって
+    // 範囲がずれないようにする。
+    if (visible) {
+      Box(
+        modifier = Modifier
+          .align(Alignment.TopCenter)
+          .fillMaxWidth()
+          .onSizeChanged { overlayHeight = with(density) { it.height.toDp() } },
+      ) {
+        if (state.controlsCollapsed) {
+          PlacesCollapsedBar(
+            state = state,
+            onViewModeChange = onViewModeChange,
+            onExpand = { onControlsCollapsedChange(false) },
+            modifier = Modifier.padding(12.dp),
+          )
+        } else {
+          Surface(
+            // 地図の文字が透けると読みにくいので、重ねたものは不透明にする。
+            color = MaterialTheme.colorScheme.surface,
+            shape = RoundedCornerShape(bottomStart = 16.dp, bottomEnd = 16.dp),
+            shadowElevation = 2.dp,
+          ) {
+            // 余白は一覧表示と揃え、切り替えても見出しの位置が動かないようにする。
+            Column(modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 12.dp)) {
+              PlacesHeader(
+                viewMode = state.viewMode,
+                onViewModeChange = onViewModeChange,
+                onAddByMap = onAddByMap,
+                onAddBySearch = onAddBySearch,
+                onCollapse = {
+                  // 検索欄に入力中なら、キーボードも閉じる。
+                  focusManager.clearFocus()
+                  onControlsCollapsedChange(true)
+                },
+              )
+              Spacer(modifier = Modifier.height(12.dp))
+              PlacesFilterControls(
+                state = state,
+                onClearFilters = onClearFilters,
+                onNameQueryChange = onNameQueryChange,
+                onWishlistFilterChange = onWishlistFilterChange,
+                onVisitedFilterChange = onVisitedFilterChange,
+                onToggleCategoryFilter = onToggleCategoryFilter,
+                onClearCategoryFilter = onClearCategoryFilter,
+              )
+            }
           }
         }
       }
@@ -1673,6 +1694,7 @@ private fun PlacesMapView(
   items: List<PlaceListItem>,
   emptyMessage: String?,
   onPlaceClick: (Long) -> Unit,
+  visible: Boolean,
   camera: PlacesMapCamera,
   modifier: Modifier = Modifier,
   // 地図に重ねたもの（見出し・検索欄・絞り込み）の分の余白。範囲合わせ・Google のロゴ・0 件の文言がその下に収まる。
@@ -1685,6 +1707,8 @@ private fun PlacesMapView(
   val cameraPositionState = camera.position
   // マーカーの吹き出しをシステムバックで閉じられるようにする。
   val infoWindow = rememberMapInfoWindowState()
+  // 一覧表示の裏に回ったら吹き出しを閉じる。見えない吹き出しにバックを吸われないように。
+  LaunchedEffect(visible) { if (!visible) infoWindow.close() }
 
   // 範囲を合わせるのは、地図を初めて開いたときと絞り込みの結果が変わったときだけ。詳細から戻ったときや、
   // 一覧表示を挟んで地図に戻ったときは前に見ていた範囲のまま（[camera] は地図表示の外で持っている）。
