@@ -104,6 +104,19 @@ class PlacesStateTest {
     assertEquals(setOf(2L, 3L), state.visibleItems.map { it.place.id }.toSet())
   }
 
+  // 一覧／地図の切り替えも絞り込みと同じく残り、絞り込みの結果は見せ方に依らない。
+  @Test
+  fun viewMode_roundTripsAndKeepsFilters() {
+    val handle = SavedStateHandle()
+    PlacesState(viewMode = PlacesViewMode.MAP, wishlistFilter = WishlistFilter.WISHLISTED).saveListOptionsTo(handle)
+    val restored = PlacesState().withListOptionsFrom(handle)
+    assertEquals(PlacesViewMode.MAP, restored.viewMode)
+    assertEquals(PlacesViewMode.LIST, PlacesState().withListOptionsFrom(SavedStateHandle()).viewMode)
+
+    val list = PlacesState(items = items, wishlistFilter = WishlistFilter.WISHLISTED)
+    assertEquals(list.visibleItems, list.copy(viewMode = PlacesViewMode.MAP).visibleItems)
+  }
+
   @Test
   fun nameQuery_roundTripsAndResetsScroll() {
     val handle = SavedStateHandle()
