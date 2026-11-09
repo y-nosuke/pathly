@@ -118,6 +118,30 @@ class PlacesStateTest {
   }
 
   @Test
+  fun controlsCollapsed_roundTrips() {
+    val handle = SavedStateHandle()
+    PlacesState(controlsCollapsed = true).saveListOptionsTo(handle)
+    assertTrue(PlacesState().withListOptionsFrom(handle).controlsCollapsed)
+    assertFalse(PlacesState().withListOptionsFrom(SavedStateHandle()).controlsCollapsed)
+  }
+
+  @Test
+  fun activeFilterCount_countsEachAxisOnce() {
+    assertEquals(0, PlacesState().activeFilterCount)
+    assertEquals(
+      4,
+      PlacesState(
+        nameQuery = "カフェ",
+        wishlistFilter = WishlistFilter.WISHLISTED,
+        visitedFilter = VisitedFilter.UNVISITED,
+        categoryFilter = setOf(PlaceCategoryFacet.CAFE, PlaceCategoryFacet.PARK),
+      ).activeFilterCount,
+    )
+    // 空白だけの検索語は条件にならない（noFilter と同じ扱い）。
+    assertEquals(0, PlacesState(nameQuery = "  ").activeFilterCount)
+  }
+
+  @Test
   fun nameQuery_roundTripsAndResetsScroll() {
     val handle = SavedStateHandle()
     PlacesState(nameQuery = "カフェ").saveListOptionsTo(handle)

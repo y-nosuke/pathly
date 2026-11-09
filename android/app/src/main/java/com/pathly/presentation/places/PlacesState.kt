@@ -63,6 +63,8 @@ data class PlacesState(
   val sortDescending: Boolean = PlaceSort.REGISTERED.defaultDescending,
   // 一覧で見るか地図で見るか。絞り込みと同じく、アプリを使っている間は保つ。
   val viewMode: PlacesViewMode = PlacesViewMode.LIST,
+  // 地図表示で、地図に重ねた見出し・検索欄・絞り込みをたたんでいるか。たたんでも小さな帯は残る。
+  val controlsCollapsed: Boolean = false,
   val isLoading: Boolean = false,
   val errorMessage: String? = null,
   val search: SearchState = SearchState(),
@@ -83,6 +85,15 @@ data class PlacesState(
       visitedFilter == VisitedFilter.ANY &&
       categoryFilter.isEmpty() &&
       nameQuery.isBlank()
+
+  /** かけている絞り込みの数（名前の検索・行きたい・訪問状況・業種）。たたんだ帯に出す。 */
+  val activeFilterCount: Int
+    get() = listOf(
+      nameQuery.isNotBlank(),
+      wishlistFilter != WishlistFilter.ANY,
+      visitedFilter != VisitedFilter.ANY,
+      categoryFilter.isNotEmpty(),
+    ).count { it }
 
   /**
    * 一覧を先頭へ戻す条件（絞り込み・並べ替え・先頭の場所）をまとめた値。これが変わったときだけ先頭へ戻す。
@@ -153,6 +164,7 @@ private const val KEY_NAME_QUERY = "places.nameQuery"
 private const val KEY_SORT = "places.sort"
 private const val KEY_SORT_DESCENDING = "places.sortDescending"
 private const val KEY_VIEW_MODE = "places.viewMode"
+private const val KEY_CONTROLS_COLLAPSED = "places.controlsCollapsed"
 
 /** [handle] に保存した絞り込み・並べ替えを反映した状態。保存が無ければ既定のまま。 */
 fun PlacesState.withListOptionsFrom(handle: SavedStateHandle): PlacesState {
@@ -165,6 +177,7 @@ fun PlacesState.withListOptionsFrom(handle: SavedStateHandle): PlacesState {
     sort = sort,
     sortDescending = handle.get<Boolean>(KEY_SORT_DESCENDING) ?: sort.defaultDescending,
     viewMode = handle.getEnum(KEY_VIEW_MODE, viewMode),
+    controlsCollapsed = handle.get<Boolean>(KEY_CONTROLS_COLLAPSED) ?: controlsCollapsed,
   )
 }
 
@@ -177,4 +190,5 @@ fun PlacesState.saveListOptionsTo(handle: SavedStateHandle) {
   handle.putEnum(KEY_SORT, sort)
   handle[KEY_SORT_DESCENDING] = sortDescending
   handle.putEnum(KEY_VIEW_MODE, viewMode)
+  handle[KEY_CONTROLS_COLLAPSED] = controlsCollapsed
 }

@@ -59,8 +59,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -159,6 +161,7 @@ fun PlacesListRoute(
       onSortChange = viewModel::setSort,
       onToggleSortDirection = viewModel::toggleSortDirection,
       onViewModeChange = viewModel::setViewMode,
+      onControlsCollapsedChange = viewModel::setControlsCollapsed,
       onItemClick = { onItemClick(it.place.id) },
       onMapPlaceClick = onItemClick,
       onToggleWishlist = viewModel::toggleWishlist,
@@ -334,6 +337,8 @@ internal fun PlacesListContent(
   onSortChange: (PlaceSort) -> Unit,
   onToggleSortDirection: () -> Unit,
   onViewModeChange: (PlacesViewMode) -> Unit,
+  // 地図表示で、地図に重ねた見出し・検索欄・絞り込みをたたむ（true）／ひろげる（false）。
+  onControlsCollapsedChange: (Boolean) -> Unit,
   onItemClick: (PlaceListItem) -> Unit,
   // 地図表示のマーカーのタップ（場所の id）。一覧の行と同じく場所詳細へ進む。
   onMapPlaceClick: (Long) -> Unit,
@@ -348,126 +353,74 @@ internal fun PlacesListContent(
   // 吹き出しが出ているときは、後から登録される地図側の処理が先に吹き出しを閉じる。
   BackHandler(enabled = state.viewMode == PlacesViewMode.MAP) { onViewModeChange(PlacesViewMode.LIST) }
 
+  // 地図表示: 地図をタブいっぱいに広げ、見出し・検索欄・絞り込みは地図の上に重ねる。
+  if (state.viewMode == PlacesViewMode.MAP) {
+    PlacesMapLayout(
+      state = state,
+      onAddByMap = onAddByMap,
+      onAddBySearch = onAddBySearch,
+      onClearFilters = onClearFilters,
+      onNameQueryChange = onNameQueryChange,
+      onWishlistFilterChange = onWishlistFilterChange,
+      onVisitedFilterChange = onVisitedFilterChange,
+      onToggleCategoryFilter = onToggleCategoryFilter,
+      onClearCategoryFilter = onClearCategoryFilter,
+      onViewModeChange = onViewModeChange,
+      onControlsCollapsedChange = onControlsCollapsedChange,
+      onPlaceClick = onMapPlaceClick,
+      modifier = modifier,
+      mapContent = mapContent,
+    )
+    return
+  }
+
   Column(
     modifier = modifier
       .fillMaxSize()
       .padding(16.dp),
   ) {
-    Row(
-      modifier = Modifier.fillMaxWidth(),
-      horizontalArrangement = Arrangement.SpaceBetween,
-      verticalAlignment = Alignment.CenterVertically,
-    ) {
-      Text(
-        text = "場所",
-        style = MaterialTheme.typography.headlineMedium,
-        fontWeight = FontWeight.Bold,
-      )
-      Row(verticalAlignment = Alignment.CenterVertically) {
-        PlacesViewModeToggle(viewMode = state.viewMode, onChange = onViewModeChange)
-        Box {
-          var menuOpen by remember { mutableStateOf(false) }
-          Button(onClick = { menuOpen = true }) {
-            Icon(painter = painterResource(R.drawable.ic_place), contentDescription = null)
-            Text(text = " 追加")
-          }
-          DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+    PlacesHeader(
+      viewMode = state.viewMode,
+      onViewModeChange = onViewModeChange,
+      onAddByMap = onAddByMap,
+      onAddBySearch = onAddBySearch,
+    )
+
+    Spacer(modifier = Modifier.height(12.dp))
+
+    PlacesFilterControls(
+      state = state,
+      onClearFilters = onClearFilters,
+      onNameQueryChange = onNameQueryChange,
+      onWishlistFilterChange = onWishlistFilterChange,
+      onVisitedFilterChange = onVisitedFilterChange,
+      onToggleCategoryFilter = onToggleCategoryFilter,
+      onClearCategoryFilter = onClearCategoryFilter,
+    )
+
+    Spacer(modifier = Modifier.height(8.dp))
+
+    // 並べ替え（軸メニュー ＋ 昇順/降順トグル）。地図表示では並びに意味が無いので出さない。
+    Row(verticalAlignment = Alignment.CenterVertically) {
+      Box {
+        var sortOpen by remember { mutableStateOf(false) }
+        TextButton(onClick = { sortOpen = true }) {
+          Text(text = "並べ替え: ${state.sort.label} ▾")
+        }
+        DropdownMenu(expanded = sortOpen, onDismissRequest = { sortOpen = false }) {
+          PlaceSort.entries.forEach { sort ->
             DropdownMenuItem(
-              text = { Text("検索して追加") },
+              text = { Text(sort.label) },
               onClick = {
-                menuOpen = false
-                onAddBySearch()
-              },
-            )
-            DropdownMenuItem(
-              text = { Text("地図で選ぶ") },
-              onClick = {
-                menuOpen = false
-                onAddByMap()
+                sortOpen = false
+                onSortChange(sort)
               },
             )
           }
         }
       }
-    }
-
-    Spacer(modifier = Modifier.height(12.dp))
-
-    // 名前の検索（表示名に含むものだけ残す）。ほかの絞り込みとは AND で、「すべて」で消える。
-    ListNameSearchField(
-      query = state.nameQuery,
-      onQueryChange = onNameQueryChange,
-      placeholder = "名前で検索",
-    )
-
-    Spacer(modifier = Modifier.height(8.dp))
-
-    // 絞り込みは3軸独立（行きたい / 訪問状況 / 業種）。横に収まらない端末向けに横スクロール可。
-    Row(
-      modifier = Modifier
-        .fillMaxWidth()
-        .horizontalScroll(rememberScrollState()),
-      horizontalArrangement = Arrangement.spacedBy(8.dp),
-      verticalAlignment = Alignment.CenterVertically,
-    ) {
-      // すべて: 絞り込みを全解除。何も絞っていないときは選択状態にして現在地を示す。
-      FilterChip(
-        selected = state.noFilter,
-        onClick = onClearFilters,
-        label = { Text("すべて") },
-      )
-      // 行きたいは1つのトグル。タップで 指定なし→行きたい→行きたい以外→… と切り替わる。
-      FilterChip(
-        selected = state.wishlistFilter != WishlistFilter.ANY,
-        onClick = {
-          val next = WishlistFilter.entries[(state.wishlistFilter.ordinal + 1) % WishlistFilter.entries.size]
-          onWishlistFilterChange(next)
-        },
-        label = { Text(state.wishlistFilter.chipLabel) },
-      )
-      // 訪問状況も1つのトグル。タップで 指定なし→訪問済み→未訪問→… と切り替わる。
-      FilterChip(
-        selected = state.visitedFilter != VisitedFilter.ANY,
-        onClick = {
-          val next = VisitedFilter.entries[(state.visitedFilter.ordinal + 1) % VisitedFilter.entries.size]
-          onVisitedFilterChange(next)
-        },
-        label = { Text(state.visitedFilter.chipLabel) },
-      )
-      // 業種は複数選べる（選んだどれかに当たる場所を残す）。
-      CategoryFilterChip(
-        selected = state.categoryFilter,
-        counts = state.categoryCounts,
-        onToggle = onToggleCategoryFilter,
-        onClear = onClearCategoryFilter,
-      )
-    }
-
-    Spacer(modifier = Modifier.height(8.dp))
-
-    // 並べ替え（軸メニュー ＋ 昇順/降順トグル）。地図表示では並びに意味が無いので出さない。
-    if (state.viewMode == PlacesViewMode.LIST) {
-      Row(verticalAlignment = Alignment.CenterVertically) {
-        Box {
-          var sortOpen by remember { mutableStateOf(false) }
-          TextButton(onClick = { sortOpen = true }) {
-            Text(text = "並べ替え: ${state.sort.label} ▾")
-          }
-          DropdownMenu(expanded = sortOpen, onDismissRequest = { sortOpen = false }) {
-            PlaceSort.entries.forEach { sort ->
-              DropdownMenuItem(
-                text = { Text(sort.label) },
-                onClick = {
-                  sortOpen = false
-                  onSortChange(sort)
-                },
-              )
-            }
-          }
-        }
-        TextButton(onClick = onToggleSortDirection) {
-          Text(text = if (state.sortDescending) "降順 ↓" else "昇順 ↑")
-        }
+      TextButton(onClick = onToggleSortDirection) {
+        Text(text = if (state.sortDescending) "降順 ↓" else "昇順 ↑")
       }
     }
 
@@ -478,16 +431,6 @@ internal fun PlacesListContent(
         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
           CircularProgressIndicator()
         }
-      }
-
-      // 地図表示は 0 件でも地図を出し、文言を上に重ねる。
-      state.viewMode == PlacesViewMode.MAP -> {
-        PlacesMapView(
-          items = state.visibleItems,
-          emptyMessage = if (state.visibleItems.isEmpty()) state.emptyMessage() else null,
-          onPlaceClick = onMapPlaceClick,
-          mapContent = mapContent,
-        )
       }
 
       state.visibleItems.isEmpty() -> {
@@ -1446,6 +1389,259 @@ private fun PlaceListItem.toRegisteredPlace(): RegisteredPlace = RegisteredPlace
   hasGoogleInfo = place.googlePlaceId != null,
 )
 
+/** 場所タブの見出しの行（「場所」・一覧／地図の切り替え・追加）。[onCollapse] があれば右端にたたむボタンを出す。 */
+@Composable
+private fun PlacesHeader(
+  viewMode: PlacesViewMode,
+  onViewModeChange: (PlacesViewMode) -> Unit,
+  onAddByMap: () -> Unit,
+  onAddBySearch: () -> Unit,
+  onCollapse: (() -> Unit)? = null,
+) {
+  Row(
+    modifier = Modifier.fillMaxWidth(),
+    horizontalArrangement = Arrangement.SpaceBetween,
+    verticalAlignment = Alignment.CenterVertically,
+  ) {
+    Text(
+      text = "場所",
+      style = MaterialTheme.typography.headlineMedium,
+      fontWeight = FontWeight.Bold,
+    )
+    Row(verticalAlignment = Alignment.CenterVertically) {
+      PlacesViewModeToggle(viewMode = viewMode, onChange = onViewModeChange)
+      Box {
+        var menuOpen by remember { mutableStateOf(false) }
+        Button(onClick = { menuOpen = true }) {
+          Icon(painter = painterResource(R.drawable.ic_place), contentDescription = null)
+          Text(text = " 追加")
+        }
+        DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+          DropdownMenuItem(
+            text = { Text("検索して追加") },
+            onClick = {
+              menuOpen = false
+              onAddBySearch()
+            },
+          )
+          DropdownMenuItem(
+            text = { Text("地図で選ぶ") },
+            onClick = {
+              menuOpen = false
+              onAddByMap()
+            },
+          )
+        }
+      }
+      onCollapse?.let {
+        IconButton(onClick = it) {
+          Icon(painter = painterResource(R.drawable.ic_expand_less), contentDescription = "たたむ")
+        }
+      }
+    }
+  }
+}
+
+/** 名前の検索欄と絞り込みのチップ。一覧表示と地図表示で同じものを出す。 */
+@Composable
+private fun PlacesFilterControls(
+  state: PlacesState,
+  onClearFilters: () -> Unit,
+  onNameQueryChange: (String) -> Unit,
+  onWishlistFilterChange: (WishlistFilter) -> Unit,
+  onVisitedFilterChange: (VisitedFilter) -> Unit,
+  onToggleCategoryFilter: (PlaceCategoryFacet) -> Unit,
+  onClearCategoryFilter: () -> Unit,
+) {
+  // 名前の検索（表示名に含むものだけ残す）。ほかの絞り込みとは AND で、「すべて」で消える。
+  ListNameSearchField(
+    query = state.nameQuery,
+    onQueryChange = onNameQueryChange,
+    placeholder = "名前で検索",
+  )
+
+  Spacer(modifier = Modifier.height(8.dp))
+
+  // 絞り込みは3軸独立（行きたい / 訪問状況 / 業種）。横に収まらない端末向けに横スクロール可。
+  Row(
+    modifier = Modifier
+      .fillMaxWidth()
+      .horizontalScroll(rememberScrollState()),
+    horizontalArrangement = Arrangement.spacedBy(8.dp),
+    verticalAlignment = Alignment.CenterVertically,
+  ) {
+    // すべて: 絞り込みを全解除。何も絞っていないときは選択状態にして現在地を示す。
+    FilterChip(
+      selected = state.noFilter,
+      onClick = onClearFilters,
+      label = { Text("すべて") },
+    )
+    // 行きたいは1つのトグル。タップで 指定なし→行きたい→行きたい以外→… と切り替わる。
+    FilterChip(
+      selected = state.wishlistFilter != WishlistFilter.ANY,
+      onClick = {
+        val next = WishlistFilter.entries[(state.wishlistFilter.ordinal + 1) % WishlistFilter.entries.size]
+        onWishlistFilterChange(next)
+      },
+      label = { Text(state.wishlistFilter.chipLabel) },
+    )
+    // 訪問状況も1つのトグル。タップで 指定なし→訪問済み→未訪問→… と切り替わる。
+    FilterChip(
+      selected = state.visitedFilter != VisitedFilter.ANY,
+      onClick = {
+        val next = VisitedFilter.entries[(state.visitedFilter.ordinal + 1) % VisitedFilter.entries.size]
+        onVisitedFilterChange(next)
+      },
+      label = { Text(state.visitedFilter.chipLabel) },
+    )
+    // 業種は複数選べる（選んだどれかに当たる場所を残す）。
+    CategoryFilterChip(
+      selected = state.categoryFilter,
+      counts = state.categoryCounts,
+      onToggle = onToggleCategoryFilter,
+      onClear = onClearCategoryFilter,
+    )
+  }
+}
+
+/**
+ * 場所タブの地図表示。地図をタブいっぱいに広げ、見出し・検索欄・絞り込みを上に重ねる。重ねたものはたためて、
+ * たたむと一覧への切り替えと絞り込みの様子だけの小さな帯になる。地図の範囲合わせは重ねたものの下で行う。
+ */
+@Composable
+private fun PlacesMapLayout(
+  state: PlacesState,
+  onAddByMap: () -> Unit,
+  onAddBySearch: () -> Unit,
+  onClearFilters: () -> Unit,
+  onNameQueryChange: (String) -> Unit,
+  onWishlistFilterChange: (WishlistFilter) -> Unit,
+  onVisitedFilterChange: (VisitedFilter) -> Unit,
+  onToggleCategoryFilter: (PlaceCategoryFacet) -> Unit,
+  onClearCategoryFilter: () -> Unit,
+  onViewModeChange: (PlacesViewMode) -> Unit,
+  onControlsCollapsedChange: (Boolean) -> Unit,
+  onPlaceClick: (Long) -> Unit,
+  modifier: Modifier = Modifier,
+  mapContent: (@Composable () -> Unit)? = null,
+) {
+  val density = LocalDensity.current
+  val focusManager = LocalFocusManager.current
+  // 重ねたものの高さ。地図の上の余白にして、マーカー・範囲合わせ・0 件の文言が隠れないようにする。
+  var overlayHeight by remember { mutableStateOf(0.dp) }
+
+  Box(modifier = modifier.fillMaxSize()) {
+    if (state.isLoading) {
+      Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+        CircularProgressIndicator()
+      }
+    } else {
+      // 0 件でも地図を出し、文言を上に重ねる。
+      PlacesMapView(
+        items = state.visibleItems,
+        emptyMessage = if (state.visibleItems.isEmpty()) state.emptyMessage() else null,
+        onPlaceClick = onPlaceClick,
+        contentPadding = PaddingValues(top = overlayHeight),
+        mapContent = mapContent,
+      )
+    }
+
+    Box(
+      modifier = Modifier
+        .align(Alignment.TopCenter)
+        .fillMaxWidth()
+        .onSizeChanged { overlayHeight = with(density) { it.height.toDp() } },
+    ) {
+      if (state.controlsCollapsed) {
+        PlacesCollapsedBar(
+          state = state,
+          onViewModeChange = onViewModeChange,
+          onExpand = { onControlsCollapsedChange(false) },
+          modifier = Modifier.padding(12.dp),
+        )
+      } else {
+        Surface(
+          // 地図の文字が透けると読みにくいので、重ねたものは不透明にする。
+          color = MaterialTheme.colorScheme.surface,
+          shape = RoundedCornerShape(bottomStart = 16.dp, bottomEnd = 16.dp),
+          shadowElevation = 2.dp,
+        ) {
+          // 余白は一覧表示と揃え、切り替えても見出しの位置が動かないようにする。
+          Column(modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 12.dp)) {
+            PlacesHeader(
+              viewMode = state.viewMode,
+              onViewModeChange = onViewModeChange,
+              onAddByMap = onAddByMap,
+              onAddBySearch = onAddBySearch,
+              onCollapse = {
+                // 検索欄に入力中なら、キーボードも閉じる。
+                focusManager.clearFocus()
+                onControlsCollapsedChange(true)
+              },
+            )
+            Spacer(modifier = Modifier.height(12.dp))
+            PlacesFilterControls(
+              state = state,
+              onClearFilters = onClearFilters,
+              onNameQueryChange = onNameQueryChange,
+              onWishlistFilterChange = onWishlistFilterChange,
+              onVisitedFilterChange = onVisitedFilterChange,
+              onToggleCategoryFilter = onToggleCategoryFilter,
+              onClearCategoryFilter = onClearCategoryFilter,
+            )
+          }
+        }
+      }
+    }
+  }
+}
+
+/**
+ * 地図表示で見出し・検索欄・絞り込みをたたんだときの帯。一覧へ戻る切り替えと、絞り込んでいることが分かる件数を残す
+ * （絞り込みを忘れて「場所が足りない」と思わないように）。件数の部分を押してもひろがる。
+ */
+@Composable
+private fun PlacesCollapsedBar(
+  state: PlacesState,
+  onViewModeChange: (PlacesViewMode) -> Unit,
+  onExpand: () -> Unit,
+  modifier: Modifier = Modifier,
+) {
+  Surface(
+    modifier = modifier.fillMaxWidth(),
+    shape = RoundedCornerShape(28.dp),
+    color = MaterialTheme.colorScheme.surface,
+    shadowElevation = 2.dp,
+  ) {
+    Row(
+      modifier = Modifier.padding(horizontal = 4.dp),
+      verticalAlignment = Alignment.CenterVertically,
+    ) {
+      PlacesViewModeToggle(viewMode = state.viewMode, onChange = onViewModeChange)
+      Text(
+        text = state.collapsedSummary(),
+        style = MaterialTheme.typography.bodyLarge,
+        maxLines = 1,
+        overflow = TextOverflow.Ellipsis,
+        modifier = Modifier
+          .weight(1f)
+          .clickable(onClick = onExpand)
+          .padding(horizontal = 4.dp, vertical = 12.dp),
+      )
+      IconButton(onClick = onExpand) {
+        Icon(painter = painterResource(R.drawable.ic_expand_more), contentDescription = "ひろげる")
+      }
+    }
+  }
+}
+
+// たたんだ帯の文言。絞り込んでいなければ全件の数、絞り込んでいれば条件の数と「残った数 / 全件」。
+private fun PlacesState.collapsedSummary(): String = if (noFilter) {
+  "場所 ${items.size} 件"
+} else {
+  "絞り込み $activeFilterCount・${visibleItems.size} / ${items.size} 件"
+}
+
 /** 一覧表示と地図表示の切り替え。今と反対の見せ方のアイコンを出し、押すとそちらへ切り替わる。 */
 @Composable
 private fun PlacesViewModeToggle(viewMode: PlacesViewMode, onChange: (PlacesViewMode) -> Unit) {
@@ -1468,6 +1664,8 @@ private fun PlacesMapView(
   emptyMessage: String?,
   onPlaceClick: (Long) -> Unit,
   modifier: Modifier = Modifier,
+  // 地図に重ねたもの（見出し・検索欄・絞り込み）の分の余白。範囲合わせ・Google のロゴ・0 件の文言がその下に収まる。
+  contentPadding: PaddingValues = PaddingValues(),
   mapContent: (@Composable () -> Unit)? = null,
 ) {
   val context = LocalContext.current
@@ -1525,11 +1723,7 @@ private fun PlacesMapView(
     }
   }
 
-  Box(
-    modifier = modifier
-      .fillMaxSize()
-      .clip(RoundedCornerShape(8.dp)),
-  ) {
+  Box(modifier = modifier.fillMaxSize()) {
     if (mapContent != null) {
       mapContent()
     } else {
@@ -1541,24 +1735,30 @@ private fun PlacesMapView(
           mapToolbarEnabled = false,
           myLocationButtonEnabled = false,
         ),
+        contentPadding = contentPadding,
         onMapLoaded = { mapLoaded = true },
       ) {
         RegisteredPlaceMarkers(places, infoWindow) { onPlaceClick(it.placeId) }
       }
     }
     emptyMessage?.let { message ->
-      Surface(
-        shape = RoundedCornerShape(8.dp),
-        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.9f),
-        modifier = Modifier.align(Alignment.Center).padding(16.dp),
+      Box(
+        modifier = Modifier.fillMaxSize().padding(contentPadding),
+        contentAlignment = Alignment.Center,
       ) {
-        Text(
-          text = message,
-          style = MaterialTheme.typography.bodyLarge,
-          textAlign = TextAlign.Center,
-          color = MaterialTheme.colorScheme.onSurfaceVariant,
+        Surface(
+          shape = RoundedCornerShape(8.dp),
+          color = MaterialTheme.colorScheme.surface.copy(alpha = 0.9f),
           modifier = Modifier.padding(16.dp),
-        )
+        ) {
+          Text(
+            text = message,
+            style = MaterialTheme.typography.bodyLarge,
+            textAlign = TextAlign.Center,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(16.dp),
+          )
+        }
       }
     }
   }
