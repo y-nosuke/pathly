@@ -50,6 +50,8 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.MutableState
+import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -76,6 +78,7 @@ import com.google.android.gms.maps.model.CameraPosition
 import com.google.android.gms.maps.model.LatLng
 import com.google.android.gms.maps.model.LatLngBounds
 import com.google.android.gms.tasks.CancellationTokenSource
+import com.google.maps.android.compose.CameraPositionState
 import com.google.maps.android.compose.GoogleMap
 import com.google.maps.android.compose.MapUiSettings
 import com.google.maps.android.compose.MarkerState
@@ -353,6 +356,10 @@ internal fun PlacesListContent(
   // 吹き出しが出ているときは、後から登録される地図側の処理が先に吹き出しを閉じる。
   BackHandler(enabled = state.viewMode == PlacesViewMode.MAP) { onViewModeChange(PlacesViewMode.LIST) }
 
+  // 地図表示の範囲は、一覧表示に切り替えても捨てない。地図に戻ったら前に見ていた範囲のまま出す
+  // （その間に絞り込みの結果が変わっていれば、戻ったときに合わせ直す）。
+  val mapCamera = rememberPlacesMapCamera()
+
   // 地図表示: 地図をタブいっぱいに広げ、見出し・検索欄・絞り込みは地図の上に重ねる。
   if (state.viewMode == PlacesViewMode.MAP) {
     PlacesMapLayout(
@@ -368,6 +375,7 @@ internal fun PlacesListContent(
       onViewModeChange = onViewModeChange,
       onControlsCollapsedChange = onControlsCollapsedChange,
       onPlaceClick = onMapPlaceClick,
+      camera = mapCamera,
       modifier = modifier,
       mapContent = mapContent,
     )
@@ -1522,6 +1530,7 @@ private fun PlacesMapLayout(
   onViewModeChange: (PlacesViewMode) -> Unit,
   onControlsCollapsedChange: (Boolean) -> Unit,
   onPlaceClick: (Long) -> Unit,
+  camera: PlacesMapCamera,
   modifier: Modifier = Modifier,
   mapContent: (@Composable () -> Unit)? = null,
 ) {
@@ -1541,6 +1550,7 @@ private fun PlacesMapLayout(
         items = state.visibleItems,
         emptyMessage = if (state.visibleItems.isEmpty()) state.emptyMessage() else null,
         onPlaceClick = onPlaceClick,
+        camera = camera,
         contentPadding = PaddingValues(top = overlayHeight),
         mapContent = mapContent,
       )
@@ -1663,6 +1673,7 @@ private fun PlacesMapView(
   items: List<PlaceListItem>,
   emptyMessage: String?,
   onPlaceClick: (Long) -> Unit,
+  camera: PlacesMapCamera,
   modifier: Modifier = Modifier,
   // 地図に重ねたもの（見出し・検索欄・絞り込み）の分の余白。範囲合わせ・Google のロゴ・0 件の文言がその下に収まる。
   contentPadding: PaddingValues = PaddingValues(),
@@ -1671,16 +1682,14 @@ private fun PlacesMapView(
   val context = LocalContext.current
   val scope = rememberCoroutineScope()
   val places = remember(items) { items.map { it.toRegisteredPlace() } }
-  val cameraPositionState = rememberCameraPositionState {
-    position = CameraPosition.fromLatLngZoom(DEFAULT_LOCATION, 12f)
-  }
+  val cameraPositionState = camera.position
   // マーカーの吹き出しをシステムバックで閉じられるようにする。
   val infoWindow = rememberMapInfoWindowState()
 
-  // 範囲を合わせるのは、地図を開いたときと絞り込みの結果が変わったときだけ。詳細から戻ったときは
-  // 前に見ていた範囲のまま（カメラの位置と、最後に合わせた結果を画面の状態として残す）。
+  // 範囲を合わせるのは、地図を初めて開いたときと絞り込みの結果が変わったときだけ。詳細から戻ったときや、
+  // 一覧表示を挟んで地図に戻ったときは前に見ていた範囲のまま（[camera] は地図表示の外で持っている）。
   val fitKey = remember(places) { places.map { it.placeId }.sorted().joinToString(",") }
-  var fittedFor by rememberSaveable { mutableStateOf<String?>(null) }
+  var fittedFor by camera::fittedFor
   // 範囲（bounds）で合わせるには地図の大きさが決まっている必要があるので、読み込みを待つ。
   var mapLoaded by remember { mutableStateOf(false) }
   val boundsPaddingPx = with(LocalDensity.current) { PlacesMapBoundsPadding.roundToPx() }
@@ -1762,6 +1771,22 @@ private fun PlacesMapView(
       }
     }
   }
+}
+
+/** 地図表示の見ていた範囲と、最後に範囲を合わせたときの絞り込みの結果（場所の id を並べたもの）。 */
+@Stable
+internal class PlacesMapCamera(val position: CameraPositionState, fittedFor: MutableState<String?>) {
+  var fittedFor: String? by fittedFor
+}
+
+/** 地図表示の外（一覧と切り替える場所）で持つ。どちらも画面の状態として残り、詳細から戻っても保たれる。 */
+@Composable
+private fun rememberPlacesMapCamera(): PlacesMapCamera {
+  val position = rememberCameraPositionState {
+    position = CameraPosition.fromLatLngZoom(DEFAULT_LOCATION, 12f)
+  }
+  val fittedFor = rememberSaveable { mutableStateOf<String?>(null) }
+  return remember(position, fittedFor) { PlacesMapCamera(position, fittedFor) }
 }
 
 // 地図表示で絞り込んだ場所が全部入るよう範囲を合わせるときの、端の余白（マーカーと名前が切れないように）。
