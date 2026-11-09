@@ -341,6 +341,10 @@ internal fun PlacesListContent(
   onDeleteRequest: (PlaceListItem) -> Unit,
   modifier: Modifier = Modifier,
 ) {
+  // 地図表示はタブの中の一段奥の見方として扱い、システムバックで一覧表示へ戻す（タブは離れない）。
+  // 吹き出しが出ているときは、後から登録される地図側の処理が先に吹き出しを閉じる。
+  BackHandler(enabled = state.viewMode == PlacesViewMode.MAP) { onViewModeChange(PlacesViewMode.LIST) }
+
   Column(
     modifier = modifier
       .fillMaxSize()

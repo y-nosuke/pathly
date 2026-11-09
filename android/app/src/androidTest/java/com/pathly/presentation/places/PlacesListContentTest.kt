@@ -12,6 +12,7 @@ import androidx.compose.ui.test.onFirst
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.test.espresso.Espresso
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.pathly.domain.model.Place
 import com.pathly.domain.model.PlaceListItem
@@ -63,6 +64,16 @@ class PlacesListContentTest {
 
     composeTestRule.onNodeWithText("場所2").assertIsDisplayed()
     composeTestRule.onNodeWithText("場所1").assertDoesNotExist()
+  }
+
+  @Test
+  fun `地図表示でバックを押すと一覧に戻る`() {
+    setContent(PlacesState(items = listOf(plain, wished), viewMode = PlacesViewMode.MAP))
+
+    Espresso.pressBack()
+
+    composeTestRule.onNodeWithText("場所1").assertIsDisplayed()
+    composeTestRule.onNodeWithContentDescription("地図で見る").assertIsDisplayed()
   }
 
   @Test
