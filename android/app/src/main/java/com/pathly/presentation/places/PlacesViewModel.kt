@@ -124,6 +124,11 @@ class PlacesViewModel @Inject constructor(
     updateListOptions { it.copy(nameQuery = query) }
   }
 
+  /** 一覧表示と地図表示を切り替える（絞り込みはそのまま）。 */
+  fun setViewMode(mode: PlacesViewMode) {
+    updateListOptions { it.copy(viewMode = mode) }
+  }
+
   /** 絞り込みを全解除する（行きたい・訪問状況・業種・名前の検索語をまとめて指定なしに戻す）。並べ替えは保持。 */
   fun clearFilters() {
     updateListOptions {

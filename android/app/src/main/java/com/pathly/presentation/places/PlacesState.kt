@@ -38,6 +38,9 @@ enum class PlaceSort(val label: String, val defaultDescending: Boolean) {
   UPDATED("更新順", true),
 }
 
+/** 場所タブの見せ方（一覧／地図）。絞り込みは両方で共有する。 */
+enum class PlacesViewMode { LIST, MAP }
+
 /** キーワード検索の状態（追加＞検索して追加）。 */
 data class SearchState(
   val query: String = "",
@@ -58,6 +61,8 @@ data class PlacesState(
   val nameQuery: String = "",
   val sort: PlaceSort = PlaceSort.REGISTERED,
   val sortDescending: Boolean = PlaceSort.REGISTERED.defaultDescending,
+  // 一覧で見るか地図で見るか。絞り込みと同じく、アプリを使っている間は保つ。
+  val viewMode: PlacesViewMode = PlacesViewMode.LIST,
   val isLoading: Boolean = false,
   val errorMessage: String? = null,
   val search: SearchState = SearchState(),
@@ -147,6 +152,7 @@ private const val KEY_CATEGORY = "places.categoryFilter"
 private const val KEY_NAME_QUERY = "places.nameQuery"
 private const val KEY_SORT = "places.sort"
 private const val KEY_SORT_DESCENDING = "places.sortDescending"
+private const val KEY_VIEW_MODE = "places.viewMode"
 
 /** [handle] に保存した絞り込み・並べ替えを反映した状態。保存が無ければ既定のまま。 */
 fun PlacesState.withListOptionsFrom(handle: SavedStateHandle): PlacesState {
@@ -158,6 +164,7 @@ fun PlacesState.withListOptionsFrom(handle: SavedStateHandle): PlacesState {
     nameQuery = handle.get<String>(KEY_NAME_QUERY).orEmpty(),
     sort = sort,
     sortDescending = handle.get<Boolean>(KEY_SORT_DESCENDING) ?: sort.defaultDescending,
+    viewMode = handle.getEnum(KEY_VIEW_MODE, viewMode),
   )
 }
 
@@ -169,4 +176,5 @@ fun PlacesState.saveListOptionsTo(handle: SavedStateHandle) {
   handle[KEY_NAME_QUERY] = nameQuery
   handle.putEnum(KEY_SORT, sort)
   handle[KEY_SORT_DESCENDING] = sortDescending
+  handle.putEnum(KEY_VIEW_MODE, viewMode)
 }

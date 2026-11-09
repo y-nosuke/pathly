@@ -60,6 +60,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -71,6 +72,7 @@ import com.google.android.gms.location.LocationServices
 import com.google.android.gms.maps.CameraUpdateFactory
 import com.google.android.gms.maps.model.CameraPosition
 import com.google.android.gms.maps.model.LatLng
+import com.google.android.gms.maps.model.LatLngBounds
 import com.google.android.gms.tasks.CancellationTokenSource
 import com.google.maps.android.compose.GoogleMap
 import com.google.maps.android.compose.MapUiSettings
@@ -156,7 +158,9 @@ fun PlacesListRoute(
       onClearCategoryFilter = viewModel::clearCategoryFilter,
       onSortChange = viewModel::setSort,
       onToggleSortDirection = viewModel::toggleSortDirection,
+      onViewModeChange = viewModel::setViewMode,
       onItemClick = { onItemClick(it.place.id) },
+      onMapPlaceClick = onItemClick,
       onToggleWishlist = viewModel::toggleWishlist,
       // 確認ダイアログは出さず即時削除。取り消しは上のスナックバーから。
       onDeleteRequest = { viewModel.deletePlace(it.place.id) },
@@ -277,19 +281,7 @@ fun PlaceDetailRoute(
     // 登録済みの場所の地図表示（この場所自身は主マーカーと重なるので除外）。
     registeredPlaces = uiState.items
       .filter { it.place.id != placeId }
-      .map {
-        RegisteredPlace(
-          placeId = it.place.id,
-          name = it.displayName,
-          latitude = it.place.latitude,
-          longitude = it.place.longitude,
-          isWishlisted = it.isWishlisted,
-          isVisited = it.isVisited,
-          // 業種のグリフと、地図の絞り込みの業種（未分類／その他の分け方）に使う。
-          categoryCode = it.place.category?.code,
-          hasGoogleInfo = it.place.googlePlaceId != null,
-        )
-      },
+      .map { it.toRegisteredPlace() },
     showRegisteredPlaces = uiState.showRegisteredPlaces,
     onToggleRegisteredPlaces = { viewModel.toggleShowRegisteredPlaces() },
     mapPlaceFilter = mapPlaceFilter,
@@ -329,7 +321,7 @@ fun PlaceDetailRoute(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun PlacesListContent(
+internal fun PlacesListContent(
   state: PlacesState,
   onAddByMap: () -> Unit,
   onAddBySearch: () -> Unit,
@@ -341,7 +333,10 @@ private fun PlacesListContent(
   onClearCategoryFilter: () -> Unit,
   onSortChange: (PlaceSort) -> Unit,
   onToggleSortDirection: () -> Unit,
+  onViewModeChange: (PlacesViewMode) -> Unit,
   onItemClick: (PlaceListItem) -> Unit,
+  // 地図表示のマーカーのタップ（場所の id）。一覧の行と同じく場所詳細へ進む。
+  onMapPlaceClick: (Long) -> Unit,
   onToggleWishlist: (PlaceListItem) -> Unit,
   onDeleteRequest: (PlaceListItem) -> Unit,
   modifier: Modifier = Modifier,
@@ -361,27 +356,30 @@ private fun PlacesListContent(
         style = MaterialTheme.typography.headlineMedium,
         fontWeight = FontWeight.Bold,
       )
-      Box {
-        var menuOpen by remember { mutableStateOf(false) }
-        Button(onClick = { menuOpen = true }) {
-          Icon(painter = painterResource(R.drawable.ic_place), contentDescription = null)
-          Text(text = " 追加")
-        }
-        DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
-          DropdownMenuItem(
-            text = { Text("検索して追加") },
-            onClick = {
-              menuOpen = false
-              onAddBySearch()
-            },
-          )
-          DropdownMenuItem(
-            text = { Text("地図で選ぶ") },
-            onClick = {
-              menuOpen = false
-              onAddByMap()
-            },
-          )
+      Row(verticalAlignment = Alignment.CenterVertically) {
+        PlacesViewModeToggle(viewMode = state.viewMode, onChange = onViewModeChange)
+        Box {
+          var menuOpen by remember { mutableStateOf(false) }
+          Button(onClick = { menuOpen = true }) {
+            Icon(painter = painterResource(R.drawable.ic_place), contentDescription = null)
+            Text(text = " 追加")
+          }
+          DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+            DropdownMenuItem(
+              text = { Text("検索して追加") },
+              onClick = {
+                menuOpen = false
+                onAddBySearch()
+              },
+            )
+            DropdownMenuItem(
+              text = { Text("地図で選ぶ") },
+              onClick = {
+                menuOpen = false
+                onAddByMap()
+              },
+            )
+          }
         }
       }
     }
@@ -440,27 +438,29 @@ private fun PlacesListContent(
 
     Spacer(modifier = Modifier.height(8.dp))
 
-    // 並べ替え（軸メニュー ＋ 昇順/降順トグル）。
-    Row(verticalAlignment = Alignment.CenterVertically) {
-      Box {
-        var sortOpen by remember { mutableStateOf(false) }
-        TextButton(onClick = { sortOpen = true }) {
-          Text(text = "並べ替え: ${state.sort.label} ▾")
-        }
-        DropdownMenu(expanded = sortOpen, onDismissRequest = { sortOpen = false }) {
-          PlaceSort.entries.forEach { sort ->
-            DropdownMenuItem(
-              text = { Text(sort.label) },
-              onClick = {
-                sortOpen = false
-                onSortChange(sort)
-              },
-            )
+    // 並べ替え（軸メニュー ＋ 昇順/降順トグル）。地図表示では並びに意味が無いので出さない。
+    if (state.viewMode == PlacesViewMode.LIST) {
+      Row(verticalAlignment = Alignment.CenterVertically) {
+        Box {
+          var sortOpen by remember { mutableStateOf(false) }
+          TextButton(onClick = { sortOpen = true }) {
+            Text(text = "並べ替え: ${state.sort.label} ▾")
+          }
+          DropdownMenu(expanded = sortOpen, onDismissRequest = { sortOpen = false }) {
+            PlaceSort.entries.forEach { sort ->
+              DropdownMenuItem(
+                text = { Text(sort.label) },
+                onClick = {
+                  sortOpen = false
+                  onSortChange(sort)
+                },
+              )
+            }
           }
         }
-      }
-      TextButton(onClick = onToggleSortDirection) {
-        Text(text = if (state.sortDescending) "降順 ↓" else "昇順 ↑")
+        TextButton(onClick = onToggleSortDirection) {
+          Text(text = if (state.sortDescending) "降順 ↓" else "昇順 ↑")
+        }
       }
     }
 
@@ -473,11 +473,19 @@ private fun PlacesListContent(
         }
       }
 
+      // 地図表示は 0 件でも地図を出し、文言を上に重ねる。
+      state.viewMode == PlacesViewMode.MAP -> {
+        PlacesMapView(
+          items = state.visibleItems,
+          emptyMessage = if (state.visibleItems.isEmpty()) state.emptyMessage() else null,
+          onPlaceClick = onMapPlaceClick,
+        )
+      }
+
       state.visibleItems.isEmpty() -> {
         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
           Text(
-            // 場所はあるのに絞り込みで消えたときは、追加を促さず条件のせいだと分かる文言にする。
-            text = if (state.items.isEmpty()) "場所がありません\n「追加」から登録できます" else "条件に合う場所がありません",
+            text = state.emptyMessage(),
             style = MaterialTheme.typography.bodyLarge,
             textAlign = TextAlign.Center,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -1413,6 +1421,138 @@ internal fun PrioritySelector(
     }
   }
 }
+
+// 一覧・地図で 0 件のときの文言。場所はあるのに絞り込みで消えたときは、追加を促さず条件のせいだと分かる文言にする。
+private fun PlacesState.emptyMessage(): String = if (items.isEmpty()) "場所がありません\n「追加」から登録できます" else "条件に合う場所がありません"
+
+/** 地図に「登録済みの場所」として出すための形。 */
+private fun PlaceListItem.toRegisteredPlace(): RegisteredPlace = RegisteredPlace(
+  placeId = place.id,
+  name = displayName,
+  latitude = place.latitude,
+  longitude = place.longitude,
+  isWishlisted = isWishlisted,
+  isVisited = isVisited,
+  // 業種のグリフと、地図の絞り込みの業種（未分類／その他の分け方）に使う。
+  categoryCode = place.category?.code,
+  hasGoogleInfo = place.googlePlaceId != null,
+)
+
+/** 一覧表示と地図表示の切り替え。今と反対の見せ方のアイコンを出し、押すとそちらへ切り替わる。 */
+@Composable
+private fun PlacesViewModeToggle(viewMode: PlacesViewMode, onChange: (PlacesViewMode) -> Unit) {
+  val next = if (viewMode == PlacesViewMode.LIST) PlacesViewMode.MAP else PlacesViewMode.LIST
+  IconButton(onClick = { onChange(next) }) {
+    Icon(
+      painter = painterResource(if (next == PlacesViewMode.MAP) R.drawable.ic_map else R.drawable.ic_list),
+      contentDescription = if (next == PlacesViewMode.MAP) "地図で見る" else "一覧で見る",
+    )
+  }
+}
+
+/**
+ * 場所タブの地図表示。一覧と同じ絞り込みの結果（[items]）だけをマーカーで出す。見た目はほかの地図の
+ * 登録済みの場所と同じ（まとまり・名前のラベルも）。マーカーのタップは一覧の行と同じく場所詳細へ（[onPlaceClick]）。
+ */
+@Composable
+private fun PlacesMapView(
+  items: List<PlaceListItem>,
+  emptyMessage: String?,
+  onPlaceClick: (Long) -> Unit,
+  modifier: Modifier = Modifier,
+) {
+  val context = LocalContext.current
+  val scope = rememberCoroutineScope()
+  val places = remember(items) { items.map { it.toRegisteredPlace() } }
+  val cameraPositionState = rememberCameraPositionState {
+    position = CameraPosition.fromLatLngZoom(DEFAULT_LOCATION, 12f)
+  }
+  // マーカーの吹き出しをシステムバックで閉じられるようにする。
+  val infoWindow = rememberMapInfoWindowState()
+
+  // 範囲を合わせるのは、地図を開いたときと絞り込みの結果が変わったときだけ。詳細から戻ったときは
+  // 前に見ていた範囲のまま（カメラの位置と、最後に合わせた結果を画面の状態として残す）。
+  val fitKey = remember(places) { places.map { it.placeId }.sorted().joinToString(",") }
+  var fittedFor by rememberSaveable { mutableStateOf<String?>(null) }
+  // 範囲（bounds）で合わせるには地図の大きさが決まっている必要があるので、読み込みを待つ。
+  var mapLoaded by remember { mutableStateOf(false) }
+  val boundsPaddingPx = with(LocalDensity.current) { PlacesMapBoundsPadding.roundToPx() }
+  LaunchedEffect(fitKey, mapLoaded) {
+    if (!mapLoaded || fitKey == fittedFor) return@LaunchedEffect
+    val firstFit = fittedFor == null
+    fittedFor = fitKey
+    when (places.size) {
+      // 0 件: 最初に開いたときだけ現在地あたりへ寄る。絞り込みで 0 件になったときは今の範囲のまま。
+      0 -> if (firstFit) {
+        try {
+          LocationServices.getFusedLocationProviderClient(context).getCurrentLocation(
+            com.google.android.gms.location.Priority.PRIORITY_BALANCED_POWER_ACCURACY,
+            CancellationTokenSource().token,
+          ).addOnSuccessListener { location ->
+            // 現在地が返るまでに場所が出てきて範囲を合わせ直していたら、そちらを優先する。
+            if (fittedFor != fitKey) return@addOnSuccessListener
+            location?.let {
+              scope.launch {
+                cameraPositionState.animate(CameraUpdateFactory.newLatLngZoom(LatLng(it.latitude, it.longitude), 14f))
+              }
+            }
+          }
+        } catch (e: SecurityException) {
+          // 権限が無ければ既定の位置のまま。
+        }
+      }
+
+      // 1 件: 範囲では寄りすぎるので、その場所を中心に街区が見える程度に寄る。
+      1 -> places.first().let {
+        cameraPositionState.animate(CameraUpdateFactory.newLatLngZoom(LatLng(it.latitude, it.longitude), 16f))
+      }
+
+      else -> {
+        val bounds = LatLngBounds.builder().apply {
+          places.forEach { include(LatLng(it.latitude, it.longitude)) }
+        }.build()
+        cameraPositionState.animate(CameraUpdateFactory.newLatLngBounds(bounds, boundsPaddingPx))
+      }
+    }
+  }
+
+  Box(
+    modifier = modifier
+      .fillMaxSize()
+      .clip(RoundedCornerShape(8.dp)),
+  ) {
+    GoogleMap(
+      modifier = Modifier.fillMaxSize(),
+      cameraPositionState = cameraPositionState,
+      uiSettings = MapUiSettings(
+        zoomControlsEnabled = false,
+        mapToolbarEnabled = false,
+        myLocationButtonEnabled = false,
+      ),
+      onMapLoaded = { mapLoaded = true },
+    ) {
+      RegisteredPlaceMarkers(places, infoWindow) { onPlaceClick(it.placeId) }
+    }
+    emptyMessage?.let { message ->
+      Surface(
+        shape = RoundedCornerShape(8.dp),
+        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.9f),
+        modifier = Modifier.align(Alignment.Center).padding(16.dp),
+      ) {
+        Text(
+          text = message,
+          style = MaterialTheme.typography.bodyLarge,
+          textAlign = TextAlign.Center,
+          color = MaterialTheme.colorScheme.onSurfaceVariant,
+          modifier = Modifier.padding(16.dp),
+        )
+      }
+    }
+  }
+}
+
+// 地図表示で絞り込んだ場所が全部入るよう範囲を合わせるときの、端の余白（マーカーと名前が切れないように）。
+private val PlacesMapBoundsPadding = 56.dp
 
 private fun priorityStars(priority: Priority): String = when (priority) {
   Priority.HIGH -> "★★★"
