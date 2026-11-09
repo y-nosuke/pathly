@@ -112,6 +112,8 @@ class PlacesListContentTest {
       onMapPlaceClick = {},
       onToggleWishlist = {},
       onDeleteRequest = {},
+      // CI のエミュレータでは GMS の地図が落ちることがあるので、地図は描かない（ほかの画面のテストと同じ）。
+      mapContent = {},
     )
   }
 

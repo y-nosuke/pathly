@@ -340,6 +340,9 @@ internal fun PlacesListContent(
   onToggleWishlist: (PlaceListItem) -> Unit,
   onDeleteRequest: (PlaceListItem) -> Unit,
   modifier: Modifier = Modifier,
+  // 地図表示の地図スロット。null（既定）は実マップ（GoogleMap）を描画する。
+  // テストは空スロット（{}）を渡し、GMS 依存の地図描画を避けて切り替え・文言だけを検証する。
+  mapContent: (@Composable () -> Unit)? = null,
 ) {
   // 地図表示はタブの中の一段奥の見方として扱い、システムバックで一覧表示へ戻す（タブは離れない）。
   // 吹き出しが出ているときは、後から登録される地図側の処理が先に吹き出しを閉じる。
@@ -483,6 +486,7 @@ internal fun PlacesListContent(
           items = state.visibleItems,
           emptyMessage = if (state.visibleItems.isEmpty()) state.emptyMessage() else null,
           onPlaceClick = onMapPlaceClick,
+          mapContent = mapContent,
         )
       }
 
@@ -1464,6 +1468,7 @@ private fun PlacesMapView(
   emptyMessage: String?,
   onPlaceClick: (Long) -> Unit,
   modifier: Modifier = Modifier,
+  mapContent: (@Composable () -> Unit)? = null,
 ) {
   val context = LocalContext.current
   val scope = rememberCoroutineScope()
@@ -1525,17 +1530,21 @@ private fun PlacesMapView(
       .fillMaxSize()
       .clip(RoundedCornerShape(8.dp)),
   ) {
-    GoogleMap(
-      modifier = Modifier.fillMaxSize(),
-      cameraPositionState = cameraPositionState,
-      uiSettings = MapUiSettings(
-        zoomControlsEnabled = false,
-        mapToolbarEnabled = false,
-        myLocationButtonEnabled = false,
-      ),
-      onMapLoaded = { mapLoaded = true },
-    ) {
-      RegisteredPlaceMarkers(places, infoWindow) { onPlaceClick(it.placeId) }
+    if (mapContent != null) {
+      mapContent()
+    } else {
+      GoogleMap(
+        modifier = Modifier.fillMaxSize(),
+        cameraPositionState = cameraPositionState,
+        uiSettings = MapUiSettings(
+          zoomControlsEnabled = false,
+          mapToolbarEnabled = false,
+          myLocationButtonEnabled = false,
+        ),
+        onMapLoaded = { mapLoaded = true },
+      ) {
+        RegisteredPlaceMarkers(places, infoWindow) { onPlaceClick(it.placeId) }
+      }
     }
     emptyMessage?.let { message ->
       Surface(
