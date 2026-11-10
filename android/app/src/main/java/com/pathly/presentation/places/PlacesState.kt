@@ -6,6 +6,7 @@ import com.pathly.domain.model.PlaceCategoryFacet
 import com.pathly.domain.model.PlaceListItem
 import com.pathly.domain.model.PlacePrediction
 import com.pathly.domain.model.PlaceSearchResult
+import com.pathly.domain.model.categoryFacetCounts
 import com.pathly.presentation.common.getEnum
 import com.pathly.presentation.common.getEnumSet
 import com.pathly.presentation.common.matchesNameQuery
@@ -110,27 +111,19 @@ data class PlacesState(
       visibleItems.firstOrNull()?.place?.id?.toString().orEmpty(),
     ).joinToString("|")
 
-  /** 業種ごとの場所の件数（絞り込みの選択肢に添える）。0 件の業種は入らない。 */
+  /**
+   * 業種ごとの場所の件数（絞り込みの選択肢に添える）。業種以外の絞り込み（行きたい・訪問・名前の検索）に合う
+   * 場所で数え、全体にはあるのに絞り込みで 0 件になった業種は 0 で残る（→ [categoryFacetCounts]）。
+   */
   val categoryCounts: Map<PlaceCategoryFacet, Int>
-    get() = items.groupingBy { PlaceCategoryFacet.of(it.place) }.eachCount()
+    get() = categoryFacetCounts(items, { listOf(PlaceCategoryFacet.of(it.place)) }, ::matchesExceptCategory)
 
   /** 現在の絞り込み・並べ替えを適用した一覧。 */
   val visibleItems: List<PlaceListItem>
     get() {
       val filtered = items.filter { item ->
-        val wishlistOk = when (wishlistFilter) {
-          WishlistFilter.ANY -> true
-          WishlistFilter.WISHLISTED -> item.isWishlisted
-          WishlistFilter.NOT_WISHLISTED -> !item.isWishlisted
-        }
-        val visitedOk = when (visitedFilter) {
-          VisitedFilter.ANY -> true
-          VisitedFilter.VISITED -> item.isVisited
-          VisitedFilter.UNVISITED -> !item.isVisited
-        }
         val categoryOk = categoryFilter.isEmpty() || PlaceCategoryFacet.of(item.place) in categoryFilter
-        val nameOk = matchesNameQuery(item.displayName, nameQuery)
-        wishlistOk && visitedOk && categoryOk && nameOk
+        categoryOk && matchesExceptCategory(item)
       }
 
       // 各軸は昇順の比較器で定義し、降順ならまとめて反転する。
@@ -155,6 +148,21 @@ data class PlacesState(
       }
       return filtered.sortedWith(if (sortDescending) ascending.reversed() else ascending)
     }
+
+  /** 業種以外の絞り込み（行きたい・訪問・名前の検索）に合うか。 */
+  private fun matchesExceptCategory(item: PlaceListItem): Boolean {
+    val wishlistOk = when (wishlistFilter) {
+      WishlistFilter.ANY -> true
+      WishlistFilter.WISHLISTED -> item.isWishlisted
+      WishlistFilter.NOT_WISHLISTED -> !item.isWishlisted
+    }
+    val visitedOk = when (visitedFilter) {
+      VisitedFilter.ANY -> true
+      VisitedFilter.VISITED -> item.isVisited
+      VisitedFilter.UNVISITED -> !item.isVisited
+    }
+    return wishlistOk && visitedOk && matchesNameQuery(item.displayName, nameQuery)
+  }
 }
 
 private const val KEY_WISHLIST = "places.wishlistFilter"

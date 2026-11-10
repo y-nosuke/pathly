@@ -48,12 +48,32 @@ class PlacesStateTest {
   }
 
   @Test
-  fun categoryCounts_countAllPlacesRegardlessOfOtherFilters() {
-    val state = PlacesState(items = items, wishlistFilter = WishlistFilter.WISHLISTED)
-
+  fun categoryCounts_countAllPlacesWithoutFilters() {
     assertEquals(
       mapOf(PlaceCategoryFacet.CAFE to 2, PlaceCategoryFacet.PARK to 1, PlaceCategoryFacet.UNCATEGORIZED to 1),
-      state.categoryCounts,
+      PlacesState(items = items).categoryCounts,
+    )
+  }
+
+  // 行きたい・訪問・名前で絞ると、件数もその条件での数になる。全体にある業種は 0 件でも残す。
+  @Test
+  fun categoryCounts_followOtherFiltersAndKeepZero() {
+    assertEquals(
+      mapOf(PlaceCategoryFacet.CAFE to 1, PlaceCategoryFacet.PARK to 1, PlaceCategoryFacet.UNCATEGORIZED to 0),
+      PlacesState(items = items, wishlistFilter = WishlistFilter.WISHLISTED).categoryCounts,
+    )
+    assertEquals(
+      mapOf(PlaceCategoryFacet.CAFE to 1, PlaceCategoryFacet.PARK to 0, PlaceCategoryFacet.UNCATEGORIZED to 0),
+      PlacesState(items = items, nameQuery = "場所1").categoryCounts,
+    )
+  }
+
+  // 業種そのものの選択は件数に効かせない（選んでいない業種が 0 にならないように）。
+  @Test
+  fun categoryCounts_ignoreCategoryFilterItself() {
+    assertEquals(
+      PlacesState(items = items).categoryCounts,
+      PlacesState(items = items, categoryFilter = setOf(PlaceCategoryFacet.CAFE)).categoryCounts,
     )
   }
 

@@ -3,6 +3,7 @@ package com.pathly.presentation.history
 import androidx.lifecycle.SavedStateHandle
 import com.pathly.domain.model.GpsTrack
 import com.pathly.domain.model.PlaceCategoryFacet
+import com.pathly.domain.model.categoryFacetCounts
 import com.pathly.presentation.common.getEnum
 import com.pathly.presentation.common.getEnumSet
 import com.pathly.presentation.common.matchesNameQuery
@@ -66,32 +67,19 @@ data class HistoryState(
       categoryFilter.isEmpty() &&
       nameQuery.isBlank()
 
-  /** 業種ごとの、その業種に立ち寄った経路の件数（絞り込みの選択肢に添える）。0 件の業種は入らない。 */
+  /**
+   * 業種ごとの、その業種に立ち寄った経路の件数（絞り込みの選択肢に添える）。業種以外の絞り込みに合う経路で数え、
+   * 全体には立ち寄りがあるのに絞り込みで 0 件になった業種は 0 で残る（→ [categoryFacetCounts]）。
+   */
   val categoryCounts: Map<PlaceCategoryFacet, Int>
-    get() = tracks.flatMap { it.stopCategories }.groupingBy { it }.eachCount()
+    get() = categoryFacetCounts(tracks, { it.stopCategories }, ::matchesExceptCategory)
 
   /** 現在の絞り込み・並べ替えを適用した経路一覧。 */
   val visibleTracks: List<GpsTrack>
     get() {
       val filtered = tracks.filter { track ->
-        val favoriteOk = when (favoriteFilter) {
-          TrackFavoriteFilter.ANY -> true
-          TrackFavoriteFilter.FAVORITE -> track.isFavorite
-          TrackFavoriteFilter.NOT_FAVORITE -> !track.isFavorite
-        }
-        val namedOk = when (namedFilter) {
-          TrackNamedFilter.ANY -> true
-          TrackNamedFilter.NAMED -> track.hasName
-          TrackNamedFilter.UNNAMED -> !track.hasName
-        }
-        val stopOk = when (stopFilter) {
-          TrackStopFilter.ANY -> true
-          TrackStopFilter.HAS_STOPS -> track.stopCount > 0
-          TrackStopFilter.NO_STOPS -> track.stopCount == 0
-        }
         val categoryOk = categoryFilter.isEmpty() || track.stopCategories.any { it in categoryFilter }
-        val nameOk = matchesNameQuery(listTitleOf(track), nameQuery)
-        favoriteOk && namedOk && stopOk && categoryOk && nameOk
+        categoryOk && matchesExceptCategory(track)
       }
 
       // 各軸は昇順の比較器で定義し、降順ならまとめて反転する。
@@ -113,6 +101,27 @@ data class HistoryState(
       }
       return filtered.sortedWith(if (sortDescending) ascending.reversed() else ascending)
     }
+
+  /** 業種以外の絞り込み（お気に入り・命名・立ち寄り・名前の検索）に合うか。 */
+  private fun matchesExceptCategory(track: GpsTrack): Boolean {
+    val favoriteOk = when (favoriteFilter) {
+      TrackFavoriteFilter.ANY -> true
+      TrackFavoriteFilter.FAVORITE -> track.isFavorite
+      TrackFavoriteFilter.NOT_FAVORITE -> !track.isFavorite
+    }
+    val namedOk = when (namedFilter) {
+      TrackNamedFilter.ANY -> true
+      TrackNamedFilter.NAMED -> track.hasName
+      TrackNamedFilter.UNNAMED -> !track.hasName
+    }
+    val stopOk = when (stopFilter) {
+      TrackStopFilter.ANY -> true
+      TrackStopFilter.HAS_STOPS -> track.stopCount > 0
+      TrackStopFilter.NO_STOPS -> track.stopCount == 0
+    }
+    val nameOk = matchesNameQuery(listTitleOf(track), nameQuery)
+    return favoriteOk && namedOk && stopOk && nameOk
+  }
 }
 
 /** 一覧のカードの見出し（名前。未命名なら日付）。名前の検索はこれに当てる。 */
