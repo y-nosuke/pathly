@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.pathly.domain.model.GeoBounds
 import com.pathly.domain.model.GpsTrack
 import com.pathly.domain.repository.GpsTrackRepository
+import com.pathly.domain.repository.PlaceRepository
 import com.pathly.util.Logger
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.CancellationException
@@ -29,6 +30,7 @@ import javax.inject.Inject
 @HiltViewModel
 class TrackOverlayViewModel @Inject constructor(
   private val gpsTrackRepository: GpsTrackRepository,
+  private val placeRepository: PlaceRepository,
 ) : ViewModel() {
 
   private val logger = Logger("TrackOverlayViewModel")
@@ -89,8 +91,9 @@ class TrackOverlayViewModel @Inject constructor(
         return@launch
       }
       val segments = loaded.filter { it.size >= 2 }
+      val stops = placeRepository.getStopsForTrack(trackId).first()
       _uiState.update { s ->
-        s.copy(selected = s.selected.map { if (it.track.id == trackId) it.copy(segments = segments) else it })
+        s.copy(selected = s.selected.map { if (it.track.id == trackId) it.copy(segments = segments, stops = stops) else it })
       }
     }
   }
@@ -100,9 +103,9 @@ class TrackOverlayViewModel @Inject constructor(
     _uiState.update { it.copy(selected = emptyList()) }
   }
 
-  /** 一覧を閉じる。重ねた線は残す。 */
+  /** 一覧を閉じる。重ねた線も消す（線だけが地図に残って、どこから外すか分からなくならないように）。 */
   fun closeSheet() {
     searchJob?.cancel()
-    _uiState.update { it.copy(isSheetOpen = false, isSearching = false) }
+    _uiState.value = TrackOverlayState()
   }
 }

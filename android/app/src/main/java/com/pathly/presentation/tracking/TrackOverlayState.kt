@@ -2,6 +2,7 @@ package com.pathly.presentation.tracking
 
 import com.pathly.domain.model.GpsPoint
 import com.pathly.domain.model.GpsTrack
+import com.pathly.domain.model.Stop
 
 /** 記録画面の地図に同時に重ねられる過去の経路の本数。色の数と同じ。 */
 const val TRACK_OVERLAY_MAX = 8
@@ -12,14 +13,16 @@ data class OverlayTrack(
   val colorIndex: Int,
   // 線の点（補正後・欠落で分けた区間ごと）。読み込みが終わるまでは空。
   val segments: List<List<GpsPoint>> = emptyList(),
+  // この経路の立ち寄り（訪問順）。線と同じ色の番号つきバッジで出す。
+  val stops: List<Stop> = emptyList(),
 )
 
 /**
  * 記録画面の「経路」（地図に映っている範囲の過去の経路を一覧から選んで重ねる）の状態。
- * 選んだ経路は範囲を探し直しても外すまで残り、アプリを使っている間は保つ（ViewModel が持つ）。
+ * 選んだ経路は範囲を探し直しても外すまで残る。一覧を閉じると重ねた線も消す（一覧と線をひと続きで使う）。
  */
 data class TrackOverlayState(
-  // 一覧のシートを出しているか。閉じても選んだ線は地図に残る。
+  // 一覧のシートを出しているか（閉じると重ねた線も消す）。
   val isSheetOpen: Boolean = false,
   val isSearching: Boolean = false,
   // 最後に探した範囲に入る経路（新しい順）。

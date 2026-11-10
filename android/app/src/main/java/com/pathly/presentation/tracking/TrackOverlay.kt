@@ -32,13 +32,19 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.google.android.gms.maps.model.LatLng
 import com.google.maps.android.compose.GoogleMapComposable
+import com.google.maps.android.compose.MarkerState
 import com.google.maps.android.compose.Polyline
 import com.pathly.R
 import com.pathly.domain.model.GpsTrack
 import com.pathly.presentation.common.FloatingSheet
 import com.pathly.presentation.common.FloatingSheetState
+import com.pathly.presentation.common.MapInfoWindowState
+import com.pathly.presentation.common.MapMarker
+import com.pathly.presentation.common.RouteBadgeMarker
+import com.pathly.presentation.common.rememberMarkerIconCache
 import com.pathly.presentation.history.listTitleOf
 import com.pathly.util.DateFormatters
 import kotlin.math.roundToInt
@@ -58,25 +64,54 @@ internal val TrackOverlayColors = listOf(
   Color(0xFF37474F), // 墨
 )
 
-/** 過去の経路の線。記録中の経路より細く・半透明にして、記録中の線が上に見えるようにする。 */
+/**
+ * 過去の経路の線と立ち寄り。線は地図の上で見失わない太さにし、白い縁取りで地図の道路と分ける。
+ * 記録中の経路より下に描く（記録中の線が上に見える）。立ち寄りは線と同じ色の番号つきバッジで出す。
+ */
 @Composable
 @GoogleMapComposable
-internal fun TrackOverlayLines(tracks: List<OverlayTrack>) {
+internal fun TrackOverlayContent(tracks: List<OverlayTrack>, infoWindow: MapInfoWindowState) {
+  val icons = rememberMarkerIconCache()
   tracks.forEach { overlay ->
     key(overlay.track.id) {
-      val color = TrackOverlayColors[overlay.colorIndex].copy(alpha = 0.8f)
+      val color = TrackOverlayColors[overlay.colorIndex]
       // 記録中は現在地の更新のたびに地図が描き直されるので、点の変換は線が変わったときだけにする。
       val lines = remember(overlay.segments) {
         overlay.segments.map { segment -> segment.map { LatLng(it.latitude, it.longitude) } }
       }
       lines.forEach { points ->
-        Polyline(points = points, color = color, width = 5f, zIndex = -1f)
+        Polyline(points = points, color = Color.White, width = 20f, zIndex = -2f)
+        Polyline(points = points, color = color, width = 12f, zIndex = -1f)
+      }
+      overlay.stops.forEachIndexed { index, stop ->
+        key(stop.id) {
+          val state = remember(stop.place.latitude, stop.place.longitude) {
+            MarkerState(position = LatLng(stop.place.latitude, stop.place.longitude))
+          }
+          val number = index + 1
+          val icon = icons.getLabeled(OverlayStopIconKey(overlay.colorIndex, number), stop.place.displayName) {
+            RouteBadgeMarker(bg = color, size = 28.dp) {
+              Text(text = "$number", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+            }
+          }
+          MapMarker(
+            icon = icon.icon,
+            infoWindow = infoWindow,
+            state = state,
+            title = stop.place.displayName,
+            snippet = "${listTitleOf(overlay.track)} ・ ${DateFormatters.shortTime(stop.arrivalTime)} ・ 滞在${stop.durationMinutes}分",
+            anchor = icon.anchor,
+          )
+        }
       }
     }
   }
 }
 
-/** 記録画面の右上の「この範囲の経路」ボタン。重ねている経路があれば塗りつぶす。 */
+/** 重ねた経路の立ち寄りのバッジ（色と番号ごとに 1 回だけ描く）。 */
+private data class OverlayStopIconKey(val colorIndex: Int, val number: Int)
+
+/** 記録画面の右上の「この範囲の経路」ボタン。一覧を出している間は塗りつぶす。 */
 @Composable
 internal fun TrackOverlayButton(
   active: Boolean,
@@ -114,7 +149,8 @@ internal fun TrackOverlaySheet(
   onClose: () -> Unit,
   modifier: Modifier = Modifier,
 ) {
-  FloatingSheet(state = sheetState, modifier = modifier.testTag("trackOverlaySheet"), restoreLabel = "この範囲の経路") {
+  // 畳みきったときの戻すボタンは出さない（記録ボタンと重なる）。戻すのは右上の経路のボタンで行う。
+  FloatingSheet(state = sheetState, modifier = modifier.testTag("trackOverlaySheet")) {
     Row(
       modifier = Modifier
         .fillMaxWidth()

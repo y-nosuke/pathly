@@ -3,7 +3,10 @@ package com.pathly.presentation.tracking
 import com.pathly.domain.model.GeoBounds
 import com.pathly.domain.model.GpsPoint
 import com.pathly.domain.model.GpsTrack
+import com.pathly.domain.model.Place
+import com.pathly.domain.model.Stop
 import com.pathly.domain.repository.GpsTrackRepository
+import com.pathly.domain.repository.PlaceRepository
 import io.mockk.coEvery
 import io.mockk.mockk
 import kotlinx.coroutines.Dispatchers
@@ -27,6 +30,7 @@ class TrackOverlayViewModelTest {
 
   private val testDispatcher = StandardTestDispatcher()
   private val repository = mockk<GpsTrackRepository>()
+  private val placeRepository = mockk<PlaceRepository>()
   private lateinit var viewModel: TrackOverlayViewModel
 
   private val bounds = GeoBounds(south = 35.67, west = 139.75, north = 35.69, east = 139.78)
@@ -34,7 +38,8 @@ class TrackOverlayViewModelTest {
   @Before
   fun setup() {
     Dispatchers.setMain(testDispatcher)
-    viewModel = TrackOverlayViewModel(repository).also { it.computeDispatcher = testDispatcher }
+    coEvery { placeRepository.getStopsForTrack(any()) } returns flowOf(emptyList())
+    viewModel = TrackOverlayViewModel(repository, placeRepository).also { it.computeDispatcher = testDispatcher }
   }
 
   @After
@@ -153,7 +158,7 @@ class TrackOverlayViewModelTest {
   }
 
   @Test
-  fun `一覧を閉じても_重ねた線は残る`() = runTest {
+  fun `一覧を閉じると_重ねた線も消える`() = runTest {
     coEvery { repository.getDisplaySegments(any()) } returns listOf(listOf(point(0), point(1)))
     viewModel.toggle(track(1))
     testDispatcher.scheduler.advanceUntilIdle()
@@ -162,7 +167,20 @@ class TrackOverlayViewModelTest {
 
     val state = viewModel.uiState.value
     assertFalse(state.isSheetOpen)
-    assertEquals(1, state.selected.size)
+    assertTrue(state.selected.isEmpty())
+  }
+
+  @Test
+  fun `選んだ経路の立ち寄りも読み込む`() = runTest {
+    val place = mockk<Place>(relaxed = true)
+    val stop = Stop(id = 7, place = place, trackId = 1, arrivalTime = Date(1000), departureTime = Date(2000))
+    coEvery { repository.getDisplaySegments(1L) } returns listOf(listOf(point(0), point(1)))
+    coEvery { placeRepository.getStopsForTrack(1L) } returns flowOf(listOf(stop))
+
+    viewModel.toggle(track(1))
+    testDispatcher.scheduler.advanceUntilIdle()
+
+    assertEquals(listOf(7L), viewModel.uiState.value.selected.single().stops.map { it.id })
   }
 
   @Test

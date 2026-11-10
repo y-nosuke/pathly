@@ -295,7 +295,8 @@ fun TrackingScreen(
       }
       // この範囲の経路: 押した時点で地図に映っている範囲で探す（地図を動かすたびには探さない）。
       TrackOverlayButton(
-        active = overlayState.selected.isNotEmpty(),
+        // 押した時点で塗りつぶす（経路を選ぶ前から、一覧を出していることが分かるように）。
+        active = overlayState.isSheetOpen,
         // 立ち寄りの追加中は一覧を出せない（追加のシートが優先）ので押せなくする。
         enabled = manualTarget == null,
         onClick = {
@@ -509,7 +510,7 @@ fun TrackingScreen(
       )
     }
 
-    // この範囲の経路の一覧。閉じても重ねた線は残る。
+    // この範囲の経路の一覧。閉じると重ねた線も消える。
     if (showOverlaySheet) {
       TrackOverlaySheet(
         state = overlayState,
@@ -755,7 +756,7 @@ private fun TrackingMapView(
       onMapClick = onMapClick,
     ) {
       // 過去の経路は記録中の経路の下に描く。
-      TrackOverlayLines(overlayTracks)
+      TrackOverlayContent(overlayTracks, infoWindow)
       val displayPoints = track?.smoothedPoints.orEmpty()
       if (track != null && displayPoints.size >= 2) {
         // 確定済み立ち寄りの滞在区間（帯）。詳細画面と同じ描画。

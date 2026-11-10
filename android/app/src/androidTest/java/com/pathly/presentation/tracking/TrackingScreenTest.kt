@@ -45,7 +45,7 @@ class TrackingScreenTest {
 
     mockOnRequestPermission = mockk(relaxed = true)
     mockViewModel = mockk(relaxed = true)
-    overlayViewModel = TrackOverlayViewModel(mockk(relaxed = true))
+    overlayViewModel = TrackOverlayViewModel(mockk(relaxed = true), mockk(relaxed = true))
 
     uiStateFlow = MutableStateFlow(
       TrackingState(
