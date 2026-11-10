@@ -47,3 +47,22 @@ enum class PlaceCategoryFacet(val label: String) {
     fun of(place: Place): PlaceCategoryFacet = of(place.googlePlaceId != null, place.category?.code)
   }
 }
+
+/**
+ * 業種の絞り込みの選択肢に添える件数。[items] 全体に 1 件でもある業種をキーにし、値は業種以外の絞り込みに
+ * 合うもの（[counted] が true）だけを数えた数。業種以外で絞って 0 件になった業種も 0 として残す（絞り込みの
+ * たびに選択肢が出たり消えたりしないように）。業種そのものの選択は件数に効かせない（選んでいない業種の件数が
+ * 0 にならないように）。[facetsOf] は 1 件が当たる業種（場所なら 1 つ、経路なら立ち寄った場所の業種すべて）。
+ */
+fun <T> categoryFacetCounts(
+  items: List<T>,
+  facetsOf: (T) -> Iterable<PlaceCategoryFacet>,
+  counted: (T) -> Boolean,
+): Map<PlaceCategoryFacet, Int> {
+  val counts = mutableMapOf<PlaceCategoryFacet, Int>()
+  items.forEach { item ->
+    val add = if (counted(item)) 1 else 0
+    facetsOf(item).forEach { facet -> counts[facet] = (counts[facet] ?: 0) + add }
+  }
+  return counts
+}

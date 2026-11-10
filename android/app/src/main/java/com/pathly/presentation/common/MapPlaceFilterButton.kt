@@ -70,8 +70,8 @@ private fun MapPlaceFilterPanel(
   places: List<RegisteredPlace>,
   onFilterChange: (MapPlaceFilter) -> Unit,
 ) {
-  // 業種の件数はほかの絞り込みに関係なく全体で数える（場所一覧と同じ）。
-  val counts: Map<PlaceCategoryFacet, Int> = remember(places) { places.groupingBy { it.categoryFacet }.eachCount() }
+  // 業種の件数は行きたい・訪問の条件に合う場所で数える（場所一覧と同じ）。
+  val counts: Map<PlaceCategoryFacet, Int> = remember(places, filter) { filter.categoryCounts(places) }
   Column(modifier = Modifier.padding(horizontal = 12.dp)) {
     // 行きたい・訪問は 1 つのチップで 指定なし→あり→なし→… と切り替える（場所一覧と同じ）。
     FilterChip(

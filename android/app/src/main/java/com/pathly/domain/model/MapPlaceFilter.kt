@@ -23,9 +23,14 @@ data class MapPlaceFilter(
   val isEmpty: Boolean get() = wishlisted == null && visited == null && categories.isEmpty()
 
   /** [place] がこの条件に合うか（地図に出すか）。 */
-  fun matches(place: RegisteredPlace): Boolean = (wishlisted == null || place.isWishlisted == wishlisted) &&
-    (visited == null || place.isVisited == visited) &&
+  fun matches(place: RegisteredPlace): Boolean = matchesExceptCategory(place) &&
     (categories.isEmpty() || place.categoryFacet in categories)
+
+  /** 業種の選択肢に添える件数（行きたい・訪問の条件に合う場所の数。→ [categoryFacetCounts]）。 */
+  fun categoryCounts(places: List<RegisteredPlace>): Map<PlaceCategoryFacet, Int> = categoryFacetCounts(places, { listOf(it.categoryFacet) }, ::matchesExceptCategory)
+
+  private fun matchesExceptCategory(place: RegisteredPlace): Boolean = (wishlisted == null || place.isWishlisted == wishlisted) &&
+    (visited == null || place.isVisited == visited)
 }
 
 /** 3 状態の切り替え（指定なし → あり → なし → 指定なし…）。地図のチップをタップしたときの次の状態。 */

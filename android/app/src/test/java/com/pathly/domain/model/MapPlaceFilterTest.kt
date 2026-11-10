@@ -52,6 +52,20 @@ class MapPlaceFilterTest {
   }
 
   @Test
+  fun `業種の件数は行きたい・訪問に合う場所で数え0件の業種も残す`() {
+    assertEquals(
+      mapOf(PlaceCategoryFacet.CAFE to 1, PlaceCategoryFacet.PARK to 1, PlaceCategoryFacet.UNCATEGORIZED to 1, PlaceCategoryFacet.OTHER to 1),
+      MapPlaceFilter().categoryCounts(places),
+    )
+    assertEquals(
+      mapOf(PlaceCategoryFacet.CAFE to 1, PlaceCategoryFacet.PARK to 0, PlaceCategoryFacet.UNCATEGORIZED to 0, PlaceCategoryFacet.OTHER to 0),
+      MapPlaceFilter(wishlisted = true).categoryCounts(places),
+    )
+    // 業種そのものの選択は件数に効かせない。
+    assertEquals(MapPlaceFilter().categoryCounts(places), MapPlaceFilter(categories = setOf(PlaceCategoryFacet.CAFE)).categoryCounts(places))
+  }
+
+  @Test
   fun `チップは 指定なし→あり→なし→指定なし と回る`() {
     val none: Boolean? = null
     assertEquals(true, none.nextTriState())

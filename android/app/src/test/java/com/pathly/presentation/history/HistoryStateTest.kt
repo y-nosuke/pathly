@@ -2,6 +2,7 @@ package com.pathly.presentation.history
 
 import androidx.lifecycle.SavedStateHandle
 import com.pathly.domain.model.GpsTrack
+import com.pathly.domain.model.PlaceCategoryFacet
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -79,7 +80,26 @@ class HistoryStateTest {
     assertEquals("鎌倉", HistoryState().withListOptionsFrom(handle).nameQuery)
   }
 
-  private fun track(id: Long, name: String?, start: Long, favorite: Boolean = false) = GpsTrack(
+  // お気に入りで絞ると、業種の件数もお気に入りの経路で数える。全体で立ち寄りのある業種は 0 件でも残す。
+  @Test
+  fun `業種の件数_ほかの絞り込みに合う経路で数え0件も残す`() {
+    val cafeFav = track(id = 1, name = "a", start = 1_794_106_800_000L, favorite = true, categories = setOf(PlaceCategoryFacet.CAFE))
+    val cafePark = track(id = 2, name = "b", start = 1_794_106_800_000L, categories = setOf(PlaceCategoryFacet.CAFE, PlaceCategoryFacet.PARK))
+    val all = listOf(cafeFav, cafePark)
+
+    assertEquals(mapOf(PlaceCategoryFacet.CAFE to 2, PlaceCategoryFacet.PARK to 1), HistoryState(tracks = all).categoryCounts)
+    assertEquals(
+      mapOf(PlaceCategoryFacet.CAFE to 1, PlaceCategoryFacet.PARK to 0),
+      HistoryState(tracks = all, favoriteFilter = TrackFavoriteFilter.FAVORITE).categoryCounts,
+    )
+    // 業種そのものの選択は件数に効かせない。
+    assertEquals(
+      HistoryState(tracks = all).categoryCounts,
+      HistoryState(tracks = all, categoryFilter = setOf(PlaceCategoryFacet.PARK)).categoryCounts,
+    )
+  }
+
+  private fun track(id: Long, name: String?, start: Long, favorite: Boolean = false, categories: Set<PlaceCategoryFacet> = emptySet()) = GpsTrack(
     id = id,
     startTime = Date(start),
     endTime = Date(start + 60_000),
@@ -88,5 +108,6 @@ class HistoryStateTest {
     isFavorite = favorite,
     createdAt = Date(start),
     updatedAt = Date(start),
+    stopCategories = categories,
   )
 }

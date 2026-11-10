@@ -178,7 +178,7 @@ class HistoryViewModelTest {
   }
 
   @Test
-  fun `業種の件数_その業種に立ち寄った経路の数で0件の業種は出ない`() = runTest {
+  fun `業種の件数_その業種に立ち寄った経路の数で立ち寄りの無い業種は出ない`() = runTest {
     // Given
     val tracks = listOf(
       createTrack(id = 1, endTime = Date(), stopCategories = setOf(PlaceCategoryFacet.CAFE, PlaceCategoryFacet.UNCATEGORIZED)),
