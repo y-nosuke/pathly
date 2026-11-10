@@ -83,6 +83,45 @@ class PlacesListContentTest {
     composeTestRule.onNodeWithText("場所がありません", substring = true).assertIsDisplayed()
   }
 
+  @Test
+  fun `地図表示でたたむと検索と絞り込みが消えて帯に件数が出る`() {
+    setContent(PlacesState(items = listOf(plain, wished), viewMode = PlacesViewMode.MAP))
+    composeTestRule.onNodeWithText("すべて").assertIsDisplayed()
+
+    composeTestRule.onNodeWithContentDescription("たたむ").performClick()
+
+    composeTestRule.onNodeWithText("すべて").assertDoesNotExist()
+    composeTestRule.onNodeWithText("場所 2 件").assertIsDisplayed()
+    // 一覧へ戻る切り替えは、たたんでも残る。
+    composeTestRule.onNodeWithContentDescription("一覧で見る").assertIsDisplayed()
+
+    composeTestRule.onNodeWithContentDescription("ひろげる").performClick()
+
+    composeTestRule.onNodeWithText("すべて").assertIsDisplayed()
+  }
+
+  @Test
+  fun `たたんだ帯に絞り込み中であることと残った件数が出る`() {
+    setContent(
+      PlacesState(
+        items = listOf(plain, wished),
+        wishlistFilter = WishlistFilter.WISHLISTED,
+        viewMode = PlacesViewMode.MAP,
+        controlsCollapsed = true,
+      ),
+    )
+
+    composeTestRule.onNodeWithText("絞り込み 1・1 / 2 件").assertIsDisplayed()
+  }
+
+  @Test
+  fun `一覧表示にはたたむボタンが無い`() {
+    setContent(PlacesState(items = listOf(plain, wished), controlsCollapsed = true))
+
+    composeTestRule.onNodeWithText("すべて").assertIsDisplayed()
+    composeTestRule.onNodeWithContentDescription("たたむ").assertDoesNotExist()
+  }
+
   // ViewModel の代わりに、状態をこの場で持って操作に応じて書き換える。
   private fun setContent(initial: PlacesState) {
     composeTestRule.setContent {
@@ -108,6 +147,7 @@ class PlacesListContentTest {
       onSortChange = {},
       onToggleSortDirection = {},
       onViewModeChange = { state = state.copy(viewMode = it) },
+      onControlsCollapsedChange = { state = state.copy(controlsCollapsed = it) },
       onItemClick = {},
       onMapPlaceClick = {},
       onToggleWishlist = {},

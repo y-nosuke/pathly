@@ -129,6 +129,11 @@ class PlacesViewModel @Inject constructor(
     updateListOptions { it.copy(viewMode = mode) }
   }
 
+  /** 地図表示で、地図に重ねた見出し・検索欄・絞り込みをたたむ／ひろげる。 */
+  fun setControlsCollapsed(collapsed: Boolean) {
+    updateListOptions { it.copy(controlsCollapsed = collapsed) }
+  }
+
   /** 絞り込みを全解除する（行きたい・訪問状況・業種・名前の検索語をまとめて指定なしに戻す）。並べ替えは保持。 */
   fun clearFilters() {
     updateListOptions {
