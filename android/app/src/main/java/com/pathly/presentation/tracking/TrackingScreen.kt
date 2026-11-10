@@ -61,6 +61,7 @@ import com.google.android.gms.maps.model.LatLng
 import com.google.android.gms.maps.model.PointOfInterest
 import com.google.android.gms.tasks.CancellationTokenSource
 import com.google.maps.android.compose.CameraMoveStartedReason
+import com.google.maps.android.compose.CameraPositionState
 import com.google.maps.android.compose.GoogleMap
 import com.google.maps.android.compose.MapProperties
 import com.google.maps.android.compose.MapType
@@ -69,6 +70,7 @@ import com.google.maps.android.compose.MarkerState
 import com.google.maps.android.compose.Polyline
 import com.google.maps.android.compose.rememberCameraPositionState
 import com.pathly.R
+import com.pathly.domain.model.GeoBounds
 import com.pathly.domain.model.GpsPoint
 import com.pathly.domain.model.GpsTrack
 import com.pathly.domain.model.RegisteredPlace
@@ -82,6 +84,7 @@ import com.pathly.presentation.common.MarkerPickBlue
 import com.pathly.presentation.common.NearbyPlaceConfirmDialog
 import com.pathly.presentation.common.RegisteredPlaceMarkers
 import com.pathly.presentation.common.RouteMapContent
+import com.pathly.presentation.common.SheetDetent
 import com.pathly.presentation.common.heightOf
 import com.pathly.presentation.common.rememberFloatingSheetState
 import com.pathly.presentation.common.rememberMapInfoWindowState
@@ -108,12 +111,15 @@ fun TrackingScreen(
   // 場所シートの訪問履歴から、その訪問のお出掛け（経路詳細）を開く。
   onOpenTrack: (trackId: Long) -> Unit = {},
   viewModel: TrackingViewModel = hiltViewModel(),
+  // 「この範囲の経路」（地図に映っている範囲の過去の経路を選んで重ねる）。記録まわりとは別の ViewModel。
+  trackOverlayViewModel: TrackOverlayViewModel = hiltViewModel(),
   // 地図スロット。null（既定）は実マップ（GoogleMap）を描画する。
   // テストは空スロット（{}）を渡し、GMS 依存の地図描画を避けてオーバーレイだけを検証する。
   mapContent: (@Composable () -> Unit)? = null,
 ) {
   val uiState by viewModel.uiState.collectAsStateWithLifecycle()
   val mapPlaceFilter by viewModel.mapPlaceFilter.collectAsStateWithLifecycle()
+  val overlayState by trackOverlayViewModel.uiState.collectAsStateWithLifecycle()
   val snackbarHostState = remember { SnackbarHostState() }
 
   // 場所を削除したら「取り消す」を出す（場所一覧・経路詳細と同じ出し方）。
@@ -164,6 +170,13 @@ fun TrackingScreen(
   // シートの開き具合。地図の下パディングを合わせて、選んだ地点がシートの裏に来ないようにする。
   val placeSheetState = rememberFloatingSheetState()
   val manualSheetState = rememberFloatingSheetState(peekFraction = 0.5f)
+  val overlaySheetState = rememberFloatingSheetState()
+  // 地図のカメラ。「この範囲の経路」を押したときに、そのとき映っている範囲を読むため画面で持つ。
+  val mapCameraState = rememberCameraPositionState {
+    position = CameraPosition.fromLatLngZoom(LatLng(35.6762, 139.6503), 15f)
+  }
+  // 場所シート・手動追加のシートが出ている間は、経路の一覧は下がる（閉じれば戻る）。
+  val showOverlaySheet = overlayState.isSheetOpen && placeSheetTarget == null && manualTarget == null
   // マーカーの吹き出し。シートと同時に出るので、シート側から一緒に閉じられるよう画面で持つ。
   val infoWindow = rememberMapInfoWindowState()
   // 地図で選んだ地点。可視領域へ寄せる合図（同じ地点を選び直しても効くよう nonce で送る）。
@@ -183,8 +196,10 @@ fun TrackingScreen(
     } else {
       TrackingMapView(
         hasPermission = uiState.hasLocationPermission,
+        cameraPositionState = mapCameraState,
         track = uiState.currentTrack,
         currentLocation = uiState.currentLocation,
+        overlayTracks = overlayState.selected,
         stops = uiState.stops,
         currentStop = uiState.currentStop,
         infoWindow = infoWindow,
@@ -229,6 +244,7 @@ fun TrackingScreen(
           bottom = when {
             manualTarget != null -> manualSheetState.heightOf(manualSheetState.detent)
             placeSheetTarget != null -> placeSheetState.heightOf(placeSheetState.detent)
+            showOverlaySheet -> overlaySheetState.heightOf(overlaySheetState.detent)
             else -> 0.dp
           },
         ),
@@ -277,6 +293,21 @@ fun TrackingScreen(
           onFilterChange = viewModel::setMapPlaceFilter,
         )
       }
+      // この範囲の経路: 押した時点で地図に映っている範囲で探す（地図を動かすたびには探さない）。
+      TrackOverlayButton(
+        active = overlayState.selected.isNotEmpty(),
+        // 立ち寄りの追加中は一覧を出せない（追加のシートが優先）ので押せなくする。
+        enabled = manualTarget == null,
+        onClick = {
+          mapCameraState.projection?.visibleRegion?.latLngBounds?.let { b ->
+            placeSheetTarget = null
+            trackOverlayViewModel.search(
+              GeoBounds(b.southwest.latitude, b.southwest.longitude, b.northeast.latitude, b.northeast.longitude),
+            )
+            overlaySheetState.settleTo(SheetDetent.PEEK)
+          }
+        },
+      )
     }
 
     // 記録中の左上操作（縦積み）: 「立ち寄りを追加」モード切替 と 「今ここ」ショートカット。
@@ -478,6 +509,18 @@ fun TrackingScreen(
       )
     }
 
+    // この範囲の経路の一覧。閉じても重ねた線は残る。
+    if (showOverlaySheet) {
+      TrackOverlaySheet(
+        state = overlayState,
+        sheetState = overlaySheetState,
+        onToggle = trackOverlayViewModel::toggle,
+        onClearAll = trackOverlayViewModel::clearAll,
+        onClose = trackOverlayViewModel::closeSheet,
+        modifier = Modifier.align(Alignment.BottomCenter),
+      )
+    }
+
     // 保存（確定）中は画面全体を覆う。終わっていないのに終わったように見せない（→ adr/0021）。
     if (uiState.isFinalizing) {
       FinalizingOverlay()
@@ -584,6 +627,7 @@ fun TrackingScreen(
 
 @Composable
 private fun TrackingMapView(
+  cameraPositionState: CameraPositionState,
   hasPermission: Boolean,
   track: GpsTrack?,
   currentLocation: LocationInfo?,
@@ -606,10 +650,9 @@ private fun TrackingMapView(
   // 効くよう、実行の合図は [focusNonce] の変化で受ける（経路詳細と同じ仕組み）。
   focusTarget: LatLng? = null,
   focusNonce: Int = 0,
+  // 一覧から選んで重ねている過去の経路（色分け）。
+  overlayTracks: List<OverlayTrack> = emptyList(),
 ) {
-  val cameraPositionState = rememberCameraPositionState {
-    position = CameraPosition.fromLatLngZoom(LatLng(35.6762, 139.6503), 15f)
-  }
   var followUser by remember { mutableStateOf(true) }
   var isLocating by remember { mutableStateOf(false) }
 
@@ -711,6 +754,8 @@ private fun TrackingMapView(
       // 空きスペースのタップは手動立ち寄り追加に使う（呼び出し側で記録中のみ受ける）
       onMapClick = onMapClick,
     ) {
+      // 過去の経路は記録中の経路の下に描く。
+      TrackOverlayLines(overlayTracks)
       val displayPoints = track?.smoothedPoints.orEmpty()
       if (track != null && displayPoints.size >= 2) {
         // 確定済み立ち寄りの滞在区間（帯）。詳細画面と同じ描画。

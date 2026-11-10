@@ -66,6 +66,7 @@
 - [x] 立ち寄り場所の永続化・自動命名（Places）・手動編集
 - [x] 手動での場所記録（ワンタップ）— 記録画面の「今ここ」／地図タップからの場所登録・立ち寄り追加
 - [x] 経路の名前・お気に入り・絞り込み／並べ替え
+- [x] 記録画面の地図で、映っている範囲の経路を選んで重ねる → [#137](https://github.com/y-nosuke/pathly/issues/137)
 - [x] 立ち寄りの手動追加・誤検知の付け替え・訪問メモ
 - [x] 立ち寄りの滞在期間の編集・手動統合（→ [ADR-0024](adr/0024-stop-duration-edit-and-manual-merge.md)）
 - [x] **データの書き出し・読み込み**（→ [specs/backup.md](specs/backup.md)・[ADR-0027](adr/0027-data-export-import.md)）。

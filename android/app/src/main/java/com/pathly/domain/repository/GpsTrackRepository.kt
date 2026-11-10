@@ -1,5 +1,7 @@
 package com.pathly.domain.repository
 
+import com.pathly.domain.model.GeoBounds
+import com.pathly.domain.model.GpsPoint
 import com.pathly.domain.model.GpsTrack
 import kotlinx.coroutines.flow.Flow
 
@@ -16,6 +18,18 @@ interface GpsTrackRepository {
 
   /** お気に入り登録を切り替える。 */
   suspend fun setFavorite(trackId: Long, favorite: Boolean)
+
+  /**
+   * 地図の範囲に入る完了済み経路の ID（記録の点か、立ち寄った場所が範囲に入るもの）。
+   * 記録画面の「経路」で使う（docs/specs/screens.md）。
+   */
+  suspend fun getFinishedTrackIdsInBounds(bounds: GeoBounds): Set<Long>
+
+  /**
+   * 地図に描く補正後の点列（欠落で分けた区間ごと）。保存済みの補正点だけを読み、生の点は読まない。
+   * 保存済みが無い古い経路だけ、生の点から計算する。経路が無ければ null。
+   */
+  suspend fun getDisplaySegments(trackId: Long): List<List<GpsPoint>>?
 
   /**
    * 補正後の点列を更新する。記録中に呼ばれ、確定済み（末尾の暫定分を除く）だけを

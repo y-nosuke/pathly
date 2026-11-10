@@ -16,7 +16,8 @@ import java.util.Date
       onDelete = ForeignKey.CASCADE,
     ),
   ],
-  indices = [Index("trackId")],
+  // 緯度・経度は、地図の範囲に入る経路を探すため（記録画面の「経路」）。範囲の問い合わせが全表走査にならないように張る。
+  indices = [Index("trackId"), Index("latitude", "longitude")],
 )
 data class GpsPointEntity(
   @PrimaryKey(autoGenerate = true)

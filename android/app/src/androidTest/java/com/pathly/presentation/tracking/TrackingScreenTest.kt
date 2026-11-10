@@ -26,6 +26,7 @@ class TrackingScreenTest {
 
   private lateinit var mockOnRequestPermission: () -> Unit
   private lateinit var mockViewModel: TrackingViewModel
+  private lateinit var overlayViewModel: TrackOverlayViewModel
   private lateinit var uiStateFlow: MutableStateFlow<TrackingState>
 
   @Before
@@ -44,6 +45,7 @@ class TrackingScreenTest {
 
     mockOnRequestPermission = mockk(relaxed = true)
     mockViewModel = mockk(relaxed = true)
+    overlayViewModel = TrackOverlayViewModel(mockk(relaxed = true))
 
     uiStateFlow = MutableStateFlow(
       TrackingState(
@@ -68,6 +70,7 @@ class TrackingScreenTest {
         TrackingScreen(
           onRequestPermission = mockOnRequestPermission,
           viewModel = mockViewModel,
+          trackOverlayViewModel = overlayViewModel,
           mapContent = {},
         )
       }
@@ -96,6 +99,7 @@ class TrackingScreenTest {
         TrackingScreen(
           onRequestPermission = mockOnRequestPermission,
           viewModel = mockViewModel,
+          trackOverlayViewModel = overlayViewModel,
           mapContent = {},
         )
       }
@@ -117,6 +121,7 @@ class TrackingScreenTest {
         TrackingScreen(
           onRequestPermission = mockOnRequestPermission,
           viewModel = mockViewModel,
+          trackOverlayViewModel = overlayViewModel,
           mapContent = {},
         )
       }
@@ -142,6 +147,7 @@ class TrackingScreenTest {
         TrackingScreen(
           onRequestPermission = mockOnRequestPermission,
           viewModel = mockViewModel,
+          trackOverlayViewModel = overlayViewModel,
           mapContent = {},
         )
       }
@@ -163,6 +169,7 @@ class TrackingScreenTest {
         TrackingScreen(
           onRequestPermission = mockOnRequestPermission,
           viewModel = mockViewModel,
+          trackOverlayViewModel = overlayViewModel,
           mapContent = {},
         )
       }
@@ -195,6 +202,7 @@ class TrackingScreenTest {
         TrackingScreen(
           onRequestPermission = mockOnRequestPermission,
           viewModel = mockViewModel,
+          trackOverlayViewModel = overlayViewModel,
           mapContent = {},
         )
       }
@@ -225,6 +233,7 @@ class TrackingScreenTest {
         TrackingScreen(
           onRequestPermission = mockOnRequestPermission,
           viewModel = mockViewModel,
+          trackOverlayViewModel = overlayViewModel,
           mapContent = {},
         )
       }
@@ -247,6 +256,7 @@ class TrackingScreenTest {
         TrackingScreen(
           onRequestPermission = mockOnRequestPermission,
           viewModel = mockViewModel,
+          trackOverlayViewModel = overlayViewModel,
           mapContent = {},
         )
       }
@@ -278,6 +288,7 @@ class TrackingScreenTest {
         TrackingScreen(
           onRequestPermission = mockOnRequestPermission,
           viewModel = mockViewModel,
+          trackOverlayViewModel = overlayViewModel,
           mapContent = {},
         )
       }

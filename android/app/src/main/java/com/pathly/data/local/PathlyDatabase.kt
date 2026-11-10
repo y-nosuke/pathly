@@ -64,7 +64,7 @@ abstract class PathlyDatabase : RoomDatabase() {
     const val DATABASE_NAME = "pathly_database"
 
     /** スキーマのバージョン。上げるときは DatabaseMigrations にマイグレーションを足す。 */
-    const val VERSION = 16
+    const val VERSION = 17
     private val logger = Logger("PathlyDatabase")
 
     @Volatile

@@ -40,6 +40,29 @@ interface GpsTrackDao {
   @Query("SELECT id FROM gps_tracks WHERE isActive = 0")
   suspend fun getFinishedTrackIds(): List<Long>
 
+  /**
+   * 地図の範囲に入る完了済み経路の ID（記録画面の「経路」）。記録の点が 1 つでも範囲に入るか、立ち寄った場所が
+   * 範囲に入る経路。立ち寄りの場所は地図のマーカーと同じく、施設の座標があればそちらで見る。
+   *
+   * 点は `gps_points(latitude, longitude)` の索引で緯度の幅だけを引くので、全点を読まない。
+   * 東経 180 度をまたぐ範囲（[west] > [east]）は経度を 2 つに分けて見る。
+   */
+  @Query(
+    "SELECT id FROM gps_tracks WHERE isActive = 0 AND (" +
+      "id IN (SELECT trackId FROM gps_points " +
+      "WHERE latitude BETWEEN :south AND :north AND " +
+      "((:west <= :east AND longitude BETWEEN :west AND :east) OR " +
+      "(:west > :east AND (longitude >= :west OR longitude <= :east)))) " +
+      "OR id IN (SELECT s.trackId FROM stops s " +
+      "INNER JOIN places p ON p.id = s.placeId " +
+      "LEFT JOIN google_places g ON g.placeId = p.id " +
+      "WHERE COALESCE(g.latitude, p.latitude) BETWEEN :south AND :north AND " +
+      "((:west <= :east AND COALESCE(g.longitude, p.longitude) BETWEEN :west AND :east) OR " +
+      "(:west > :east AND (COALESCE(g.longitude, p.longitude) >= :west OR " +
+      "COALESCE(g.longitude, p.longitude) <= :east)))))",
+  )
+  suspend fun getFinishedTrackIdsInBounds(south: Double, west: Double, north: Double, east: Double): List<Long>
+
   /** 距離が未計算の完了済み経路（v11 以前に記録した分のバックフィル対象）。 */
   @Query("SELECT id FROM gps_tracks WHERE isActive = 0 AND totalDistanceMeters IS NULL")
   suspend fun getFinishedTrackIdsWithoutDistance(): List<Long>
