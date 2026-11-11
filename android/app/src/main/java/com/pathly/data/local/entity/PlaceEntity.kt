@@ -39,11 +39,13 @@ data class PlaceEntity(
   val createdAt: Date = Date(),
   val updatedAt: Date = Date(),
   /**
-   * 地域（都道府県・市区町村）。アンカー座標から Geocoder で引いて、作った後に裏で書き足す（→ adr/0029）。
+   * 地域（国・都道府県・市区町村）。アンカー座標から Geocoder で引いて、作った後に裏で書き足す（→ adr/0029）。
    * アンカーは動かないので、一度引いたら変わらない。[regionResolvedAt] が null ならまだ引いていない。
-   * 引いたが分からなかった（海の上など）ときは、[regionResolvedAt] だけ入れて都道府県・市区町村は null のまま。
+   * 引いたが分からなかった（海の上など）ときは、[regionResolvedAt] だけ入れてほかは null のまま。
+   * [countryCode] は ISO 3166-1 の 2 文字。海外の場所の [prefecture] には州などが入る（絞り込みには使わない）。
    */
   val prefecture: String? = null,
   val city: String? = null,
   val regionResolvedAt: Date? = null,
+  val countryCode: String? = null,
 )

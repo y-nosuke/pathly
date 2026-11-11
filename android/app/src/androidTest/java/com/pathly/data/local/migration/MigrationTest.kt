@@ -515,6 +515,38 @@ class MigrationTest {
     db.close()
   }
 
+  @Test
+  fun migrate18To19_addsCountry_marksJapanAndRelooksUpTheRest() {
+    helper.createDatabase(TEST_DB, 18).apply {
+      // 1: 日本の都道府県が入っている → 日本。2: 海外の州が入っている → 引き直し。
+      // 3: 引いたが分からなかった → 引き直し。4: まだ引いていない → そのまま。
+      execSQL(
+        "INSERT INTO places (id, name, latitude, longitude, note, source, createdAt, updatedAt, prefecture, city, regionResolvedAt) VALUES " +
+          "(1, '東京', 35.68, 139.76, NULL, 'USER', 0, 0, '東京都', '千代田区', 100), " +
+          "(2, 'ホノルル', 21.30, -157.85, NULL, 'USER', 0, 0, 'ハワイ州', 'ホノルル', 100), " +
+          "(3, '海', 30.0, 140.0, NULL, 'USER', 0, 0, NULL, NULL, 100), " +
+          "(4, '新しい', 35.0, 135.7, NULL, 'USER', 0, 0, NULL, NULL, NULL)",
+      )
+      close()
+    }
+
+    // 足した列の DDL が Room の生成物とずれていればここで失敗する。
+    val db = helper.runMigrationsAndValidate(TEST_DB, 19, true, DatabaseMigrations.MIGRATION_18_19)
+
+    db.query("SELECT id, countryCode, prefecture, city, regionResolvedAt FROM places ORDER BY id").use { cursor ->
+      assertTrue(cursor.moveToNext())
+      assertEquals("JP", cursor.getString(1))
+      assertEquals("東京都", cursor.getString(2))
+      assertEquals("千代田区", cursor.getString(3))
+      assertEquals(100L, cursor.getLong(4))
+      repeat(3) {
+        assertTrue(cursor.moveToNext())
+        for (column in 1..4) assertTrue("id=${cursor.getLong(0)} column=$column", cursor.isNull(column))
+      }
+    }
+    db.close()
+  }
+
   companion object {
     private const val TEST_DB = "migration-test"
   }

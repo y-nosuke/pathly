@@ -2,6 +2,7 @@ package com.pathly.data.local.migration
 
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
+import com.pathly.domain.model.JAPANESE_PREFECTURES
 import com.pathly.util.Logger
 
 /**
@@ -647,6 +648,33 @@ object DatabaseMigrations {
     }
   }
 
+  val MIGRATION_18_19 = object : Migration(18, 19) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+      try {
+        logger.i("Starting migration from version 18 to 19")
+
+        // 場所の地域に国を足す（海外は国 → 都市で絞る → adr/0029）。
+        db.execSQL("ALTER TABLE `places` ADD COLUMN `countryCode` TEXT")
+        // 日本の都道府県が入っている場所は日本。
+        val placeholders = JAPANESE_PREFECTURES.joinToString(",") { "?" }
+        db.execSQL(
+          "UPDATE `places` SET `countryCode` = 'JP' WHERE `prefecture` IN ($placeholders)",
+          JAPANESE_PREFECTURES.toTypedArray(),
+        )
+        // それ以外で引き済みの場所（海外の州が都道府県に入った・分からなかった）は、国を取るために引き直す。
+        db.execSQL(
+          "UPDATE `places` SET `prefecture` = NULL, `city` = NULL, `regionResolvedAt` = NULL " +
+            "WHERE `regionResolvedAt` IS NOT NULL AND `countryCode` IS NULL",
+        )
+
+        logger.i("Migration from version 18 to 19 completed successfully")
+      } catch (e: Exception) {
+        logger.e("Migration from version 18 to 19 failed", e)
+        throw e
+      }
+    }
+  }
+
   val ALL_MIGRATIONS = arrayOf(
     MIGRATION_1_2,
     MIGRATION_2_3,
@@ -665,6 +693,7 @@ object DatabaseMigrations {
     MIGRATION_15_16,
     MIGRATION_16_17,
     MIGRATION_17_18,
+    MIGRATION_18_19,
     // 将来のマイグレーションをここに追加
   )
 

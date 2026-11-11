@@ -48,7 +48,7 @@ class PlaceRegionDaoTest {
     assertEquals(listOf(b), regionDao.getUnresolved(a, 10).map { it.placeId })
     assertEquals(2, regionDao.observeUnresolvedCount().first())
 
-    regionDao.updateRegion(a, "東京都", "千代田区", Date())
+    regionDao.updateRegion(a, "JP", "東京都", "千代田区", Date())
 
     assertEquals(listOf(b), regionDao.getUnresolved(0, 10).map { it.placeId })
     assertEquals(1, regionDao.observeUnresolvedCount().first())
@@ -58,7 +58,7 @@ class PlaceRegionDaoTest {
   fun unknownRegion_isStillResolved_soItIsNotLookedUpAgain() = runTest {
     val sea = place(30.0, 140.0)
 
-    regionDao.updateRegion(sea, null, null, Date())
+    regionDao.updateRegion(sea, null, null, null, Date())
 
     assertEquals(emptyList<UnresolvedRegionRow>(), regionDao.getUnresolved(0, 10))
   }
@@ -68,10 +68,11 @@ class PlaceRegionDaoTest {
     val id = place()
     val before = database.placeDao().getById(id)!!.updatedAt
 
-    regionDao.updateRegion(id, "東京都", "千代田区", Date(before.time + 60_000))
+    regionDao.updateRegion(id, "JP", "東京都", "千代田区", Date(before.time + 60_000))
 
     val after = database.placeDao().getById(id)!!
     assertEquals(before, after.updatedAt)
+    assertEquals("JP", after.countryCode)
     assertEquals("東京都", after.prefecture)
     assertEquals("千代田区", after.city)
   }
@@ -80,7 +81,7 @@ class PlaceRegionDaoTest {
   fun placeListAndStopRegions_carryTheRegion() = runTest {
     val tokyo = place()
     val unresolved = place(34.98, 135.76)
-    regionDao.updateRegion(tokyo, "東京都", "千代田区", Date())
+    regionDao.updateRegion(tokyo, "JP", "東京都", "千代田区", Date())
     val now = Date()
     val trackId = database.gpsTrackDao().insertTrack(
       GpsTrackEntity(startTime = now, endTime = now, isActive = false, createdAt = now, updatedAt = now),
@@ -89,11 +90,12 @@ class PlaceRegionDaoTest {
     database.stopDao().insert(StopEntity(placeId = unresolved, trackId = trackId, arrivalTime = now, departureTime = now))
 
     val list = database.placeDao().getPlacesWithWishlist().first().associateBy { it.id }
+    assertEquals("JP", list.getValue(tokyo).regionCountryCode)
     assertEquals("東京都", list.getValue(tokyo).regionPrefecture)
     assertEquals("千代田区", list.getValue(tokyo).regionCity)
     assertNull(list.getValue(unresolved).regionPrefecture)
 
-    val stopRegions = database.stopDao().observeStopRegionsByTrack().first().map { it.prefecture to it.city }.toSet()
-    assertEquals(setOf("東京都" to "千代田区", null to null), stopRegions)
+    val stopRegions = database.stopDao().observeStopRegionsByTrack().first().map { Triple(it.countryCode, it.prefecture, it.city) }.toSet()
+    assertEquals(setOf(Triple("JP", "東京都", "千代田区"), Triple(null, null, null)), stopRegions)
   }
 }

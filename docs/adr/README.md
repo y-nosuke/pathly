@@ -45,3 +45,4 @@
 | [0027](0027-data-export-import.md)                   | データの書き出しは DB の写しを zip に、読み込みは再起動して全部入れ替える              | Accepted |
 | [0028](0028-cluster-registered-place-markers.md)     | 登録済みの場所のマーカーは自前の計算でまとめ、地図ライブラリの Clustering は使わない   | Accepted |
 | [0029](0029-place-region-by-geocoder.md)             | 場所の地域（都道府県・市区町村）は、場所の座標から Geocoder で引いて places の列に持つ | Accepted |
+| [0030](0030-overseas-region-by-country-and-city.md)  | 海外の場所の地域は、国 → 都市で持ち、州は絞り込みに使わない                            | Accepted |

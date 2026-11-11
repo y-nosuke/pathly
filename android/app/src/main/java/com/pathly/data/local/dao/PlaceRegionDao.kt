@@ -13,7 +13,7 @@ data class UnresolvedRegionRow(
 )
 
 /**
- * 場所の地域（`places.prefecture` / `city` / `regionResolvedAt`）を引いて書き足すための問い合わせ（→ adr/0029）。
+ * 場所の地域（`places.countryCode` / `prefecture` / `city` / `regionResolvedAt`）を引いて書き足すための問い合わせ（→ adr/0029）。
  * 地域だけを書き換え、`updatedAt`（自分で編集した日時）は動かさない。
  */
 @Dao
@@ -30,6 +30,9 @@ interface PlaceRegionDao {
   fun observeUnresolvedCount(): Flow<Int>
 
   /** 引いた地域を書き足す。分からなかったときも [resolvedAt] を入れて、引き直さないようにする。 */
-  @Query("UPDATE places SET prefecture = :prefecture, city = :city, regionResolvedAt = :resolvedAt WHERE id = :placeId")
-  suspend fun updateRegion(placeId: Long, prefecture: String?, city: String?, resolvedAt: Date)
+  @Query(
+    "UPDATE places SET countryCode = :countryCode, prefecture = :prefecture, city = :city, " +
+      "regionResolvedAt = :resolvedAt WHERE id = :placeId",
+  )
+  suspend fun updateRegion(placeId: Long, countryCode: String?, prefecture: String?, city: String?, resolvedAt: Date)
 }

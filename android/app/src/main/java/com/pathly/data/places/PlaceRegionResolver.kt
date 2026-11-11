@@ -18,7 +18,7 @@ import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 
 /**
- * 場所の地域（都道府県・市区町村）を、場所のアンカー座標から Geocoder で引いて `places` に書き足す
+ * 場所の地域（国・都道府県・市区町村）を、場所のアンカー座標から Geocoder で引いて `places` に書き足す
  * （→ adr/0029）。Google の施設情報の住所は使わない。
  *
  * 値を揃えるため、端末の言語に依らず日本語で引く。住所・座標はログに出さない（件数だけ）。
@@ -45,7 +45,7 @@ class PlaceRegionResolver @Inject constructor(
   }
 
   /**
-   * [lookup] で地域を引いて書き足す。1 件が引けなくても、その後ろの場所は続けて引く（1 件のせいで残りが
+   * [lookup] で地域を引いて書き足す（住所のまま。海外の州も残し、揃えるのは読むとき → [PlaceRegion.of]）。1 件が引けなくても、その後ろの場所は続けて引く（1 件のせいで残りが
    * 止まらないように）。ただし続けて [MAX_FAILURES_IN_A_ROW] 件失敗したら、通信断などとみてそこでやめる。
    * 引けなかった場所は地域を書かずに残し、次の再試行で引き直す。
    */
@@ -71,7 +71,7 @@ class PlaceRegionResolver @Inject constructor(
           failedInARow = 0
           resolved++
           // 引いている間に場所が消されていたら、更新は 0 行で終わるだけ。
-          placeRegionDao.updateRegion(row.placeId, region.prefecture, region.city, Date())
+          placeRegionDao.updateRegion(row.placeId, region.countryCode, region.prefecture, region.city, Date())
         }
         // 短い間に問い合わせを詰め込まない（Geocoder は回数の上限が公開されていない）。
         delay(LOOKUP_INTERVAL_MS)
@@ -106,8 +106,12 @@ class PlaceRegionResolver @Inject constructor(
   }
 }
 
-/** 住所から地域を取り出す。都道府県は `adminArea`。 */
-private fun regionOf(address: Address): PlaceRegion = PlaceRegion(address.adminArea?.takeIf { it.isNotBlank() }, cityOf(address))
+/** 住所から地域を取り出す。国は `countryCode`、都道府県（海外は州など）は `adminArea`。 */
+private fun regionOf(address: Address): PlaceRegion = PlaceRegion(
+  countryCode = address.countryCode?.takeIf { it.isNotBlank() },
+  prefecture = address.adminArea?.takeIf { it.isNotBlank() },
+  city = cityOf(address),
+)
 
 /**
  * 住所から市区町村を取り出す。東京の区・市・町・村は `locality` に入る。郡の町村などで `locality` が無ければ

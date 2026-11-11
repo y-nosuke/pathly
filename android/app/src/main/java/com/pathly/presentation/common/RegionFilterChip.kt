@@ -25,8 +25,8 @@ import com.pathly.domain.model.RegionKey
 import com.pathly.domain.model.sortedForDisplay
 
 /**
- * 一覧の絞り込みバーに置く「地域」のチップ（→ adr/0029）。タップで都道府県の一覧（件数つき）を開き、
- * 都道府県の横の▸でその中の市区町村（件数つき）を開ける。都道府県も市区町村も複数選べる（選んだどれかに当たれば残す）。
+ * 一覧の絞り込みバーに置く「地域」のチップ（→ adr/0029）。タップで 1 段目（日本の都道府県、続けて海外の国。件数つき）の
+ * 一覧を開き、横の▼でその中の市区町村・都市（件数つき）を開ける。どの段も複数選べる（選んだどれかに当たれば残す）。
  *
  * 選択肢・件数の考え方は業種のチップ（[CategoryFilterChip]）と同じ。選択中のものは、全体から消えても外せるように残す。
  * 選べる地域が 1 つも無ければチップごと出さない。
@@ -40,13 +40,13 @@ fun RegionFilterChip(
 ) {
   if (counts.isEmpty() && selected.isEmpty()) return
   // 全体から消えた選択中の地域（場所を消したなど）も、外せるように並べる。
-  val listed = counts.flatMap { c -> listOf(c.key) + c.cities.map { (city, _) -> RegionKey(c.prefecture, city) } }.toSet()
+  val listed = counts.flatMap { c -> listOf(c.key) + c.cities.map { (city, _) -> c.cityKey(city) } }.toSet()
   val orphans = (selected - listed).sortedForDisplay()
 
   Box {
     var menuOpen by remember { mutableStateOf(false) }
-    // 開いている都道府県（▸で市区町村を出す）。
-    var expanded by remember { mutableStateOf(setOf<String>()) }
+    // 開いている 1 段目（▼で市区町村・都市を出す）。
+    var expanded by remember { mutableStateOf(setOf<RegionKey>()) }
     FilterChip(
       selected = selected.isNotEmpty(),
       onClick = { menuOpen = true },
@@ -60,30 +60,30 @@ fun RegionFilterChip(
         onClick = onClear,
       )
       HorizontalDivider()
-      counts.forEach { pref ->
-        val prefKey = pref.key
-        val open = pref.prefecture != null && pref.prefecture in expanded
+      counts.forEach { top ->
+        val key = top.key
+        val open = key in expanded
         // 複数選ぶので、選んでもメニューは閉じない。
         DropdownMenuItem(
-          text = { Text("${prefKey.label}（${pref.count}）") },
-          leadingIcon = { Checkbox(checked = prefKey in selected, onCheckedChange = null) },
-          trailingIcon = if (pref.prefecture != null && pref.cities.isNotEmpty()) {
+          text = { Text("${key.label}（${top.count}）") },
+          leadingIcon = { Checkbox(checked = key in selected, onCheckedChange = null) },
+          trailingIcon = if (top.cities.isNotEmpty()) {
             {
-              IconButton(onClick = { expanded = if (open) expanded - pref.prefecture else expanded + pref.prefecture }) {
+              IconButton(onClick = { expanded = if (open) expanded - key else expanded + key }) {
                 Icon(
                   painter = painterResource(if (open) R.drawable.ic_expand_less else R.drawable.ic_expand_more),
-                  contentDescription = if (open) "${pref.prefecture}の市区町村を閉じる" else "${pref.prefecture}の市区町村を開く",
+                  contentDescription = if (open) "${key.label}の中を閉じる" else "${key.label}の中を開く",
                 )
               }
             }
           } else {
             null
           },
-          onClick = { onToggle(prefKey) },
+          onClick = { onToggle(key) },
         )
         if (open) {
-          pref.cities.forEach { (city, count) ->
-            val cityKey = RegionKey(pref.prefecture, city)
+          top.cities.forEach { (city, count) ->
+            val cityKey = top.cityKey(city)
             DropdownMenuItem(
               text = { Text("$city（$count）") },
               leadingIcon = { Checkbox(checked = cityKey in selected, onCheckedChange = null) },

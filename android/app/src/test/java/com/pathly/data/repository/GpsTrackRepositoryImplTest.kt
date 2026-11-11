@@ -286,8 +286,8 @@ class GpsTrackRepositoryImplTest {
     // track1 は東京と、地域をまだ引いていない場所に立ち寄った。track2 は立ち寄りなし。
     every { mockStopDao.observeStopRegionsByTrack() } returns flowOf(
       listOf(
-        TrackStopRegion(trackId = 1L, prefecture = "東京都", city = "千代田区"),
-        TrackStopRegion(trackId = 1L, prefecture = null, city = null),
+        TrackStopRegion(trackId = 1L, countryCode = "JP", prefecture = "東京都", city = "千代田区"),
+        TrackStopRegion(trackId = 1L, countryCode = null, prefecture = null, city = null),
       ),
     )
 
@@ -296,7 +296,7 @@ class GpsTrackRepositoryImplTest {
 
     // Then
     assertEquals(
-      setOf(PlaceRegion("東京都", "千代田区"), PlaceRegion.UNKNOWN),
+      setOf(PlaceRegion("JP", "東京都", "千代田区"), PlaceRegion.UNKNOWN),
       result.first { it.id == 1L }.stopRegions,
     )
     assertEquals(emptySet<PlaceRegion>(), result.first { it.id == 2L }.stopRegions)

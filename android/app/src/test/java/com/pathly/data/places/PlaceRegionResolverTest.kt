@@ -16,7 +16,7 @@ import java.io.IOException
 
 class PlaceRegionResolverTest {
 
-  private val tokyo = PlaceRegion("東京都", "千代田区")
+  private val tokyo = PlaceRegion("JP", "東京都", "千代田区")
 
   /** places の代わり。id → 引いたか。getUnresolved は本物と同じく id の続きから未解決を返す。 */
   private class FakeDao(ids: List<Long>) {
@@ -30,8 +30,8 @@ class PlaceRegionResolverTest {
         val limit = secondArg<Int>()
         all.filter { it > afterId && it !in resolved }.take(limit).map { UnresolvedRegionRow(it, it.toDouble(), 0.0) }
       }
-      coEvery { dao.updateRegion(any(), any(), any(), any()) } answers {
-        resolved[firstArg()] = PlaceRegion(secondArg(), thirdArg())
+      coEvery { dao.updateRegion(any(), any(), any(), any(), any()) } answers {
+        resolved[firstArg()] = PlaceRegion(secondArg(), thirdArg(), arg(3))
       }
     }
   }
@@ -76,7 +76,7 @@ class PlaceRegionResolverTest {
 
     assertTrue(error is IOException)
     assertEquals(PlaceRegionResolver.MAX_FAILURES_IN_A_ROW, calls)
-    coVerify(exactly = 0) { fake.dao.updateRegion(any(), any(), any(), any()) }
+    coVerify(exactly = 0) { fake.dao.updateRegion(any(), any(), any(), any(), any()) }
   }
 
   @Test

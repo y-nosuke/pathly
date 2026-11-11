@@ -26,20 +26,21 @@ fun SavedStateHandle.putEnumSet(key: String, values: Set<Enum<*>>) {
   this[key] = ArrayList(values.map { it.name })
 }
 
-// 地域の選択は「都道府県<区切り>市区町村」の文字列のリストで持つ。地域不明は都道府県を空にする。
+// 地域の選択は「国<区切り>都道府県<区切り>市区町村」の文字列のリストで持つ。無いところは空にする（地域不明は全部空）。
 private const val REGION_SEPARATOR = '\u001F'
 
 /** [key] に保存した地域の選択を読む。無ければ空。 */
 fun SavedStateHandle.getRegionSet(key: String): Set<RegionKey> {
   val encoded = get<ArrayList<String>>(key) ?: return emptySet()
-  return encoded.map { s ->
-    val prefecture = s.substringBefore(REGION_SEPARATOR).ifEmpty { null }
-    val city = s.substringAfter(REGION_SEPARATOR, "").ifEmpty { null }
-    RegionKey(prefecture, city)
+  return encoded.mapNotNull { s ->
+    val parts = s.split(REGION_SEPARATOR).map { it.ifEmpty { null } }
+    if (parts.size == 3) RegionKey(parts[0], parts[1], parts[2]) else null
   }.toSet()
 }
 
 /** 地域の選択を [key] に保存する。 */
 fun SavedStateHandle.putRegionSet(key: String, values: Set<RegionKey>) {
-  this[key] = ArrayList(values.map { "${it.prefecture.orEmpty()}$REGION_SEPARATOR${it.city.orEmpty()}" })
+  this[key] = ArrayList(
+    values.map { listOf(it.countryCode, it.prefecture, it.city).joinToString(REGION_SEPARATOR.toString()) { p -> p.orEmpty() } },
+  )
 }
