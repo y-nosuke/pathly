@@ -608,6 +608,26 @@ object DatabaseMigrations {
     }
   }
 
+  val MIGRATION_16_17 = object : Migration(16, 17) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+      try {
+        logger.i("Starting migration from version 16 to 17")
+
+        // 地図に映っている範囲に入る経路を探す（記録画面の「経路」）ため、記録の点に緯度・経度の索引を張る。
+        // 表の中身は変えない。
+        db.execSQL(
+          "CREATE INDEX IF NOT EXISTS `index_gps_points_latitude_longitude` " +
+            "ON `gps_points` (`latitude`, `longitude`)",
+        )
+
+        logger.i("Migration from version 16 to 17 completed successfully")
+      } catch (e: Exception) {
+        logger.e("Migration from version 16 to 17 failed", e)
+        throw e
+      }
+    }
+  }
+
   val ALL_MIGRATIONS = arrayOf(
     MIGRATION_1_2,
     MIGRATION_2_3,
@@ -624,6 +644,7 @@ object DatabaseMigrations {
     MIGRATION_13_14,
     MIGRATION_14_15,
     MIGRATION_15_16,
+    MIGRATION_16_17,
     // 将来のマイグレーションをここに追加
   )
 

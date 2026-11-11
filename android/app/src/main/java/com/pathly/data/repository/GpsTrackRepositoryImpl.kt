@@ -7,6 +7,7 @@ import com.pathly.data.local.dao.StopDao
 import com.pathly.data.local.entity.GpsPointEntity
 import com.pathly.data.local.entity.GpsTrackEntity
 import com.pathly.data.local.entity.SmoothedPointEntity
+import com.pathly.domain.model.GeoBounds
 import com.pathly.domain.model.GpsPoint
 import com.pathly.domain.model.GpsTrack
 import com.pathly.domain.model.PlaceCategoryFacet
@@ -175,6 +176,20 @@ class GpsTrackRepositoryImpl @Inject constructor(
       logger.e("Repository operation failed", e)
       throw e
     }
+  }
+
+  // 範囲（座標）はログに出さない（docs/designs/logging.md）。件数だけ残す。
+  override suspend fun getFinishedTrackIdsInBounds(bounds: GeoBounds): Set<Long> {
+    val ids = gpsTrackDao.getFinishedTrackIdsInBounds(bounds.south, bounds.west, bounds.north, bounds.east).toSet()
+    logger.d("Found ${ids.size} tracks in the map bounds")
+    return ids
+  }
+
+  override suspend fun getDisplaySegments(trackId: Long): List<List<GpsPoint>>? {
+    val saved = smoothedPointDao.getByTrack(trackId)
+    if (saved.isNotEmpty()) return TrackSegments.split(saved.map { it.toGpsPoint() })
+    // 保存済みが無い（記録中・古い経路）ときだけ、生の点を読んで計算する。
+    return getTrackById(trackId)?.smoothedSegments
   }
 
   override suspend fun updateSmoothedForTrack(trackId: Long, isFinal: Boolean) {

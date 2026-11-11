@@ -462,6 +462,35 @@ class MigrationTest {
     db.close()
   }
 
+  @Test
+  fun migrate16To17_addsGpsPointLatLngIndex_keepingPoints() {
+    helper.createDatabase(TEST_DB, 16).apply {
+      execSQL(
+        "INSERT INTO gps_tracks (id, startTime, endTime, isActive, createdAt, updatedAt, isFavorite) " +
+          "VALUES (1, 0, 1, 0, 0, 0, 0)",
+      )
+      execSQL(
+        "INSERT INTO gps_points (id, trackId, latitude, longitude, accuracy, elapsedRealtimeNanos, isMock, timestamp, createdAt) " +
+          "VALUES (1, 1, 35.68, 139.76, 5.0, 0, 0, 0, 0)",
+      )
+      close()
+    }
+
+    // 索引の DDL が Room の生成物とずれていればここで失敗する。
+    val db = helper.runMigrationsAndValidate(TEST_DB, 17, true, DatabaseMigrations.MIGRATION_16_17)
+
+    db.query("SELECT name FROM sqlite_master WHERE type = 'index' AND tbl_name = 'gps_points'").use { cursor ->
+      val names = buildList { while (cursor.moveToNext()) add(cursor.getString(0)) }
+      assertTrue("索引が無い: $names", "index_gps_points_latitude_longitude" in names)
+    }
+    // 中身は変えない。
+    db.query("SELECT COUNT(*) FROM gps_points").use { cursor ->
+      assertTrue(cursor.moveToFirst())
+      assertEquals(1, cursor.getInt(0))
+    }
+    db.close()
+  }
+
   companion object {
     private const val TEST_DB = "migration-test"
   }
