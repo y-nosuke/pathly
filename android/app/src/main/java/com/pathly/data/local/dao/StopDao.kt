@@ -10,6 +10,7 @@ import com.pathly.data.local.entity.StopEntity
 import com.pathly.data.local.entity.StopWithPlace
 import com.pathly.data.local.entity.TrackStopCategory
 import com.pathly.data.local.entity.TrackStopCount
+import com.pathly.data.local.entity.TrackStopRegion
 import kotlinx.coroutines.flow.Flow
 import java.util.Date
 
@@ -36,6 +37,16 @@ interface StopDao {
       "LEFT JOIN google_place_categories c ON c.id = g.categoryId",
   )
   fun observeStopCategoriesByTrack(): Flow<List<TrackStopCategory>>
+
+  /**
+   * 経路ごとに、立ち寄った場所の地域（一覧の地域での絞り込み用）。同じ経路・同じ地域は 1 行にまとめる。
+   * 地域をまだ引いていない場所は都道府県も市区町村も null で出る（地域不明）。
+   */
+  @Query(
+    "SELECT DISTINCT s.trackId AS trackId, p.prefecture AS prefecture, p.city AS city " +
+      "FROM stops s INNER JOIN places p ON p.id = s.placeId",
+  )
+  fun observeStopRegionsByTrack(): Flow<List<TrackStopRegion>>
 
   @Query("DELETE FROM stops WHERE trackId = :trackId")
   suspend fun deleteByTrack(trackId: Long)

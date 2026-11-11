@@ -491,6 +491,30 @@ class MigrationTest {
     db.close()
   }
 
+  @Test
+  fun migrate17To18_addsRegionColumnsToPlaces_asUnresolved() {
+    helper.createDatabase(TEST_DB, 17).apply {
+      execSQL(
+        "INSERT INTO places (id, name, latitude, longitude, note, source, createdAt, updatedAt) " +
+          "VALUES (1, '自分の名前', 35.68, 139.76, NULL, 'USER', 0, 0)",
+      )
+      close()
+    }
+
+    // 足した列の DDL が Room の生成物とずれていればここで失敗する。
+    val db = helper.runMigrationsAndValidate(TEST_DB, 18, true, DatabaseMigrations.MIGRATION_17_18)
+
+    // 既存の場所はまだ引いていない扱い（裏のキャッチアップが埋める）。ほかの列はそのまま。
+    db.query("SELECT name, prefecture, city, regionResolvedAt FROM places WHERE id = 1").use { cursor ->
+      assertTrue(cursor.moveToFirst())
+      assertEquals("自分の名前", cursor.getString(0))
+      assertTrue(cursor.isNull(1))
+      assertTrue(cursor.isNull(2))
+      assertTrue(cursor.isNull(3))
+    }
+    db.close()
+  }
+
   companion object {
     private const val TEST_DB = "migration-test"
   }

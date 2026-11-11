@@ -628,6 +628,25 @@ object DatabaseMigrations {
     }
   }
 
+  val MIGRATION_17_18 = object : Migration(17, 18) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+      try {
+        logger.i("Starting migration from version 17 to 18")
+
+        // 場所の地域（都道府県・市区町村）。場所の座標から Geocoder で引いて書き足す（→ adr/0029）。
+        // 既存の場所は regionResolvedAt が null ＝まだ引いていない扱いで、裏のキャッチアップが埋める。
+        db.execSQL("ALTER TABLE `places` ADD COLUMN `prefecture` TEXT")
+        db.execSQL("ALTER TABLE `places` ADD COLUMN `city` TEXT")
+        db.execSQL("ALTER TABLE `places` ADD COLUMN `regionResolvedAt` INTEGER")
+
+        logger.i("Migration from version 17 to 18 completed successfully")
+      } catch (e: Exception) {
+        logger.e("Migration from version 17 to 18 failed", e)
+        throw e
+      }
+    }
+  }
+
   val ALL_MIGRATIONS = arrayOf(
     MIGRATION_1_2,
     MIGRATION_2_3,
@@ -645,6 +664,7 @@ object DatabaseMigrations {
     MIGRATION_14_15,
     MIGRATION_15_16,
     MIGRATION_16_17,
+    MIGRATION_17_18,
     // 将来のマイグレーションをここに追加
   )
 

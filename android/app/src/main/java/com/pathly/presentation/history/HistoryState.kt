@@ -3,12 +3,19 @@ package com.pathly.presentation.history
 import androidx.lifecycle.SavedStateHandle
 import com.pathly.domain.model.GpsTrack
 import com.pathly.domain.model.PlaceCategoryFacet
+import com.pathly.domain.model.PlaceRegion
+import com.pathly.domain.model.RegionCount
+import com.pathly.domain.model.RegionKey
 import com.pathly.domain.model.categoryFacetCounts
+import com.pathly.domain.model.matchesAnyOf
+import com.pathly.domain.model.regionCounts
 import com.pathly.presentation.common.getEnum
 import com.pathly.presentation.common.getEnumSet
+import com.pathly.presentation.common.getRegionSet
 import com.pathly.presentation.common.matchesNameQuery
 import com.pathly.presentation.common.putEnum
 import com.pathly.presentation.common.putEnumSet
+import com.pathly.presentation.common.putRegionSet
 import com.pathly.util.DateFormatters
 import java.text.Collator
 import java.util.Locale
@@ -46,12 +53,14 @@ enum class TrackSort(val label: String, val defaultDescending: Boolean) {
 data class HistoryState(
   val tracks: List<GpsTrack> = emptyList(),
   val activeTrack: GpsTrack? = null,
-  // 絞り込みは4軸独立（お気に入り / 命名 / 立ち寄り / 業種）。業種以外はそれぞれ3状態。
+  // 絞り込みは5軸独立（お気に入り / 命名 / 立ち寄り / 業種 / 地域）。業種・地域以外はそれぞれ3状態。
   val favoriteFilter: TrackFavoriteFilter = TrackFavoriteFilter.ANY,
   val namedFilter: TrackNamedFilter = TrackNamedFilter.ANY,
   val stopFilter: TrackStopFilter = TrackStopFilter.ANY,
   // 立ち寄った場所の業種。複数選べて、選んだどれかに立ち寄っていれば残す（OR）。空＝指定なし。
   val categoryFilter: Set<PlaceCategoryFacet> = emptySet(),
+  // 立ち寄った場所の地域。複数選べて、選んだどれかに立ち寄っていれば残す（OR）。空＝指定なし。
+  val regionFilter: Set<RegionKey> = emptySet(),
   // 名前の検索語（経路の名前、未命名なら一覧の見出しの日付に含むものだけ残す）。空＝指定なし。ほかの絞り込みとは AND。
   val nameQuery: String = "",
   val sort: TrackSort = TrackSort.DATE,
@@ -65,6 +74,7 @@ data class HistoryState(
       namedFilter == TrackNamedFilter.ANY &&
       stopFilter == TrackStopFilter.ANY &&
       categoryFilter.isEmpty() &&
+      regionFilter.isEmpty() &&
       nameQuery.isBlank()
 
   /**
@@ -72,15 +82,16 @@ data class HistoryState(
    * 全体には立ち寄りがあるのに絞り込みで 0 件になった業種は 0 で残る（→ [categoryFacetCounts]）。
    */
   val categoryCounts: Map<PlaceCategoryFacet, Int>
-    get() = categoryFacetCounts(tracks, { it.stopCategories }, ::matchesExceptCategory)
+    get() = categoryFacetCounts(tracks, { it.stopCategories }) { matchesBase(it) && regionOk(it) }
+
+  /** 地域ごとの、そこに立ち寄った経路の件数。地域以外の絞り込みに合う経路で数える（→ [regionCounts]）。 */
+  val regionCounts: List<RegionCount>
+    get() = regionCounts(tracks, ::regionsOf) { matchesBase(it) && categoryOk(it) }
 
   /** 現在の絞り込み・並べ替えを適用した経路一覧。 */
   val visibleTracks: List<GpsTrack>
     get() {
-      val filtered = tracks.filter { track ->
-        val categoryOk = categoryFilter.isEmpty() || track.stopCategories.any { it in categoryFilter }
-        categoryOk && matchesExceptCategory(track)
-      }
+      val filtered = tracks.filter { matchesBase(it) && categoryOk(it) && regionOk(it) }
 
       // 各軸は昇順の比較器で定義し、降順ならまとめて反転する。
       // 元の tracks は開始が新しい順なので、同値のときはその並び（＝安定ソート）を保つ。
@@ -102,8 +113,12 @@ data class HistoryState(
       return filtered.sortedWith(if (sortDescending) ascending.reversed() else ascending)
     }
 
-  /** 業種以外の絞り込み（お気に入り・命名・立ち寄り・名前の検索）に合うか。 */
-  private fun matchesExceptCategory(track: GpsTrack): Boolean {
+  private fun categoryOk(track: GpsTrack): Boolean = categoryFilter.isEmpty() || track.stopCategories.any { it in categoryFilter }
+
+  private fun regionOk(track: GpsTrack): Boolean = regionFilter.matchesAnyOf(regionsOf(track))
+
+  /** 業種・地域以外の絞り込み（お気に入り・命名・立ち寄り・名前の検索）に合うか。 */
+  private fun matchesBase(track: GpsTrack): Boolean {
     val favoriteOk = when (favoriteFilter) {
       TrackFavoriteFilter.ANY -> true
       TrackFavoriteFilter.FAVORITE -> track.isFavorite
@@ -124,6 +139,9 @@ data class HistoryState(
   }
 }
 
+/** 経路の地域（立ち寄った場所の地域）。立ち寄りの無い経路は場所が分からないので地域不明に入れる。 */
+private fun regionsOf(track: GpsTrack): Set<PlaceRegion> = track.stopRegions.ifEmpty { setOf(PlaceRegion.UNKNOWN) }
+
 /** 一覧のカードの見出し（名前。未命名なら日付）。名前の検索はこれに当てる。 */
 internal fun listTitleOf(track: GpsTrack): String = track.name?.takeIf { track.hasName } ?: DateFormatters.shortDate(track.startTime)
 
@@ -134,6 +152,7 @@ private const val KEY_FAVORITE = "history.favoriteFilter"
 private const val KEY_NAMED = "history.namedFilter"
 private const val KEY_STOP = "history.stopFilter"
 private const val KEY_CATEGORY = "history.categoryFilter"
+private const val KEY_REGION = "history.regionFilter"
 private const val KEY_NAME_QUERY = "history.nameQuery"
 private const val KEY_SORT = "history.sort"
 private const val KEY_SORT_DESCENDING = "history.sortDescending"
@@ -146,6 +165,7 @@ fun HistoryState.withListOptionsFrom(handle: SavedStateHandle): HistoryState {
     namedFilter = handle.getEnum(KEY_NAMED, namedFilter),
     stopFilter = handle.getEnum(KEY_STOP, stopFilter),
     categoryFilter = handle.getEnumSet<PlaceCategoryFacet>(KEY_CATEGORY),
+    regionFilter = handle.getRegionSet(KEY_REGION),
     nameQuery = handle.get<String>(KEY_NAME_QUERY).orEmpty(),
     sort = sort,
     sortDescending = handle.get<Boolean>(KEY_SORT_DESCENDING) ?: sort.defaultDescending,
@@ -158,6 +178,7 @@ fun HistoryState.saveListOptionsTo(handle: SavedStateHandle) {
   handle.putEnum(KEY_NAMED, namedFilter)
   handle.putEnum(KEY_STOP, stopFilter)
   handle.putEnumSet(KEY_CATEGORY, categoryFilter)
+  handle.putRegionSet(KEY_REGION, regionFilter)
   handle[KEY_NAME_QUERY] = nameQuery
   handle.putEnum(KEY_SORT, sort)
   handle[KEY_SORT_DESCENDING] = sortDescending

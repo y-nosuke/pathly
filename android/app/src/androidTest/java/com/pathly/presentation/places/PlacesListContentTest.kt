@@ -144,6 +144,8 @@ class PlacesListContentTest {
       onVisitedFilterChange = { state = state.copy(visitedFilter = it) },
       onToggleCategoryFilter = {},
       onClearCategoryFilter = {},
+      onToggleRegionFilter = {},
+      onClearRegionFilter = {},
       onSortChange = {},
       onToggleSortDirection = {},
       onViewModeChange = { state = state.copy(viewMode = it) },

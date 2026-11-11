@@ -10,9 +10,11 @@ import com.pathly.data.local.entity.GpsTrackEntity
 import com.pathly.data.local.entity.TrackListRow
 import com.pathly.data.local.entity.TrackStopCategory
 import com.pathly.data.local.entity.TrackStopCount
+import com.pathly.data.local.entity.TrackStopRegion
 import com.pathly.domain.model.GpsPoint
 import com.pathly.domain.model.GpsTrack
 import com.pathly.domain.model.PlaceCategoryFacet
+import com.pathly.domain.model.PlaceRegion
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
@@ -56,6 +58,7 @@ class GpsTrackRepositoryImplTest {
     // 一度も流れないため、既定は空を返しておく（件数・業種のテストでは上書きする）。
     every { mockStopDao.observeStopCountsByTrack() } returns flowOf(emptyList())
     every { mockStopDao.observeStopCategoriesByTrack() } returns flowOf(emptyList())
+    every { mockStopDao.observeStopRegionsByTrack() } returns flowOf(emptyList())
     repository = GpsTrackRepositoryImpl(
       mockGpsTrackDao,
       mockGpsPointDao,
@@ -270,6 +273,33 @@ class GpsTrackRepositoryImplTest {
       result.first { it.id == 1L }.stopCategories,
     )
     assertEquals(emptySet<PlaceCategoryFacet>(), result.first { it.id == 2L }.stopCategories)
+  }
+
+  @Test
+  fun `getAllTracks_立ち寄った場所の地域がstopRegionsに反映される`() = runTest {
+    // Given
+    val rows = listOf(
+      TrackListRow(createGpsTrackEntity(id = 1L, isActive = false), pointCount = 0),
+      TrackListRow(createGpsTrackEntity(id = 2L, isActive = false), pointCount = 0),
+    )
+    coEvery { mockGpsTrackDao.getTrackListRows() } returns flowOf(rows)
+    // track1 は東京と、地域をまだ引いていない場所に立ち寄った。track2 は立ち寄りなし。
+    every { mockStopDao.observeStopRegionsByTrack() } returns flowOf(
+      listOf(
+        TrackStopRegion(trackId = 1L, prefecture = "東京都", city = "千代田区"),
+        TrackStopRegion(trackId = 1L, prefecture = null, city = null),
+      ),
+    )
+
+    // When
+    val result = repository.getAllTracks().first()
+
+    // Then
+    assertEquals(
+      setOf(PlaceRegion("東京都", "千代田区"), PlaceRegion.UNKNOWN),
+      result.first { it.id == 1L }.stopRegions,
+    )
+    assertEquals(emptySet<PlaceRegion>(), result.first { it.id == 2L }.stopRegions)
   }
 
   @Test

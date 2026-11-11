@@ -97,6 +97,7 @@ import com.pathly.domain.model.PlacePrediction
 import com.pathly.domain.model.PlaceSearchResult
 import com.pathly.domain.model.PlaceVisit
 import com.pathly.domain.model.Priority
+import com.pathly.domain.model.RegionKey
 import com.pathly.domain.model.RegisteredPlace
 import com.pathly.presentation.common.CategoryFilterChip
 import com.pathly.presentation.common.CloseInfoWindowWithSheet
@@ -109,6 +110,7 @@ import com.pathly.presentation.common.MarkerPickBlue
 import com.pathly.presentation.common.MarkerUnvisitedGray
 import com.pathly.presentation.common.MarkerVisitedGreen
 import com.pathly.presentation.common.NearbyPlaceConfirmDialog
+import com.pathly.presentation.common.RegionFilterChip
 import com.pathly.presentation.common.RegisteredPlaceMarker
 import com.pathly.presentation.common.RegisteredPlaceMarkers
 import com.pathly.presentation.common.ScrollToTopButton
@@ -163,6 +165,8 @@ fun PlacesListRoute(
       onVisitedFilterChange = viewModel::setVisitedFilter,
       onToggleCategoryFilter = viewModel::toggleCategoryFilter,
       onClearCategoryFilter = viewModel::clearCategoryFilter,
+      onToggleRegionFilter = viewModel::toggleRegionFilter,
+      onClearRegionFilter = viewModel::clearRegionFilter,
       onSortChange = viewModel::setSort,
       onToggleSortDirection = viewModel::toggleSortDirection,
       onViewModeChange = viewModel::setViewMode,
@@ -339,6 +343,8 @@ internal fun PlacesListContent(
   onVisitedFilterChange: (VisitedFilter) -> Unit,
   onToggleCategoryFilter: (PlaceCategoryFacet) -> Unit,
   onClearCategoryFilter: () -> Unit,
+  onToggleRegionFilter: (RegionKey) -> Unit,
+  onClearRegionFilter: () -> Unit,
   onSortChange: (PlaceSort) -> Unit,
   onToggleSortDirection: () -> Unit,
   onViewModeChange: (PlacesViewMode) -> Unit,
@@ -382,6 +388,8 @@ internal fun PlacesListContent(
         onVisitedFilterChange = onVisitedFilterChange,
         onToggleCategoryFilter = onToggleCategoryFilter,
         onClearCategoryFilter = onClearCategoryFilter,
+        onToggleRegionFilter = onToggleRegionFilter,
+        onClearRegionFilter = onClearRegionFilter,
         onViewModeChange = onViewModeChange,
         onControlsCollapsedChange = onControlsCollapsedChange,
         onPlaceClick = onMapPlaceClick,
@@ -416,6 +424,8 @@ internal fun PlacesListContent(
           onVisitedFilterChange = onVisitedFilterChange,
           onToggleCategoryFilter = onToggleCategoryFilter,
           onClearCategoryFilter = onClearCategoryFilter,
+          onToggleRegionFilter = onToggleRegionFilter,
+          onClearRegionFilter = onClearRegionFilter,
         )
 
         Spacer(modifier = Modifier.height(8.dp))
@@ -1474,6 +1484,8 @@ private fun PlacesFilterControls(
   onVisitedFilterChange: (VisitedFilter) -> Unit,
   onToggleCategoryFilter: (PlaceCategoryFacet) -> Unit,
   onClearCategoryFilter: () -> Unit,
+  onToggleRegionFilter: (RegionKey) -> Unit,
+  onClearRegionFilter: () -> Unit,
 ) {
   // 名前の検索（表示名に含むものだけ残す）。ほかの絞り込みとは AND で、「すべて」で消える。
   ListNameSearchField(
@@ -1523,6 +1535,13 @@ private fun PlacesFilterControls(
       onToggle = onToggleCategoryFilter,
       onClear = onClearCategoryFilter,
     )
+    // 地域は都道府県 → 市区町村の 2 段。複数選べる（選んだどれかに当たるものを残す）。
+    RegionFilterChip(
+      selected = state.regionFilter,
+      counts = state.regionCounts,
+      onToggle = onToggleRegionFilter,
+      onClear = onClearRegionFilter,
+    )
   }
 }
 
@@ -1543,6 +1562,8 @@ private fun PlacesMapLayout(
   onVisitedFilterChange: (VisitedFilter) -> Unit,
   onToggleCategoryFilter: (PlaceCategoryFacet) -> Unit,
   onClearCategoryFilter: () -> Unit,
+  onToggleRegionFilter: (RegionKey) -> Unit,
+  onClearRegionFilter: () -> Unit,
   onViewModeChange: (PlacesViewMode) -> Unit,
   onControlsCollapsedChange: (Boolean) -> Unit,
   onPlaceClick: (Long) -> Unit,
@@ -1618,6 +1639,8 @@ private fun PlacesMapLayout(
                 onVisitedFilterChange = onVisitedFilterChange,
                 onToggleCategoryFilter = onToggleCategoryFilter,
                 onClearCategoryFilter = onClearCategoryFilter,
+                onToggleRegionFilter = onToggleRegionFilter,
+                onClearRegionFilter = onClearRegionFilter,
               )
             }
           }

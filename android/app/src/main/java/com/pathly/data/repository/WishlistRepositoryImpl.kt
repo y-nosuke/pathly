@@ -17,6 +17,7 @@ import com.pathly.data.local.entity.WishlistEntity
 import com.pathly.data.places.PlacesTextSearcher
 import com.pathly.domain.model.Place
 import com.pathly.domain.model.PlaceListItem
+import com.pathly.domain.model.PlaceRegion
 import com.pathly.domain.model.PlaceRegistration
 import com.pathly.domain.model.PlaceSearchResult
 import com.pathly.domain.model.PlaceSource
@@ -255,5 +256,6 @@ class WishlistRepositoryImpl @Inject constructor(
     markedVisitedAt = markedVisitedAt,
     visitCount = visitCount,
     lastStopAt = lastStopAt,
+    region = PlaceRegion(regionPrefecture, regionCity),
   )
 }
