@@ -54,7 +54,7 @@ class GpsTrackRepositoryImpl @Inject constructor(
     val categoriesByTrack = stopCategories.groupBy({ it.trackId }) {
       PlaceCategoryFacet.of(it.hasGoogleInfo, it.categoryCode)
     }
-    val regionsByTrack = stopRegions.groupBy({ it.trackId }) { PlaceRegion(it.prefecture, it.city) }
+    val regionsByTrack = stopRegions.groupBy({ it.trackId }) { PlaceRegion.of(it.countryCode, it.prefecture, it.city) }
     rows.map { row ->
       row.track.toGpsTrack(
         stopCount = countByTrack[row.track.id] ?: 0,

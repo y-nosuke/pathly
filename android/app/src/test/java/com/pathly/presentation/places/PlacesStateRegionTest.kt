@@ -36,15 +36,16 @@ class PlacesStateRegionTest {
     region = region,
   )
 
-  private val shibuyaCafe = item(1, PlaceRegion("東京都", "渋谷区"), code = "cafe")
-  private val shinjukuPark = item(2, PlaceRegion("東京都", "新宿区"), code = "park")
-  private val kyotoCafe = item(3, PlaceRegion("京都府", "京都市"), code = "cafe")
+  private val shibuyaCafe = item(1, PlaceRegion.of("JP", "東京都", "渋谷区"), code = "cafe")
+  private val shinjukuPark = item(2, PlaceRegion.of("JP", "東京都", "新宿区"), code = "park")
+  private val kyotoCafe = item(3, PlaceRegion.of("JP", "京都府", "京都市"), code = "cafe")
   private val unknown = item(4, PlaceRegion.UNKNOWN)
-  private val items = listOf(shibuyaCafe, shinjukuPark, kyotoCafe, unknown)
+  private val honolulu = item(5, PlaceRegion.of("US", "ハワイ州", "ホノルル"))
+  private val items = listOf(shibuyaCafe, shinjukuPark, kyotoCafe, unknown, honolulu)
 
   @Test
   fun regionFilter_keepsPlacesInAnySelectedRegion() {
-    val state = PlacesState(items = items, regionFilter = setOf(RegionKey("京都府"), RegionKey("東京都", "渋谷区")))
+    val state = PlacesState(items = items, regionFilter = setOf(RegionKey("JP", "京都府"), RegionKey("JP", "東京都", "渋谷区")))
 
     assertEquals(setOf(1L, 3L), state.visibleItems.map { it.place.id }.toSet())
     assertFalse(state.noFilter)
@@ -59,22 +60,29 @@ class PlacesStateRegionTest {
   }
 
   @Test
+  fun regionFilter_countryKeepsPlacesInThatCountry() {
+    val state = PlacesState(items = items, regionFilter = setOf(RegionKey("US")))
+
+    assertEquals(listOf(5L), state.visibleItems.map { it.place.id })
+  }
+
+  @Test
   fun regionCounts_followOtherAxesButNotRegion() {
     // 業種でカフェに絞ると、地域の件数はカフェだけで数える。地域の選択は件数に効かせない。
     val state = PlacesState(
       items = items,
       categoryFilter = setOf(PlaceCategoryFacet.CAFE),
-      regionFilter = setOf(RegionKey("京都府")),
+      regionFilter = setOf(RegionKey("JP", "京都府")),
     )
 
-    val counts = state.regionCounts.associate { it.prefecture to it.count }
-    assertEquals(mapOf("東京都" to 1, "京都府" to 1, null to 0), counts)
+    val counts = state.regionCounts.associate { it.key.label to it.count }
+    assertEquals(mapOf("東京都" to 1, "京都府" to 1, "アメリカ合衆国" to 0, "地域不明" to 0), counts)
     assertEquals(listOf(3L), state.visibleItems.map { it.place.id })
   }
 
   @Test
   fun categoryCounts_followRegionFilter() {
-    val state = PlacesState(items = items, regionFilter = setOf(RegionKey("東京都")))
+    val state = PlacesState(items = items, regionFilter = setOf(RegionKey("JP", "東京都")))
 
     assertEquals(1, state.categoryCounts[PlaceCategoryFacet.CAFE])
     assertEquals(1, state.categoryCounts[PlaceCategoryFacet.PARK])
@@ -83,7 +91,7 @@ class PlacesStateRegionTest {
   @Test
   fun regionFilter_roundTripsThroughSavedStateHandle() {
     val handle = SavedStateHandle()
-    val selected = setOf(RegionKey("東京都"), RegionKey("東京都", "渋谷区"), RegionKey.UNKNOWN)
+    val selected = setOf(RegionKey("JP", "東京都"), RegionKey("JP", "東京都", "渋谷区"), RegionKey("US", city = "ホノルル"), RegionKey.UNKNOWN)
 
     PlacesState(regionFilter = selected).saveListOptionsTo(handle)
 

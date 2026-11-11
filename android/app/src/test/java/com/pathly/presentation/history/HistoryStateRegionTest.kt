@@ -22,14 +22,14 @@ class HistoryStateRegionTest {
     stopRegions = regions,
   )
 
-  private val tokyoKyoto = track(1, setOf(PlaceRegion("東京都", "渋谷区"), PlaceRegion("京都府", "京都市")))
-  private val tokyo = track(2, setOf(PlaceRegion("東京都", "新宿区")), favorite = true)
+  private val tokyoKyoto = track(1, setOf(PlaceRegion.of("JP", "東京都", "渋谷区"), PlaceRegion.of("JP", "京都府", "京都市")))
+  private val tokyo = track(2, setOf(PlaceRegion.of("JP", "東京都", "新宿区")), favorite = true)
   private val noStops = track(3, emptySet())
   private val tracks = listOf(tokyoKyoto, tokyo, noStops)
 
   @Test
   fun regionFilter_keepsTracksThatStoppedInAnySelectedRegion() {
-    val state = HistoryState(tracks = tracks, regionFilter = setOf(RegionKey("京都府")))
+    val state = HistoryState(tracks = tracks, regionFilter = setOf(RegionKey("JP", "京都府")))
 
     assertEquals(listOf(1L), state.visibleTracks.map { it.id })
   }
@@ -45,7 +45,7 @@ class HistoryStateRegionTest {
   fun regionCounts_followOtherAxes() {
     val state = HistoryState(tracks = tracks, favoriteFilter = TrackFavoriteFilter.FAVORITE)
 
-    val counts = state.regionCounts.associate { it.prefecture to it.count }
-    assertEquals(mapOf("東京都" to 1, "京都府" to 0, null to 0), counts)
+    val counts = state.regionCounts.associate { it.key.label to it.count }
+    assertEquals(mapOf("東京都" to 1, "京都府" to 0, "地域不明" to 0), counts)
   }
 }

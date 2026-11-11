@@ -5,6 +5,7 @@
 
 関連: 場所の静的な情報と動的な情報を分ける考え方は [0001](0001-place-data-separation.md)、
 座標のアンカーは [0023](0023-place-identity-and-coordinate-anchor.md)。Google の内容の保存の見直しは #145。
+海外の場所（国 → 都市）は [0030](0030-overseas-region-by-country-and-city.md) で足した。
 
 ## Context（背景）
 

@@ -115,7 +115,7 @@ data class PlacesState(
       wishlistFilter.name,
       visitedFilter.name,
       categoryFilter.map { it.name }.sorted().joinToString(","),
-      regionFilter.map { "${it.prefecture}/${it.city}" }.sorted().joinToString(","),
+      regionFilter.map { "${it.countryCode}/${it.prefecture}/${it.city}" }.sorted().joinToString(","),
       nameQuery.trim(),
       sort.name,
       sortDescending.toString(),

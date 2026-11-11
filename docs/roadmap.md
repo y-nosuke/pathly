@@ -68,6 +68,7 @@
 - [x] 経路の名前・お気に入り・絞り込み／並べ替え
 - [x] 記録画面の地図で、映っている範囲の経路を選んで重ねる → [#137](https://github.com/y-nosuke/pathly/issues/137)
 - [x] 場所・経路の一覧を地域（都道府県・市区町村）で絞り込む → [#138](https://github.com/y-nosuke/pathly/issues/138)
+- [x] 海外の場所も、国 → 都市で絞り込めるようにする → [#146](https://github.com/y-nosuke/pathly/issues/146)
 - [x] 立ち寄りの手動追加・誤検知の付け替え・訪問メモ
 - [x] 立ち寄りの滞在期間の編集・手動統合（→ [ADR-0024](adr/0024-stop-duration-edit-and-manual-merge.md)）
 - [x] **データの書き出し・読み込み**（→ [specs/backup.md](specs/backup.md)・[ADR-0027](adr/0027-data-export-import.md)）。

@@ -43,7 +43,7 @@ interface StopDao {
    * 地域をまだ引いていない場所は都道府県も市区町村も null で出る（地域不明）。
    */
   @Query(
-    "SELECT DISTINCT s.trackId AS trackId, p.prefecture AS prefecture, p.city AS city " +
+    "SELECT DISTINCT s.trackId AS trackId, p.countryCode AS countryCode, p.prefecture AS prefecture, p.city AS city " +
       "FROM stops s INNER JOIN places p ON p.id = s.placeId",
   )
   fun observeStopRegionsByTrack(): Flow<List<TrackStopRegion>>

@@ -256,6 +256,6 @@ class WishlistRepositoryImpl @Inject constructor(
     markedVisitedAt = markedVisitedAt,
     visitCount = visitCount,
     lastStopAt = lastStopAt,
-    region = PlaceRegion(regionPrefecture, regionCity),
+    region = PlaceRegion.of(regionCountryCode, regionPrefecture, regionCity),
   )
 }
