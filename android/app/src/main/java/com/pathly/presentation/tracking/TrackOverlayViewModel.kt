@@ -43,6 +43,7 @@ class TrackOverlayViewModel @Inject constructor(
   val uiState: StateFlow<TrackOverlayState> = _uiState.asStateFlow()
 
   private var searchJob: Job? = null
+  private var focusNonce = 0
 
   /** [bounds] に入る経路を探して一覧を出す。前の検索が終わっていなければ取り消す。 */
   fun search(bounds: GeoBounds) {
@@ -93,9 +94,30 @@ class TrackOverlayViewModel @Inject constructor(
       val segments = loaded.filter { it.size >= 2 }
       val stops = placeRepository.getStopsForTrack(trackId).first()
       _uiState.update { s ->
-        s.copy(selected = s.selected.map { if (it.track.id == trackId) it.copy(segments = segments, stops = stops) else it })
+        s.copy(
+          selected = s.selected.map {
+            if (it.track.id == trackId) it.copy(segments = segments, stops = stops, isLoaded = true) else it
+          },
+        )
       }
     }
+  }
+
+  /**
+   * その経路の全体が見えるまで地図を寄せる。まだ重ねていなければ重ねてから寄せる（上限なら何もしない）。
+   * 実際に寄せるのは画面（線を読み終えてから）。
+   */
+  fun focus(track: GpsTrack) {
+    if (track.id !in _uiState.value.selectedIds) {
+      toggle(track)
+      if (track.id !in _uiState.value.selectedIds) return
+    }
+    _uiState.update { it.copy(focusRequest = TrackFocusRequest(track.id, ++focusNonce)) }
+  }
+
+  /** 地図を寄せ終えた（または寄せられなかった）。 */
+  fun consumeFocus() {
+    _uiState.update { it.copy(focusRequest = null) }
   }
 
   /** 重ねている経路をすべて外す。 */

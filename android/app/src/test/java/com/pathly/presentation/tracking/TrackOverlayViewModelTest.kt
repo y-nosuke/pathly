@@ -194,4 +194,48 @@ class TrackOverlayViewModelTest {
     assertFalse(state.isSearching)
     assertEquals("経路を探せませんでした", state.errorMessage)
   }
+
+  @Test
+  fun `全体を見る_まだ重ねていない経路は重ねてから寄せる合図を出す`() = runTest {
+    coEvery { repository.getDisplaySegments(1L) } returns listOf(listOf(point(0), point(3)))
+
+    viewModel.focus(track(1))
+    testDispatcher.scheduler.advanceUntilIdle()
+
+    val state = viewModel.uiState.value
+    assertEquals(listOf(1L), state.selected.map { it.track.id })
+    assertEquals(1L, state.focusRequest?.trackId)
+    val overlay = state.selected.single()
+    assertTrue(overlay.isLoaded)
+    assertEquals(point(0).latitude, overlay.bounds!!.south, 1e-9)
+    assertEquals(point(3).latitude, overlay.bounds!!.north, 1e-9)
+
+    viewModel.consumeFocus()
+    assertNull(viewModel.uiState.value.focusRequest)
+  }
+
+  @Test
+  fun `全体を見る_重ねている経路は外さずに合図だけ出す`() = runTest {
+    coEvery { repository.getDisplaySegments(any()) } returns listOf(listOf(point(0), point(1)))
+    viewModel.toggle(track(1))
+    testDispatcher.scheduler.advanceUntilIdle()
+
+    viewModel.focus(track(1))
+    val first = viewModel.uiState.value.focusRequest
+    viewModel.focus(track(1))
+
+    val state = viewModel.uiState.value
+    assertEquals(1, state.selected.size)
+    assertTrue("押し直しても効くよう合図が変わる", first != state.focusRequest)
+  }
+
+  @Test
+  fun `全体を見る_上限で重ねられないときは何もしない`() = runTest {
+    coEvery { repository.getDisplaySegments(any()) } returns listOf(listOf(point(0), point(1)))
+    (1L..TRACK_OVERLAY_MAX.toLong()).forEach { viewModel.toggle(track(it)) }
+
+    viewModel.focus(track(99))
+
+    assertNull(viewModel.uiState.value.focusRequest)
+  }
 }

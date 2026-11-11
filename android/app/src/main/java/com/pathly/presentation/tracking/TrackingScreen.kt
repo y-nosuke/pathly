@@ -58,6 +58,7 @@ import com.google.android.gms.location.Priority
 import com.google.android.gms.maps.CameraUpdateFactory
 import com.google.android.gms.maps.model.CameraPosition
 import com.google.android.gms.maps.model.LatLng
+import com.google.android.gms.maps.model.LatLngBounds
 import com.google.android.gms.maps.model.PointOfInterest
 import com.google.android.gms.tasks.CancellationTokenSource
 import com.google.maps.android.compose.CameraMoveStartedReason
@@ -103,6 +104,9 @@ import kotlin.math.roundToInt
 
 /** 手動追加のハイライト（選択した滞在区間）。軌跡・立ち寄りと見分ける青。経路詳細と揃える。 */
 private val manualHighlightColor = Color(0xFF1E88E5)
+
+// 「この経路の全体を見る」で寄せたとき、線の端が画面の縁やボタンに掛からないようにする余白（px）。
+private const val FIT_PADDING_PX = 160
 
 @Composable
 fun TrackingScreen(
@@ -170,7 +174,27 @@ fun TrackingScreen(
   // シートの開き具合。地図の下パディングを合わせて、選んだ地点がシートの裏に来ないようにする。
   val placeSheetState = rememberFloatingSheetState()
   val manualSheetState = rememberFloatingSheetState(peekFraction = 0.5f)
-  val overlaySheetState = rememberFloatingSheetState()
+  // 経路の一覧は畳みきれないようにする（開け閉めは経路のボタンと × で。畳んだまま閉じて線ごと消えないように）。
+  // 地図を広く見られるよう、開いたときは低めにする。
+  val overlaySheetState = rememberFloatingSheetState(peekFraction = 0.35f, allowHidden = false)
+  // 一覧の「この経路の全体を見る」で地図を寄せる範囲（同じ範囲でも効くよう nonce で送る）。
+  var fitBounds by remember { mutableStateOf<LatLngBounds?>(null) }
+  var fitNonce by remember { mutableIntStateOf(0) }
+  // 線を読み終えてから寄せる（まだ重ねていない経路は、重ねてから読み込みが終わるまで待つ）。
+  val overlayFocus = overlayState.focusRequest?.let { req -> overlayState.selected.firstOrNull { it.track.id == req.trackId } }
+  LaunchedEffect(overlayState.focusRequest, overlayFocus?.isLoaded) {
+    if (overlayState.focusRequest == null) return@LaunchedEffect
+    if (overlayFocus == null) {
+      trackOverlayViewModel.consumeFocus()
+      return@LaunchedEffect
+    }
+    if (!overlayFocus.isLoaded) return@LaunchedEffect
+    overlayFocus.bounds?.let { b ->
+      fitBounds = LatLngBounds(LatLng(b.south, b.west), LatLng(b.north, b.east))
+      fitNonce++
+    }
+    trackOverlayViewModel.consumeFocus()
+  }
   // 地図のカメラ。「この範囲の経路」を押したときに、そのとき映っている範囲を読むため画面で持つ。
   val mapCameraState = rememberCameraPositionState {
     position = CameraPosition.fromLatLngZoom(LatLng(35.6762, 139.6503), 15f)
@@ -250,6 +274,8 @@ fun TrackingScreen(
         ),
         focusTarget = focusTarget,
         focusNonce = focusNonce,
+        fitBounds = fitBounds,
+        fitNonce = fitNonce,
         onRegisteredPlaceClick = { place ->
           if (uiState.isTracking && manualMode) {
             manualTarget = ManualStopTarget(
@@ -300,12 +326,17 @@ fun TrackingScreen(
         // 立ち寄りの追加中は一覧を出せない（追加のシートが優先）ので押せなくする。
         enabled = manualTarget == null,
         onClick = {
-          mapCameraState.projection?.visibleRegion?.latLngBounds?.let { b ->
-            placeSheetTarget = null
-            trackOverlayViewModel.search(
-              GeoBounds(b.southwest.latitude, b.southwest.longitude, b.northeast.latitude, b.northeast.longitude),
-            )
-            overlaySheetState.settleTo(SheetDetent.PEEK)
+          // もう一度押すと閉じる（登録済みの場所のトグルと同じ）。閉じると重ねた線も消える。
+          if (overlayState.isSheetOpen) {
+            trackOverlayViewModel.closeSheet()
+          } else {
+            mapCameraState.projection?.visibleRegion?.latLngBounds?.let { b ->
+              placeSheetTarget = null
+              trackOverlayViewModel.search(
+                GeoBounds(b.southwest.latitude, b.southwest.longitude, b.northeast.latitude, b.northeast.longitude),
+              )
+              overlaySheetState.settleTo(SheetDetent.PEEK)
+            }
           }
         },
       )
@@ -516,6 +547,7 @@ fun TrackingScreen(
         state = overlayState,
         sheetState = overlaySheetState,
         onToggle = trackOverlayViewModel::toggle,
+        onFocus = trackOverlayViewModel::focus,
         onClearAll = trackOverlayViewModel::clearAll,
         onClose = trackOverlayViewModel::closeSheet,
         modifier = Modifier.align(Alignment.BottomCenter),
@@ -653,6 +685,9 @@ private fun TrackingMapView(
   focusNonce: Int = 0,
   // 一覧から選んで重ねている過去の経路（色分け）。
   overlayTracks: List<OverlayTrack> = emptyList(),
+  // 範囲の経路の一覧で「この経路の全体を見る」を押したとき、その範囲が全部入るまで寄せる（[fitNonce] の変化が合図）。
+  fitBounds: LatLngBounds? = null,
+  fitNonce: Int = 0,
 ) {
   var followUser by remember { mutableStateOf(true) }
   var isLocating by remember { mutableStateOf(false) }
@@ -731,6 +766,15 @@ private fun TrackingMapView(
     focusTarget?.let {
       followUser = false
       cameraPositionState.animate(CameraUpdateFactory.newLatLng(it))
+    }
+  }
+
+  LaunchedEffect(fitNonce) {
+    if (fitNonce == 0) return@LaunchedEffect
+    fitBounds?.let {
+      // 追従したままだと次の現在地の更新で引き戻されるので止める（現在地ボタンで戻せる）。
+      followUser = false
+      cameraPositionState.animate(CameraUpdateFactory.newLatLngBounds(it, FIT_PADDING_PX))
     }
   }
 

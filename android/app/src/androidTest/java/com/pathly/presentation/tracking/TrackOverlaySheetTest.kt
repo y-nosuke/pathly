@@ -49,6 +49,7 @@ class TrackOverlaySheetTest {
             state = initial,
             sheetState = rememberFloatingSheetState(),
             onToggle = onToggle,
+            onFocus = {},
             onClearAll = {},
             onClose = {},
             modifier = Modifier.align(Alignment.BottomCenter),

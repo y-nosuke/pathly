@@ -145,11 +145,12 @@ internal fun TrackOverlaySheet(
   state: TrackOverlayState,
   sheetState: FloatingSheetState,
   onToggle: (GpsTrack) -> Unit,
+  onFocus: (GpsTrack) -> Unit,
   onClearAll: () -> Unit,
   onClose: () -> Unit,
   modifier: Modifier = Modifier,
 ) {
-  // 畳みきったときの戻すボタンは出さない（記録ボタンと重なる）。戻すのは右上の経路のボタンで行う。
+  // 畳みきれないシートにしてある（呼び出し側）。開け閉めは右上の経路のボタンと × で行う。
   FloatingSheet(state = sheetState, modifier = modifier.testTag("trackOverlaySheet")) {
     Row(
       modifier = Modifier
@@ -210,7 +211,7 @@ internal fun TrackOverlaySheet(
             }
           }
           items(state.inRange, key = { it.id }) { track ->
-            TrackOverlayRow(track, state, onToggle)
+            TrackOverlayRow(track, state, onToggle, onFocus)
           }
           if (outOfRange.isNotEmpty()) {
             item {
@@ -223,7 +224,7 @@ internal fun TrackOverlaySheet(
               )
             }
             items(outOfRange, key = { "out-${it.id}" }) { track ->
-              TrackOverlayRow(track, state, onToggle)
+              TrackOverlayRow(track, state, onToggle, onFocus)
             }
           }
         }
@@ -233,7 +234,12 @@ internal fun TrackOverlaySheet(
 }
 
 @Composable
-private fun TrackOverlayRow(track: GpsTrack, state: TrackOverlayState, onToggle: (GpsTrack) -> Unit) {
+private fun TrackOverlayRow(
+  track: GpsTrack,
+  state: TrackOverlayState,
+  onToggle: (GpsTrack) -> Unit,
+  onFocus: (GpsTrack) -> Unit,
+) {
   val colorIndex = state.colorIndexOf(track.id)
   val checked = colorIndex != null
   // 上限まで選んでいるときは、まだ選んでいない経路を選べなくする（外すのはいつでもできる）。
@@ -242,7 +248,7 @@ private fun TrackOverlayRow(track: GpsTrack, state: TrackOverlayState, onToggle:
     modifier = Modifier
       .fillMaxWidth()
       .clickable(enabled = enabled) { onToggle(track) }
-      .padding(start = 8.dp, end = 20.dp, top = 2.dp, bottom = 2.dp)
+      .padding(start = 8.dp, end = 4.dp, top = 2.dp, bottom = 2.dp)
       .testTag("trackOverlayRow-${track.id}"),
     verticalAlignment = Alignment.CenterVertically,
     horizontalArrangement = Arrangement.spacedBy(4.dp),
@@ -288,6 +294,14 @@ private fun TrackOverlayRow(track: GpsTrack, state: TrackOverlayState, onToggle:
         tint = MaterialTheme.colorScheme.primary,
         modifier = Modifier.size(18.dp),
       )
+    }
+    // その経路の全体が見えるまで地図を寄せる（まだ重ねていなければ重ねてから）。
+    IconButton(
+      onClick = { onFocus(track) },
+      enabled = enabled,
+      modifier = Modifier.testTag("trackOverlayFocus-${track.id}"),
+    ) {
+      Icon(painter = painterResource(R.drawable.ic_fit), contentDescription = "この経路の全体を見る")
     }
   }
 }

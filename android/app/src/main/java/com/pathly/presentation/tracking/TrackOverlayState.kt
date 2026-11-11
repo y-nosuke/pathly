@@ -1,5 +1,6 @@
 package com.pathly.presentation.tracking
 
+import com.pathly.domain.model.GeoBounds
 import com.pathly.domain.model.GpsPoint
 import com.pathly.domain.model.GpsTrack
 import com.pathly.domain.model.Stop
@@ -15,7 +16,21 @@ data class OverlayTrack(
   val segments: List<List<GpsPoint>> = emptyList(),
   // この経路の立ち寄り（訪問順）。線と同じ色の番号つきバッジで出す。
   val stops: List<Stop> = emptyList(),
-)
+  // 線と立ち寄りを読み終えたか（地図を寄せるのは読み終えてから）。
+  val isLoaded: Boolean = false,
+) {
+  /** 線と立ち寄りが全部入る範囲。何も無ければ null。 */
+  val bounds: GeoBounds?
+    get() {
+      val lats = segments.flatten().map { it.latitude } + stops.map { it.place.latitude }
+      val lngs = segments.flatten().map { it.longitude } + stops.map { it.place.longitude }
+      if (lats.isEmpty()) return null
+      return GeoBounds(south = lats.min(), west = lngs.min(), north = lats.max(), east = lngs.max())
+    }
+}
+
+/** 一覧の行から「この経路へ寄せる」を押した合図。同じ経路を押し直しても効くよう [nonce] で区別する。 */
+data class TrackFocusRequest(val trackId: Long, val nonce: Int)
 
 /**
  * 記録画面の「経路」（地図に映っている範囲の過去の経路を一覧から選んで重ねる）の状態。
@@ -30,6 +45,8 @@ data class TrackOverlayState(
   // 地図に重ねている経路（選んだ順）。
   val selected: List<OverlayTrack> = emptyList(),
   val errorMessage: String? = null,
+  // 地図を寄せる対象（線を読み終えたら画面が寄せて、[TrackOverlayViewModel.consumeFocus] で消す）。
+  val focusRequest: TrackFocusRequest? = null,
 ) {
   val selectedIds: Set<Long>
     get() = selected.mapTo(mutableSetOf()) { it.track.id }
