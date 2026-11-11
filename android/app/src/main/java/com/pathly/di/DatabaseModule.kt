@@ -7,6 +7,7 @@ import com.pathly.data.local.dao.GooglePlaceDao
 import com.pathly.data.local.dao.GpsPointDao
 import com.pathly.data.local.dao.GpsTrackDao
 import com.pathly.data.local.dao.PlaceDao
+import com.pathly.data.local.dao.PlaceRegionDao
 import com.pathly.data.local.dao.PlaceResolutionDao
 import com.pathly.data.local.dao.SmoothedPointDao
 import com.pathly.data.local.dao.StopDao
@@ -44,6 +45,9 @@ object DatabaseModule {
 
   @Provides
   fun providePlaceResolutionDao(database: PathlyDatabase): PlaceResolutionDao = database.placeResolutionDao()
+
+  @Provides
+  fun providePlaceRegionDao(database: PathlyDatabase): PlaceRegionDao = database.placeRegionDao()
 
   @Provides
   fun provideGooglePlaceDao(database: PathlyDatabase): GooglePlaceDao = database.googlePlaceDao()

@@ -46,8 +46,10 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.pathly.R
 import com.pathly.domain.model.GpsTrack
 import com.pathly.domain.model.PlaceCategoryFacet
+import com.pathly.domain.model.RegionKey
 import com.pathly.presentation.common.CategoryFilterChip
 import com.pathly.presentation.common.ListNameSearchField
+import com.pathly.presentation.common.RegionFilterChip
 import com.pathly.presentation.common.ScrollToTopButton
 import com.pathly.presentation.common.ScrollToTopButtonClearance
 import com.pathly.util.DateFormatters
@@ -89,6 +91,8 @@ fun HistoryScreen(
         onStopFilterChange = viewModel::setStopFilter,
         onToggleCategoryFilter = viewModel::toggleCategoryFilter,
         onClearCategoryFilter = viewModel::clearCategoryFilter,
+        onToggleRegionFilter = viewModel::toggleRegionFilter,
+        onClearRegionFilter = viewModel::clearRegionFilter,
         onSortChange = viewModel::setSort,
         onToggleSortDirection = viewModel::toggleSortDirection,
       )
@@ -233,6 +237,8 @@ private fun FilterSortBar(
   onStopFilterChange: (TrackStopFilter) -> Unit,
   onToggleCategoryFilter: (PlaceCategoryFacet) -> Unit,
   onClearCategoryFilter: () -> Unit,
+  onToggleRegionFilter: (RegionKey) -> Unit,
+  onClearRegionFilter: () -> Unit,
   onSortChange: (TrackSort) -> Unit,
   onToggleSortDirection: () -> Unit,
   modifier: Modifier = Modifier,
@@ -290,6 +296,13 @@ private fun FilterSortBar(
         counts = state.categoryCounts,
         onToggle = onToggleCategoryFilter,
         onClear = onClearCategoryFilter,
+      )
+      // 地域は都道府県 → 市区町村の 2 段。複数選べる（選んだどれかに当たるものを残す）。
+      RegionFilterChip(
+        selected = state.regionFilter,
+        counts = state.regionCounts,
+        onToggle = onToggleRegionFilter,
+        onClear = onClearRegionFilter,
       )
     }
 

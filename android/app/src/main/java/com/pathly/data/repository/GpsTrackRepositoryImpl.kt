@@ -11,6 +11,7 @@ import com.pathly.domain.model.GeoBounds
 import com.pathly.domain.model.GpsPoint
 import com.pathly.domain.model.GpsTrack
 import com.pathly.domain.model.PlaceCategoryFacet
+import com.pathly.domain.model.PlaceRegion
 import com.pathly.domain.model.SmoothingParams
 import com.pathly.domain.model.TrackSegments
 import com.pathly.domain.model.TrackSmoother
@@ -47,16 +48,19 @@ class GpsTrackRepositoryImpl @Inject constructor(
     gpsTrackDao.getTrackListRows(),
     stopDao.observeStopCountsByTrack(),
     stopDao.observeStopCategoriesByTrack(),
-  ) { rows, stopCounts, stopCategories ->
+    stopDao.observeStopRegionsByTrack(),
+  ) { rows, stopCounts, stopCategories, stopRegions ->
     val countByTrack = stopCounts.associate { it.trackId to it.count }
     val categoriesByTrack = stopCategories.groupBy({ it.trackId }) {
       PlaceCategoryFacet.of(it.hasGoogleInfo, it.categoryCode)
     }
+    val regionsByTrack = stopRegions.groupBy({ it.trackId }) { PlaceRegion(it.prefecture, it.city) }
     rows.map { row ->
       row.track.toGpsTrack(
         stopCount = countByTrack[row.track.id] ?: 0,
         pointCount = row.pointCount,
         stopCategories = categoriesByTrack[row.track.id].orEmpty().toSet(),
+        stopRegions = regionsByTrack[row.track.id].orEmpty().toSet(),
       )
     }
   }
@@ -362,6 +366,7 @@ class GpsTrackRepositoryImpl @Inject constructor(
     smoothedOverride: List<GpsPoint>? = null,
     pointCount: Int = points.size,
     stopCategories: Set<PlaceCategoryFacet> = emptySet(),
+    stopRegions: Set<PlaceRegion> = emptySet(),
   ): GpsTrack = GpsTrack(
     id = this.id,
     startTime = this.startTime,
@@ -371,6 +376,7 @@ class GpsTrackRepositoryImpl @Inject constructor(
     isFavorite = this.isFavorite,
     stopCount = stopCount,
     stopCategories = stopCategories,
+    stopRegions = stopRegions,
     points = points,
     pointCount = pointCount,
     storedDistanceMeters = this.totalDistanceMeters,

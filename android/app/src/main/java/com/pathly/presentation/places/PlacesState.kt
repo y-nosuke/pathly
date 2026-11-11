@@ -6,12 +6,18 @@ import com.pathly.domain.model.PlaceCategoryFacet
 import com.pathly.domain.model.PlaceListItem
 import com.pathly.domain.model.PlacePrediction
 import com.pathly.domain.model.PlaceSearchResult
+import com.pathly.domain.model.RegionCount
+import com.pathly.domain.model.RegionKey
 import com.pathly.domain.model.categoryFacetCounts
+import com.pathly.domain.model.matchesAnyOf
+import com.pathly.domain.model.regionCounts
 import com.pathly.presentation.common.getEnum
 import com.pathly.presentation.common.getEnumSet
+import com.pathly.presentation.common.getRegionSet
 import com.pathly.presentation.common.matchesNameQuery
 import com.pathly.presentation.common.putEnum
 import com.pathly.presentation.common.putEnumSet
+import com.pathly.presentation.common.putRegionSet
 import java.text.Collator
 import java.util.Locale
 
@@ -53,11 +59,13 @@ data class SearchState(
 
 data class PlacesState(
   val items: List<PlaceListItem> = emptyList(),
-  // 絞り込みは3軸独立（行きたい / 訪問状況 / 業種）。行きたい・訪問状況はそれぞれ3状態。
+  // 絞り込みは4軸独立（行きたい / 訪問状況 / 業種 / 地域）。行きたい・訪問状況はそれぞれ3状態。
   val wishlistFilter: WishlistFilter = WishlistFilter.ANY,
   val visitedFilter: VisitedFilter = VisitedFilter.ANY,
   // 業種は複数選べて、選んだどれかに当たれば残す（OR）。空＝指定なし。
   val categoryFilter: Set<PlaceCategoryFacet> = emptySet(),
+  // 地域（都道府県・市区町村）。複数選べて、選んだどれかに当たれば残す（OR）。空＝指定なし。
+  val regionFilter: Set<RegionKey> = emptySet(),
   // 名前の検索語（表示名に含むものだけ残す）。空＝指定なし。ほかの絞り込みとは AND。
   val nameQuery: String = "",
   val sort: PlaceSort = PlaceSort.REGISTERED,
@@ -85,15 +93,17 @@ data class PlacesState(
     get() = wishlistFilter == WishlistFilter.ANY &&
       visitedFilter == VisitedFilter.ANY &&
       categoryFilter.isEmpty() &&
+      regionFilter.isEmpty() &&
       nameQuery.isBlank()
 
-  /** かけている絞り込みの数（名前の検索・行きたい・訪問状況・業種）。たたんだ帯に出す。 */
+  /** かけている絞り込みの数（名前の検索・行きたい・訪問状況・業種・地域）。たたんだ帯に出す。 */
   val activeFilterCount: Int
     get() = listOf(
       nameQuery.isNotBlank(),
       wishlistFilter != WishlistFilter.ANY,
       visitedFilter != VisitedFilter.ANY,
       categoryFilter.isNotEmpty(),
+      regionFilter.isNotEmpty(),
     ).count { it }
 
   /**
@@ -105,6 +115,7 @@ data class PlacesState(
       wishlistFilter.name,
       visitedFilter.name,
       categoryFilter.map { it.name }.sorted().joinToString(","),
+      regionFilter.map { "${it.prefecture}/${it.city}" }.sorted().joinToString(","),
       nameQuery.trim(),
       sort.name,
       sortDescending.toString(),
@@ -112,19 +123,20 @@ data class PlacesState(
     ).joinToString("|")
 
   /**
-   * 業種ごとの場所の件数（絞り込みの選択肢に添える）。業種以外の絞り込み（行きたい・訪問・名前の検索）に合う
+   * 業種ごとの場所の件数（絞り込みの選択肢に添える）。業種以外の絞り込み（行きたい・訪問・地域・名前の検索）に合う
    * 場所で数え、全体にはあるのに絞り込みで 0 件になった業種は 0 で残る（→ [categoryFacetCounts]）。
    */
   val categoryCounts: Map<PlaceCategoryFacet, Int>
-    get() = categoryFacetCounts(items, { listOf(PlaceCategoryFacet.of(it.place)) }, ::matchesExceptCategory)
+    get() = categoryFacetCounts(items, { listOf(PlaceCategoryFacet.of(it.place)) }) { matchesBase(it) && regionOk(it) }
+
+  /** 地域ごとの場所の件数。地域以外の絞り込み（行きたい・訪問・業種・名前の検索）に合う場所で数える（→ [regionCounts]）。 */
+  val regionCounts: List<RegionCount>
+    get() = regionCounts(items, { listOf(it.region) }) { matchesBase(it) && categoryOk(it) }
 
   /** 現在の絞り込み・並べ替えを適用した一覧。 */
   val visibleItems: List<PlaceListItem>
     get() {
-      val filtered = items.filter { item ->
-        val categoryOk = categoryFilter.isEmpty() || PlaceCategoryFacet.of(item.place) in categoryFilter
-        categoryOk && matchesExceptCategory(item)
-      }
+      val filtered = items.filter { matchesBase(it) && categoryOk(it) && regionOk(it) }
 
       // 各軸は昇順の比較器で定義し、降順ならまとめて反転する。
       // 元の items は登録が新しい順なので、同値のときはその並び（＝安定ソート）を保つ。
@@ -149,8 +161,12 @@ data class PlacesState(
       return filtered.sortedWith(if (sortDescending) ascending.reversed() else ascending)
     }
 
-  /** 業種以外の絞り込み（行きたい・訪問・名前の検索）に合うか。 */
-  private fun matchesExceptCategory(item: PlaceListItem): Boolean {
+  private fun categoryOk(item: PlaceListItem): Boolean = categoryFilter.isEmpty() || PlaceCategoryFacet.of(item.place) in categoryFilter
+
+  private fun regionOk(item: PlaceListItem): Boolean = regionFilter.matchesAnyOf(listOf(item.region))
+
+  /** 業種・地域以外の絞り込み（行きたい・訪問・名前の検索）に合うか。 */
+  private fun matchesBase(item: PlaceListItem): Boolean {
     val wishlistOk = when (wishlistFilter) {
       WishlistFilter.ANY -> true
       WishlistFilter.WISHLISTED -> item.isWishlisted
@@ -168,6 +184,7 @@ data class PlacesState(
 private const val KEY_WISHLIST = "places.wishlistFilter"
 private const val KEY_VISITED = "places.visitedFilter"
 private const val KEY_CATEGORY = "places.categoryFilter"
+private const val KEY_REGION = "places.regionFilter"
 private const val KEY_NAME_QUERY = "places.nameQuery"
 private const val KEY_SORT = "places.sort"
 private const val KEY_SORT_DESCENDING = "places.sortDescending"
@@ -181,6 +198,7 @@ fun PlacesState.withListOptionsFrom(handle: SavedStateHandle): PlacesState {
     wishlistFilter = handle.getEnum(KEY_WISHLIST, wishlistFilter),
     visitedFilter = handle.getEnum(KEY_VISITED, visitedFilter),
     categoryFilter = handle.getEnumSet<PlaceCategoryFacet>(KEY_CATEGORY),
+    regionFilter = handle.getRegionSet(KEY_REGION),
     nameQuery = handle.get<String>(KEY_NAME_QUERY).orEmpty(),
     sort = sort,
     sortDescending = handle.get<Boolean>(KEY_SORT_DESCENDING) ?: sort.defaultDescending,
@@ -194,6 +212,7 @@ fun PlacesState.saveListOptionsTo(handle: SavedStateHandle) {
   handle.putEnum(KEY_WISHLIST, wishlistFilter)
   handle.putEnum(KEY_VISITED, visitedFilter)
   handle.putEnumSet(KEY_CATEGORY, categoryFilter)
+  handle.putRegionSet(KEY_REGION, regionFilter)
   handle[KEY_NAME_QUERY] = nameQuery
   handle.putEnum(KEY_SORT, sort)
   handle[KEY_SORT_DESCENDING] = sortDescending

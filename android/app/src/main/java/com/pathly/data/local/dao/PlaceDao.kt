@@ -80,7 +80,8 @@ interface PlaceDao {
       "c.code AS categoryCode, c.displayName AS categoryDisplayName, " +
       "w.id AS wishlistId, w.priority AS priority, v.markedAt AS markedVisitedAt, " +
       "(SELECT COUNT(*) FROM stops s WHERE s.placeId = p.id) AS visitCount, " +
-      "(SELECT MAX(s.arrivalTime) FROM stops s WHERE s.placeId = p.id) AS lastStopAt " +
+      "(SELECT MAX(s.arrivalTime) FROM stops s WHERE s.placeId = p.id) AS lastStopAt, " +
+      "p.prefecture AS regionPrefecture, p.city AS regionCity " +
       "FROM places p " +
       "LEFT JOIN google_places g ON g.placeId = p.id " +
       "LEFT JOIN google_place_categories c ON c.id = g.categoryId " +
@@ -99,7 +100,8 @@ interface PlaceDao {
       "c.code AS categoryCode, c.displayName AS categoryDisplayName, " +
       "w.id AS wishlistId, w.priority AS priority, v.markedAt AS markedVisitedAt, " +
       "(SELECT COUNT(*) FROM stops s WHERE s.placeId = p.id) AS visitCount, " +
-      "(SELECT MAX(s.arrivalTime) FROM stops s WHERE s.placeId = p.id) AS lastStopAt " +
+      "(SELECT MAX(s.arrivalTime) FROM stops s WHERE s.placeId = p.id) AS lastStopAt, " +
+      "p.prefecture AS regionPrefecture, p.city AS regionCity " +
       "FROM places p " +
       "LEFT JOIN google_places g ON g.placeId = p.id " +
       "LEFT JOIN google_place_categories c ON c.id = g.categoryId " +

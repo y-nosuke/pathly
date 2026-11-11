@@ -64,6 +64,9 @@ erDiagram
     Double longitude
     String note
     String source
+    String prefecture
+    String city
+    Date regionResolvedAt
   }
   stops {
     Long id PK
@@ -105,18 +108,18 @@ erDiagram
 
 ## エンティティ一覧
 
-| エンティティ                | 役割                                                                                             | 主な関連                                               |
-| --------------------------- | ------------------------------------------------------------------------------------------------ | ------------------------------------------------------ |
-| **gps_tracks**              | お出掛け 1 回分の記録セッション。名前・お気に入り・確定時に焼き込む総移動距離を持つ              | gps_points / smoothed_points / stops を従える          |
-| **gps_points**              | 原 GPS 座標（無改変で保持）                                                                      | gps_tracks に属す                                      |
-| **smoothed_points**         | 補正（スムージング）後の点列。原データと併存                                                     | gps_tracks に属す／sourcePointId で生点を辿れる        |
-| **places**                  | 場所そのもの（自分の名前・メモ・同定用のアンカー座標）。由来（`source`）で自動回収の対象を分ける | stops から参照される                                   |
-| **stops**                   | 立ち寄り（訪問）。places と gps_tracks を結ぶ                                                    | 経路削除で消える（場所は残す）／訪問メモ `note` を持つ |
-| **place_resolutions**       | Google 問い合わせログ（行の有無＝問い合わせ済みか）                                              | places に 1:0..1                                       |
-| **google_places**           | Google 由来データ（place ID・名前・住所・カテゴリ・施設の座標）                                  | places に 1:0..1（行＝該当 POI あり）                  |
-| **google_place_categories** | 業種のマスタ（`code`＝Google の primaryType・表示名）                                            | google_places から参照される（多対 1）                 |
-| **wishlist**                | 行きたい場所（優先度のみ。メモは places.note）                                                   | places に 1:0..1                                       |
-| **visited_places**          | 手動で「訪問済み」にした印（行の存在＝訪問済み・`markedAt`＝印を付けた日時）                     | places に 1:0..1                                       |
+| エンティティ                | 役割                                                                                                                                                                                                                                                                  | 主な関連                                               |
+| --------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------ |
+| **gps_tracks**              | お出掛け 1 回分の記録セッション。名前・お気に入り・確定時に焼き込む総移動距離を持つ                                                                                                                                                                                   | gps_points / smoothed_points / stops を従える          |
+| **gps_points**              | 原 GPS 座標（無改変で保持）                                                                                                                                                                                                                                           | gps_tracks に属す                                      |
+| **smoothed_points**         | 補正（スムージング）後の点列。原データと併存                                                                                                                                                                                                                          | gps_tracks に属す／sourcePointId で生点を辿れる        |
+| **places**                  | 場所そのもの（自分の名前・メモ・同定用のアンカー座標）。由来（`source`）で自動回収の対象を分ける。地域（都道府県・市区町村）はアンカーから Geocoder で引いて後から書き足す（`regionResolvedAt` が null＝まだ。→ [ADR-0029](../adr/0029-place-region-by-geocoder.md)） | stops から参照される                                   |
+| **stops**                   | 立ち寄り（訪問）。places と gps_tracks を結ぶ                                                                                                                                                                                                                         | 経路削除で消える（場所は残す）／訪問メモ `note` を持つ |
+| **place_resolutions**       | Google 問い合わせログ（行の有無＝問い合わせ済みか）                                                                                                                                                                                                                   | places に 1:0..1                                       |
+| **google_places**           | Google 由来データ（place ID・名前・住所・カテゴリ・施設の座標）                                                                                                                                                                                                       | places に 1:0..1（行＝該当 POI あり）                  |
+| **google_place_categories** | 業種のマスタ（`code`＝Google の primaryType・表示名）                                                                                                                                                                                                                 | google_places から参照される（多対 1）                 |
+| **wishlist**                | 行きたい場所（優先度のみ。メモは places.note）                                                                                                                                                                                                                        | places に 1:0..1                                       |
+| **visited_places**          | 手動で「訪問済み」にした印（行の存在＝訪問済み・`markedAt`＝印を付けた日時）                                                                                                                                                                                          | places に 1:0..1                                       |
 
 ### 関連と削除規則（要点）
 

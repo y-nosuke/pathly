@@ -5,6 +5,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.pathly.domain.model.GpsTrack
 import com.pathly.domain.model.PlaceCategoryFacet
+import com.pathly.domain.model.RegionKey
 import com.pathly.domain.repository.GpsTrackRepository
 import com.pathly.presentation.common.toggled
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -81,12 +82,22 @@ class HistoryViewModel @Inject constructor(
     updateListOptions { it.copy(categoryFilter = emptySet()) }
   }
 
+  /** 地域の絞り込みで、その都道府県・市区町村を選ぶ／外す（複数選べる）。 */
+  fun toggleRegionFilter(region: RegionKey) {
+    updateListOptions { it.copy(regionFilter = it.regionFilter.toggled(region)) }
+  }
+
+  /** 地域の絞り込みだけをまとめて外す（ほかの軸はそのまま）。 */
+  fun clearRegionFilter() {
+    updateListOptions { it.copy(regionFilter = emptySet()) }
+  }
+
   /** 名前の検索語を変える（入力のたびに一覧を絞る）。 */
   fun setNameQuery(query: String) {
     updateListOptions { it.copy(nameQuery = query) }
   }
 
-  /** 絞り込みを全解除する（4軸と名前の検索語をまとめて指定なしに戻す）。並べ替えは保持。 */
+  /** 絞り込みを全解除する（5軸と名前の検索語をまとめて指定なしに戻す）。並べ替えは保持。 */
   fun clearFilters() {
     updateListOptions {
       it.copy(
@@ -94,6 +105,7 @@ class HistoryViewModel @Inject constructor(
         namedFilter = TrackNamedFilter.ANY,
         stopFilter = TrackStopFilter.ANY,
         categoryFilter = emptySet(),
+        regionFilter = emptySet(),
         nameQuery = "",
       )
     }

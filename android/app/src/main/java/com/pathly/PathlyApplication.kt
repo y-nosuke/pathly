@@ -8,8 +8,10 @@ import com.google.android.gms.maps.MapsInitializer
 import com.google.android.gms.maps.OnMapsSdkInitializedCallback
 import com.google.android.libraries.places.api.Places
 import com.pathly.data.backup.DataBackupManager
+import com.pathly.data.local.dao.PlaceRegionDao
 import com.pathly.data.settings.MaintenanceStore
 import com.pathly.data.work.PlaceNameCatchUpWorker
+import com.pathly.data.work.PlaceRegionCatchUpWorker
 import com.pathly.domain.model.TrackSmoother
 import com.pathly.domain.repository.GpsTrackRepository
 import com.pathly.util.Logger
@@ -17,6 +19,8 @@ import dagger.hilt.android.HiltAndroidApp
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
@@ -39,6 +43,9 @@ class PathlyApplication :
 
   @Inject
   lateinit var workerFactory: HiltWorkerFactory
+
+  @Inject
+  lateinit var placeRegionDao: PlaceRegionDao
 
   /** WorkManager から Hilt でワーカーを組み立てるための設定。 */
   override val workManagerConfiguration: Configuration
@@ -65,6 +72,15 @@ class PathlyApplication :
     // オフライン記録で未解決のまま残った立ち寄り場所の名前解決を予約する。
     // ネットワーク接続を制約にしているので、いま繋がっていなくても復帰した時点で走る。
     PlaceNameCatchUpWorker.enqueue(this)
+
+    // 地域（都道府県・市区町村）をまだ引いていない場所が出てきたら、引くのを予約する（→ adr/0029）。
+    // 場所は記録中にも増えるので、起動時だけでなく数を見続ける。0 → 1 以上に変わったときだけ予約する。
+    appScope.launch {
+      placeRegionDao.observeUnresolvedCount()
+        .map { it > 0 }
+        .distinctUntilChanged()
+        .collect { hasUnresolved -> if (hasUnresolved) PlaceRegionCatchUpWorker.enqueue(this@PathlyApplication) }
+    }
 
     // 保存済みのデータに対する一度きりの修復。距離を埋めてから補正点を作り直す順にする
     // （作り直しは距離も焼き直すので、逆だと二度手間になる）。

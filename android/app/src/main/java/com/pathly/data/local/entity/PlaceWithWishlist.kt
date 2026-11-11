@@ -36,6 +36,9 @@ data class PlaceWithWishlist(
   val visitCount: Int,
   // 直近の立ち寄り（arrivalTime の最大）。立ち寄りが無ければ null。訪問順の並べ替えに使う。
   val lastStopAt: Date?,
+  // 地域（places の列。まだ引いていない・分からなければ null。→ adr/0029）。
+  val regionPrefecture: String? = null,
+  val regionCity: String? = null,
 ) {
   val category: PlaceCategory? get() = categoryCode?.let { PlaceCategory(it, categoryDisplayName) }
 }

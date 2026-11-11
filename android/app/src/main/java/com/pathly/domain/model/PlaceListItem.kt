@@ -16,6 +16,8 @@ data class PlaceListItem(
   val visitCount: Int,
   /** 直近の立ち寄り日時（arrivalTime の最大）。立ち寄りが無ければ null。 */
   val lastStopAt: Date? = null,
+  /** 地域（都道府県・市区町村）。まだ引いていない・分からなければ地域不明（→ adr/0029）。 */
+  val region: PlaceRegion = PlaceRegion.UNKNOWN,
 ) {
   /** 行きたいに登録済みか。 */
   val isWishlisted: Boolean get() = wishlistId != null

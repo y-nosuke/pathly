@@ -14,6 +14,7 @@ import com.pathly.domain.model.PlacePrediction
 import com.pathly.domain.model.PlaceSearchResult
 import com.pathly.domain.model.PlaceVisit
 import com.pathly.domain.model.Priority
+import com.pathly.domain.model.RegionKey
 import com.pathly.domain.model.RegisteredPlace
 import com.pathly.domain.repository.WishlistRepository
 import com.pathly.domain.usecase.PlaceEditUseCase
@@ -119,6 +120,16 @@ class PlacesViewModel @Inject constructor(
     updateListOptions { it.copy(categoryFilter = emptySet()) }
   }
 
+  /** 地域の絞り込みで、その都道府県・市区町村を選ぶ／外す（複数選べる）。 */
+  fun toggleRegionFilter(region: RegionKey) {
+    updateListOptions { it.copy(regionFilter = it.regionFilter.toggled(region)) }
+  }
+
+  /** 地域の絞り込みだけをまとめて外す（ほかの軸はそのまま）。 */
+  fun clearRegionFilter() {
+    updateListOptions { it.copy(regionFilter = emptySet()) }
+  }
+
   /** 名前の検索語を変える（入力のたびに一覧を絞る）。 */
   fun setNameQuery(query: String) {
     updateListOptions { it.copy(nameQuery = query) }
@@ -134,13 +145,14 @@ class PlacesViewModel @Inject constructor(
     updateListOptions { it.copy(controlsCollapsed = collapsed) }
   }
 
-  /** 絞り込みを全解除する（行きたい・訪問状況・業種・名前の検索語をまとめて指定なしに戻す）。並べ替えは保持。 */
+  /** 絞り込みを全解除する（行きたい・訪問状況・業種・地域・名前の検索語をまとめて指定なしに戻す）。並べ替えは保持。 */
   fun clearFilters() {
     updateListOptions {
       it.copy(
         wishlistFilter = WishlistFilter.ANY,
         visitedFilter = VisitedFilter.ANY,
         categoryFilter = emptySet(),
+        regionFilter = emptySet(),
         nameQuery = "",
       )
     }
