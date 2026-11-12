@@ -14,6 +14,7 @@ import com.google.android.libraries.places.api.net.FetchPlaceRequest
 import com.google.android.libraries.places.api.net.FindAutocompletePredictionsRequest
 import com.google.android.libraries.places.api.net.PlacesClient
 import com.pathly.domain.model.GeoBounds
+import com.pathly.domain.model.MapRegion
 import com.pathly.domain.model.PlacePrediction
 import com.pathly.domain.model.PlaceSearchResult
 import com.pathly.util.Logger
@@ -128,11 +129,11 @@ class PlacesTextSearcher @Inject constructor(
   }
 
   /**
-   * 地域の候補を確定して、その地域の範囲（viewport）を得る。地図を移すだけなので、引くのは範囲と位置だけ
-   * （施設の名前・種類は引かない＝Place Details の安い区分に収まる）。セッションはここで終了する。
-   * 範囲が返らないときは、位置のまわりの決まった広さにする。オフライン・失敗時は null。
+   * 地域の候補を確定して、その地域の範囲（viewport）と中心を得る。地図を移すだけなので、引くのは範囲と位置だけ
+   * （施設の名前・種類は引かない＝Place Details の安い区分に収まる。名前は候補の文字を使う）。セッションはここで終了する。
+   * 範囲が返らないときは、位置のまわりの決まった広さにする。位置が返らないときは範囲の中心。オフライン・失敗時は null。
    */
-  suspend fun fetchRegion(placeId: String): GeoBounds? = withContext(Dispatchers.IO) {
+  suspend fun fetchRegion(placeId: String): MapRegion? = withContext(Dispatchers.IO) {
     if (!isOnline()) return@withContext null
     val placesClient = client ?: return@withContext null
     val token = sessionToken
@@ -140,16 +141,17 @@ class PlacesTextSearcher @Inject constructor(
       val builder = FetchPlaceRequest.builder(placeId, REGION_FIELDS)
       if (token != null) builder.setSessionToken(token)
       val place = Tasks.await(placesClient.fetchPlace(builder.build())).place
-      place.viewport?.let { v ->
+      val viewport = place.viewport
+      val location = place.location ?: viewport?.center ?: return@withContext null
+      val bounds = viewport?.let { v ->
         GeoBounds(v.southwest.latitude, v.southwest.longitude, v.northeast.latitude, v.northeast.longitude)
-      } ?: place.location?.let {
-        GeoBounds(
-          it.latitude - REGION_FALLBACK_HALF_SPAN_DEG,
-          it.longitude - REGION_FALLBACK_HALF_SPAN_DEG,
-          it.latitude + REGION_FALLBACK_HALF_SPAN_DEG,
-          it.longitude + REGION_FALLBACK_HALF_SPAN_DEG,
-        )
-      }
+      } ?: GeoBounds(
+        location.latitude - REGION_FALLBACK_HALF_SPAN_DEG,
+        location.longitude - REGION_FALLBACK_HALF_SPAN_DEG,
+        location.latitude + REGION_FALLBACK_HALF_SPAN_DEG,
+        location.longitude + REGION_FALLBACK_HALF_SPAN_DEG,
+      )
+      MapRegion(bounds = bounds, latitude = location.latitude, longitude = location.longitude)
     } catch (e: Exception) {
       logger.w("fetchPlace (region) failed", e)
       null

@@ -14,6 +14,7 @@ import androidx.compose.ui.test.performTextInput
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.pathly.domain.model.GeoBounds
+import com.pathly.domain.model.MapRegion
 import com.pathly.domain.model.PlacePrediction
 import com.pathly.domain.model.PlaceSearchResult
 import com.pathly.ui.theme.PathlyAndroidTheme
@@ -388,7 +389,8 @@ class TrackingScreenTest {
   fun trackingScreen_jumpToRegion_selectingPredictionClosesSearch() {
     coEvery { mockViewModel.predictRegions(any(), any()) } returns
       listOf(PlacePrediction(placeId = "r1", primaryText = "札幌市", secondaryText = "北海道"))
-    coEvery { mockViewModel.fetchRegion("r1") } returns GeoBounds(42.9, 141.2, 43.2, 141.5)
+    coEvery { mockViewModel.fetchRegion("r1") } returns
+      MapRegion(bounds = GeoBounds(42.9, 141.2, 43.2, 141.5), latitude = 43.06, longitude = 141.35)
 
     composeTestRule.setContent {
       PathlyAndroidTheme {

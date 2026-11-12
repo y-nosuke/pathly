@@ -55,7 +55,7 @@ internal fun <T : Any> TrackingPlaceSearchBar(
   placeholder: String,
   fetchFailedText: String,
   onSearchPredictions: suspend (query: String) -> List<PlacePrediction>,
-  onFetchPrediction: suspend (placeId: String) -> T?,
+  onFetchPrediction: suspend (prediction: PlacePrediction) -> T?,
   onSelected: (T) -> Unit,
   onClose: () -> Unit,
   modifier: Modifier = Modifier,
@@ -164,9 +164,10 @@ internal fun <T : Any> TrackingPlaceSearchBar(
             isSearching = isSearching || isFetching,
             onSelectPrediction = { placeId ->
               if (isFetching) return@PlaceSearchPredictions
+              val prediction = predictions.firstOrNull { it.placeId == placeId } ?: return@PlaceSearchPredictions
               scope.launch {
                 isFetching = true
-                val result = onFetchPrediction(placeId)
+                val result = onFetchPrediction(prediction)
                 isFetching = false
                 if (result != null) {
                   keyboard?.hide()
