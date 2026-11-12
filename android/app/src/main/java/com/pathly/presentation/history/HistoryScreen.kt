@@ -1,6 +1,7 @@
 package com.pathly.presentation.history
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.background
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -11,12 +12,14 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -39,12 +42,16 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.google.android.gms.maps.model.CameraPosition
+import com.google.android.gms.maps.model.LatLng
+import com.google.maps.android.compose.rememberCameraPositionState
 import com.pathly.R
 import com.pathly.domain.model.GpsTrack
 import com.pathly.domain.model.PlaceCategoryFacet
@@ -72,8 +79,22 @@ fun HistoryScreen(
   modifier: Modifier = Modifier,
   viewModel: HistoryViewModel = hiltViewModel(),
   onTrackClick: (GpsTrack) -> Unit = {},
+  // 地図表示の地図スロット。null（既定）は実マップ（GoogleMap）を描く。テストは空スロット（{}）を渡す。
+  mapContent: (@Composable () -> Unit)? = null,
 ) {
   val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+  val isMap = uiState.viewMode == HistoryViewMode.MAP
+  // 地図表示はタブの中の一段奥の見方として扱い、システムバックで一覧表示へ戻す（タブは離れない。場所タブと同じ）。
+  // 吹き出しが出ているときは、後から登録される地図側の処理が先に吹き出しを閉じる。
+  BackHandler(enabled = isMap) { viewModel.setViewMode(HistoryViewMode.LIST) }
+  // 地図表示の範囲は、一覧表示に切り替えても・経路詳細へ行って戻っても捨てない。
+  val mapCamera = rememberCameraPositionState {
+    position = CameraPosition.fromLatLngZoom(LatLng(35.6762, 139.6503), 12f)
+  }
+  var mapInitialized by rememberSaveable { mutableStateOf(false) }
+  // 地図は一度開いたら、一覧表示に切り替えても捨てずに一覧の裏に残す（作り直すと地図の絵が出るまでちらつくため）。
+  var keepMap by rememberSaveable { mutableStateOf(false) }
+  LaunchedEffect(isMap) { if (isMap) keepMap = true }
 
   // 名前を編集中の経路（null=ダイアログ非表示）。
   var renameTarget by remember { mutableStateOf<GpsTrack?>(null) }
@@ -83,19 +104,122 @@ fun HistoryScreen(
   var filterPanelOpen by rememberSaveable { mutableStateOf(false) }
   // 欄が実際に出ているか。読み込み中や、完了した経路が無い（記録中だけの）ときは一覧に欄を入れないので、
   // 開いたままでも出ていない扱いにする（閉じるボタン・戻る・ボタンの ▴ を欄の見え方に揃える）。
-  val panelVisible = filterPanelOpen && !uiState.isLoading && uiState.tracks.isNotEmpty()
-  // 欄が出ているときの戻るは、欄を閉じる。
+  // 地図表示では、重ねたものをたたんでいる間は欄が見えない。
+  val panelVisible = filterPanelOpen &&
+    uiState.tracks.isNotEmpty() &&
+    if (isMap) !uiState.controlsCollapsed else !uiState.isLoading
+  // 欄が出ているときの戻るは、欄を閉じる（地図表示から一覧へ戻すより先）。
   BackHandler(enabled = panelVisible) { filterPanelOpen = false }
 
+  Box(modifier = modifier.fillMaxSize()) {
+    if (isMap || keepMap) {
+      HistoryMapLayout(
+        state = uiState,
+        visible = isMap,
+        camera = mapCamera,
+        initialized = mapInitialized,
+        onInitialized = { mapInitialized = true },
+        onViewModeChange = viewModel::setViewMode,
+        onControlsCollapsedChange = viewModel::setControlsCollapsed,
+        onToggle = viewModel::toggleOverlay,
+        onFocus = viewModel::focusOverlay,
+        onClearAll = viewModel::clearOverlays,
+        onConsumeFocus = viewModel::consumeFocus,
+        onOpenTrack = onTrackClick,
+        filterControls = {
+          if (uiState.tracks.isNotEmpty()) {
+            FilterSortBar(
+              state = uiState,
+              onClearFilters = viewModel::clearFilters,
+              onResetListOptions = viewModel::resetListOptions,
+              onNameQueryChange = viewModel::setNameQuery,
+              onFavoriteFilterChange = viewModel::setFavoriteFilter,
+              onNamedFilterChange = viewModel::setNamedFilter,
+              onStopFilterChange = viewModel::setStopFilter,
+              onToggleCategoryFilter = viewModel::toggleCategoryFilter,
+              onClearCategoryFilter = viewModel::clearCategoryFilter,
+              onToggleRegionFilter = viewModel::toggleRegionFilter,
+              onClearRegionFilter = viewModel::clearRegionFilter,
+              onSortChange = viewModel::setSort,
+              onToggleSortDirection = viewModel::toggleSortDirection,
+              panelOpen = panelVisible,
+              onPanelOpenChange = { filterPanelOpen = it },
+              // 地図表示では並びに意味が無いので並べ替えは出さない。欄は重ねたものの中に出す（一覧が無いので）。
+              showSort = false,
+              inlinePanel = true,
+            )
+          }
+        },
+        mapContent = mapContent,
+      )
+    }
+    if (!isMap) {
+      HistoryListContent(
+        uiState = uiState,
+        viewModel = viewModel,
+        panelVisible = panelVisible,
+        onPanelOpenChange = { filterPanelOpen = it },
+        onTrackClick = onTrackClick,
+        onRenameClick = { renameTarget = it },
+        onDeleteClick = { deleteTarget = it },
+      )
+    }
+  }
+
+  renameTarget?.let { target ->
+    RenameTrackDialog(
+      initialName = target.name.orEmpty(),
+      onDismiss = { renameTarget = null },
+      onConfirm = { newName ->
+        viewModel.renameTrack(target.id, newName)
+        renameTarget = null
+      },
+    )
+  }
+
+  deleteTarget?.let { target ->
+    val label = target.name?.takeIf { it.isNotBlank() }
+      ?: DateFormatters.shortDate(target.startTime)
+    AlertDialog(
+      onDismissRequest = { deleteTarget = null },
+      title = { Text("記録を削除しますか？") },
+      text = { Text("「$label」の経路・立ち寄りをすべて削除します。この操作は元に戻せません。") },
+      confirmButton = {
+        TextButton(onClick = {
+          viewModel.deleteTrack(target)
+          deleteTarget = null
+        }) {
+          Text("削除する", color = MaterialTheme.colorScheme.error)
+        }
+      },
+      dismissButton = {
+        TextButton(onClick = { deleteTarget = null }) { Text("キャンセル") }
+      },
+    )
+  }
+}
+
+/** 履歴の一覧表示（見出し・絞り込み・統計・経路の一覧）。裏に残した地図を隠し、触っても地図に届かないようにする。 */
+@Composable
+private fun HistoryListContent(
+  uiState: HistoryState,
+  viewModel: HistoryViewModel,
+  panelVisible: Boolean,
+  onPanelOpenChange: (Boolean) -> Unit,
+  onTrackClick: (GpsTrack) -> Unit,
+  onRenameClick: (GpsTrack) -> Unit,
+  onDeleteClick: (GpsTrack) -> Unit,
+) {
   Column(
-    modifier = modifier
+    modifier = Modifier
       .fillMaxSize()
+      .background(MaterialTheme.colorScheme.background)
+      .pointerInput(Unit) {}
       .padding(16.dp),
   ) {
-    Text(
-      text = "外出履歴",
-      style = MaterialTheme.typography.headlineMedium,
-      fontWeight = FontWeight.Bold,
+    HistoryHeader(
+      viewMode = uiState.viewMode,
+      onViewModeChange = viewModel::setViewMode,
       modifier = Modifier.padding(bottom = 12.dp),
     )
 
@@ -116,7 +240,7 @@ fun HistoryScreen(
         onSortChange = viewModel::setSort,
         onToggleSortDirection = viewModel::toggleSortDirection,
         panelOpen = panelVisible,
-        onPanelOpenChange = { filterPanelOpen = it },
+        onPanelOpenChange = onPanelOpenChange,
       )
       Spacer(modifier = Modifier.height(8.dp))
     }
@@ -217,8 +341,8 @@ fun HistoryScreen(
                 track = track,
                 onTrackClick = { onTrackClick(track) },
                 onToggleFavorite = { viewModel.toggleFavorite(track) },
-                onRenameClick = { renameTarget = track },
-                onDeleteClick = { deleteTarget = track },
+                onRenameClick = { onRenameClick(track) },
+                onDeleteClick = { onDeleteClick(track) },
               )
             }
           }
@@ -229,7 +353,7 @@ fun HistoryScreen(
           // 欄を開いている間は、親指の届く下にも閉じるボタンを浮かべる。
           if (panelVisible) {
             FilterPanelCloseButton(
-              onClick = { filterPanelOpen = false },
+              onClick = { onPanelOpenChange(false) },
               modifier = Modifier
                 .align(Alignment.BottomCenter)
                 .padding(bottom = 8.dp),
@@ -245,43 +369,11 @@ fun HistoryScreen(
       }
     }
   }
-
-  renameTarget?.let { target ->
-    RenameTrackDialog(
-      initialName = target.name.orEmpty(),
-      onDismiss = { renameTarget = null },
-      onConfirm = { newName ->
-        viewModel.renameTrack(target.id, newName)
-        renameTarget = null
-      },
-    )
-  }
-
-  deleteTarget?.let { target ->
-    val label = target.name?.takeIf { it.isNotBlank() }
-      ?: DateFormatters.shortDate(target.startTime)
-    AlertDialog(
-      onDismissRequest = { deleteTarget = null },
-      title = { Text("記録を削除しますか？") },
-      text = { Text("「$label」の経路・立ち寄りをすべて削除します。この操作は元に戻せません。") },
-      confirmButton = {
-        TextButton(onClick = {
-          viewModel.deleteTrack(target)
-          deleteTarget = null
-        }) {
-          Text("削除する", color = MaterialTheme.colorScheme.error)
-        }
-      },
-      dismissButton = {
-        TextButton(onClick = { deleteTarget = null }) { Text("キャンセル") }
-      },
-    )
-  }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun FilterSortBar(
+internal fun FilterSortBar(
   state: HistoryState,
   onClearFilters: () -> Unit,
   onResetListOptions: () -> Unit,
@@ -298,6 +390,10 @@ private fun FilterSortBar(
   panelOpen: Boolean,
   onPanelOpenChange: (Boolean) -> Unit,
   modifier: Modifier = Modifier,
+  // 並べ替えを出すか（地図表示では並びに意味が無いので出さない）。
+  showSort: Boolean = true,
+  // 絞り込みの欄をここに出すか（地図表示。一覧表示では欄を一覧の先頭に入れる）。
+  inlinePanel: Boolean = false,
 ) {
   Column(modifier = modifier) {
     // 名前の検索（名前、未命名なら見出しの日付に含むものだけ残す）。ほかの絞り込みとは AND。消すのは欄の ×。
@@ -321,25 +417,8 @@ private fun FilterSortBar(
     Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
       FilterPanelButton(activeCount = activeFilters.size, expanded = panelOpen, onClick = { onPanelOpenChange(!panelOpen) })
       Spacer(modifier = Modifier.weight(1f))
-      Box {
-        var sortOpen by remember { mutableStateOf(false) }
-        TextButton(onClick = { sortOpen = true }) {
-          Text(text = "並べ替え: ${state.sort.label} ▾")
-        }
-        DropdownMenu(expanded = sortOpen, onDismissRequest = { sortOpen = false }) {
-          TrackSort.entries.forEach { sort ->
-            DropdownMenuItem(
-              text = { Text(sort.label) },
-              onClick = {
-                sortOpen = false
-                onSortChange(sort)
-              },
-            )
-          }
-        }
-      }
-      TextButton(onClick = onToggleSortDirection) {
-        Text(text = if (state.sortDescending) "降順 ↓" else "昇順 ↑")
+      if (showSort) {
+        SortControls(state = state, onSortChange = onSortChange, onToggleSortDirection = onToggleSortDirection)
       }
     }
     // 欄を開いている間はチップの行を出さない（欄に選んでいるものが見えている。選ぶたびに行が出たり消えたりして
@@ -350,6 +429,53 @@ private fun FilterSortBar(
         onChipClick = { onPanelOpenChange(true) },
         onReset = onResetListOptions.takeUnless { state.isInitialListOptions },
       )
+    }
+    if (inlinePanel && panelOpen) {
+      Spacer(modifier = Modifier.height(8.dp))
+      // 地図を隠しきらないよう高さを抑え、中でスクロールする。
+      Box(modifier = Modifier.heightIn(max = 360.dp).verticalScroll(rememberScrollState())) {
+        HistoryFilterPanel(
+          state = state,
+          onClearFilters = onClearFilters,
+          onResetListOptions = onResetListOptions,
+          onFavoriteFilterChange = onFavoriteFilterChange,
+          onNamedFilterChange = onNamedFilterChange,
+          onStopFilterChange = onStopFilterChange,
+          onToggleCategoryFilter = onToggleCategoryFilter,
+          onToggleRegionFilter = onToggleRegionFilter,
+        )
+      }
+    }
+  }
+}
+
+/** 並べ替え（軸メニュー ＋ 昇順/降順トグル）。 */
+@Composable
+private fun SortControls(
+  state: HistoryState,
+  onSortChange: (TrackSort) -> Unit,
+  onToggleSortDirection: () -> Unit,
+) {
+  Row(verticalAlignment = Alignment.CenterVertically) {
+    Box {
+      var sortOpen by remember { mutableStateOf(false) }
+      TextButton(onClick = { sortOpen = true }) {
+        Text(text = "並べ替え: ${state.sort.label} ▾")
+      }
+      DropdownMenu(expanded = sortOpen, onDismissRequest = { sortOpen = false }) {
+        TrackSort.entries.forEach { sort ->
+          DropdownMenuItem(
+            text = { Text(sort.label) },
+            onClick = {
+              sortOpen = false
+              onSortChange(sort)
+            },
+          )
+        }
+      }
+    }
+    TextButton(onClick = onToggleSortDirection) {
+      Text(text = if (state.sortDescending) "降順 ↓" else "昇順 ↑")
     }
   }
 }

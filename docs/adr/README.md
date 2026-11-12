@@ -48,3 +48,4 @@
 | [0030](0030-overseas-region-by-country-and-city.md)   | 海外の場所の地域は、国 → 都市で持ち、州は絞り込みに使わない                                           | Accepted |
 | [0031](0031-list-filters-in-a-panel.md)               | 一覧の絞り込みは、一覧の先頭に開く欄にまとめ、効いている条件だけをチップで出す                        | Accepted |
 | [0032](0032-jump-to-region-by-places-autocomplete.md) | 記録画面の「地域へ移動」は、Places の Autocomplete を地域に絞って使い、入口は「検索して登録」と分ける | Accepted |
+| [0033](0033-history-map-shows-selected-tracks.md)     | 履歴の地図表示は、絞り込んだ経路のうち選んだものだけを重ね、選び方は「この範囲の経路」と揃える        | Accepted |
