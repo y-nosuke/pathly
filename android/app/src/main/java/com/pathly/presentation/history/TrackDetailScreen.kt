@@ -247,6 +247,8 @@ fun TrackDetailScreen(
   // タップした立ち寄りへ地図をフォーカスする（nonce で同じ場所の再タップにも反応）。
   var focusTarget by remember { mutableStateOf<LatLng?>(null) }
   var focusNonce by remember { mutableIntStateOf(0) }
+  // 「経路の全体を見る」の合図（押すたびに増やし、地図が経路全体に合わせ直す）。
+  var fitNonce by remember { mutableIntStateOf(0) }
 
   // 立ち寄りへ地図を寄せ、一覧側の強調も合わせる。行タップだけでなく**編集を始めるとき**にも使う。
   // 直す対象が画面の外にあると、地図のハイライトを見ながら期間を調整できないため。
@@ -360,6 +362,7 @@ fun TrackDetailScreen(
           },
           focusTarget = focusTarget,
           focusNonce = focusNonce,
+          fitNonce = fitNonce,
           // フォーカスがピンをシート/オーバーレイの裏に隠さないよう、下端を空ける。
           // 通常モードは現在の段（ハーフ/フル）の高さ分。ドラッグ中の逐次値ではなく確定値を使う。
           contentPadding = PaddingValues(
@@ -459,6 +462,24 @@ fun TrackDetailScreen(
           contentDescription = "戻る",
           modifier = Modifier.padding(8.dp),
         )
+      }
+
+      // 経路の全体を見る。立ち寄りへ寄ったり地図を動かしたりしたあと、開いたときの見え方に戻す。
+      // 戻るの隣に固定で置く（右に並ぶトグル・絞り込みは出たり消えたりするので、位置がずれないように）。
+      if (track.points.isNotEmpty()) {
+        Surface(
+          onClick = { fitNonce++ },
+          shape = CircleShape,
+          color = MaterialTheme.colorScheme.surface,
+          shadowElevation = 4.dp,
+        ) {
+          Icon(
+            painter = painterResource(R.drawable.ic_fit),
+            contentDescription = "経路の全体を見る",
+            tint = MaterialTheme.colorScheme.onSurface,
+            modifier = Modifier.padding(8.dp),
+          )
+        }
       }
 
       // 登録済みの場所を地図に出すトグル（ONで既存placeをアンバーのピンで表示）。
