@@ -4,12 +4,19 @@ import android.Manifest
 import androidx.compose.ui.test.assertHasClickAction
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.v2.createComposeRule
+import androidx.compose.ui.test.onAllNodesWithTag
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performTextInput
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
+import com.pathly.domain.model.PlacePrediction
+import com.pathly.domain.model.PlaceSearchResult
 import com.pathly.ui.theme.PathlyAndroidTheme
+import io.mockk.coEvery
 import io.mockk.mockk
 import io.mockk.verify
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -309,5 +316,69 @@ class TrackingScreenTest {
     composeTestRule
       .onNodeWithText("位置情報を許可")
       .assertDoesNotExist()
+  }
+
+  @Test
+  fun trackingScreen_searchAndRegister_selectingPredictionOpensPlaceSheet() {
+    coEvery { mockViewModel.predictPlacesNear(any(), any()) } returns
+      listOf(PlacePrediction(placeId = "p1", primaryText = "テスト喫茶", secondaryText = "東京都千代田区"))
+    coEvery { mockViewModel.fetchPlaceResult("p1") } returns
+      PlaceSearchResult(
+        googlePlaceId = "p1",
+        name = "テスト喫茶",
+        address = "東京都千代田区",
+        category = null,
+        latitude = 35.68,
+        longitude = 139.76,
+      )
+
+    composeTestRule.setContent {
+      PathlyAndroidTheme {
+        TrackingScreen(
+          onRequestPermission = mockOnRequestPermission,
+          viewModel = mockViewModel,
+          trackOverlayViewModel = overlayViewModel,
+          mapContent = {},
+        )
+      }
+    }
+
+    // 地図の上のボタンで検索窓を開く（検索のセッションを始める）。窓と重なる上端のボタンは隠れる。
+    composeTestRule.onNodeWithContentDescription("検索して場所を登録").performClick()
+    composeTestRule.onNodeWithTag("trackingPlaceSearch").assertIsDisplayed()
+    composeTestRule.onNodeWithContentDescription("検索して場所を登録").assertDoesNotExist()
+    verify { mockViewModel.startPlaceSearch() }
+
+    // 候補を選ぶと、検索窓を閉じて場所シートで登録へ進む。
+    composeTestRule.onNodeWithTag("trackingPlaceSearchField").performTextInput("テスト")
+    composeTestRule.waitUntil(timeoutMillis = 5_000) {
+      composeTestRule.onAllNodesWithText("東京都千代田区").fetchSemanticsNodes().isNotEmpty()
+    }
+    composeTestRule.onNodeWithText("東京都千代田区").performClick()
+    composeTestRule.waitUntil(timeoutMillis = 5_000) {
+      composeTestRule.onAllNodesWithTag("trackingPlaceSearch").fetchSemanticsNodes().isEmpty()
+    }
+    // 場所シート（POI タップと同じ）が出る。登録のボタンはシートの下のほうにあるので、在ることだけを見る。
+    composeTestRule.onNodeWithText("登録").assertExists()
+  }
+
+  @Test
+  fun trackingScreen_searchAndRegister_closeReturnsToMap() {
+    composeTestRule.setContent {
+      PathlyAndroidTheme {
+        TrackingScreen(
+          onRequestPermission = mockOnRequestPermission,
+          viewModel = mockViewModel,
+          trackOverlayViewModel = overlayViewModel,
+          mapContent = {},
+        )
+      }
+    }
+
+    composeTestRule.onNodeWithContentDescription("検索して場所を登録").performClick()
+    composeTestRule.onNodeWithContentDescription("検索を閉じる").performClick()
+    composeTestRule.onNodeWithTag("trackingPlaceSearch").assertDoesNotExist()
+    composeTestRule.onNodeWithContentDescription("検索して場所を登録").assertIsDisplayed()
+    composeTestRule.onNodeWithContentDescription("記録開始").assertIsDisplayed()
   }
 }

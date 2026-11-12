@@ -6,6 +6,7 @@ import com.pathly.data.places.PlacesTextSearcher
 import com.pathly.data.settings.MapSurface
 import com.pathly.data.settings.SettingsRepository
 import com.pathly.data.tracking.TrackingController
+import com.pathly.domain.model.GeoBounds
 import com.pathly.domain.model.MapPlaceFilter
 import com.pathly.domain.model.NearbyRegisterPrompt
 import com.pathly.domain.model.NearbyStopPrompt
@@ -348,6 +349,8 @@ class TrackingViewModel @Inject constructor(
     memo: String?,
     googlePlaceId: String?,
     googleName: String? = null,
+    // キーワード検索で選んだ場所は施設情報を取得済みなので、渡して引き直させない。
+    knownDetails: PlaceSearchResult? = null,
   ) {
     viewModelScope.launch {
       try {
@@ -361,6 +364,7 @@ class TrackingViewModel @Inject constructor(
           memo,
           googlePlaceId,
           isShownOnMap = shownOnMap(),
+          knownDetails = knownDetails,
           googleName = googleName,
         )
         when (result) {
@@ -498,8 +502,16 @@ class TrackingViewModel @Inject constructor(
     }
   }
 
+  /** 地図の上の「検索して登録」を開いたとき: 検索のセッションを始める（候補〜確定を 1 セッションにまとめて課金を抑える）。 */
+  fun startPlaceSearch() {
+    placesTextSearcher.startSession()
+  }
+
   /** 「Googleで情報を取得」の名前検索フォールバック: キーワード候補を返す。 */
   suspend fun predictPlaces(query: String): List<PlacePrediction> = placesTextSearcher.predict(query)
+
+  /** 地図の上の「検索して登録」: キーワード候補を返す。開いたときに地図に映っていた範囲 [bias] の中を優先する。 */
+  suspend fun predictPlacesNear(query: String, bias: GeoBounds?): List<PlacePrediction> = placesTextSearcher.predict(query, bias)
 
   /** 名前検索で選んだ候補を、座標つきの施設情報に確定する。 */
   suspend fun fetchPlaceResult(placeId: String): PlaceSearchResult? = placesTextSearcher.fetch(placeId)

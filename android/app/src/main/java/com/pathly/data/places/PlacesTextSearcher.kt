@@ -3,12 +3,15 @@ package com.pathly.data.places
 import android.content.Context
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
+import com.google.android.gms.maps.model.LatLng
 import com.google.android.gms.tasks.Tasks
 import com.google.android.libraries.places.api.Places
 import com.google.android.libraries.places.api.model.AutocompleteSessionToken
+import com.google.android.libraries.places.api.model.RectangularBounds
 import com.google.android.libraries.places.api.net.FetchPlaceRequest
 import com.google.android.libraries.places.api.net.FindAutocompletePredictionsRequest
 import com.google.android.libraries.places.api.net.PlacesClient
+import com.pathly.domain.model.GeoBounds
 import com.pathly.domain.model.PlacePrediction
 import com.pathly.domain.model.PlaceSearchResult
 import com.pathly.util.Logger
@@ -54,16 +57,23 @@ class PlacesTextSearcher @Inject constructor(
     sessionToken = AutocompleteSessionToken.newInstance()
   }
 
-  /** キーワードの候補（Autocomplete）を返す。オフライン・未初期化・失敗時は空リスト。 */
-  suspend fun predict(query: String): List<PlacePrediction> = withContext(Dispatchers.IO) {
+  /**
+   * キーワードの候補（Autocomplete）を返す。オフライン・未初期化・失敗時は空リスト。
+   * [locationBias] を渡すと、その範囲の中の候補を優先する（範囲の外も出る。料金は変わらない）。
+   */
+  suspend fun predict(query: String, locationBias: GeoBounds? = null): List<PlacePrediction> = withContext(Dispatchers.IO) {
     if (query.isBlank() || !isOnline()) return@withContext emptyList()
     val placesClient = client ?: return@withContext emptyList()
     val token = sessionToken ?: AutocompleteSessionToken.newInstance().also { sessionToken = it }
     try {
-      val request = FindAutocompletePredictionsRequest.builder()
+      val builder = FindAutocompletePredictionsRequest.builder()
         .setQuery(query)
         .setSessionToken(token)
-        .build()
+      // 東経 180 度をまたぐ範囲は南西・北東の 2 点で表せないので、寄せずに探す。
+      locationBias?.takeUnless { it.crossesAntimeridian }?.let {
+        builder.setLocationBias(RectangularBounds.newInstance(LatLng(it.south, it.west), LatLng(it.north, it.east)))
+      }
+      val request = builder.build()
       val response = Tasks.await(placesClient.findAutocompletePredictions(request))
       response.autocompletePredictions.map {
         PlacePrediction(
