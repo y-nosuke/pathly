@@ -7,8 +7,12 @@ import com.pathly.domain.model.GpsTrack
 import com.pathly.domain.model.PlaceCategoryFacet
 import com.pathly.domain.model.RegionKey
 import com.pathly.domain.repository.GpsTrackRepository
+import com.pathly.domain.repository.PlaceRepository
 import com.pathly.presentation.common.toggled
+import com.pathly.presentation.tracking.TrackOverlaySelection
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -19,12 +23,29 @@ import javax.inject.Inject
 @HiltViewModel
 class HistoryViewModel @Inject constructor(
   private val gpsTrackRepository: GpsTrackRepository,
+  private val placeRepository: PlaceRepository,
   private val savedStateHandle: SavedStateHandle,
 ) : ViewModel() {
 
   // 絞り込み・並べ替えはアプリが裏で落とされても戻せるよう savedStateHandle から始める。
   private val _uiState = MutableStateFlow(HistoryState().withListOptionsFrom(savedStateHandle))
   val uiState: StateFlow<HistoryState> = _uiState.asStateFlow()
+
+  // 線の点を読む計算を主スレッドから外す。テストでは差し替える。
+  internal var computeDispatcher: CoroutineDispatcher = Dispatchers.Default
+
+  // 地図表示で選んで重ねる経路（記録画面の「この範囲の経路」と同じ仕組み）。ViewModel が生きている間
+  // （経路詳細へ行って戻る・タブを切り替える）は保ち、アプリを閉じると消える。
+  private val selection = TrackOverlaySelection(
+    state = _uiState,
+    selectedOf = { it.selected },
+    withSelected = { s, selected -> s.copy(selected = selected) },
+    withFocus = { s, focus -> s.copy(focusRequest = focus) },
+    gpsTrackRepository = gpsTrackRepository,
+    placeRepository = placeRepository,
+    scope = viewModelScope,
+    computeDispatcher = { computeDispatcher },
+  )
 
   init {
     loadTracks()
@@ -45,6 +66,8 @@ class HistoryViewModel @Inject constructor(
               errorMessage = null,
             )
           }
+          // 地図に重ねている経路も、消された経路は外し、名前・お気に入りを今の値に揃える。
+          selection.syncWith(completedTracks)
         }
       } catch (e: Exception) {
         _uiState.update {
@@ -138,6 +161,28 @@ class HistoryViewModel @Inject constructor(
   fun toggleSortDirection() {
     updateListOptions { it.copy(sortDescending = !it.sortDescending) }
   }
+
+  /** 一覧で見るか地図で見るかを切り替える（絞り込みはそのまま）。 */
+  fun setViewMode(mode: HistoryViewMode) {
+    updateListOptions { it.copy(viewMode = mode) }
+  }
+
+  /** 地図表示で、地図に重ねた見出し・検索欄・絞り込みをたたむ／ひろげる。 */
+  fun setControlsCollapsed(collapsed: Boolean) {
+    updateListOptions { it.copy(controlsCollapsed = collapsed) }
+  }
+
+  /** 地図表示で、経路を地図に重ねる／外す（同時に 8 本まで）。 */
+  fun toggleOverlay(track: GpsTrack) = selection.toggle(track)
+
+  /** 地図表示で、その経路の全体が見えるまで地図を寄せる（まだ重ねていなければ重ねてから）。 */
+  fun focusOverlay(track: GpsTrack) = selection.focus(track)
+
+  /** 地図を寄せ終えた（または寄せられなかった）。 */
+  fun consumeFocus() = selection.consumeFocus()
+
+  /** 地図に重ねている経路をすべて外す。 */
+  fun clearOverlays() = selection.clearAll()
 
   /** お気に入り登録を切り替える。 */
   fun toggleFavorite(track: GpsTrack) {

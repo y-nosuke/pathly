@@ -16,6 +16,8 @@ import com.pathly.presentation.common.matchesNameQuery
 import com.pathly.presentation.common.putEnum
 import com.pathly.presentation.common.putEnumSet
 import com.pathly.presentation.common.putRegionSet
+import com.pathly.presentation.tracking.OverlayTrack
+import com.pathly.presentation.tracking.TrackFocusRequest
 import com.pathly.util.DateFormatters
 import java.text.Collator
 import java.util.Locale
@@ -50,6 +52,9 @@ enum class TrackSort(val label: String, val defaultDescending: Boolean) {
   NAME("名前順", false),
 }
 
+/** 履歴の見せ方（一覧か地図か）。 */
+enum class HistoryViewMode { LIST, MAP }
+
 data class HistoryState(
   val tracks: List<GpsTrack> = emptyList(),
   val activeTrack: GpsTrack? = null,
@@ -67,6 +72,14 @@ data class HistoryState(
   val sortDescending: Boolean = TrackSort.DATE.defaultDescending,
   val isLoading: Boolean = false,
   val errorMessage: String? = null,
+  // 一覧で見るか地図で見るか。絞り込みは両方で共有する。
+  val viewMode: HistoryViewMode = HistoryViewMode.LIST,
+  // 地図表示で、地図に重ねた見出し・検索欄・絞り込みをたたんでいるか。
+  val controlsCollapsed: Boolean = false,
+  // 地図表示で選んで重ねている経路（選んだ順）。絞り込みから外れても外すまで残す。
+  val selected: List<OverlayTrack> = emptyList(),
+  // 地図を寄せる対象（線を読み終えたら画面が寄せて、[HistoryViewModel.consumeFocus] で消す）。
+  val focusRequest: TrackFocusRequest? = null,
 ) {
   /** 絞り込み・並べ替え（軸と向き）が、開いたときのまま（初期状態）か。違えば「初期状態に戻す」を出す。 */
   val isInitialListOptions: Boolean
@@ -80,6 +93,17 @@ data class HistoryState(
       categoryFilter.isEmpty() &&
       regionFilter.isEmpty() &&
       nameQuery.isBlank()
+
+  /** かけている絞り込みの数（名前の検索・お気に入り・命名・立ち寄り・業種・地域）。たたんだ帯に出す。 */
+  val activeFilterCount: Int
+    get() = listOf(
+      nameQuery.isNotBlank(),
+      favoriteFilter != TrackFavoriteFilter.ANY,
+      namedFilter != TrackNamedFilter.ANY,
+      stopFilter != TrackStopFilter.ANY,
+      categoryFilter.isNotEmpty(),
+      regionFilter.isNotEmpty(),
+    ).count { it }
 
   /**
    * 業種ごとの、その業種に立ち寄った経路の件数（絞り込みの選択肢に添える）。業種以外の絞り込みに合う経路で数え、
@@ -160,6 +184,8 @@ private const val KEY_REGION = "history.regionFilter"
 private const val KEY_NAME_QUERY = "history.nameQuery"
 private const val KEY_SORT = "history.sort"
 private const val KEY_SORT_DESCENDING = "history.sortDescending"
+private const val KEY_VIEW_MODE = "history.viewMode"
+private const val KEY_CONTROLS_COLLAPSED = "history.controlsCollapsed"
 
 /** [handle] に保存した絞り込み・並べ替えを反映した状態。保存が無ければ既定のまま。 */
 fun HistoryState.withListOptionsFrom(handle: SavedStateHandle): HistoryState {
@@ -173,6 +199,8 @@ fun HistoryState.withListOptionsFrom(handle: SavedStateHandle): HistoryState {
     nameQuery = handle.get<String>(KEY_NAME_QUERY).orEmpty(),
     sort = sort,
     sortDescending = handle.get<Boolean>(KEY_SORT_DESCENDING) ?: sort.defaultDescending,
+    viewMode = handle.getEnum(KEY_VIEW_MODE, viewMode),
+    controlsCollapsed = handle.get<Boolean>(KEY_CONTROLS_COLLAPSED) ?: controlsCollapsed,
   )
 }
 
@@ -186,4 +214,6 @@ fun HistoryState.saveListOptionsTo(handle: SavedStateHandle) {
   handle[KEY_NAME_QUERY] = nameQuery
   handle.putEnum(KEY_SORT, sort)
   handle[KEY_SORT_DESCENDING] = sortDescending
+  handle.putEnum(KEY_VIEW_MODE, viewMode)
+  handle[KEY_CONTROLS_COLLAPSED] = controlsCollapsed
 }

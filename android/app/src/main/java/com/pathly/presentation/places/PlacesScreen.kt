@@ -109,6 +109,7 @@ import com.pathly.presentation.common.FilterPanelButton
 import com.pathly.presentation.common.FilterPanelCloseButton
 import com.pathly.presentation.common.FloatingSheet
 import com.pathly.presentation.common.ListFilterPanel
+import com.pathly.presentation.common.ListMapToggle
 import com.pathly.presentation.common.ListNameSearchField
 import com.pathly.presentation.common.MapMarker
 import com.pathly.presentation.common.MapPinMarker
@@ -1772,13 +1773,7 @@ private fun PlacesState.collapsedSummary(): String = if (noFilter) {
 /** 一覧表示と地図表示の切り替え。今と反対の見せ方のアイコンを出し、押すとそちらへ切り替わる。 */
 @Composable
 private fun PlacesViewModeToggle(viewMode: PlacesViewMode, onChange: (PlacesViewMode) -> Unit) {
-  val next = if (viewMode == PlacesViewMode.LIST) PlacesViewMode.MAP else PlacesViewMode.LIST
-  IconButton(onClick = { onChange(next) }) {
-    Icon(
-      painter = painterResource(if (next == PlacesViewMode.MAP) R.drawable.ic_map else R.drawable.ic_list),
-      contentDescription = if (next == PlacesViewMode.MAP) "地図で見る" else "一覧で見る",
-    )
-  }
+  ListMapToggle(isMap = viewMode == PlacesViewMode.MAP) { toMap -> onChange(if (toMap) PlacesViewMode.MAP else PlacesViewMode.LIST) }
 }
 
 /**

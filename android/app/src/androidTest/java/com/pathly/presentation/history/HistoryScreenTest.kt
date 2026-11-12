@@ -14,6 +14,7 @@ import androidx.compose.ui.test.performTextInput
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.pathly.domain.model.GpsPoint
 import com.pathly.domain.model.GpsTrack
+import com.pathly.presentation.tracking.OverlayTrack
 import com.pathly.ui.theme.PathlyAndroidTheme
 import io.mockk.mockk
 import io.mockk.verify
@@ -596,6 +597,97 @@ class HistoryScreenTest {
     composeTestRule.onNodeWithContentDescription("お気に入りの絞り込みを外す").assertDoesNotExist()
     composeTestRule.onNodeWithText("初期状態に戻す").performClick()
     verify { mockViewModel.resetListOptions() }
+  }
+
+  @Test
+  fun historyScreen_mapToggle_switchesViewMode() {
+    uiStateFlow.value = HistoryState(tracks = listOf(createSampleTrack(id = 1L)))
+    composeTestRule.setContent {
+      PathlyAndroidTheme {
+        HistoryScreen(viewModel = mockViewModel, onTrackClick = mockOnTrackClick, mapContent = {})
+      }
+    }
+
+    composeTestRule.onNodeWithContentDescription("地図で見る").performClick()
+    verify { mockViewModel.setViewMode(HistoryViewMode.MAP) }
+  }
+
+  @Test
+  fun historyScreen_mapView_listsFilteredTracks_selectsWithCheck_opensWithRowTap() {
+    val first = createSampleTrack(id = 1L).copy(name = "鎌倉さんぽ")
+    val second = createSampleTrack(id = 2L).copy(name = "横浜みなと")
+    uiStateFlow.value = HistoryState(
+      tracks = listOf(first, second),
+      viewMode = HistoryViewMode.MAP,
+      selected = listOf(OverlayTrack(track = first, colorIndex = 0)),
+    )
+    composeTestRule.setContent {
+      PathlyAndroidTheme {
+        HistoryScreen(viewModel = mockViewModel, onTrackClick = mockOnTrackClick, mapContent = {})
+      }
+    }
+
+    // 地図表示: 下のシートに絞り込んだ経路の一覧。統計・並べ替えは出さない。
+    composeTestRule.onNodeWithTag("historyMapSheet").assertIsDisplayed()
+    composeTestRule.onNodeWithText("経路 2 件").assertIsDisplayed()
+    composeTestRule.onNodeWithText("地図に重ねる経路を選ぶ（1 / 8 本）").assertIsDisplayed()
+    composeTestRule.onNodeWithText("並べ替え: 日付順 ▾").assertDoesNotExist()
+
+    // チェックで選ぶ（重ねる）。行のタップは経路詳細へ。
+    composeTestRule.onNodeWithTag("historyMapCheck-2").performClick()
+    verify { mockViewModel.toggleOverlay(second) }
+    composeTestRule.onNodeWithText("横浜みなと").performClick()
+    verify { mockOnTrackClick(second) }
+
+    // 選んだ経路をすべて外す・すべて見る。
+    composeTestRule.onNodeWithText("すべて外す").performClick()
+    verify { mockViewModel.clearOverlays() }
+    composeTestRule.onNodeWithContentDescription("選んだ経路をすべて見る").assertIsDisplayed()
+
+    // 一覧へ戻る。
+    composeTestRule.onNodeWithContentDescription("一覧で見る").performClick()
+    verify { mockViewModel.setViewMode(HistoryViewMode.LIST) }
+  }
+
+  @Test
+  fun historyScreen_mapView_selectedOutsideFilter_isListedSeparately() {
+    val favorite = createSampleTrack(id = 1L).copy(name = "お気に入りの経路", isFavorite = true)
+    val other = createSampleTrack(id = 2L).copy(name = "ほかの経路")
+    uiStateFlow.value = HistoryState(
+      tracks = listOf(favorite, other),
+      favoriteFilter = TrackFavoriteFilter.FAVORITE,
+      viewMode = HistoryViewMode.MAP,
+      selected = listOf(OverlayTrack(track = other, colorIndex = 0)),
+    )
+    composeTestRule.setContent {
+      PathlyAndroidTheme {
+        HistoryScreen(viewModel = mockViewModel, onTrackClick = mockOnTrackClick, mapContent = {})
+      }
+    }
+
+    composeTestRule.onNodeWithText("絞り込んだ経路 1 件").assertIsDisplayed()
+    composeTestRule.onNodeWithText("絞り込みの外（重ねている経路）").assertIsDisplayed()
+    composeTestRule.onNodeWithText("ほかの経路").assertIsDisplayed()
+  }
+
+  @Test
+  fun historyScreen_mapView_collapsedBar_showsFilterSummary() {
+    val favorite = createSampleTrack(id = 1L).copy(isFavorite = true)
+    uiStateFlow.value = HistoryState(
+      tracks = listOf(favorite, createSampleTrack(id = 2L)),
+      favoriteFilter = TrackFavoriteFilter.FAVORITE,
+      viewMode = HistoryViewMode.MAP,
+      controlsCollapsed = true,
+    )
+    composeTestRule.setContent {
+      PathlyAndroidTheme {
+        HistoryScreen(viewModel = mockViewModel, onTrackClick = mockOnTrackClick, mapContent = {})
+      }
+    }
+
+    composeTestRule.onNodeWithText("絞り込み 1・1 / 2 件").assertIsDisplayed()
+    composeTestRule.onNodeWithContentDescription("ひろげる").performClick()
+    verify { mockViewModel.setControlsCollapsed(false) }
   }
 
   private fun createSampleTrack(

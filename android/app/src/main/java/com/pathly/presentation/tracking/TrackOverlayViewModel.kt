@@ -18,7 +18,6 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import javax.inject.Inject
 
 /**
@@ -43,7 +42,18 @@ class TrackOverlayViewModel @Inject constructor(
   val uiState: StateFlow<TrackOverlayState> = _uiState.asStateFlow()
 
   private var searchJob: Job? = null
-  private var focusNonce = 0
+
+  // 選んだ経路（色・上限・線の読み込み・寄せる合図）は履歴の地図表示と共有する。
+  private val selection = TrackOverlaySelection(
+    state = _uiState,
+    selectedOf = { it.selected },
+    withSelected = { s, selected -> s.copy(selected = selected) },
+    withFocus = { s, focus -> s.copy(focusRequest = focus) },
+    gpsTrackRepository = gpsTrackRepository,
+    placeRepository = placeRepository,
+    scope = viewModelScope,
+    computeDispatcher = { computeDispatcher },
+  )
 
   /** [bounds] に入る経路を探して一覧を出す。前の検索が終わっていなければ取り消す。 */
   fun search(bounds: GeoBounds) {
@@ -54,15 +64,8 @@ class TrackOverlayViewModel @Inject constructor(
         val ids = gpsTrackRepository.getFinishedTrackIdsInBounds(bounds)
         // 一覧の行（名前・距離・お気に入り）は履歴一覧と同じものを使う。点は読まない。
         val all = gpsTrackRepository.getAllTracks().first()
-        val byId = all.associateBy { it.id }
-        _uiState.update { state ->
-          state.copy(
-            isSearching = false,
-            inRange = all.filter { it.id in ids },
-            // 消された経路は外し、名前・お気に入りは今の値に揃える。
-            selected = state.selected.mapNotNull { o -> byId[o.track.id]?.let { o.copy(track = it) } },
-          )
-        }
+        _uiState.update { it.copy(isSearching = false, inRange = all.filter { track -> track.id in ids }) }
+        selection.syncWith(all)
       } catch (e: Exception) {
         if (e is CancellationException) throw e
         logger.e("Failed to search tracks in the map bounds", e)
@@ -72,58 +75,16 @@ class TrackOverlayViewModel @Inject constructor(
   }
 
   /** 経路を地図に重ねる／外す。上限まで選んでいれば足さない。 */
-  fun toggle(track: GpsTrack) {
-    val state = _uiState.value
-    if (track.id in state.selectedIds) {
-      _uiState.update { s -> s.copy(selected = s.selected.filterNot { it.track.id == track.id }) }
-      return
-    }
-    val color = nextFreeColorIndex(state.selected.map { it.colorIndex }) ?: return
-    _uiState.update { s -> s.copy(selected = s.selected + OverlayTrack(track, color)) }
-    loadSegments(track.id)
-  }
+  fun toggle(track: GpsTrack) = selection.toggle(track)
 
-  private fun loadSegments(trackId: Long) {
-    viewModelScope.launch {
-      val loaded = withContext(computeDispatcher) { gpsTrackRepository.getDisplaySegments(trackId) }
-      if (loaded == null) {
-        // 読めなかった（消された）経路は選びから外す。
-        _uiState.update { s -> s.copy(selected = s.selected.filterNot { it.track.id == trackId }) }
-        return@launch
-      }
-      val segments = loaded.filter { it.size >= 2 }
-      val stops = placeRepository.getStopsForTrack(trackId).first()
-      _uiState.update { s ->
-        s.copy(
-          selected = s.selected.map {
-            if (it.track.id == trackId) it.copy(segments = segments, stops = stops, isLoaded = true) else it
-          },
-        )
-      }
-    }
-  }
-
-  /**
-   * その経路の全体が見えるまで地図を寄せる。まだ重ねていなければ重ねてから寄せる（上限なら何もしない）。
-   * 実際に寄せるのは画面（線を読み終えてから）。
-   */
-  fun focus(track: GpsTrack) {
-    if (track.id !in _uiState.value.selectedIds) {
-      toggle(track)
-      if (track.id !in _uiState.value.selectedIds) return
-    }
-    _uiState.update { it.copy(focusRequest = TrackFocusRequest(track.id, ++focusNonce)) }
-  }
+  /** その経路の全体が見えるまで地図を寄せる（まだ重ねていなければ重ねてから。上限なら何もしない）。 */
+  fun focus(track: GpsTrack) = selection.focus(track)
 
   /** 地図を寄せ終えた（または寄せられなかった）。 */
-  fun consumeFocus() {
-    _uiState.update { it.copy(focusRequest = null) }
-  }
+  fun consumeFocus() = selection.consumeFocus()
 
   /** 重ねている経路をすべて外す。 */
-  fun clearAll() {
-    _uiState.update { it.copy(selected = emptyList()) }
-  }
+  fun clearAll() = selection.clearAll()
 
   /** 一覧を閉じる。重ねた線も消す（線だけが地図に残って、どこから外すか分からなくならないように）。 */
   fun closeSheet() {
