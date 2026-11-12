@@ -1,19 +1,23 @@
 package com.pathly.presentation.tracking
 
 import androidx.activity.compose.BackHandler
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
+import androidx.compose.material3.TextField
+import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -23,22 +27,31 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
+import com.pathly.R
 import com.pathly.domain.model.PlacePrediction
 import com.pathly.domain.model.PlaceSearchResult
-import com.pathly.presentation.places.PlaceKeywordSearchBody
+import com.pathly.presentation.places.PlaceSearchPredictions
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 /**
- * 記録画面の「検索して登録」: キーワードで Google の場所を探し、選んだ 1 件を [onSelected] で返す。
- * 登録そのものは地図の上の場所シートで行う（地図タップ・POI タップと同じシート）。
- * 探す欄と候補の一覧は場所タブの「検索して追加」と共有する（[PlaceKeywordSearchBody]）。
+ * 記録画面の「検索して登録」: 地図はそのままに、上端に検索窓を重ね、候補は窓の下のカードに出す。
+ * 選んだ 1 件を [onSelected] で返し、登録は地図の上の場所シートで行う（地図タップ・POI タップと同じシート）。
+ * 候補の一覧は場所タブの「検索して追加」と共有する（[PlaceSearchPredictions]）。
+ * 地図をタップしたとき・戻る・× で閉じる（閉じる処理は呼び出し側の [onClose]）。
  */
 @Composable
-internal fun TrackingPlaceSearchPanel(
+internal fun TrackingPlaceSearchBar(
   onSearchPredictions: suspend (query: String) -> List<PlacePrediction>,
   onFetchPrediction: suspend (placeId: String) -> PlaceSearchResult?,
   onSelected: (PlaceSearchResult) -> Unit,
@@ -51,8 +64,17 @@ internal fun TrackingPlaceSearchPanel(
   var isFetching by remember { mutableStateOf(false) }
   var fetchFailed by remember { mutableStateOf(false) }
   val scope = rememberCoroutineScope()
+  val focusRequester = remember { FocusRequester() }
+  val keyboard = LocalSoftwareKeyboardController.current
+  // 候補のカードは画面の半分ほどまで。その下は地図が見えるようにする。
+  val maxCardHeight = with(LocalDensity.current) {
+    (LocalWindowInfo.current.containerSize.height * 0.45f).toDp()
+  }
 
   BackHandler { onClose() }
+
+  // 開いたらすぐ打てるようにする。
+  LaunchedEffect(Unit) { focusRequester.requestFocus() }
 
   // 打鍵ごとには叩かない（場所タブの「検索して追加」と同じ 300ms のデバウンス）。
   LaunchedEffect(query) {
@@ -68,55 +90,94 @@ internal fun TrackingPlaceSearchPanel(
     isSearching = false
   }
 
-  Surface(
+  Column(
     modifier = modifier
-      .fillMaxSize()
+      .statusBarsPadding()
+      .padding(12.dp)
+      .fillMaxWidth()
       .testTag("trackingPlaceSearch"),
-    color = MaterialTheme.colorScheme.surface,
   ) {
-    Column(
-      modifier = Modifier
-        .statusBarsPadding()
-        .padding(16.dp),
+    Surface(
+      shape = RoundedCornerShape(28.dp),
+      color = MaterialTheme.colorScheme.surface,
+      shadowElevation = 4.dp,
     ) {
-      Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically,
+      Row(verticalAlignment = Alignment.CenterVertically) {
+        Icon(
+          painter = painterResource(R.drawable.ic_search),
+          contentDescription = null,
+          tint = MaterialTheme.colorScheme.onSurfaceVariant,
+          modifier = Modifier
+            .padding(start = 16.dp)
+            .size(20.dp),
+        )
+        TextField(
+          value = query,
+          onValueChange = { query = it },
+          placeholder = { Text("店名・場所名で検索") },
+          singleLine = true,
+          keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+          // 確定キーは候補を選ぶまでの間、キーボードを下げて地図を見せるだけ。
+          keyboardActions = KeyboardActions(onSearch = { keyboard?.hide() }),
+          colors = TextFieldDefaults.colors(
+            focusedContainerColor = Color.Transparent,
+            unfocusedContainerColor = Color.Transparent,
+            focusedIndicatorColor = Color.Transparent,
+            unfocusedIndicatorColor = Color.Transparent,
+          ),
+          modifier = Modifier
+            .weight(1f)
+            .focusRequester(focusRequester)
+            .testTag("trackingPlaceSearchField"),
+        )
+        IconButton(onClick = onClose) {
+          Icon(painter = painterResource(R.drawable.ic_close), contentDescription = "検索を閉じる")
+        }
+      }
+    }
+
+    // 何か打ってから候補のカードを出す（空のうちは地図を隠さない）。
+    if (query.isNotBlank() || fetchFailed) {
+      Surface(
+        shape = RoundedCornerShape(16.dp),
+        color = MaterialTheme.colorScheme.surface,
+        shadowElevation = 4.dp,
+        modifier = Modifier
+          .padding(top = 8.dp)
+          .fillMaxWidth()
+          .heightIn(max = maxCardHeight),
       ) {
-        Text(
-          text = "検索して登録",
-          style = MaterialTheme.typography.headlineSmall,
-          fontWeight = FontWeight.Bold,
-        )
-        TextButton(onClick = onClose) { Text("閉じる") }
-      }
-
-      if (fetchFailed) {
-        Text(
-          text = "場所の取得に失敗しました（オフライン等）",
-          style = MaterialTheme.typography.bodySmall,
-          color = MaterialTheme.colorScheme.error,
-        )
-      }
-
-      Spacer(modifier = Modifier.height(8.dp))
-
-      PlaceKeywordSearchBody(
-        query = query,
-        predictions = predictions,
-        isSearching = isSearching || isFetching,
-        onQueryChange = { query = it },
-        onSelectPrediction = { placeId ->
-          if (isFetching) return@PlaceKeywordSearchBody
-          scope.launch {
-            isFetching = true
-            val result = onFetchPrediction(placeId)
-            isFetching = false
-            if (result != null) onSelected(result) else fetchFailed = true
+        Column(modifier = Modifier.padding(horizontal = 16.dp)) {
+          if (fetchFailed) {
+            Text(
+              text = "場所の取得に失敗しました（オフライン等）",
+              style = MaterialTheme.typography.bodySmall,
+              color = MaterialTheme.colorScheme.error,
+              modifier = Modifier.padding(top = 8.dp),
+            )
           }
-        },
-      )
+          PlaceSearchPredictions(
+            query = query,
+            predictions = predictions,
+            isSearching = isSearching || isFetching,
+            onSelectPrediction = { placeId ->
+              if (isFetching) return@PlaceSearchPredictions
+              scope.launch {
+                isFetching = true
+                val result = onFetchPrediction(placeId)
+                isFetching = false
+                if (result != null) {
+                  keyboard?.hide()
+                  onSelected(result)
+                } else {
+                  fetchFailed = true
+                }
+              }
+            },
+            modifier = Modifier.fillMaxWidth(),
+          )
+        }
+      }
     }
   }
 }

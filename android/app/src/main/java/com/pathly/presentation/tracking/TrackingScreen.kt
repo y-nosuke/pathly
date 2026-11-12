@@ -173,6 +173,8 @@ fun TrackingScreen(
   var manualMode by remember { mutableStateOf(false) }
   // 「検索して登録」の検索画面を開いているか。候補を選ぶと閉じ、地図の上の場所シートで登録する。
   var placeSearchOpen by remember { mutableStateOf(false) }
+  // 検索窓を開いたときに地図に映っていた範囲。候補はこの中を優先する（範囲の外も出る）。
+  var placeSearchBias by remember { mutableStateOf<GeoBounds?>(null) }
   // シートの開き具合。地図の下パディングを合わせて、選んだ地点がシートの裏に来ないようにする。
   val placeSheetState = rememberFloatingSheetState()
   val manualSheetState = rememberFloatingSheetState(peekFraction = 0.5f)
@@ -231,6 +233,11 @@ fun TrackingScreen(
         infoWindow = infoWindow,
         // 手動追加モード（記録中のみ）: POIタップも立ち寄り追加に。通常は統一の場所シート（POI登録）。
         onPoiClick = { poi ->
+          // 検索窓を開いている間の地図のタップは、窓を閉じるだけ（地図を見たくてタップしたとみなす）。
+          if (placeSearchOpen) {
+            placeSearchOpen = false
+            return@TrackingMapView
+          }
           if (uiState.isTracking && manualMode) {
             // 施設は確定しているので、名前と placeId を持ったまま渡す（候補の選び直しは出さない）。
             manualTarget = ManualStopTarget(
@@ -245,6 +252,10 @@ fun TrackingScreen(
         },
         // 手動追加モード＝立ち寄り追加、それ以外（通常/平常時）＝場所シート（空き地点の登録）。
         onMapClick = { latLng ->
+          if (placeSearchOpen) {
+            placeSearchOpen = false
+            return@TrackingMapView
+          }
           if (uiState.isTracking && manualMode) {
             manualTarget = ManualStopTarget(latLng.latitude, latLng.longitude, ManualStopOrigin.MapPoint)
           } else {
@@ -281,6 +292,10 @@ fun TrackingScreen(
         fitBounds = fitBounds,
         fitNonce = fitNonce,
         onRegisteredPlaceClick = { place ->
+          if (placeSearchOpen) {
+            placeSearchOpen = false
+            return@TrackingMapView
+          }
           if (uiState.isTracking && manualMode) {
             manualTarget = ManualStopTarget(
               place.latitude,
@@ -295,79 +310,85 @@ fun TrackingScreen(
       )
     }
 
-    // 登録済みの場所を地図に出すトグル（記録画面・画面別）。上部右に置き、ON のときは下に絞り込みボタンを出す。
-    Column(
-      modifier = Modifier
-        .align(Alignment.TopEnd)
-        .statusBarsPadding()
-        .padding(12.dp),
-      verticalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-      Surface(
-        onClick = { viewModel.toggleShowRegisteredPlaces() },
-        shape = CircleShape,
-        color = if (uiState.showRegisteredPlaces) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surface,
-        shadowElevation = 4.dp,
+    // 検索窓を開いている間は、上端の操作（右のボタン列・左上の記録中の操作・記録中のピル）を隠す（窓と重なるため）。
+    if (!placeSearchOpen) {
+      // 登録済みの場所を地図に出すトグル（記録画面・画面別）。上部右に置き、ON のときは下に絞り込みボタンを出す。
+      Column(
+        modifier = Modifier
+          .align(Alignment.TopEnd)
+          .statusBarsPadding()
+          .padding(12.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
       ) {
-        Icon(
-          painter = painterResource(R.drawable.ic_place),
-          contentDescription = if (uiState.showRegisteredPlaces) "登録済みの場所を隠す" else "登録済みの場所を表示",
-          tint = if (uiState.showRegisteredPlaces) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface,
-          modifier = Modifier.padding(8.dp),
-        )
-      }
-      if (uiState.showRegisteredPlaces) {
-        MapPlaceFilterButton(
-          filter = mapPlaceFilter,
-          places = uiState.registeredPlaces,
-          onFilterChange = viewModel::setMapPlaceFilter,
-        )
-      }
-      // この範囲の経路: 押した時点で地図に映っている範囲で探す（地図を動かすたびには探さない）。
-      TrackOverlayButton(
-        // 押した時点で塗りつぶす（経路を選ぶ前から、一覧を出していることが分かるように）。
-        active = overlayState.isSheetOpen,
-        // 立ち寄りの追加中は一覧を出せない（追加のシートが優先）ので押せなくする。
-        enabled = manualTarget == null,
-        onClick = {
-          // もう一度押すと閉じる（登録済みの場所のトグルと同じ）。閉じると重ねた線も消える。
-          if (overlayState.isSheetOpen) {
-            trackOverlayViewModel.closeSheet()
-          } else {
-            mapCameraState.projection?.visibleRegion?.latLngBounds?.let { b ->
-              placeSheetTarget = null
-              trackOverlayViewModel.search(
-                GeoBounds(b.southwest.latitude, b.southwest.longitude, b.northeast.latitude, b.northeast.longitude),
-              )
-              overlaySheetState.settleTo(SheetDetent.PEEK)
+        Surface(
+          onClick = { viewModel.toggleShowRegisteredPlaces() },
+          shape = CircleShape,
+          color = if (uiState.showRegisteredPlaces) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surface,
+          shadowElevation = 4.dp,
+        ) {
+          Icon(
+            painter = painterResource(R.drawable.ic_place),
+            contentDescription = if (uiState.showRegisteredPlaces) "登録済みの場所を隠す" else "登録済みの場所を表示",
+            tint = if (uiState.showRegisteredPlaces) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface,
+            modifier = Modifier.padding(8.dp),
+          )
+        }
+        if (uiState.showRegisteredPlaces) {
+          MapPlaceFilterButton(
+            filter = mapPlaceFilter,
+            places = uiState.registeredPlaces,
+            onFilterChange = viewModel::setMapPlaceFilter,
+          )
+        }
+        // この範囲の経路: 押した時点で地図に映っている範囲で探す（地図を動かすたびには探さない）。
+        TrackOverlayButton(
+          // 押した時点で塗りつぶす（経路を選ぶ前から、一覧を出していることが分かるように）。
+          active = overlayState.isSheetOpen,
+          // 立ち寄りの追加中は一覧を出せない（追加のシートが優先）ので押せなくする。
+          enabled = manualTarget == null,
+          onClick = {
+            // もう一度押すと閉じる（登録済みの場所のトグルと同じ）。閉じると重ねた線も消える。
+            if (overlayState.isSheetOpen) {
+              trackOverlayViewModel.closeSheet()
+            } else {
+              mapCameraState.projection?.visibleRegion?.latLngBounds?.let { b ->
+                placeSheetTarget = null
+                trackOverlayViewModel.search(
+                  GeoBounds(b.southwest.latitude, b.southwest.longitude, b.northeast.latitude, b.northeast.longitude),
+                )
+                overlaySheetState.settleTo(SheetDetent.PEEK)
+              }
             }
-          }
-        },
-      )
-      // 検索して登録: 場所タブへ移らずに、キーワードで探した場所をこの地図の上で登録する。
-      Surface(
-        onClick = {
-          placeSheetTarget = null
-          viewModel.startPlaceSearch()
-          placeSearchOpen = true
-        },
-        // 立ち寄りの追加中は、そちらのシートが優先なので押せなくする（経路のボタンと同じ）。
-        enabled = manualTarget == null,
-        shape = CircleShape,
-        color = MaterialTheme.colorScheme.surface,
-        shadowElevation = 4.dp,
-      ) {
-        Icon(
-          painter = painterResource(R.drawable.ic_search),
-          contentDescription = "検索して場所を登録",
-          tint = MaterialTheme.colorScheme.onSurface,
-          modifier = Modifier.padding(8.dp),
+          },
         )
+        // 検索して登録: 場所タブへ移らずに、キーワードで探した場所をこの地図の上で登録する。
+        Surface(
+          onClick = {
+            placeSheetTarget = null
+            placeSearchBias = mapCameraState.projection?.visibleRegion?.latLngBounds?.let { b ->
+              GeoBounds(b.southwest.latitude, b.southwest.longitude, b.northeast.latitude, b.northeast.longitude)
+            }
+            viewModel.startPlaceSearch()
+            placeSearchOpen = true
+          },
+          // 立ち寄りの追加中は、そちらのシートが優先なので押せなくする（経路のボタンと同じ）。
+          enabled = manualTarget == null,
+          shape = CircleShape,
+          color = MaterialTheme.colorScheme.surface,
+          shadowElevation = 4.dp,
+        ) {
+          Icon(
+            painter = painterResource(R.drawable.ic_search),
+            contentDescription = "検索して場所を登録",
+            tint = MaterialTheme.colorScheme.onSurface,
+            modifier = Modifier.padding(8.dp),
+          )
+        }
       }
     }
 
     // 記録中の左上操作（縦積み）: 「立ち寄りを追加」モード切替 と 「今ここ」ショートカット。
-    if (uiState.isTracking) {
+    if (uiState.isTracking && !placeSearchOpen) {
       Column(
         modifier = Modifier
           .align(Alignment.TopStart)
@@ -438,7 +459,7 @@ fun TrackingScreen(
     }
 
     // 記録中の状態ピル（上部中央）
-    if (uiState.isTracking) {
+    if (uiState.isTracking && !placeSearchOpen) {
       RecordingStatusPill(
         startTime = uiState.currentTrack?.startTime,
         modifier = Modifier
@@ -639,10 +660,10 @@ fun TrackingScreen(
       )
     }
 
-    // 検索して登録: 候補を選んだら閉じて、その場所へ地図を寄せ、場所シートで登録する。
+    // 検索して登録: 地図はそのままに上端へ検索窓を重ねる。候補を選んだら閉じて、その場所へ地図を寄せ、場所シートで登録する。
     if (placeSearchOpen) {
-      TrackingPlaceSearchPanel(
-        onSearchPredictions = viewModel::predictPlaces,
+      TrackingPlaceSearchBar(
+        onSearchPredictions = { query -> viewModel.predictPlacesNear(query, placeSearchBias) },
         onFetchPrediction = viewModel::fetchPlaceResult,
         onSelected = { result ->
           placeSearchOpen = false
@@ -650,6 +671,7 @@ fun TrackingScreen(
           focusOn(LatLng(result.latitude, result.longitude))
         },
         onClose = { placeSearchOpen = false },
+        modifier = Modifier.align(Alignment.TopCenter),
       )
     }
   }

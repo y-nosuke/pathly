@@ -320,7 +320,7 @@ class TrackingScreenTest {
 
   @Test
   fun trackingScreen_searchAndRegister_selectingPredictionOpensPlaceSheet() {
-    coEvery { mockViewModel.predictPlaces(any()) } returns
+    coEvery { mockViewModel.predictPlacesNear(any(), any()) } returns
       listOf(PlacePrediction(placeId = "p1", primaryText = "テスト喫茶", secondaryText = "東京都千代田区"))
     coEvery { mockViewModel.fetchPlaceResult("p1") } returns
       PlaceSearchResult(
@@ -343,13 +343,14 @@ class TrackingScreenTest {
       }
     }
 
-    // 地図の上のボタンで検索の画面を開く（検索のセッションを始める）。
+    // 地図の上のボタンで検索窓を開く（検索のセッションを始める）。窓と重なる上端のボタンは隠れる。
     composeTestRule.onNodeWithContentDescription("検索して場所を登録").performClick()
     composeTestRule.onNodeWithTag("trackingPlaceSearch").assertIsDisplayed()
+    composeTestRule.onNodeWithContentDescription("検索して場所を登録").assertDoesNotExist()
     verify { mockViewModel.startPlaceSearch() }
 
-    // 候補を選ぶと、検索の画面を閉じて場所シートで登録へ進む。
-    composeTestRule.onNodeWithText("店名・場所名で検索").performTextInput("テスト")
+    // 候補を選ぶと、検索窓を閉じて場所シートで登録へ進む。
+    composeTestRule.onNodeWithTag("trackingPlaceSearchField").performTextInput("テスト")
     composeTestRule.waitUntil(timeoutMillis = 5_000) {
       composeTestRule.onAllNodesWithText("東京都千代田区").fetchSemanticsNodes().isNotEmpty()
     }
@@ -375,8 +376,9 @@ class TrackingScreenTest {
     }
 
     composeTestRule.onNodeWithContentDescription("検索して場所を登録").performClick()
-    composeTestRule.onNodeWithText("閉じる").performClick()
+    composeTestRule.onNodeWithContentDescription("検索を閉じる").performClick()
     composeTestRule.onNodeWithTag("trackingPlaceSearch").assertDoesNotExist()
+    composeTestRule.onNodeWithContentDescription("検索して場所を登録").assertIsDisplayed()
     composeTestRule.onNodeWithContentDescription("記録開始").assertIsDisplayed()
   }
 }

@@ -48,30 +48,52 @@ internal fun PlaceKeywordSearchBody(
 
     Spacer(modifier = Modifier.height(8.dp))
 
-    when {
-      isSearching -> {
-        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-          CircularProgressIndicator()
-        }
-      }
+    PlaceSearchPredictions(
+      query = query,
+      predictions = predictions,
+      isSearching = isSearching,
+      onSelectPrediction = onSelectPrediction,
+      modifier = Modifier.fillMaxSize(),
+    )
+  }
+}
 
-      query.isNotBlank() && predictions.isEmpty() -> {
-        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-          Text(
-            text = "候補がありません\n（オンライン・キーワードを確認）",
-            style = MaterialTheme.typography.bodyMedium,
-            textAlign = TextAlign.Center,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-          )
-        }
+/**
+ * キーワード検索の候補の一覧（検索中・候補なしの表示を含む）。[PlaceKeywordSearchBody] の下半分で、
+ * 記録画面の地図の上の検索窓では、窓の下のカードにこれだけを出す。高さは [modifier] で決める
+ * （全面なら fillMaxSize、カードなら中身に合わせて縮む）。
+ */
+@Composable
+internal fun PlaceSearchPredictions(
+  query: String,
+  predictions: List<PlacePrediction>,
+  isSearching: Boolean,
+  onSelectPrediction: (placeId: String) -> Unit,
+  modifier: Modifier = Modifier,
+) {
+  when {
+    isSearching -> {
+      Box(modifier = modifier.padding(vertical = 16.dp), contentAlignment = Alignment.Center) {
+        CircularProgressIndicator()
       }
+    }
 
-      else -> {
-        LazyColumn {
-          items(predictions, key = { it.placeId }) { prediction ->
-            PredictionRow(prediction = prediction, onClick = { onSelectPrediction(prediction.placeId) })
-            HorizontalDivider()
-          }
+    query.isNotBlank() && predictions.isEmpty() -> {
+      Box(modifier = modifier.padding(vertical = 16.dp), contentAlignment = Alignment.Center) {
+        Text(
+          text = "候補がありません\n（オンライン・キーワードを確認）",
+          style = MaterialTheme.typography.bodyMedium,
+          textAlign = TextAlign.Center,
+          color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+      }
+    }
+
+    else -> {
+      LazyColumn(modifier = modifier) {
+        items(predictions, key = { it.placeId }) { prediction ->
+          PredictionRow(prediction = prediction, onClick = { onSelectPrediction(prediction.placeId) })
+          HorizontalDivider()
         }
       }
     }
