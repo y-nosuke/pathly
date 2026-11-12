@@ -1,5 +1,6 @@
 package com.pathly.presentation.history
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -34,6 +35,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -47,11 +49,21 @@ import com.pathly.R
 import com.pathly.domain.model.GpsTrack
 import com.pathly.domain.model.PlaceCategoryFacet
 import com.pathly.domain.model.RegionKey
-import com.pathly.presentation.common.CategoryFilterChip
+import com.pathly.presentation.common.ActiveFilter
+import com.pathly.presentation.common.ActiveFilterChips
+import com.pathly.presentation.common.CategoryFilterSection
+import com.pathly.presentation.common.FilterChoiceSection
+import com.pathly.presentation.common.FilterPanelButton
+import com.pathly.presentation.common.FilterPanelCloseButton
+import com.pathly.presentation.common.ListFilterPanel
 import com.pathly.presentation.common.ListNameSearchField
-import com.pathly.presentation.common.RegionFilterChip
+import com.pathly.presentation.common.RegionFilterSection
 import com.pathly.presentation.common.ScrollToTopButton
 import com.pathly.presentation.common.ScrollToTopButtonClearance
+import com.pathly.presentation.common.categoryChipLabel
+import com.pathly.presentation.common.choiceLabel
+import com.pathly.presentation.common.flippedChoice
+import com.pathly.presentation.common.regionChipLabel
 import com.pathly.util.DateFormatters
 import kotlin.math.roundToInt
 
@@ -67,6 +79,13 @@ fun HistoryScreen(
   var renameTarget by remember { mutableStateOf<GpsTrack?>(null) }
   // 削除確認中の経路（null=ダイアログ非表示）。削除は破壊的（点列・立ち寄りもCASCADEで消える）ため確認する。
   var deleteTarget by remember { mutableStateOf<GpsTrack?>(null) }
+  // 絞り込みの欄を開いているか（欄は一覧の先頭に入れる）。
+  var filterPanelOpen by rememberSaveable { mutableStateOf(false) }
+  // 欄が実際に出ているか。読み込み中や、完了した経路が無い（記録中だけの）ときは一覧に欄を入れないので、
+  // 開いたままでも出ていない扱いにする（閉じるボタン・戻る・ボタンの ▴ を欄の見え方に揃える）。
+  val panelVisible = filterPanelOpen && !uiState.isLoading && uiState.tracks.isNotEmpty()
+  // 欄が出ているときの戻るは、欄を閉じる。
+  BackHandler(enabled = panelVisible) { filterPanelOpen = false }
 
   Column(
     modifier = modifier
@@ -85,6 +104,7 @@ fun HistoryScreen(
       FilterSortBar(
         state = uiState,
         onClearFilters = viewModel::clearFilters,
+        onResetListOptions = viewModel::resetListOptions,
         onNameQueryChange = viewModel::setNameQuery,
         onFavoriteFilterChange = viewModel::setFavoriteFilter,
         onNamedFilterChange = viewModel::setNamedFilter,
@@ -95,6 +115,8 @@ fun HistoryScreen(
         onClearRegionFilter = viewModel::clearRegionFilter,
         onSortChange = viewModel::setSort,
         onToggleSortDirection = viewModel::toggleSortDirection,
+        panelOpen = panelVisible,
+        onPanelOpenChange = { filterPanelOpen = it },
       )
       Spacer(modifier = Modifier.height(8.dp))
     }
@@ -126,6 +148,13 @@ fun HistoryScreen(
       else -> {
         val visibleTracks = uiState.visibleTracks
         val listState = rememberLazyListState()
+        // 絞り込みの欄を開いたら、欄が見えるよう先頭へ寄せる。開いたまま組み直したとき（画面の回転・詳細から戻る）は
+        // 動かさない（見ていた位置のまま）。
+        var scrolledForOpen by remember { mutableStateOf(panelVisible) }
+        LaunchedEffect(panelVisible) {
+          if (panelVisible && !scrolledForOpen) listState.animateScrollToItem(0)
+          scrolledForOpen = panelVisible
+        }
         Box(modifier = Modifier.fillMaxSize()) {
           LazyColumn(
             state = listState,
@@ -133,6 +162,21 @@ fun HistoryScreen(
             contentPadding = PaddingValues(bottom = ScrollToTopButtonClearance),
             verticalArrangement = Arrangement.spacedBy(8.dp),
           ) {
+            // 絞り込みの欄は一覧の先頭に入れ、一覧と一緒にスクロールする（選びながら下の結果を見られる）。
+            if (panelVisible) {
+              item(key = "filterPanel") {
+                HistoryFilterPanel(
+                  state = uiState,
+                  onClearFilters = viewModel::clearFilters,
+                  onResetListOptions = viewModel::resetListOptions,
+                  onFavoriteFilterChange = viewModel::setFavoriteFilter,
+                  onNamedFilterChange = viewModel::setNamedFilter,
+                  onStopFilterChange = viewModel::setStopFilter,
+                  onToggleCategoryFilter = viewModel::toggleCategoryFilter,
+                  onToggleRegionFilter = viewModel::toggleRegionFilter,
+                )
+              }
+            }
             item {
               // 統計は一覧と同じく絞り込み後の経路で数える。絞っているときは全体の件数も添える。
               StatisticsSummaryCard(
@@ -182,6 +226,15 @@ fun HistoryScreen(
             listState = listState,
             modifier = Modifier.align(Alignment.BottomEnd).padding(bottom = 8.dp),
           )
+          // 欄を開いている間は、親指の届く下にも閉じるボタンを浮かべる。
+          if (panelVisible) {
+            FilterPanelCloseButton(
+              onClick = { filterPanelOpen = false },
+              modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .padding(bottom = 8.dp),
+            )
+          }
         }
       }
     }
@@ -231,6 +284,7 @@ fun HistoryScreen(
 private fun FilterSortBar(
   state: HistoryState,
   onClearFilters: () -> Unit,
+  onResetListOptions: () -> Unit,
   onNameQueryChange: (String) -> Unit,
   onFavoriteFilterChange: (TrackFavoriteFilter) -> Unit,
   onNamedFilterChange: (TrackNamedFilter) -> Unit,
@@ -241,73 +295,32 @@ private fun FilterSortBar(
   onClearRegionFilter: () -> Unit,
   onSortChange: (TrackSort) -> Unit,
   onToggleSortDirection: () -> Unit,
+  panelOpen: Boolean,
+  onPanelOpenChange: (Boolean) -> Unit,
   modifier: Modifier = Modifier,
 ) {
   Column(modifier = modifier) {
-    // 名前の検索（名前、未命名なら見出しの日付に含むものだけ残す）。ほかの絞り込みとは AND で、「すべて」で消える。
+    // 名前の検索（名前、未命名なら見出しの日付に含むものだけ残す）。ほかの絞り込みとは AND。消すのは欄の ×。
     ListNameSearchField(
       query = state.nameQuery,
       onQueryChange = onNameQueryChange,
       placeholder = "名前・日付で検索",
     )
     Spacer(modifier = Modifier.height(8.dp))
-    // 絞り込みは4軸独立（お気に入り / 命名 / 立ち寄り / 業種）。横に収まらない端末向けに横スクロール可。
-    Row(
-      modifier = Modifier
-        .fillMaxWidth()
-        .horizontalScroll(rememberScrollState()),
-      horizontalArrangement = Arrangement.spacedBy(8.dp),
-      verticalAlignment = Alignment.CenterVertically,
-    ) {
-      // すべて: 絞り込みを全解除。何も絞っていないときは選択状態にして現在地を示す。
-      FilterChip(
-        selected = state.noFilter,
-        onClick = onClearFilters,
-        label = { Text("すべて") },
-      )
-      // 各軸は1つのトグル。タップで 指定なし→…→… と循環する。
-      FilterChip(
-        selected = state.favoriteFilter != TrackFavoriteFilter.ANY,
-        onClick = {
-          val entries = TrackFavoriteFilter.entries
-          onFavoriteFilterChange(entries[(state.favoriteFilter.ordinal + 1) % entries.size])
-        },
-        label = { Text(state.favoriteFilter.chipLabel) },
-      )
-      FilterChip(
-        selected = state.namedFilter != TrackNamedFilter.ANY,
-        onClick = {
-          val entries = TrackNamedFilter.entries
-          onNamedFilterChange(entries[(state.namedFilter.ordinal + 1) % entries.size])
-        },
-        label = { Text(state.namedFilter.chipLabel) },
-      )
-      FilterChip(
-        selected = state.stopFilter != TrackStopFilter.ANY,
-        onClick = {
-          val entries = TrackStopFilter.entries
-          onStopFilterChange(entries[(state.stopFilter.ordinal + 1) % entries.size])
-        },
-        label = { Text(state.stopFilter.chipLabel) },
-      )
-      // 業種は立ち寄った場所の業種。複数選べる（どれかに立ち寄った経路を残す）。
-      CategoryFilterChip(
-        selected = state.categoryFilter,
-        counts = state.categoryCounts,
-        onToggle = onToggleCategoryFilter,
-        onClear = onClearCategoryFilter,
-      )
-      // 地域は都道府県 → 市区町村の 2 段。複数選べる（選んだどれかに当たるものを残す）。
-      RegionFilterChip(
-        selected = state.regionFilter,
-        counts = state.regionCounts,
-        onToggle = onToggleRegionFilter,
-        onClear = onClearRegionFilter,
-      )
-    }
 
-    // 並べ替え（軸メニュー ＋ 昇順/降順トグル）。
-    Row(verticalAlignment = Alignment.CenterVertically) {
+    // 絞り込みの各軸はボタンで開く欄（一覧の先頭）にまとめ、効いている条件だけをチップで出す（→ specs/screens.md）。
+    val activeFilters = historyActiveFilters(
+      state = state,
+      onFavoriteFilterChange = onFavoriteFilterChange,
+      onNamedFilterChange = onNamedFilterChange,
+      onStopFilterChange = onStopFilterChange,
+      onClearCategoryFilter = onClearCategoryFilter,
+      onClearRegionFilter = onClearRegionFilter,
+    )
+    // 絞り込みのボタンと、並べ替え（軸メニュー ＋ 昇順/降順トグル）。
+    Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+      FilterPanelButton(activeCount = activeFilters.size, expanded = panelOpen, onClick = { onPanelOpenChange(!panelOpen) })
+      Spacer(modifier = Modifier.weight(1f))
       Box {
         var sortOpen by remember { mutableStateOf(false) }
         TextButton(onClick = { sortOpen = true }) {
@@ -329,8 +342,111 @@ private fun FilterSortBar(
         Text(text = if (state.sortDescending) "降順 ↓" else "昇順 ↑")
       }
     }
+    // 欄を開いている間はチップの行を出さない（欄に選んでいるものが見えている。選ぶたびに行が出たり消えたりして
+    // 欄がずれないように）。「初期状態に戻す」は欄の見出しにある。
+    if (!panelOpen) {
+      ActiveFilterChips(
+        activeFilters,
+        onChipClick = { onPanelOpenChange(true) },
+        onReset = onResetListOptions.takeUnless { state.isInitialListOptions },
+      )
+    }
   }
 }
+
+/** 経路一覧の絞り込みの欄（お気に入り・名前・立ち寄り・業種・地域）。 */
+@Composable
+private fun HistoryFilterPanel(
+  state: HistoryState,
+  onClearFilters: () -> Unit,
+  onResetListOptions: () -> Unit,
+  onFavoriteFilterChange: (TrackFavoriteFilter) -> Unit,
+  onNamedFilterChange: (TrackNamedFilter) -> Unit,
+  onStopFilterChange: (TrackStopFilter) -> Unit,
+  onToggleCategoryFilter: (PlaceCategoryFacet) -> Unit,
+  onToggleRegionFilter: (RegionKey) -> Unit,
+) {
+  ListFilterPanel(
+    resultCount = state.visibleTracks.size,
+    // 「すべて外す」は欄の軸だけを外す（名前の検索語は残す）ので、欄の軸が効いているときだけ押せる。
+    canClear = state.favoriteFilter != TrackFavoriteFilter.ANY ||
+      state.namedFilter != TrackNamedFilter.ANY ||
+      state.stopFilter != TrackStopFilter.ANY ||
+      state.categoryFilter.isNotEmpty() ||
+      state.regionFilter.isNotEmpty(),
+    onClearAll = onClearFilters,
+    canReset = !state.isInitialListOptions,
+    onReset = onResetListOptions,
+  ) {
+    FilterChoiceSection(
+      title = "お気に入り",
+      options = TrackFavoriteFilter.entries,
+      selected = state.favoriteFilter,
+      labelOf = { choiceLabel(it, TrackFavoriteFilter.ANY) { f -> f.chipLabel } },
+      onSelect = onFavoriteFilterChange,
+    )
+    FilterChoiceSection(
+      title = "名前",
+      options = TrackNamedFilter.entries,
+      selected = state.namedFilter,
+      labelOf = { choiceLabel(it, TrackNamedFilter.ANY) { f -> f.chipLabel } },
+      onSelect = onNamedFilterChange,
+    )
+    FilterChoiceSection(
+      title = "立ち寄り",
+      options = TrackStopFilter.entries,
+      selected = state.stopFilter,
+      labelOf = { choiceLabel(it, TrackStopFilter.ANY) { f -> f.chipLabel } },
+      onSelect = onStopFilterChange,
+    )
+    // 業種は立ち寄った場所の業種。複数選べる（どれかに立ち寄った経路を残す）。
+    CategoryFilterSection(
+      selected = state.categoryFilter,
+      counts = state.categoryCounts,
+      onToggle = onToggleCategoryFilter,
+    )
+    // 地域は立ち寄った場所の地域。都道府県（海外は国）→ 市区町村（都市）の 2 段。複数選べる。
+    RegionFilterSection(
+      selected = state.regionFilter,
+      counts = state.regionCounts,
+      onToggle = onToggleRegionFilter,
+    )
+  }
+}
+
+/** 経路一覧でいま効いている条件（絞り込みの欄の軸。名前の検索は検索欄に出ているので含めない）。並びは欄と同じ。 */
+private fun historyActiveFilters(
+  state: HistoryState,
+  onFavoriteFilterChange: (TrackFavoriteFilter) -> Unit,
+  onNamedFilterChange: (TrackNamedFilter) -> Unit,
+  onStopFilterChange: (TrackStopFilter) -> Unit,
+  onClearCategoryFilter: () -> Unit,
+  onClearRegionFilter: () -> Unit,
+): List<ActiveFilter> = listOfNotNull(
+  state.favoriteFilter.takeIf { it != TrackFavoriteFilter.ANY }?.let {
+    ActiveFilter(
+      label = it.chipLabel,
+      onRemove = { onFavoriteFilterChange(TrackFavoriteFilter.ANY) },
+      onToggle = { onFavoriteFilterChange(flippedChoice(it, TrackFavoriteFilter.FAVORITE, TrackFavoriteFilter.NOT_FAVORITE)) },
+    )
+  },
+  state.namedFilter.takeIf { it != TrackNamedFilter.ANY }?.let {
+    ActiveFilter(
+      label = it.chipLabel,
+      onRemove = { onNamedFilterChange(TrackNamedFilter.ANY) },
+      onToggle = { onNamedFilterChange(flippedChoice(it, TrackNamedFilter.NAMED, TrackNamedFilter.UNNAMED)) },
+    )
+  },
+  state.stopFilter.takeIf { it != TrackStopFilter.ANY }?.let {
+    ActiveFilter(
+      label = it.chipLabel,
+      onRemove = { onStopFilterChange(TrackStopFilter.ANY) },
+      onToggle = { onStopFilterChange(flippedChoice(it, TrackStopFilter.HAS_STOPS, TrackStopFilter.NO_STOPS)) },
+    )
+  },
+  categoryChipLabel(state.categoryFilter)?.let { ActiveFilter(it, onClearCategoryFilter) },
+  regionChipLabel(state.regionFilter)?.let { ActiveFilter(it, onClearRegionFilter) },
+)
 
 @Composable
 private fun StatisticsSummaryCard(

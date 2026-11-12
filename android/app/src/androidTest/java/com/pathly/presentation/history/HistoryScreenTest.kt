@@ -3,9 +3,11 @@ package com.pathly.presentation.history
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertHasClickAction
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextInput
@@ -484,9 +486,116 @@ class HistoryScreenTest {
     }
 
     composeTestRule.onNodeWithText("条件に合う記録がありません").assertIsDisplayed()
-    // 絞り込み中なので「すべて」は選ばれていない（押せば検索語も消える）。
-    composeTestRule.onNodeWithText("すべて").performClick()
+    // 検索語は検索欄の × で消すので、絞り込みの欄の軸としては数えない（「すべて外す」も押せない）。
+    composeTestRule.onNodeWithText("絞り込み").performClick()
+    composeTestRule.onNodeWithText("0 件").assertIsDisplayed()
+    composeTestRule.onNodeWithText("すべて外す").assertIsNotEnabled()
+  }
+
+  @Test
+  fun historyScreen_activeFilterChip_removesThatAxis() {
+    uiStateFlow.value = HistoryState(
+      tracks = listOf(createSampleTrack(id = 1L)),
+      favoriteFilter = TrackFavoriteFilter.FAVORITE,
+    )
+
+    composeTestRule.setContent {
+      PathlyAndroidTheme {
+        HistoryScreen(viewModel = mockViewModel, onTrackClick = mockOnTrackClick)
+      }
+    }
+
+    // 効いている条件の数がボタンに出て、チップの × でその軸だけ外す。
+    composeTestRule.onNodeWithText("絞り込み 1").assertIsDisplayed()
+    composeTestRule.onNodeWithContentDescription("お気に入りの絞り込みを外す").performClick()
+    verify { mockViewModel.setFavoriteFilter(TrackFavoriteFilter.ANY) }
+  }
+
+  @Test
+  fun historyScreen_activeFilterChip_tapFlipsTheChoice() {
+    uiStateFlow.value = HistoryState(tracks = listOf(createSampleTrack(id = 1L)), favoriteFilter = TrackFavoriteFilter.FAVORITE)
+
+    composeTestRule.setContent {
+      PathlyAndroidTheme {
+        HistoryScreen(viewModel = mockViewModel, onTrackClick = mockOnTrackClick)
+      }
+    }
+
+    // チップ自体を押すと「お気に入り ⇄ お気に入り以外」を切り替える（欄は開かない）。
+    composeTestRule.onNodeWithTag("activeFilter=お気に入り").performClick()
+    verify { mockViewModel.setFavoriteFilter(TrackFavoriteFilter.NOT_FAVORITE) }
+    composeTestRule.onNodeWithTag("listFilterPanel").assertDoesNotExist()
+  }
+
+  @Test
+  fun historyScreen_filterPanel_selectsAChoiceAndClearsAll() {
+    uiStateFlow.value = HistoryState(tracks = listOf(createSampleTrack(id = 1L)), namedFilter = TrackNamedFilter.NAMED)
+
+    composeTestRule.setContent {
+      PathlyAndroidTheme {
+        HistoryScreen(viewModel = mockViewModel, onTrackClick = mockOnTrackClick)
+      }
+    }
+
+    composeTestRule.onNodeWithText("絞り込み 1").performClick()
+    // 3 状態の軸は、並べたボタンから選ぶ。
+    composeTestRule.onNodeWithTag("立ち寄り=立ち寄りなし").performClick()
+    verify { mockViewModel.setStopFilter(TrackStopFilter.NO_STOPS) }
+    composeTestRule.onNodeWithText("すべて外す").performClick()
     verify { mockViewModel.clearFilters() }
+  }
+
+  @Test
+  fun historyScreen_resetListOptions_shownOnlyWhenNotInitial() {
+    uiStateFlow.value = HistoryState(tracks = listOf(createSampleTrack(id = 1L)), sortDescending = false)
+
+    composeTestRule.setContent {
+      PathlyAndroidTheme {
+        HistoryScreen(viewModel = mockViewModel, onTrackClick = mockOnTrackClick)
+      }
+    }
+
+    // 並べ替えの向きだけ変えていても出る。押すとまとめて戻す。
+    composeTestRule.onNodeWithText("初期状態に戻す").performClick()
+    verify { mockViewModel.resetListOptions() }
+    uiStateFlow.value = HistoryState(tracks = listOf(createSampleTrack(id = 1L)))
+    composeTestRule.onNodeWithText("初期状態に戻す").assertDoesNotExist()
+  }
+
+  @Test
+  fun historyScreen_filterPanel_closesFromBottomButton() {
+    uiStateFlow.value = HistoryState(tracks = listOf(createSampleTrack(id = 1L)))
+
+    composeTestRule.setContent {
+      PathlyAndroidTheme {
+        HistoryScreen(viewModel = mockViewModel, onTrackClick = mockOnTrackClick)
+      }
+    }
+
+    // 片手でも届くよう、欄を開いている間は下にも閉じるボタンを出す。
+    composeTestRule.onNodeWithText("絞り込み").performClick()
+    composeTestRule.onNodeWithTag("listFilterPanel").assertIsDisplayed()
+    composeTestRule.onNodeWithTag("filterPanelCloseButton").performClick()
+    composeTestRule.onNodeWithTag("listFilterPanel").assertDoesNotExist()
+    composeTestRule.onNodeWithTag("filterPanelCloseButton").assertDoesNotExist()
+  }
+
+  @Test
+  fun historyScreen_filterPanelOpen_hidesActiveChipsAndResetsFromHeader() {
+    uiStateFlow.value = HistoryState(tracks = listOf(createSampleTrack(id = 1L)), favoriteFilter = TrackFavoriteFilter.FAVORITE)
+
+    composeTestRule.setContent {
+      PathlyAndroidTheme {
+        HistoryScreen(viewModel = mockViewModel, onTrackClick = mockOnTrackClick)
+      }
+    }
+
+    composeTestRule.onNodeWithContentDescription("お気に入りの絞り込みを外す").assertIsDisplayed()
+    composeTestRule.onNodeWithText("絞り込み 1").performClick()
+    // 欄を開いている間はチップの行を出さない（欄で選ぶたびに欄がずれないように）。戻すのは欄の見出しから。
+    composeTestRule.onNodeWithContentDescription("お気に入りの絞り込みを外す").assertDoesNotExist()
+    composeTestRule.onNodeWithText("初期状態に戻す").performClick()
+    verify { mockViewModel.resetListOptions() }
   }
 
   private fun createSampleTrack(

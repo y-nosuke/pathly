@@ -68,7 +68,11 @@ data class HistoryState(
   val isLoading: Boolean = false,
   val errorMessage: String? = null,
 ) {
-  /** 絞り込みを一切かけていないか（「すべて」チップの選択表示に使う）。 */
+  /** 絞り込み・並べ替え（軸と向き）が、開いたときのまま（初期状態）か。違えば「初期状態に戻す」を出す。 */
+  val isInitialListOptions: Boolean
+    get() = noFilter && sort == HistoryState().sort && sortDescending == HistoryState().sortDescending
+
+  /** 絞り込み（名前の検索を含む）を一切かけていないか。 */
   val noFilter: Boolean
     get() = favoriteFilter == TrackFavoriteFilter.ANY &&
       namedFilter == TrackNamedFilter.ANY &&

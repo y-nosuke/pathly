@@ -13,10 +13,12 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -99,9 +101,15 @@ import com.pathly.domain.model.PlaceVisit
 import com.pathly.domain.model.Priority
 import com.pathly.domain.model.RegionKey
 import com.pathly.domain.model.RegisteredPlace
-import com.pathly.presentation.common.CategoryFilterChip
+import com.pathly.presentation.common.ActiveFilter
+import com.pathly.presentation.common.ActiveFilterChips
+import com.pathly.presentation.common.CategoryFilterSection
 import com.pathly.presentation.common.CloseInfoWindowWithSheet
+import com.pathly.presentation.common.FilterChoiceSection
+import com.pathly.presentation.common.FilterPanelButton
+import com.pathly.presentation.common.FilterPanelCloseButton
 import com.pathly.presentation.common.FloatingSheet
+import com.pathly.presentation.common.ListFilterPanel
 import com.pathly.presentation.common.ListNameSearchField
 import com.pathly.presentation.common.MapMarker
 import com.pathly.presentation.common.MapPinMarker
@@ -110,13 +118,17 @@ import com.pathly.presentation.common.MarkerPickBlue
 import com.pathly.presentation.common.MarkerUnvisitedGray
 import com.pathly.presentation.common.MarkerVisitedGreen
 import com.pathly.presentation.common.NearbyPlaceConfirmDialog
-import com.pathly.presentation.common.RegionFilterChip
+import com.pathly.presentation.common.RegionFilterSection
 import com.pathly.presentation.common.RegisteredPlaceMarker
 import com.pathly.presentation.common.RegisteredPlaceMarkers
 import com.pathly.presentation.common.ScrollToTopButton
 import com.pathly.presentation.common.ScrollToTopButtonClearance
+import com.pathly.presentation.common.categoryChipLabel
 import com.pathly.presentation.common.categoryGlyph
+import com.pathly.presentation.common.choiceLabel
+import com.pathly.presentation.common.flippedChoice
 import com.pathly.presentation.common.heightOf
+import com.pathly.presentation.common.regionChipLabel
 import com.pathly.presentation.common.rememberFloatingSheetState
 import com.pathly.presentation.common.rememberMapInfoWindowState
 import com.pathly.util.DateFormatters
@@ -160,6 +172,7 @@ fun PlacesListRoute(
       onAddByMap = onAddByMap,
       onAddBySearch = onAddBySearch,
       onClearFilters = viewModel::clearFilters,
+      onResetListOptions = viewModel::resetListOptions,
       onNameQueryChange = viewModel::setNameQuery,
       onWishlistFilterChange = viewModel::setWishlistFilter,
       onVisitedFilterChange = viewModel::setVisitedFilter,
@@ -338,6 +351,7 @@ internal fun PlacesListContent(
   onAddByMap: () -> Unit,
   onAddBySearch: () -> Unit,
   onClearFilters: () -> Unit,
+  onResetListOptions: () -> Unit,
   onNameQueryChange: (String) -> Unit,
   onWishlistFilterChange: (WishlistFilter) -> Unit,
   onVisitedFilterChange: (VisitedFilter) -> Unit,
@@ -373,6 +387,13 @@ internal fun PlacesListContent(
   // までの一瞬、何も描かれていない面が見えてちらつくため。
   var keepMap by rememberSaveable { mutableStateOf(false) }
   LaunchedEffect(isMap) { if (isMap) keepMap = true }
+  // 絞り込みの欄を開いているか。一覧表示と地図表示で共有する（切り替えても開いたまま）。
+  var filterPanelOpen by rememberSaveable { mutableStateOf(false) }
+  // 欄を開いているときの戻るは、欄を閉じる（地図表示から一覧へ戻すより先。吹き出しを閉じるのはさらに先）。
+  // 一覧表示の読み込み中（欄を入れる一覧が無い）や、地図表示で重ねたものをたたんでいるときは欄が見えないので、
+  // 開いたままでも出ていない扱いにする（戻る・閉じるボタン・ボタンの ▴ を欄の見え方に揃える）。
+  val panelVisible = filterPanelOpen && if (isMap) !state.controlsCollapsed else !state.isLoading
+  BackHandler(enabled = panelVisible) { filterPanelOpen = false }
 
   Box(modifier = modifier.fillMaxSize()) {
     // 地図表示: 地図をタブいっぱいに広げ、見出し・検索欄・絞り込みは地図の上に重ねる。
@@ -383,6 +404,7 @@ internal fun PlacesListContent(
         onAddByMap = onAddByMap,
         onAddBySearch = onAddBySearch,
         onClearFilters = onClearFilters,
+        onResetListOptions = onResetListOptions,
         onNameQueryChange = onNameQueryChange,
         onWishlistFilterChange = onWishlistFilterChange,
         onVisitedFilterChange = onVisitedFilterChange,
@@ -392,6 +414,8 @@ internal fun PlacesListContent(
         onClearRegionFilter = onClearRegionFilter,
         onViewModeChange = onViewModeChange,
         onControlsCollapsedChange = onControlsCollapsedChange,
+        filterPanelOpen = filterPanelOpen,
+        onFilterPanelOpenChange = { filterPanelOpen = it },
         onPlaceClick = onMapPlaceClick,
         camera = mapCamera,
         mapContent = mapContent,
@@ -419,6 +443,7 @@ internal fun PlacesListContent(
         PlacesFilterControls(
           state = state,
           onClearFilters = onClearFilters,
+          onResetListOptions = onResetListOptions,
           onNameQueryChange = onNameQueryChange,
           onWishlistFilterChange = onWishlistFilterChange,
           onVisitedFilterChange = onVisitedFilterChange,
@@ -426,12 +451,10 @@ internal fun PlacesListContent(
           onClearCategoryFilter = onClearCategoryFilter,
           onToggleRegionFilter = onToggleRegionFilter,
           onClearRegionFilter = onClearRegionFilter,
-        )
-
-        Spacer(modifier = Modifier.height(8.dp))
-
-        // 並べ替え（軸メニュー ＋ 昇順/降順トグル）。地図表示では並びに意味が無いので出さない。
-        Row(verticalAlignment = Alignment.CenterVertically) {
+          panelOpen = panelVisible,
+          onPanelOpenChange = { filterPanelOpen = it },
+        ) {
+          // 並べ替え（軸メニュー ＋ 昇順/降順トグル）。地図表示では並びに意味が無いので出さない。
           Box {
             var sortOpen by remember { mutableStateOf(false) }
             TextButton(onClick = { sortOpen = true }) {
@@ -456,60 +479,88 @@ internal fun PlacesListContent(
 
         Spacer(modifier = Modifier.height(8.dp))
 
-        when {
-          state.isLoading -> {
-            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-              CircularProgressIndicator()
-            }
+        if (state.isLoading) {
+          Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            CircularProgressIndicator()
           }
-
-          state.visibleItems.isEmpty() -> {
-            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-              Text(
-                text = state.emptyMessage(),
-                style = MaterialTheme.typography.bodyLarge,
-                textAlign = TextAlign.Center,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-              )
-            }
+        } else {
+          val listState = rememberLazyListState()
+          // 絞り込み・並べ替えを変えたとき、または先頭が変わったとき（＝追加時）に先頭へ戻す。
+          // 詳細から戻って一覧を出し直したときは戻さない（前に見ていた位置のまま）。そのため、最後に
+          // 先頭へ戻したときの条件を画面の状態として取っておき、条件が変わったときだけ動かす。
+          val scrollKey = state.scrollResetKey
+          var scrolledFor by rememberSaveable { mutableStateOf<String?>(null) }
+          LaunchedEffect(scrollKey) {
+            if (scrolledFor != null && scrolledFor != scrollKey) listState.scrollToItem(0)
+            scrolledFor = scrollKey
           }
-
-          else -> {
-            val listState = rememberLazyListState()
-            // 絞り込み・並べ替えを変えたとき、または先頭が変わったとき（＝追加時）に先頭へ戻す。
-            // 詳細から戻って一覧を出し直したときは戻さない（前に見ていた位置のまま）。そのため、最後に
-            // 先頭へ戻したときの条件を画面の状態として取っておき、条件が変わったときだけ動かす。
-            val scrollKey = state.scrollResetKey
-            var scrolledFor by rememberSaveable { mutableStateOf<String?>(null) }
-            LaunchedEffect(scrollKey) {
-              if (scrolledFor != null && scrolledFor != scrollKey) listState.scrollToItem(0)
-              scrolledFor = scrollKey
-            }
-            Box(modifier = Modifier.fillMaxSize()) {
-              LazyColumn(
-                state = listState,
-                // 最後の行が先頭へ戻るボタンの上まで上がるよう、下に余白を足す（右端の操作が隠れないように）。
-                contentPadding = PaddingValues(bottom = ScrollToTopButtonClearance),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-              ) {
-                items(state.visibleItems, key = { it.place.id }) { item ->
-                  PlaceItemRow(
-                    item = item,
-                    sort = state.sort,
-                    onClick = { onItemClick(item) },
-                    onToggleWishlist = { onToggleWishlist(item) },
-                    onDelete = { onDeleteRequest(item) },
+          // 絞り込みの欄を開いたら、欄が見えるよう先頭へ寄せる。開いたまま組み直したとき（画面の回転・詳細から戻る）は
+          // 動かさない（見ていた位置のまま）。
+          var scrolledForOpen by remember { mutableStateOf(filterPanelOpen) }
+          LaunchedEffect(filterPanelOpen) {
+            if (filterPanelOpen && !scrolledForOpen) listState.animateScrollToItem(0)
+            scrolledForOpen = filterPanelOpen
+          }
+          Box(modifier = Modifier.fillMaxSize()) {
+            LazyColumn(
+              state = listState,
+              // 最後の行が先頭へ戻るボタンの上まで上がるよう、下に余白を足す（右端の操作が隠れないように）。
+              contentPadding = PaddingValues(bottom = ScrollToTopButtonClearance),
+              verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+              // 絞り込みの欄は一覧の先頭に入れ、一覧と一緒にスクロールする（選びながら下の結果を見られる）。
+              if (filterPanelOpen) {
+                item(key = "filterPanel") {
+                  PlacesFilterPanel(
+                    state = state,
+                    onClearFilters = onClearFilters,
+                    onResetListOptions = onResetListOptions,
+                    onWishlistFilterChange = onWishlistFilterChange,
+                    onVisitedFilterChange = onVisitedFilterChange,
+                    onToggleCategoryFilter = onToggleCategoryFilter,
+                    onToggleRegionFilter = onToggleRegionFilter,
                   )
                 }
               }
-              ScrollToTopButton(
-                listState = listState,
-                modifier = Modifier.align(Alignment.BottomEnd).padding(bottom = 8.dp),
-              )
+              if (state.visibleItems.isEmpty()) {
+                item(key = "empty") {
+                  Text(
+                    text = state.emptyMessage(),
+                    style = MaterialTheme.typography.bodyLarge,
+                    textAlign = TextAlign.Center,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier
+                      .fillMaxWidth()
+                      .padding(vertical = 48.dp),
+                  )
+                }
+              }
+              items(state.visibleItems, key = { it.place.id }) { item ->
+                PlaceItemRow(
+                  item = item,
+                  sort = state.sort,
+                  onClick = { onItemClick(item) },
+                  onToggleWishlist = { onToggleWishlist(item) },
+                  onDelete = { onDeleteRequest(item) },
+                )
+              }
             }
+            ScrollToTopButton(
+              listState = listState,
+              modifier = Modifier.align(Alignment.BottomEnd).padding(bottom = 8.dp),
+            )
           }
         }
       }
+    }
+    // 欄を開いている間は、親指の届く下にも閉じるボタンを浮かべる（一覧表示・地図表示とも）。
+    if (panelVisible) {
+      FilterPanelCloseButton(
+        onClick = { filterPanelOpen = false },
+        modifier = Modifier
+          .align(Alignment.BottomCenter)
+          .padding(bottom = 8.dp),
+      )
     }
   }
 }
@@ -1474,11 +1525,16 @@ private fun PlacesHeader(
   }
 }
 
-/** 名前の検索欄と絞り込みのチップ。一覧表示と地図表示で同じものを出す。 */
+/**
+ * 名前の検索欄と、絞り込みのボタン・効いている条件のチップ。一覧表示と地図表示で同じものを出す。
+ * ボタンで絞り込みの欄を開く／閉じる（→ specs/screens.md）。欄は一覧表示では一覧の先頭に入れ、
+ * 地図表示（[inlinePanel]）ではここに出す。[trailing] はボタンの右に並べるもの（並べ替え）。
+ */
 @Composable
 private fun PlacesFilterControls(
   state: PlacesState,
   onClearFilters: () -> Unit,
+  onResetListOptions: () -> Unit,
   onNameQueryChange: (String) -> Unit,
   onWishlistFilterChange: (WishlistFilter) -> Unit,
   onVisitedFilterChange: (VisitedFilter) -> Unit,
@@ -1486,8 +1542,12 @@ private fun PlacesFilterControls(
   onClearCategoryFilter: () -> Unit,
   onToggleRegionFilter: (RegionKey) -> Unit,
   onClearRegionFilter: () -> Unit,
+  panelOpen: Boolean,
+  onPanelOpenChange: (Boolean) -> Unit,
+  inlinePanel: Boolean = false,
+  trailing: @Composable RowScope.() -> Unit = {},
 ) {
-  // 名前の検索（表示名に含むものだけ残す）。ほかの絞り込みとは AND で、「すべて」で消える。
+  // 名前の検索（表示名に含むものだけ残す）。ほかの絞り込みとは AND。消すのは欄の ×。
   ListNameSearchField(
     query = state.nameQuery,
     onQueryChange = onNameQueryChange,
@@ -1496,54 +1556,120 @@ private fun PlacesFilterControls(
 
   Spacer(modifier = Modifier.height(8.dp))
 
-  // 絞り込みは3軸独立（行きたい / 訪問状況 / 業種）。横に収まらない端末向けに横スクロール可。
-  Row(
-    modifier = Modifier
-      .fillMaxWidth()
-      .horizontalScroll(rememberScrollState()),
-    horizontalArrangement = Arrangement.spacedBy(8.dp),
-    verticalAlignment = Alignment.CenterVertically,
+  val activeFilters = placesActiveFilters(
+    state = state,
+    onWishlistFilterChange = onWishlistFilterChange,
+    onVisitedFilterChange = onVisitedFilterChange,
+    onClearCategoryFilter = onClearCategoryFilter,
+    onClearRegionFilter = onClearRegionFilter,
+  )
+
+  Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+    FilterPanelButton(activeCount = activeFilters.size, expanded = panelOpen, onClick = { onPanelOpenChange(!panelOpen) })
+    Spacer(modifier = Modifier.weight(1f))
+    trailing()
+  }
+  val onReset = onResetListOptions.takeUnless { state.isInitialListOptions }
+  // 欄を開いている間はチップの行を出さない（欄に選んでいるものが見えている。選ぶたびに行が出たり消えたりして
+  // 欄がずれないように）。「初期状態に戻す」は欄の見出しにある。
+  if (!panelOpen && (activeFilters.isNotEmpty() || onReset != null)) {
+    Spacer(modifier = Modifier.height(4.dp))
+    ActiveFilterChips(activeFilters, onChipClick = { onPanelOpenChange(true) }, onReset = onReset)
+  }
+
+  if (inlinePanel && panelOpen) {
+    Spacer(modifier = Modifier.height(8.dp))
+    // 地図を隠しきらないよう高さを抑え、中でスクロールする。
+    Box(modifier = Modifier.heightIn(max = 360.dp).verticalScroll(rememberScrollState())) {
+      PlacesFilterPanel(
+        state = state,
+        onClearFilters = onClearFilters,
+        onResetListOptions = onResetListOptions,
+        onWishlistFilterChange = onWishlistFilterChange,
+        onVisitedFilterChange = onVisitedFilterChange,
+        onToggleCategoryFilter = onToggleCategoryFilter,
+        onToggleRegionFilter = onToggleRegionFilter,
+      )
+    }
+  }
+}
+
+/** 場所一覧の絞り込みの欄（行きたい・訪問・業種・地域）。 */
+@Composable
+private fun PlacesFilterPanel(
+  state: PlacesState,
+  onClearFilters: () -> Unit,
+  onResetListOptions: () -> Unit,
+  onWishlistFilterChange: (WishlistFilter) -> Unit,
+  onVisitedFilterChange: (VisitedFilter) -> Unit,
+  onToggleCategoryFilter: (PlaceCategoryFacet) -> Unit,
+  onToggleRegionFilter: (RegionKey) -> Unit,
+) {
+  ListFilterPanel(
+    resultCount = state.visibleItems.size,
+    // 「すべて外す」は欄の軸だけを外す（名前の検索語は残す）ので、欄の軸が効いているときだけ押せる。
+    canClear = state.wishlistFilter != WishlistFilter.ANY ||
+      state.visitedFilter != VisitedFilter.ANY ||
+      state.categoryFilter.isNotEmpty() ||
+      state.regionFilter.isNotEmpty(),
+    onClearAll = onClearFilters,
+    canReset = !state.isInitialListOptions,
+    onReset = onResetListOptions,
   ) {
-    // すべて: 絞り込みを全解除。何も絞っていないときは選択状態にして現在地を示す。
-    FilterChip(
-      selected = state.noFilter,
-      onClick = onClearFilters,
-      label = { Text("すべて") },
+    FilterChoiceSection(
+      title = "行きたい",
+      options = WishlistFilter.entries,
+      selected = state.wishlistFilter,
+      labelOf = { choiceLabel(it, WishlistFilter.ANY) { f -> f.chipLabel } },
+      onSelect = onWishlistFilterChange,
     )
-    // 行きたいは1つのトグル。タップで 指定なし→行きたい→行きたい以外→… と切り替わる。
-    FilterChip(
-      selected = state.wishlistFilter != WishlistFilter.ANY,
-      onClick = {
-        val next = WishlistFilter.entries[(state.wishlistFilter.ordinal + 1) % WishlistFilter.entries.size]
-        onWishlistFilterChange(next)
-      },
-      label = { Text(state.wishlistFilter.chipLabel) },
-    )
-    // 訪問状況も1つのトグル。タップで 指定なし→訪問済み→未訪問→… と切り替わる。
-    FilterChip(
-      selected = state.visitedFilter != VisitedFilter.ANY,
-      onClick = {
-        val next = VisitedFilter.entries[(state.visitedFilter.ordinal + 1) % VisitedFilter.entries.size]
-        onVisitedFilterChange(next)
-      },
-      label = { Text(state.visitedFilter.chipLabel) },
+    FilterChoiceSection(
+      title = "訪問",
+      options = VisitedFilter.entries,
+      selected = state.visitedFilter,
+      labelOf = { choiceLabel(it, VisitedFilter.ANY) { f -> f.chipLabel } },
+      onSelect = onVisitedFilterChange,
     )
     // 業種は複数選べる（選んだどれかに当たる場所を残す）。
-    CategoryFilterChip(
+    CategoryFilterSection(
       selected = state.categoryFilter,
       counts = state.categoryCounts,
       onToggle = onToggleCategoryFilter,
-      onClear = onClearCategoryFilter,
     )
-    // 地域は都道府県 → 市区町村の 2 段。複数選べる（選んだどれかに当たるものを残す）。
-    RegionFilterChip(
+    // 地域は都道府県（海外は国）→ 市区町村（都市）の 2 段。複数選べる。
+    RegionFilterSection(
       selected = state.regionFilter,
       counts = state.regionCounts,
       onToggle = onToggleRegionFilter,
-      onClear = onClearRegionFilter,
     )
   }
 }
+
+/** 場所一覧でいま効いている条件（絞り込みの欄の軸。名前の検索は検索欄に出ているので含めない）。並びは欄と同じ。 */
+private fun placesActiveFilters(
+  state: PlacesState,
+  onWishlistFilterChange: (WishlistFilter) -> Unit,
+  onVisitedFilterChange: (VisitedFilter) -> Unit,
+  onClearCategoryFilter: () -> Unit,
+  onClearRegionFilter: () -> Unit,
+): List<ActiveFilter> = listOfNotNull(
+  state.wishlistFilter.takeIf { it != WishlistFilter.ANY }?.let {
+    ActiveFilter(
+      label = it.chipLabel,
+      onRemove = { onWishlistFilterChange(WishlistFilter.ANY) },
+      onToggle = { onWishlistFilterChange(flippedChoice(it, WishlistFilter.WISHLISTED, WishlistFilter.NOT_WISHLISTED)) },
+    )
+  },
+  state.visitedFilter.takeIf { it != VisitedFilter.ANY }?.let {
+    ActiveFilter(
+      label = it.chipLabel,
+      onRemove = { onVisitedFilterChange(VisitedFilter.ANY) },
+      onToggle = { onVisitedFilterChange(flippedChoice(it, VisitedFilter.VISITED, VisitedFilter.UNVISITED)) },
+    )
+  },
+  categoryChipLabel(state.categoryFilter)?.let { ActiveFilter(it, onClearCategoryFilter) },
+  regionChipLabel(state.regionFilter)?.let { ActiveFilter(it, onClearRegionFilter) },
+)
 
 /**
  * 場所タブの地図表示。地図をタブいっぱいに広げ、見出し・検索欄・絞り込みを上に重ねる。重ねたものはたためて、
@@ -1557,6 +1683,7 @@ private fun PlacesMapLayout(
   onAddByMap: () -> Unit,
   onAddBySearch: () -> Unit,
   onClearFilters: () -> Unit,
+  onResetListOptions: () -> Unit,
   onNameQueryChange: (String) -> Unit,
   onWishlistFilterChange: (WishlistFilter) -> Unit,
   onVisitedFilterChange: (VisitedFilter) -> Unit,
@@ -1566,6 +1693,8 @@ private fun PlacesMapLayout(
   onClearRegionFilter: () -> Unit,
   onViewModeChange: (PlacesViewMode) -> Unit,
   onControlsCollapsedChange: (Boolean) -> Unit,
+  filterPanelOpen: Boolean,
+  onFilterPanelOpenChange: (Boolean) -> Unit,
   onPlaceClick: (Long) -> Unit,
   camera: PlacesMapCamera,
   modifier: Modifier = Modifier,
@@ -1634,6 +1763,7 @@ private fun PlacesMapLayout(
               PlacesFilterControls(
                 state = state,
                 onClearFilters = onClearFilters,
+                onResetListOptions = onResetListOptions,
                 onNameQueryChange = onNameQueryChange,
                 onWishlistFilterChange = onWishlistFilterChange,
                 onVisitedFilterChange = onVisitedFilterChange,
@@ -1641,6 +1771,10 @@ private fun PlacesMapLayout(
                 onClearCategoryFilter = onClearCategoryFilter,
                 onToggleRegionFilter = onToggleRegionFilter,
                 onClearRegionFilter = onClearRegionFilter,
+                panelOpen = filterPanelOpen,
+                onPanelOpenChange = onFilterPanelOpenChange,
+                // 地図の上では一覧が無いので、欄は重ねたものの中に出す（高さを抑えて中でスクロール）。
+                inlinePanel = true,
               )
             }
           }
