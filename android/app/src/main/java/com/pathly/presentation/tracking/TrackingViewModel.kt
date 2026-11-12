@@ -8,6 +8,7 @@ import com.pathly.data.settings.SettingsRepository
 import com.pathly.data.tracking.TrackingController
 import com.pathly.domain.model.GeoBounds
 import com.pathly.domain.model.MapPlaceFilter
+import com.pathly.domain.model.MapRegion
 import com.pathly.domain.model.NearbyRegisterPrompt
 import com.pathly.domain.model.NearbyStopPrompt
 import com.pathly.domain.model.PlaceListItem
@@ -512,6 +513,12 @@ class TrackingViewModel @Inject constructor(
 
   /** 地図の上の「検索して登録」: キーワード候補を返す。開いたときに地図に映っていた範囲 [bias] の中を優先する。 */
   suspend fun predictPlacesNear(query: String, bias: GeoBounds?): List<PlacePrediction> = placesTextSearcher.predict(query, bias)
+
+  /** 地域へ移動: 地名の候補（地域だけに絞る）。[bias] の範囲の中を優先する。 */
+  suspend fun predictRegions(query: String, bias: GeoBounds?): List<PlacePrediction> = placesTextSearcher.predict(query, bias, regionsOnly = true)
+
+  /** 地域へ移動: 選んだ地名の範囲と中心。取れなければ null。 */
+  suspend fun fetchRegion(placeId: String): MapRegion? = placesTextSearcher.fetchRegion(placeId)
 
   /** 名前検索で選んだ候補を、座標つきの施設情報に確定する。 */
   suspend fun fetchPlaceResult(placeId: String): PlaceSearchResult? = placesTextSearcher.fetch(placeId)

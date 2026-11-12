@@ -2,6 +2,7 @@ package com.pathly.presentation.tracking
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -10,11 +11,13 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
@@ -48,6 +51,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.Lifecycle
@@ -89,6 +93,7 @@ import com.pathly.presentation.common.SheetDetent
 import com.pathly.presentation.common.heightOf
 import com.pathly.presentation.common.rememberFloatingSheetState
 import com.pathly.presentation.common.rememberMapInfoWindowState
+import com.pathly.presentation.common.rememberMarkerIconCache
 import com.pathly.presentation.common.stopSegmentPoints
 import com.pathly.presentation.places.PlaceActionSheet
 import com.pathly.presentation.places.PlaceDeleteUndoEffect
@@ -171,10 +176,12 @@ fun TrackingScreen(
   var reassignTarget by remember { mutableStateOf<Stop?>(null) }
   // 「立ち寄りを追加」モード（記録中のみ）。ONの間は地図タップ＝立ち寄り追加、OFF＝場所登録。
   var manualMode by remember { mutableStateOf(false) }
-  // 「検索して登録」の検索画面を開いているか。候補を選ぶと閉じ、地図の上の場所シートで登録する。
-  var placeSearchOpen by remember { mutableStateOf(false) }
+  // 地図の上の検索窓（「検索して登録」か「地域へ移動」）。null なら閉じている。
+  var mapSearch by remember { mutableStateOf<MapSearchMode?>(null) }
   // 検索窓を開いたときに地図に映っていた範囲。候補はこの中を優先する（範囲の外も出る）。
-  var placeSearchBias by remember { mutableStateOf<GeoBounds?>(null) }
+  var mapSearchBias by remember { mutableStateOf<GeoBounds?>(null) }
+  // 「地域へ移動」で移した地域の目印（中心のピンと名前）。別の地域を選ぶ・現在地ボタン・ピンのタップで消す。
+  var regionMarker by remember { mutableStateOf<RegionMarker?>(null) }
   // シートの開き具合。地図の下パディングを合わせて、選んだ地点がシートの裏に来ないようにする。
   val placeSheetState = rememberFloatingSheetState()
   val manualSheetState = rememberFloatingSheetState(peekFraction = 0.5f)
@@ -234,8 +241,8 @@ fun TrackingScreen(
         // 手動追加モード（記録中のみ）: POIタップも立ち寄り追加に。通常は統一の場所シート（POI登録）。
         onPoiClick = { poi ->
           // 検索窓を開いている間の地図のタップは、窓を閉じるだけ（地図を見たくてタップしたとみなす）。
-          if (placeSearchOpen) {
-            placeSearchOpen = false
+          if (mapSearch != null) {
+            mapSearch = null
             return@TrackingMapView
           }
           if (uiState.isTracking && manualMode) {
@@ -252,8 +259,8 @@ fun TrackingScreen(
         },
         // 手動追加モード＝立ち寄り追加、それ以外（通常/平常時）＝場所シート（空き地点の登録）。
         onMapClick = { latLng ->
-          if (placeSearchOpen) {
-            placeSearchOpen = false
+          if (mapSearch != null) {
+            mapSearch = null
             return@TrackingMapView
           }
           if (uiState.isTracking && manualMode) {
@@ -291,9 +298,12 @@ fun TrackingScreen(
         focusNonce = focusNonce,
         fitBounds = fitBounds,
         fitNonce = fitNonce,
+        regionMarker = regionMarker,
+        onRegionMarkerClick = { regionMarker = null },
+        onRecenter = { regionMarker = null },
         onRegisteredPlaceClick = { place ->
-          if (placeSearchOpen) {
-            placeSearchOpen = false
+          if (mapSearch != null) {
+            mapSearch = null
             return@TrackingMapView
           }
           if (uiState.isTracking && manualMode) {
@@ -311,7 +321,7 @@ fun TrackingScreen(
     }
 
     // 検索窓を開いている間は、上端の操作（右のボタン列・左上の記録中の操作・記録中のピル）を隠す（窓と重なるため）。
-    if (!placeSearchOpen) {
+    if (mapSearch == null) {
       // 登録済みの場所を地図に出すトグル（記録画面・画面別）。上部右に置き、ON のときは下に絞り込みボタンを出す。
       Column(
         modifier = Modifier
@@ -351,11 +361,9 @@ fun TrackingScreen(
             if (overlayState.isSheetOpen) {
               trackOverlayViewModel.closeSheet()
             } else {
-              mapCameraState.projection?.visibleRegion?.latLngBounds?.let { b ->
+              mapCameraState.visibleGeoBounds()?.let { bounds ->
                 placeSheetTarget = null
-                trackOverlayViewModel.search(
-                  GeoBounds(b.southwest.latitude, b.southwest.longitude, b.northeast.latitude, b.northeast.longitude),
-                )
+                trackOverlayViewModel.search(bounds)
                 overlaySheetState.settleTo(SheetDetent.PEEK)
               }
             }
@@ -365,11 +373,9 @@ fun TrackingScreen(
         Surface(
           onClick = {
             placeSheetTarget = null
-            placeSearchBias = mapCameraState.projection?.visibleRegion?.latLngBounds?.let { b ->
-              GeoBounds(b.southwest.latitude, b.southwest.longitude, b.northeast.latitude, b.northeast.longitude)
-            }
+            mapSearchBias = mapCameraState.visibleGeoBounds()
             viewModel.startPlaceSearch()
-            placeSearchOpen = true
+            mapSearch = MapSearchMode.Place
           },
           // 立ち寄りの追加中は、そちらのシートが優先なので押せなくする（経路のボタンと同じ）。
           enabled = manualTarget == null,
@@ -384,11 +390,29 @@ fun TrackingScreen(
             modifier = Modifier.padding(8.dp),
           )
         }
+        // 地域へ移動: 地名を探して、その地域が収まるように地図を移す（登録はしない）。
+        Surface(
+          onClick = {
+            mapSearchBias = mapCameraState.visibleGeoBounds()
+            viewModel.startPlaceSearch()
+            mapSearch = MapSearchMode.Region
+          },
+          shape = CircleShape,
+          color = MaterialTheme.colorScheme.surface,
+          shadowElevation = 4.dp,
+        ) {
+          Icon(
+            painter = painterResource(R.drawable.ic_public),
+            contentDescription = "地域へ移動",
+            tint = MaterialTheme.colorScheme.onSurface,
+            modifier = Modifier.padding(8.dp),
+          )
+        }
       }
     }
 
     // 記録中の左上操作（縦積み）: 「立ち寄りを追加」モード切替 と 「今ここ」ショートカット。
-    if (uiState.isTracking && !placeSearchOpen) {
+    if (uiState.isTracking && mapSearch == null) {
       Column(
         modifier = Modifier
           .align(Alignment.TopStart)
@@ -459,7 +483,7 @@ fun TrackingScreen(
     }
 
     // 記録中の状態ピル（上部中央）
-    if (uiState.isTracking && !placeSearchOpen) {
+    if (uiState.isTracking && mapSearch == null) {
       RecordingStatusPill(
         startTime = uiState.currentTrack?.startTime,
         modifier = Modifier
@@ -660,19 +684,44 @@ fun TrackingScreen(
       )
     }
 
-    // 検索して登録: 地図はそのままに上端へ検索窓を重ねる。候補を選んだら閉じて、その場所へ地図を寄せ、場所シートで登録する。
-    if (placeSearchOpen) {
-      TrackingPlaceSearchBar(
-        onSearchPredictions = { query -> viewModel.predictPlacesNear(query, placeSearchBias) },
-        onFetchPrediction = viewModel::fetchPlaceResult,
+    // 地図はそのままに上端へ検索窓を重ねる。
+    when (mapSearch) {
+      // 検索して登録: 候補を選んだら閉じて、その場所へ地図を寄せ、場所シートで登録する。
+      MapSearchMode.Place -> TrackingPlaceSearchBar(
+        placeholder = "店名・場所名で検索",
+        fetchFailedText = "場所の取得に失敗しました（オフライン等）",
+        onSearchPredictions = { query -> viewModel.predictPlacesNear(query, mapSearchBias) },
+        onFetchPrediction = { prediction -> viewModel.fetchPlaceResult(prediction.placeId) },
         onSelected = { result ->
-          placeSearchOpen = false
+          mapSearch = null
           placeSheetTarget = PlaceSheetTarget.NewSearchResult(result)
           focusOn(LatLng(result.latitude, result.longitude))
         },
-        onClose = { placeSearchOpen = false },
+        onClose = { mapSearch = null },
         modifier = Modifier.align(Alignment.TopCenter),
       )
+
+      // 地域へ移動: 地名を選んだら閉じて、その地域の範囲が収まるように地図を移す（現在地の追従は止まる）。
+      MapSearchMode.Region -> TrackingPlaceSearchBar(
+        placeholder = "地名で探して移動",
+        fetchFailedText = "地域の取得に失敗しました（オフライン等）",
+        onSearchPredictions = { query -> viewModel.predictRegions(query, mapSearchBias) },
+        // 目印の名前は候補の文字を使う（Places から名前を引くと料金の区分が上がるため）。
+        onFetchPrediction = { prediction ->
+          viewModel.fetchRegion(prediction.placeId)?.let { region -> prediction.primaryText to region }
+        },
+        onSelected = { (name, region) ->
+          mapSearch = null
+          val b = region.bounds
+          fitBounds = LatLngBounds(LatLng(b.south, b.west), LatLng(b.north, b.east))
+          fitNonce++
+          regionMarker = RegionMarker(name = name, position = LatLng(region.latitude, region.longitude))
+        },
+        onClose = { mapSearch = null },
+        modifier = Modifier.align(Alignment.TopCenter),
+      )
+
+      null -> Unit
     }
   }
 
@@ -762,6 +811,10 @@ private fun TrackingMapView(
   // 範囲の経路の一覧で「この経路の全体を見る」を押したとき、その範囲が全部入るまで寄せる（[fitNonce] の変化が合図）。
   fitBounds: LatLngBounds? = null,
   fitNonce: Int = 0,
+  // 「地域へ移動」で移した地域の目印。タップ（[onRegionMarkerClick]）・現在地ボタン（[onRecenter]）で消すのは画面側。
+  regionMarker: RegionMarker? = null,
+  onRegionMarkerClick: () -> Unit = {},
+  onRecenter: () -> Unit = {},
 ) {
   var followUser by remember { mutableStateOf(true) }
   var isLocating by remember { mutableStateOf(false) }
@@ -936,13 +989,32 @@ private fun TrackingMapView(
         onClusterExpand = { followUser = false },
         onRegisteredPlaceClick = onRegisteredPlaceClick,
       )
+      // 地域へ移動の目印: 地域の中心にピンと名前。見ている地図のどこがその地名かを示す（境界は描かない）。
+      regionMarker?.let { region ->
+        val icons = rememberMarkerIconCache()
+        val icon = remember(icons, region.name) {
+          // 名前はピンの上の札にする（ピンの下に書くと、地図の地名の文字と重なって読めない）。
+          icons.createLabeled(null) { RegionMarkerBadge(region.name) }
+        }
+        val state = remember(region) { MarkerState(position = region.position) }
+        MapMarker(
+          icon = icon.icon,
+          infoWindow = infoWindow,
+          state = state,
+          anchor = icon.anchor,
+          onClick = onRegionMarkerClick,
+        )
+      }
     }
 
     // 現在地ボタン：追従中は活性（色付き）、固定中は非活性（グレー）。タップで追従再開＆リセンター。
     if (hasPermission) {
       FollowLocationButton(
         following = followUser,
-        onClick = { centerOnCurrentLocation(animate = true) },
+        onClick = {
+          onRecenter()
+          centerOnCurrentLocation(animate = true)
+        },
         modifier = Modifier
           .align(Alignment.TopEnd)
           .padding(12.dp),
@@ -1229,5 +1301,46 @@ private fun formatElapsed(millis: Long): String {
     "%d:%02d:%02d".format(hours, minutes, seconds)
   } else {
     "%02d:%02d".format(minutes, seconds)
+  }
+}
+
+/** 記録画面の地図に重ねる検索窓の種類。 */
+private enum class MapSearchMode {
+  /** 検索して登録（施設を探して場所シートで登録する）。 */
+  Place,
+
+  /** 地域へ移動（地名を探して地図を移す）。 */
+  Region,
+}
+
+/** いま地図に映っている範囲（地図の準備前は null）。 */
+private fun CameraPositionState.visibleGeoBounds(): GeoBounds? = projection?.visibleRegion?.latLngBounds?.let { b ->
+  GeoBounds(b.southwest.latitude, b.southwest.longitude, b.northeast.latitude, b.northeast.longitude)
+}
+
+/** 「地域へ移動」で移した地域の目印（中心と名前）。 */
+private data class RegionMarker(val name: String, val position: LatLng)
+
+// 地域の目印の色。経路（青）・立ち寄り（紫）・登録済みの場所（緑・灰）・手動の地点（青）と見分ける。
+private val MarkerRegionIndigo = Color(0xFF3949AB)
+
+/** 地域の目印: 藍色の札（地名）の下にピン。札は地図の地名の文字と見分けられるよう塗りつぶす。 */
+@Composable
+private fun RegionMarkerBadge(name: String) {
+  Column(horizontalAlignment = Alignment.CenterHorizontally) {
+    Text(
+      text = name,
+      color = Color.White,
+      style = MaterialTheme.typography.labelLarge,
+      maxLines = 1,
+      overflow = TextOverflow.Ellipsis,
+      modifier = Modifier
+        .widthIn(max = 200.dp)
+        .background(MarkerRegionIndigo, RoundedCornerShape(8.dp))
+        .border(1.dp, Color.White, RoundedCornerShape(8.dp))
+        .padding(horizontal = 8.dp, vertical = 4.dp),
+    )
+    Spacer(modifier = Modifier.height(2.dp))
+    MapPinMarker(bg = MarkerRegionIndigo, glyph = R.drawable.ic_public)
   }
 }
