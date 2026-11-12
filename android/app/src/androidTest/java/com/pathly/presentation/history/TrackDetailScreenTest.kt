@@ -116,6 +116,57 @@ class TrackDetailScreenTest {
   }
 
   @Test
+  fun trackDetailScreen_fitWholeTrackButton_isShownAndClickable() {
+    val track = createSampleTrack()
+
+    composeTestRule.setContent {
+      PathlyAndroidTheme {
+        TrackDetailScreen(
+          track = track,
+          onBackClick = mockOnBackClick,
+          mapContent = {},
+        )
+      }
+    }
+
+    // 押しても画面は抜けない（地図を合わせ直すだけ）。
+    composeTestRule
+      .onNodeWithContentDescription("経路の全体を見る")
+      .assertIsDisplayed()
+      .assertHasClickAction()
+      .performClick()
+
+    verify(exactly = 0) { mockOnBackClick() }
+  }
+
+  @Test
+  fun trackDetailScreen_fitWholeTrackButton_hiddenWithoutPoints() {
+    val track = GpsTrack(
+      id = 1L,
+      startTime = Date(),
+      endTime = Date(),
+      isActive = false,
+      points = emptyList(),
+      createdAt = Date(),
+      updatedAt = Date(),
+    )
+
+    composeTestRule.setContent {
+      PathlyAndroidTheme {
+        TrackDetailScreen(
+          track = track,
+          onBackClick = mockOnBackClick,
+          mapContent = {},
+        )
+      }
+    }
+
+    composeTestRule
+      .onNodeWithContentDescription("経路の全体を見る")
+      .assertDoesNotExist()
+  }
+
+  @Test
   fun trackDetailScreen_backButton_hasClickAction() {
     val track = createSampleTrack()
 

@@ -52,6 +52,18 @@ private val rawTrackColor = Color(0x665E35B1)
 /** 手動追加のハイライト（選択した滞在区間）。軌跡（オレンジ）・立ち寄り（紫）と見分ける青。 */
 private val manualHighlightColor = Color(0xFF1E88E5)
 
+// 経路の全体に合わせるときの余白（px）。線の端が画面の縁に掛からないようにする。
+private const val TRACK_FIT_PADDING_PX = 80
+
+/** 経路の線（補正後の点）と立ち寄りの場所が全部入る範囲。どちらも無ければ null。 */
+internal fun trackBounds(points: List<GpsPoint>, stops: List<Stop>): LatLngBounds? {
+  if (points.isEmpty() && stops.isEmpty()) return null
+  val builder = LatLngBounds.Builder()
+  points.forEach { builder.include(LatLng(it.latitude, it.longitude)) }
+  stops.forEach { builder.include(LatLng(it.place.latitude, it.place.longitude)) }
+  return builder.build()
+}
+
 @Composable
 internal fun TrackMapView(
   track: GpsTrack,
@@ -70,6 +82,8 @@ internal fun TrackMapView(
   registeredPlaces: List<RegisteredPlace> = emptyList(),
   focusTarget: LatLng? = null,
   focusNonce: Int = 0,
+  // 「経路の全体を見る」の合図。変わるたびに、経路の線と立ち寄りが全部入るまで地図を合わせ直す。
+  fitNonce: Int = 0,
   contentPadding: PaddingValues = PaddingValues(0.dp),
   onPoiClick: (PointOfInterest) -> Unit = {},
   onMapClick: (LatLng) -> Unit = {},
@@ -81,18 +95,20 @@ internal fun TrackMapView(
 
   // カメラ範囲はトラック読み込み時に一度だけ合わせる（スライダー操作では動かさない）
   LaunchedEffect(track.id) {
-    val pts = track.smoothedPoints
-    if (pts.isNotEmpty()) {
-      val boundsBuilder = LatLngBounds.Builder()
-      pts.forEach { point ->
-        boundsBuilder.include(LatLng(point.latitude, point.longitude))
-      }
-      cameraPositionState.animate(
-        CameraUpdateFactory.newLatLngBounds(boundsBuilder.build(), 80),
-      )
+    val bounds = trackBounds(track.smoothedPoints, emptyList())
+    if (bounds != null) {
+      cameraPositionState.animate(CameraUpdateFactory.newLatLngBounds(bounds, TRACK_FIT_PADDING_PX))
     } else {
       cameraPositionState.position = CameraPosition.fromLatLngZoom(defaultPosition, 12f)
     }
+  }
+
+  // 「経路の全体を見る」: 立ち寄りや地図の操作で寄ったあと、経路全体の見え方に戻す。
+  // 記録中は、押した時点までの線と立ち寄りで合わせる（その時点の track / stops を読む）。
+  LaunchedEffect(fitNonce) {
+    if (fitNonce == 0) return@LaunchedEffect
+    val bounds = trackBounds(track.smoothedPoints, stops + listOfNotNull(currentStop)) ?: return@LaunchedEffect
+    cameraPositionState.animate(CameraUpdateFactory.newLatLngBounds(bounds, TRACK_FIT_PADDING_PX))
   }
 
   // 立ち寄り一覧のタップで、その場所へズーム＆センタリングする。
