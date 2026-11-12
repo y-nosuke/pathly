@@ -38,7 +38,6 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.FilterChip
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -1114,73 +1113,13 @@ private fun SearchAddContent(
 
     Spacer(modifier = Modifier.height(8.dp))
 
-    OutlinedTextField(
-      value = search.query,
-      onValueChange = onQueryChange,
-      label = { Text("店名・場所名で検索") },
-      singleLine = true,
-      modifier = Modifier.fillMaxWidth(),
+    PlaceKeywordSearchBody(
+      query = search.query,
+      predictions = search.predictions,
+      isSearching = search.isSearching,
+      onQueryChange = onQueryChange,
+      onSelectPrediction = onSelectPrediction,
     )
-
-    Spacer(modifier = Modifier.height(8.dp))
-
-    when {
-      search.isSearching -> {
-        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-          CircularProgressIndicator()
-        }
-      }
-
-      search.query.isNotBlank() && search.predictions.isEmpty() -> {
-        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-          Text(
-            text = "候補がありません\n（オンライン・キーワードを確認）",
-            style = MaterialTheme.typography.bodyMedium,
-            textAlign = TextAlign.Center,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-          )
-        }
-      }
-
-      else -> {
-        LazyColumn {
-          items(search.predictions, key = { it.placeId }) { prediction ->
-            PredictionRow(prediction = prediction, onClick = { onSelectPrediction(prediction.placeId) })
-            HorizontalDivider()
-          }
-        }
-      }
-    }
-  }
-}
-
-@Composable
-private fun PredictionRow(
-  prediction: PlacePrediction,
-  onClick: () -> Unit,
-  modifier: Modifier = Modifier,
-) {
-  Column(
-    modifier = modifier
-      .fillMaxWidth()
-      .clickable(onClick = onClick)
-      .padding(vertical = 12.dp),
-  ) {
-    Text(
-      text = prediction.primaryText,
-      style = MaterialTheme.typography.bodyLarge,
-      maxLines = 1,
-      overflow = TextOverflow.Ellipsis,
-    )
-    if (prediction.secondaryText.isNotBlank()) {
-      Text(
-        text = prediction.secondaryText,
-        style = MaterialTheme.typography.bodySmall,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-        maxLines = 1,
-        overflow = TextOverflow.Ellipsis,
-      )
-    }
   }
 }
 

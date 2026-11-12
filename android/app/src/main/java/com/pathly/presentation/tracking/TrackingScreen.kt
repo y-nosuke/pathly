@@ -171,6 +171,8 @@ fun TrackingScreen(
   var reassignTarget by remember { mutableStateOf<Stop?>(null) }
   // 「立ち寄りを追加」モード（記録中のみ）。ONの間は地図タップ＝立ち寄り追加、OFF＝場所登録。
   var manualMode by remember { mutableStateOf(false) }
+  // 「検索して登録」の検索画面を開いているか。候補を選ぶと閉じ、地図の上の場所シートで登録する。
+  var placeSearchOpen by remember { mutableStateOf(false) }
   // シートの開き具合。地図の下パディングを合わせて、選んだ地点がシートの裏に来ないようにする。
   val placeSheetState = rememberFloatingSheetState()
   val manualSheetState = rememberFloatingSheetState(peekFraction = 0.5f)
@@ -262,7 +264,9 @@ fun TrackingScreen(
             if (pts.size >= 2) pts.subList(start, (end + 1).coerceAtMost(pts.size)) else emptyList()
           }
         }.orEmpty(),
-        manualPickTarget = manualTarget?.let { LatLng(it.latitude, it.longitude) },
+        // 登録前に選んだ地点の青いピン。手動追加の地点か、検索で選んだ場所（地図の上に施設アイコンが無いこともあるので示す）。
+        manualPickTarget = manualTarget?.let { LatLng(it.latitude, it.longitude) }
+          ?: (placeSheetTarget as? PlaceSheetTarget.NewSearchResult)?.result?.let { LatLng(it.latitude, it.longitude) },
         // シートが出ている分だけ可視領域を狭める（ドラッグ中の逐次値ではなく段の確定値）。
         contentPadding = PaddingValues(
           bottom = when {
@@ -340,6 +344,26 @@ fun TrackingScreen(
           }
         },
       )
+      // 検索して登録: 場所タブへ移らずに、キーワードで探した場所をこの地図の上で登録する。
+      Surface(
+        onClick = {
+          placeSheetTarget = null
+          viewModel.startPlaceSearch()
+          placeSearchOpen = true
+        },
+        // 立ち寄りの追加中は、そちらのシートが優先なので押せなくする（経路のボタンと同じ）。
+        enabled = manualTarget == null,
+        shape = CircleShape,
+        color = MaterialTheme.colorScheme.surface,
+        shadowElevation = 4.dp,
+      ) {
+        Icon(
+          painter = painterResource(R.drawable.ic_search),
+          contentDescription = "検索して場所を登録",
+          tint = MaterialTheme.colorScheme.onSurface,
+          modifier = Modifier.padding(8.dp),
+        )
+      }
     }
 
     // 記録中の左上操作（縦積み）: 「立ち寄りを追加」モード切替 と 「今ここ」ショートカット。
@@ -515,7 +539,21 @@ fun TrackingScreen(
         onObservePlace = viewModel::observePlace,
         onObserveVisits = viewModel::visitsFor,
         // POI か空き地点か、近接確認が要るかの判断は ViewModel（PlaceEditUseCase）が持つ。
-        onRegisterNew = viewModel::registerPlaceWithNearbyCheck,
+        // 検索で選んだ場所は施設情報を取得済みなので、それを渡して引き直させない。
+        onRegisterNew = { lat, lng, name, wishlist, priority, visited, memo, googlePlaceId, googleName ->
+          viewModel.registerPlaceWithNearbyCheck(
+            lat,
+            lng,
+            name,
+            wishlist,
+            priority,
+            visited,
+            memo,
+            googlePlaceId,
+            googleName,
+            knownDetails = (target as? PlaceSheetTarget.NewSearchResult)?.result,
+          )
+        },
         onSaveExisting = { item, name, note, wishlist, priority, visited, link ->
           viewModel.savePlaceEdits(item, name, note, wishlist, priority, visited, link)
         },
@@ -598,6 +636,20 @@ fun TrackingScreen(
         onRangeChange = { start, end -> manualRange = start to end },
         modifier = Modifier.align(Alignment.BottomCenter),
         sheetState = manualSheetState,
+      )
+    }
+
+    // 検索して登録: 候補を選んだら閉じて、その場所へ地図を寄せ、場所シートで登録する。
+    if (placeSearchOpen) {
+      TrackingPlaceSearchPanel(
+        onSearchPredictions = viewModel::predictPlaces,
+        onFetchPrediction = viewModel::fetchPlaceResult,
+        onSelected = { result ->
+          placeSearchOpen = false
+          placeSheetTarget = PlaceSheetTarget.NewSearchResult(result)
+          focusOn(LatLng(result.latitude, result.longitude))
+        },
+        onClose = { placeSearchOpen = false },
       )
     }
   }

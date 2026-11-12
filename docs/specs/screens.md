@@ -46,7 +46,7 @@ Jetpack Compose による Android アプリの画面仕様。**マップを主�
 ```text
 ┌─────────────────────────────┐
 │        ● 記録中 00:12:34  ◎ │ ← 上部中央:経過時間ピル／右上:現在地ボタン◎
-│ [立ち寄りを追加]          🚩 │ ← 左上(記録中のみ):モード切替・今ここ／右:登録済み表示・この範囲の経路
+│ [立ち寄りを追加]          🚩 │ ← 左上(記録中のみ):モード切替・今ここ／右:登録済み表示・この範囲の経路・検索して登録
 │         [全画面 Google Map]  │ ← 現在地追従・青ドット・経路polyline
 │         ～～～ 経路 ～～～      │
 │                             │
@@ -76,6 +76,7 @@ Jetpack Compose による Android アプリの画面仕様。**マップを主�
 - **登録済みの場所の表示**: トグルで既存の場所をマーカー表示できる（訪問済み/未訪問で色、業種でアイコン、行きたいは右上の旗）。業種が分からない場所は場所ピンのまま。ON/OFF は画面ごとに独立して保存される。表示中は隣の**絞り込みボタン**で、行きたい・訪問・業種で絞れる（条件は画面ごとに独立し、場所一覧とも別。アプリを閉じても残り、絞り込み中はボタンが塗りつぶし → [map.md](map.md)）。
 - **立ち寄りマーカーのタップ**: 誤検知だったとき、その訪問だけ正しい場所へ**選び直せる**。
 - **この範囲の経路**: 右上のボタン列（登録済みの場所のトグルの下）の経路のボタンで、**押した時点で地図に映っている範囲**に入る過去の経路を探し、下から一覧を出す（→ [map.md](map.md) の「この範囲の経路」）。
+- **検索して登録**: 右上のボタン列のいちばん下の検索のボタン（`ic_search`）で、場所タブへ移らずにキーワードで場所を探して登録できる。押すと検索の画面が地図の上に重なり、店名などを入れて候補（Autocomplete）から選ぶと、画面を閉じて地図をその場所へ寄せ（現在地の追従は止まる。現在地ボタンで戻せる）、青いピンで示して**場所シート**を出す（POI タップと同じシートで、名前・行きたい・優先度・メモ）。登録すると上部に確認ピルを出す。探す欄と候補の一覧は場所タブの「検索して追加」と同じもので、オンライン限定・要 Places API なのも同じ。「閉じる」・戻るで地図に戻る。立ち寄りの追加中は押せない。記録中・停止中のどちらでも使える。
 
 ### 2. 履歴画面
 
@@ -283,7 +284,7 @@ Material3 のダイナミックカラーに対応（Android 12+）。非対応�
 
 ### アイコン
 
-画面で使うアイコン（`ic_location_on` / `ic_list` / `ic_place` / `ic_flag` / `ic_flag_filled` / `ic_favorite` / `ic_favorite_filled` / `ic_more_vert` / `ic_settings` / `ic_play_arrow` / `ic_stop` / `ic_arrow_back` / `ic_my_location` / `ic_tune` / `ic_delete` / `ic_filter` / `ic_map` / `ic_expand_less` / `ic_expand_more` / `ic_fit`）。`ic_map` と `ic_list` は場所タブの地図表示・一覧表示の切り替え、`ic_expand_less` / `ic_expand_more` は地図表示で重ねたものをたたむ・ひろげる。`ic_place` は場所タブ、行きたいフラグは **OFF=`ic_flag`（輪郭）/ ON=`ic_flag_filled`（塗り・primary色）** で区別する。
+画面で使うアイコン（`ic_location_on` / `ic_list` / `ic_place` / `ic_flag` / `ic_flag_filled` / `ic_favorite` / `ic_favorite_filled` / `ic_more_vert` / `ic_settings` / `ic_play_arrow` / `ic_stop` / `ic_arrow_back` / `ic_my_location` / `ic_tune` / `ic_delete` / `ic_filter` / `ic_map` / `ic_expand_less` / `ic_expand_more` / `ic_fit` / `ic_search`）。`ic_map` と `ic_list` は場所タブの地図表示・一覧表示の切り替え、`ic_expand_less` / `ic_expand_more` は地図表示で重ねたものをたたむ・ひろげる。`ic_place` は場所タブ、行きたいフラグは **OFF=`ic_flag`（輪郭）/ ON=`ic_flag_filled`（塗り・primary色）** で区別する。
 
 ## 今後の拡張（ロードマップ連動）
 

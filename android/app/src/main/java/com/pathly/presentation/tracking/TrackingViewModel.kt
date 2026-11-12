@@ -348,6 +348,8 @@ class TrackingViewModel @Inject constructor(
     memo: String?,
     googlePlaceId: String?,
     googleName: String? = null,
+    // キーワード検索で選んだ場所は施設情報を取得済みなので、渡して引き直させない。
+    knownDetails: PlaceSearchResult? = null,
   ) {
     viewModelScope.launch {
       try {
@@ -361,6 +363,7 @@ class TrackingViewModel @Inject constructor(
           memo,
           googlePlaceId,
           isShownOnMap = shownOnMap(),
+          knownDetails = knownDetails,
           googleName = googleName,
         )
         when (result) {
@@ -498,7 +501,12 @@ class TrackingViewModel @Inject constructor(
     }
   }
 
-  /** 「Googleで情報を取得」の名前検索フォールバック: キーワード候補を返す。 */
+  /** 地図の上の「検索して登録」を開いたとき: 検索のセッションを始める（候補〜確定を 1 セッションにまとめて課金を抑える）。 */
+  fun startPlaceSearch() {
+    placesTextSearcher.startSession()
+  }
+
+  /** 「Googleで情報を取得」の名前検索フォールバック・「検索して登録」: キーワード候補を返す。 */
   suspend fun predictPlaces(query: String): List<PlacePrediction> = placesTextSearcher.predict(query)
 
   /** 名前検索で選んだ候補を、座標つきの施設情報に確定する。 */
