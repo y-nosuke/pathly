@@ -97,7 +97,9 @@ class HistoryViewModel @Inject constructor(
     updateListOptions { it.copy(nameQuery = query) }
   }
 
-  /** 絞り込みを全解除する（5軸と名前の検索語をまとめて指定なしに戻す）。並べ替えは保持。 */
+  /**
+   * 絞り込みの欄の 5 軸を全解除する。名前の検索語は検索欄の × で消すので残す。並べ替えも保持。
+   */
   fun clearFilters() {
     updateListOptions {
       it.copy(
@@ -106,7 +108,23 @@ class HistoryViewModel @Inject constructor(
         stopFilter = TrackStopFilter.ANY,
         categoryFilter = emptySet(),
         regionFilter = emptySet(),
-        nameQuery = "",
+      )
+    }
+  }
+
+  /** 絞り込み・名前の検索・並べ替え（軸と向き）をまとめて初期状態に戻す。 */
+  fun resetListOptions() {
+    val initial = HistoryState()
+    updateListOptions {
+      it.copy(
+        favoriteFilter = initial.favoriteFilter,
+        namedFilter = initial.namedFilter,
+        stopFilter = initial.stopFilter,
+        categoryFilter = initial.categoryFilter,
+        regionFilter = initial.regionFilter,
+        nameQuery = initial.nameQuery,
+        sort = initial.sort,
+        sortDescending = initial.sortDescending,
       )
     }
   }

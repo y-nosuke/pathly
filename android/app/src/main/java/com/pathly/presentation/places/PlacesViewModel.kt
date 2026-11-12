@@ -145,7 +145,10 @@ class PlacesViewModel @Inject constructor(
     updateListOptions { it.copy(controlsCollapsed = collapsed) }
   }
 
-  /** 絞り込みを全解除する（行きたい・訪問状況・業種・地域・名前の検索語をまとめて指定なしに戻す）。並べ替えは保持。 */
+  /**
+   * 絞り込みの欄の軸を全解除する（行きたい・訪問状況・業種・地域をまとめて指定なしに戻す）。
+   * 名前の検索語は検索欄の × で消すので残す。並べ替えも保持。
+   */
   fun clearFilters() {
     updateListOptions {
       it.copy(
@@ -153,7 +156,22 @@ class PlacesViewModel @Inject constructor(
         visitedFilter = VisitedFilter.ANY,
         categoryFilter = emptySet(),
         regionFilter = emptySet(),
-        nameQuery = "",
+      )
+    }
+  }
+
+  /** 絞り込み・名前の検索・並べ替え（軸と向き）をまとめて初期状態に戻す。一覧／地図の表示の切り替えはそのまま。 */
+  fun resetListOptions() {
+    val initial = PlacesState()
+    updateListOptions {
+      it.copy(
+        wishlistFilter = initial.wishlistFilter,
+        visitedFilter = initial.visitedFilter,
+        categoryFilter = initial.categoryFilter,
+        regionFilter = initial.regionFilter,
+        nameQuery = initial.nameQuery,
+        sort = initial.sort,
+        sortDescending = initial.sortDescending,
       )
     }
   }

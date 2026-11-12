@@ -88,13 +88,17 @@ data class PlacesState(
   // 場所詳細の地図に「登録済みの場所」を出すか（画面別トグル）。
   val showRegisteredPlaces: Boolean = false,
 ) {
-  /** 絞り込みを一切かけていないか（「すべて」チップの選択表示に使う）。 */
+  /** 絞り込み（名前の検索を含む）を一切かけていないか。 */
   val noFilter: Boolean
     get() = wishlistFilter == WishlistFilter.ANY &&
       visitedFilter == VisitedFilter.ANY &&
       categoryFilter.isEmpty() &&
       regionFilter.isEmpty() &&
       nameQuery.isBlank()
+
+  /** 絞り込み・名前の検索・並べ替え（軸と向き）が、開いたときのまま（初期状態）か。違えば「初期状態に戻す」を出す。 */
+  val isInitialListOptions: Boolean
+    get() = noFilter && sort == PlacesState().sort && sortDescending == PlacesState().sortDescending
 
   /** かけている絞り込みの数（名前の検索・行きたい・訪問状況・業種・地域）。たたんだ帯に出す。 */
   val activeFilterCount: Int

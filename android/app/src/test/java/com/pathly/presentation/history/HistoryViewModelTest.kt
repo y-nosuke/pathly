@@ -237,6 +237,40 @@ class HistoryViewModelTest {
   }
 
   @Test
+  fun `clearFilters_欄の軸は外し_名前の検索語は残す`() = runTest {
+    coEvery { mockRepository.getAllTracks() } returns flowOf(listOf(createTrack(id = 1, endTime = Date())))
+    coEvery { mockRepository.getActiveTrackRealtime() } returns flowOf(null)
+    viewModel = HistoryViewModel(mockRepository, SavedStateHandle())
+    testDispatcher.scheduler.advanceUntilIdle()
+    viewModel.setFavoriteFilter(TrackFavoriteFilter.FAVORITE)
+    viewModel.setNameQuery("鎌倉")
+
+    viewModel.clearFilters()
+
+    assertEquals(TrackFavoriteFilter.ANY, viewModel.uiState.value.favoriteFilter)
+    assertEquals("鎌倉", viewModel.uiState.value.nameQuery)
+  }
+
+  @Test
+  fun `resetListOptions_絞り込み_検索_並べ替えをまとめて初期状態に戻す`() = runTest {
+    coEvery { mockRepository.getAllTracks() } returns flowOf(listOf(createTrack(id = 1, endTime = Date())))
+    coEvery { mockRepository.getActiveTrackRealtime() } returns flowOf(null)
+    viewModel = HistoryViewModel(mockRepository, SavedStateHandle())
+    testDispatcher.scheduler.advanceUntilIdle()
+    viewModel.setFavoriteFilter(TrackFavoriteFilter.FAVORITE)
+    viewModel.setNameQuery("鎌倉")
+    viewModel.setSort(TrackSort.DISTANCE)
+    viewModel.toggleSortDirection()
+    assertFalse(viewModel.uiState.value.isInitialListOptions)
+
+    viewModel.resetListOptions()
+
+    assertTrue(viewModel.uiState.value.isInitialListOptions)
+    assertEquals(HistoryState().sort, viewModel.uiState.value.sort)
+    assertEquals("", viewModel.uiState.value.nameQuery)
+  }
+
+  @Test
   fun `絞り込みと並べ替え_savedStateHandleに残り新しいViewModelで戻る`() = runTest {
     // Given: アプリが裏で落とされる前の ViewModel で条件を変える
     coEvery { mockRepository.getAllTracks() } returns flowOf(emptyList())
