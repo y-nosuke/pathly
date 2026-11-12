@@ -13,10 +13,12 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextInput
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
+import com.pathly.domain.model.GeoBounds
 import com.pathly.domain.model.PlacePrediction
 import com.pathly.domain.model.PlaceSearchResult
 import com.pathly.ui.theme.PathlyAndroidTheme
 import io.mockk.coEvery
+import io.mockk.coVerify
 import io.mockk.mockk
 import io.mockk.verify
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -380,5 +382,43 @@ class TrackingScreenTest {
     composeTestRule.onNodeWithTag("trackingPlaceSearch").assertDoesNotExist()
     composeTestRule.onNodeWithContentDescription("検索して場所を登録").assertIsDisplayed()
     composeTestRule.onNodeWithContentDescription("記録開始").assertIsDisplayed()
+  }
+
+  @Test
+  fun trackingScreen_jumpToRegion_selectingPredictionClosesSearch() {
+    coEvery { mockViewModel.predictRegions(any(), any()) } returns
+      listOf(PlacePrediction(placeId = "r1", primaryText = "札幌市", secondaryText = "北海道"))
+    coEvery { mockViewModel.fetchRegion("r1") } returns GeoBounds(42.9, 141.2, 43.2, 141.5)
+
+    composeTestRule.setContent {
+      PathlyAndroidTheme {
+        TrackingScreen(
+          onRequestPermission = mockOnRequestPermission,
+          viewModel = mockViewModel,
+          trackOverlayViewModel = overlayViewModel,
+          mapContent = {},
+        )
+      }
+    }
+
+    // 地図の上のボタンで地名の検索窓を開く。窓と重なる上端のボタンは隠れる。
+    composeTestRule.onNodeWithContentDescription("地域へ移動").performClick()
+    composeTestRule.onNodeWithTag("trackingPlaceSearch").assertIsDisplayed()
+    composeTestRule.onNodeWithText("地名で探して移動").assertIsDisplayed()
+    composeTestRule.onNodeWithContentDescription("地域へ移動").assertDoesNotExist()
+    verify { mockViewModel.startPlaceSearch() }
+
+    // 地名を選ぶと、その範囲を引いて窓を閉じる（場所シートは出さない＝登録はしない）。
+    composeTestRule.onNodeWithTag("trackingPlaceSearchField").performTextInput("札幌")
+    composeTestRule.waitUntil(timeoutMillis = 5_000) {
+      composeTestRule.onAllNodesWithText("北海道").fetchSemanticsNodes().isNotEmpty()
+    }
+    composeTestRule.onNodeWithText("北海道").performClick()
+    composeTestRule.waitUntil(timeoutMillis = 5_000) {
+      composeTestRule.onAllNodesWithTag("trackingPlaceSearch").fetchSemanticsNodes().isEmpty()
+    }
+    coVerify { mockViewModel.fetchRegion("r1") }
+    composeTestRule.onNodeWithText("登録").assertDoesNotExist()
+    composeTestRule.onNodeWithContentDescription("地域へ移動").assertIsDisplayed()
   }
 }

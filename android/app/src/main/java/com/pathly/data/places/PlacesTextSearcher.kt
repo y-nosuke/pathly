@@ -7,6 +7,8 @@ import com.google.android.gms.maps.model.LatLng
 import com.google.android.gms.tasks.Tasks
 import com.google.android.libraries.places.api.Places
 import com.google.android.libraries.places.api.model.AutocompleteSessionToken
+import com.google.android.libraries.places.api.model.Place
+import com.google.android.libraries.places.api.model.PlaceTypes
 import com.google.android.libraries.places.api.model.RectangularBounds
 import com.google.android.libraries.places.api.net.FetchPlaceRequest
 import com.google.android.libraries.places.api.net.FindAutocompletePredictionsRequest
@@ -60,8 +62,13 @@ class PlacesTextSearcher @Inject constructor(
   /**
    * キーワードの候補（Autocomplete）を返す。オフライン・未初期化・失敗時は空リスト。
    * [locationBias] を渡すと、その範囲の中の候補を優先する（範囲の外も出る。料金は変わらない）。
+   * [regionsOnly] なら地域（国・都道府県・市区町村・郵便番号など）だけに絞る（記録画面の「地域へ移動」）。
    */
-  suspend fun predict(query: String, locationBias: GeoBounds? = null): List<PlacePrediction> = withContext(Dispatchers.IO) {
+  suspend fun predict(
+    query: String,
+    locationBias: GeoBounds? = null,
+    regionsOnly: Boolean = false,
+  ): List<PlacePrediction> = withContext(Dispatchers.IO) {
     if (query.isBlank() || !isOnline()) return@withContext emptyList()
     val placesClient = client ?: return@withContext emptyList()
     val token = sessionToken ?: AutocompleteSessionToken.newInstance().also { sessionToken = it }
@@ -73,6 +80,7 @@ class PlacesTextSearcher @Inject constructor(
       locationBias?.takeUnless { it.crossesAntimeridian }?.let {
         builder.setLocationBias(RectangularBounds.newInstance(LatLng(it.south, it.west), LatLng(it.north, it.east)))
       }
+      if (regionsOnly) builder.setTypesFilter(listOf(PlaceTypes.REGIONS))
       val request = builder.build()
       val response = Tasks.await(placesClient.findAutocompletePredictions(request))
       response.autocompletePredictions.map {
@@ -119,6 +127,37 @@ class PlacesTextSearcher @Inject constructor(
     }
   }
 
+  /**
+   * 地域の候補を確定して、その地域の範囲（viewport）を得る。地図を移すだけなので、引くのは範囲と位置だけ
+   * （施設の名前・種類は引かない＝Place Details の安い区分に収まる）。セッションはここで終了する。
+   * 範囲が返らないときは、位置のまわりの決まった広さにする。オフライン・失敗時は null。
+   */
+  suspend fun fetchRegion(placeId: String): GeoBounds? = withContext(Dispatchers.IO) {
+    if (!isOnline()) return@withContext null
+    val placesClient = client ?: return@withContext null
+    val token = sessionToken
+    try {
+      val builder = FetchPlaceRequest.builder(placeId, REGION_FIELDS)
+      if (token != null) builder.setSessionToken(token)
+      val place = Tasks.await(placesClient.fetchPlace(builder.build())).place
+      place.viewport?.let { v ->
+        GeoBounds(v.southwest.latitude, v.southwest.longitude, v.northeast.latitude, v.northeast.longitude)
+      } ?: place.location?.let {
+        GeoBounds(
+          it.latitude - REGION_FALLBACK_HALF_SPAN_DEG,
+          it.longitude - REGION_FALLBACK_HALF_SPAN_DEG,
+          it.latitude + REGION_FALLBACK_HALF_SPAN_DEG,
+          it.longitude + REGION_FALLBACK_HALF_SPAN_DEG,
+        )
+      }
+    } catch (e: Exception) {
+      logger.w("fetchPlace (region) failed", e)
+      null
+    } finally {
+      sessionToken = null
+    }
+  }
+
   private fun isOnline(): Boolean {
     val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
       ?: return false
@@ -128,3 +167,8 @@ class PlacesTextSearcher @Inject constructor(
       caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)
   }
 }
+
+private val REGION_FIELDS = listOf(Place.Field.ID, Place.Field.LOCATION, Place.Field.VIEWPORT)
+
+// 範囲が返らない地域で、位置のまわりに取る広さ（緯度・経度の半幅。約 2km 四方）。
+private const val REGION_FALLBACK_HALF_SPAN_DEG = 0.01

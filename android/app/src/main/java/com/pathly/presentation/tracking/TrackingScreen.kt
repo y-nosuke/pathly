@@ -171,10 +171,10 @@ fun TrackingScreen(
   var reassignTarget by remember { mutableStateOf<Stop?>(null) }
   // 「立ち寄りを追加」モード（記録中のみ）。ONの間は地図タップ＝立ち寄り追加、OFF＝場所登録。
   var manualMode by remember { mutableStateOf(false) }
-  // 「検索して登録」の検索画面を開いているか。候補を選ぶと閉じ、地図の上の場所シートで登録する。
-  var placeSearchOpen by remember { mutableStateOf(false) }
+  // 地図の上の検索窓（「検索して登録」か「地域へ移動」）。null なら閉じている。
+  var mapSearch by remember { mutableStateOf<MapSearchMode?>(null) }
   // 検索窓を開いたときに地図に映っていた範囲。候補はこの中を優先する（範囲の外も出る）。
-  var placeSearchBias by remember { mutableStateOf<GeoBounds?>(null) }
+  var mapSearchBias by remember { mutableStateOf<GeoBounds?>(null) }
   // シートの開き具合。地図の下パディングを合わせて、選んだ地点がシートの裏に来ないようにする。
   val placeSheetState = rememberFloatingSheetState()
   val manualSheetState = rememberFloatingSheetState(peekFraction = 0.5f)
@@ -234,8 +234,8 @@ fun TrackingScreen(
         // 手動追加モード（記録中のみ）: POIタップも立ち寄り追加に。通常は統一の場所シート（POI登録）。
         onPoiClick = { poi ->
           // 検索窓を開いている間の地図のタップは、窓を閉じるだけ（地図を見たくてタップしたとみなす）。
-          if (placeSearchOpen) {
-            placeSearchOpen = false
+          if (mapSearch != null) {
+            mapSearch = null
             return@TrackingMapView
           }
           if (uiState.isTracking && manualMode) {
@@ -252,8 +252,8 @@ fun TrackingScreen(
         },
         // 手動追加モード＝立ち寄り追加、それ以外（通常/平常時）＝場所シート（空き地点の登録）。
         onMapClick = { latLng ->
-          if (placeSearchOpen) {
-            placeSearchOpen = false
+          if (mapSearch != null) {
+            mapSearch = null
             return@TrackingMapView
           }
           if (uiState.isTracking && manualMode) {
@@ -292,8 +292,8 @@ fun TrackingScreen(
         fitBounds = fitBounds,
         fitNonce = fitNonce,
         onRegisteredPlaceClick = { place ->
-          if (placeSearchOpen) {
-            placeSearchOpen = false
+          if (mapSearch != null) {
+            mapSearch = null
             return@TrackingMapView
           }
           if (uiState.isTracking && manualMode) {
@@ -311,7 +311,7 @@ fun TrackingScreen(
     }
 
     // 検索窓を開いている間は、上端の操作（右のボタン列・左上の記録中の操作・記録中のピル）を隠す（窓と重なるため）。
-    if (!placeSearchOpen) {
+    if (mapSearch == null) {
       // 登録済みの場所を地図に出すトグル（記録画面・画面別）。上部右に置き、ON のときは下に絞り込みボタンを出す。
       Column(
         modifier = Modifier
@@ -351,11 +351,9 @@ fun TrackingScreen(
             if (overlayState.isSheetOpen) {
               trackOverlayViewModel.closeSheet()
             } else {
-              mapCameraState.projection?.visibleRegion?.latLngBounds?.let { b ->
+              mapCameraState.visibleGeoBounds()?.let { bounds ->
                 placeSheetTarget = null
-                trackOverlayViewModel.search(
-                  GeoBounds(b.southwest.latitude, b.southwest.longitude, b.northeast.latitude, b.northeast.longitude),
-                )
+                trackOverlayViewModel.search(bounds)
                 overlaySheetState.settleTo(SheetDetent.PEEK)
               }
             }
@@ -365,11 +363,9 @@ fun TrackingScreen(
         Surface(
           onClick = {
             placeSheetTarget = null
-            placeSearchBias = mapCameraState.projection?.visibleRegion?.latLngBounds?.let { b ->
-              GeoBounds(b.southwest.latitude, b.southwest.longitude, b.northeast.latitude, b.northeast.longitude)
-            }
+            mapSearchBias = mapCameraState.visibleGeoBounds()
             viewModel.startPlaceSearch()
-            placeSearchOpen = true
+            mapSearch = MapSearchMode.Place
           },
           // 立ち寄りの追加中は、そちらのシートが優先なので押せなくする（経路のボタンと同じ）。
           enabled = manualTarget == null,
@@ -384,11 +380,29 @@ fun TrackingScreen(
             modifier = Modifier.padding(8.dp),
           )
         }
+        // 地域へ移動: 地名を探して、その地域が収まるように地図を移す（登録はしない）。
+        Surface(
+          onClick = {
+            mapSearchBias = mapCameraState.visibleGeoBounds()
+            viewModel.startPlaceSearch()
+            mapSearch = MapSearchMode.Region
+          },
+          shape = CircleShape,
+          color = MaterialTheme.colorScheme.surface,
+          shadowElevation = 4.dp,
+        ) {
+          Icon(
+            painter = painterResource(R.drawable.ic_public),
+            contentDescription = "地域へ移動",
+            tint = MaterialTheme.colorScheme.onSurface,
+            modifier = Modifier.padding(8.dp),
+          )
+        }
       }
     }
 
     // 記録中の左上操作（縦積み）: 「立ち寄りを追加」モード切替 と 「今ここ」ショートカット。
-    if (uiState.isTracking && !placeSearchOpen) {
+    if (uiState.isTracking && mapSearch == null) {
       Column(
         modifier = Modifier
           .align(Alignment.TopStart)
@@ -459,7 +473,7 @@ fun TrackingScreen(
     }
 
     // 記録中の状態ピル（上部中央）
-    if (uiState.isTracking && !placeSearchOpen) {
+    if (uiState.isTracking && mapSearch == null) {
       RecordingStatusPill(
         startTime = uiState.currentTrack?.startTime,
         modifier = Modifier
@@ -660,19 +674,39 @@ fun TrackingScreen(
       )
     }
 
-    // 検索して登録: 地図はそのままに上端へ検索窓を重ねる。候補を選んだら閉じて、その場所へ地図を寄せ、場所シートで登録する。
-    if (placeSearchOpen) {
-      TrackingPlaceSearchBar(
-        onSearchPredictions = { query -> viewModel.predictPlacesNear(query, placeSearchBias) },
+    // 地図はそのままに上端へ検索窓を重ねる。
+    when (mapSearch) {
+      // 検索して登録: 候補を選んだら閉じて、その場所へ地図を寄せ、場所シートで登録する。
+      MapSearchMode.Place -> TrackingPlaceSearchBar(
+        placeholder = "店名・場所名で検索",
+        fetchFailedText = "場所の取得に失敗しました（オフライン等）",
+        onSearchPredictions = { query -> viewModel.predictPlacesNear(query, mapSearchBias) },
         onFetchPrediction = viewModel::fetchPlaceResult,
         onSelected = { result ->
-          placeSearchOpen = false
+          mapSearch = null
           placeSheetTarget = PlaceSheetTarget.NewSearchResult(result)
           focusOn(LatLng(result.latitude, result.longitude))
         },
-        onClose = { placeSearchOpen = false },
+        onClose = { mapSearch = null },
         modifier = Modifier.align(Alignment.TopCenter),
       )
+
+      // 地域へ移動: 地名を選んだら閉じて、その地域の範囲が収まるように地図を移す（現在地の追従は止まる）。
+      MapSearchMode.Region -> TrackingPlaceSearchBar(
+        placeholder = "地名で探して移動",
+        fetchFailedText = "地域の取得に失敗しました（オフライン等）",
+        onSearchPredictions = { query -> viewModel.predictRegions(query, mapSearchBias) },
+        onFetchPrediction = viewModel::fetchRegion,
+        onSelected = { b ->
+          mapSearch = null
+          fitBounds = LatLngBounds(LatLng(b.south, b.west), LatLng(b.north, b.east))
+          fitNonce++
+        },
+        onClose = { mapSearch = null },
+        modifier = Modifier.align(Alignment.TopCenter),
+      )
+
+      null -> Unit
     }
   }
 
@@ -1230,4 +1264,18 @@ private fun formatElapsed(millis: Long): String {
   } else {
     "%02d:%02d".format(minutes, seconds)
   }
+}
+
+/** 記録画面の地図に重ねる検索窓の種類。 */
+private enum class MapSearchMode {
+  /** 検索して登録（施設を探して場所シートで登録する）。 */
+  Place,
+
+  /** 地域へ移動（地名を探して地図を移す）。 */
+  Region,
+}
+
+/** いま地図に映っている範囲（地図の準備前は null）。 */
+private fun CameraPositionState.visibleGeoBounds(): GeoBounds? = projection?.visibleRegion?.latLngBounds?.let { b ->
+  GeoBounds(b.southwest.latitude, b.southwest.longitude, b.northeast.latitude, b.northeast.longitude)
 }

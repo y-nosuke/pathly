@@ -39,22 +39,24 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import com.pathly.R
 import com.pathly.domain.model.PlacePrediction
-import com.pathly.domain.model.PlaceSearchResult
 import com.pathly.presentation.places.PlaceSearchPredictions
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 /**
- * 記録画面の「検索して登録」: 地図はそのままに、上端に検索窓を重ね、候補は窓の下のカードに出す。
- * 選んだ 1 件を [onSelected] で返し、登録は地図の上の場所シートで行う（地図タップ・POI タップと同じシート）。
+ * 記録画面の地図に重ねる検索窓: 地図はそのままに、上端に検索窓を重ね、候補は窓の下のカードに出す。
+ * 「検索して登録」（施設を探して場所シートで登録）と「地域へ移動」（地名を探して地図を移す）で共有する。
+ * 選んだ候補を [onFetchPrediction] で確定し、取れたら [onSelected] で返す（取れなければ [fetchFailedText] を出す）。
  * 候補の一覧は場所タブの「検索して追加」と共有する（[PlaceSearchPredictions]）。
  * 地図をタップしたとき・戻る・× で閉じる（閉じる処理は呼び出し側の [onClose]）。
  */
 @Composable
-internal fun TrackingPlaceSearchBar(
+internal fun <T : Any> TrackingPlaceSearchBar(
+  placeholder: String,
+  fetchFailedText: String,
   onSearchPredictions: suspend (query: String) -> List<PlacePrediction>,
-  onFetchPrediction: suspend (placeId: String) -> PlaceSearchResult?,
-  onSelected: (PlaceSearchResult) -> Unit,
+  onFetchPrediction: suspend (placeId: String) -> T?,
+  onSelected: (T) -> Unit,
   onClose: () -> Unit,
   modifier: Modifier = Modifier,
 ) {
@@ -114,7 +116,7 @@ internal fun TrackingPlaceSearchBar(
         TextField(
           value = query,
           onValueChange = { query = it },
-          placeholder = { Text("店名・場所名で検索") },
+          placeholder = { Text(placeholder) },
           singleLine = true,
           keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
           // 確定キーは候補を選ぶまでの間、キーボードを下げて地図を見せるだけ。
@@ -150,7 +152,7 @@ internal fun TrackingPlaceSearchBar(
         Column(modifier = Modifier.padding(horizontal = 16.dp)) {
           if (fetchFailed) {
             Text(
-              text = "場所の取得に失敗しました（オフライン等）",
+              text = fetchFailedText,
               style = MaterialTheme.typography.bodySmall,
               color = MaterialTheme.colorScheme.error,
               modifier = Modifier.padding(top = 8.dp),
