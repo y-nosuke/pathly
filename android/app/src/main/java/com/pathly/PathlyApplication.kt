@@ -8,6 +8,8 @@ import com.google.android.gms.maps.MapsInitializer
 import com.google.android.gms.maps.OnMapsSdkInitializedCallback
 import com.google.android.libraries.places.api.Places
 import com.pathly.data.backup.DataBackupManager
+import com.pathly.data.crash.CrashHandler
+import com.pathly.data.crash.CrashReportStore
 import com.pathly.data.local.dao.PlaceRegionDao
 import com.pathly.data.settings.MaintenanceStore
 import com.pathly.data.work.PlaceNameCatchUpWorker
@@ -47,6 +49,9 @@ class PathlyApplication :
   @Inject
   lateinit var placeRegionDao: PlaceRegionDao
 
+  @Inject
+  lateinit var crashReportStore: CrashReportStore
+
   /** WorkManager から Hilt でワーカーを組み立てるための設定。 */
   override val workManagerConfiguration: Configuration
     get() = Configuration.Builder()
@@ -55,11 +60,17 @@ class PathlyApplication :
       .build()
 
   override fun onCreate() {
+    // 落ちた原因を端末の中に残す（→ docs/specs/crash-reports.md）。この後で落ちたものを拾えるよう、いちばん最初に。
+    CrashHandler.install(this)
     // 予約された読み込み（データの入れ替え）を、DB を誰かが開く前に済ませる。
     // super.onCreate() で Hilt が注入を始めるので、それより前でなければならない。
     DataBackupManager.applyPendingImport(this)
     super.onCreate()
     MapsInitializer.initialize(applicationContext, MapsInitializer.Renderer.LATEST, this)
+
+    // OS に止められたときの記録に版を付けられるよう預け、前回までの異常な終わり方を取り込む。
+    crashReportStore.recordVersion()
+    appScope.launch { crashReportStore.refresh() }
 
     // Places SDK（New）。立ち寄り場所の命名に使う。キーが空なら初期化しない。
     val placesKey = BuildConfig.GOOGLE_MAPS_API_KEY

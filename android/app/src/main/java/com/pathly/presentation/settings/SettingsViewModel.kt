@@ -7,6 +7,8 @@ import com.pathly.data.backup.BackupCounts
 import com.pathly.data.backup.BackupException
 import com.pathly.data.backup.BackupSummary
 import com.pathly.data.backup.DataBackupManager
+import com.pathly.data.crash.CrashReport
+import com.pathly.data.crash.CrashReportStore
 import com.pathly.data.settings.LocationAccuracy
 import com.pathly.data.settings.SettingsRepository
 import com.pathly.data.tracking.TrackingController
@@ -26,6 +28,7 @@ import javax.inject.Inject
 class SettingsViewModel @Inject constructor(
   private val settingsRepository: SettingsRepository,
   private val backupManager: DataBackupManager,
+  private val crashReportStore: CrashReportStore,
   trackingController: TrackingController,
 ) : ViewModel() {
 
@@ -45,6 +48,14 @@ class SettingsViewModel @Inject constructor(
 
   fun setLocationAccuracy(accuracy: LocationAccuracy) {
     settingsRepository.setLocationAccuracy(accuracy)
+  }
+
+  // ---- 異常終了の記録（→ docs/specs/crash-reports.md） ----
+
+  val crashReports: StateFlow<List<CrashReport>> = crashReportStore.reports
+
+  fun clearCrashReports() {
+    viewModelScope.launch { crashReportStore.clear() }
   }
 
   // ---- データの書き出し・読み込み（→ docs/specs/backup.md） ----

@@ -33,6 +33,12 @@ body:
     validations:
       required: true
   - type: textarea
+    id: crash-report
+    attributes:
+      label: 異常終了の記録
+      description: 落ちた・応答しなくなったときは、設定タブの「異常終了の記録」から該当する記録を開き、「コピー」して貼る（端末の中にだけ残っている情報で、座標は伏せてある）
+      render: text
+  - type: textarea
     id: notes
     attributes:
       label: 補足

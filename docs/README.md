@@ -21,18 +21,19 @@
 
 ### 仕様（What）— 概要。これだけ読めば「何が起きるか」が分かる
 
-| ファイル                                 | 内容                                         |
-| ---------------------------------------- | -------------------------------------------- |
-| [specs/recording.md](specs/recording.md) | 記録（開始・継続・間隔・保存するもの・補正） |
-| [specs/stops.md](specs/stops.md)         | 立ち寄り（判定・手直し・削除）               |
-| [specs/places.md](specs/places.md)       | 場所（名前・登録・行きたい・一覧・削除）     |
-| [specs/tracks.md](specs/tracks.md)       | 経路（名前・お気に入り・絞り込み・並べ替え） |
-| [specs/map.md](specs/map.md)             | 地図タップ（画面 × モード × 表示）           |
-| [specs/security.md](specs/security.md)   | データの扱いとプライバシー                   |
-| [specs/backup.md](specs/backup.md)       | データの書き出し・読み込み                   |
-| [specs/screens.md](specs/screens.md)     | 画面と遷移                                   |
-| [specs/model.md](specs/model.md)         | データモデル（概念モデル・ER図）             |
-| [specs/glossary.md](specs/glossary.md)   | 用語集（データ・処理の日英対応）             |
+| ファイル                                         | 内容                                         |
+| ------------------------------------------------ | -------------------------------------------- |
+| [specs/recording.md](specs/recording.md)         | 記録（開始・継続・間隔・保存するもの・補正） |
+| [specs/stops.md](specs/stops.md)                 | 立ち寄り（判定・手直し・削除）               |
+| [specs/places.md](specs/places.md)               | 場所（名前・登録・行きたい・一覧・削除）     |
+| [specs/tracks.md](specs/tracks.md)               | 経路（名前・お気に入り・絞り込み・並べ替え） |
+| [specs/map.md](specs/map.md)                     | 地図タップ（画面 × モード × 表示）           |
+| [specs/security.md](specs/security.md)           | データの扱いとプライバシー                   |
+| [specs/backup.md](specs/backup.md)               | データの書き出し・読み込み                   |
+| [specs/crash-reports.md](specs/crash-reports.md) | 異常終了の記録（端末内に残す・設定で見る）   |
+| [specs/screens.md](specs/screens.md)             | 画面と遷移                                   |
+| [specs/model.md](specs/model.md)                 | データモデル（概念モデル・ER図）             |
+| [specs/glossary.md](specs/glossary.md)           | 用語集（データ・処理の日英対応）             |
 
 ### 設計（How）— 詳細。**同名の仕様があれば、その作り方**
 

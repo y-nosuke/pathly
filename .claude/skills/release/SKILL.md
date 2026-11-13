@@ -58,6 +58,10 @@ BT=$(ls -d /c/Users/yoichi/AppData/Local/Android/Sdk/build-tools/* | grep -v rc 
 - `com.pathly`・versionName が `X.Y.Z`・**debuggable でない**。
 - リリースノート（PR のタイトルから自動生成）が読める内容か。
 
+`mapping-vX.Y.Z.txt` は、その版で落ちたときの記録（設定の「異常終了の記録」）を元の名前に戻すのに要る。
+不具合の Issue にリリース版のスタックトレースが貼られたら、`docs/designs/release.md` の「リリース版のエラー情報を読む」の手順で
+`retrace` にかける（**記録の版と同じ mapping を使う**）。
+
 ## 6. スマホのリリース版を更新する（確認を取ってから）
 
 ```bash

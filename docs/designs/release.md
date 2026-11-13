@@ -117,6 +117,34 @@ base64 にした文字列は鍵そのものと同じ扱い。貼り付けたら�
 
 ---
 
+## リリース版のエラー情報を読む
+
+リリース版は R8 で名前が短くなっているので、異常終了の記録（[../specs/crash-reports.md](../specs/crash-reports.md)）の
+スタックトレースは `a.b.c(SourceFile:1)` のようになって読めない。**記録にある版と同じ** `mapping-vX.Y.Z.txt` で元の名前に戻す。
+
+1. 記録の「版」を見る（例: `0.5.0`）。開発版（`+dev` が付く・「（開発版）」）は R8 がかかっていないので戻す必要はない。
+2. その版の mapping を取ってくる。
+
+   ```bash
+   gh release download v0.5.0 --repo y-nosuke/pathly -p "mapping-*.txt" -D <作業場所>
+   ```
+
+3. 貼られたスタックトレースをファイル（`crash.txt`）に保存し、Android SDK の `retrace` にかける。
+
+   ```bash
+   CT=$(ls -d /c/Users/yoichi/AppData/Local/Android/Sdk/cmdline-tools/* | sort -V | tail -1)
+   "$CT/bin/retrace.bat" <作業場所>/mapping-v0.5.0.txt <作業場所>/crash.txt
+   ```
+
+   `retrace` は Android SDK の Command-line Tools に入っている（無ければ SDK Manager で入れる）。
+   版が違う mapping で戻すと、もっともらしい別の名前になるので必ず版を合わせる。
+
+- OS の記録（ANR・OS による停止）は OS の言葉で書かれているので、そのまま読める。ANR のスレッドの様子にある
+  アプリのクラス名は、同じように `retrace` で戻せる。
+- mapping は Release ごとに残っているので、古い版の記録も後から戻せる。
+
+---
+
 ## データの持ち出し
 
 リリース版は debuggable でないため、**adb からデータを読み書きできない**（`run-as` が使えない）。
