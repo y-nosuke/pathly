@@ -1,5 +1,7 @@
 package com.pathly.di
 
+import com.pathly.data.crash.AndroidExitReasonSource
+import com.pathly.data.crash.ExitReasonSource
 import com.pathly.data.repository.GpsTrackRepositoryImpl
 import com.pathly.data.repository.PlaceRepositoryImpl
 import com.pathly.data.repository.WishlistRepositoryImpl
@@ -33,4 +35,10 @@ abstract class RepositoryModule {
   abstract fun bindWishlistRepository(
     wishlistRepositoryImpl: WishlistRepositoryImpl,
   ): WishlistRepository
+
+  @Binds
+  @Singleton
+  abstract fun bindExitReasonSource(
+    androidExitReasonSource: AndroidExitReasonSource,
+  ): ExitReasonSource
 }

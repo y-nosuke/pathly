@@ -1,19 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?><!--
-   Sample data extraction rules file; uncomment and customize as necessary.
+   端末の自動バックアップと機種変更の引き継ぎ（Android 12 以降）。既定はすべて含め、下の除外だけを外す。
    See https://developer.android.com/about/versions/12/backup-restore#xml-changes
-   for details.
 -->
 <data-extraction-rules>
+    <!-- 異常終了の記録は、その端末・その版の診断情報なので持ち出さない（docs/specs/crash-reports.md）。 -->
     <cloud-backup>
-        <!-- TODO: Use <include> and <exclude> to control what is backed up.
-        <include .../>
-        <exclude .../>
-        -->
+        <exclude domain="file" path="crash_reports" />
     </cloud-backup>
-    <!--
     <device-transfer>
-        <include .../>
-        <exclude .../>
+        <exclude domain="file" path="crash_reports" />
     </device-transfer>
-    -->
 </data-extraction-rules>

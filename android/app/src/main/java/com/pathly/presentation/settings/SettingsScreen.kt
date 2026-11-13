@@ -133,6 +133,9 @@ fun SettingsScreen(
     BackupSection(viewModel)
 
     AboutSection()
+
+    val crashReports by viewModel.crashReports.collectAsStateWithLifecycle()
+    CrashReportSection(reports = crashReports, onClear = viewModel::clearCrashReports)
   }
 }
 

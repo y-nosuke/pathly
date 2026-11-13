@@ -50,3 +50,4 @@
 | [0032](0032-jump-to-region-by-places-autocomplete.md) | 記録画面の「地域へ移動」は、Places の Autocomplete を地域に絞って使い、入口は「検索して登録」と分ける | Accepted |
 | [0033](0033-history-map-shows-selected-tracks.md)     | 履歴の地図表示は、絞り込んだ経路のうち選んだものだけを重ね、選び方は「この範囲の経路」と揃える        | Accepted |
 | [0034](0034-no-same-facility-check-on-empty-tap.md)   | 空き地点から場所を作るときは施設を問い合わせず、同じ施設の場所があっても確認しない                    | Accepted |
+| [0035](0035-keep-crash-reports-on-device.md)          | 異常終了の原因は端末の中にだけ残し、設定画面から本人がコピーして渡す                                  | Accepted |
