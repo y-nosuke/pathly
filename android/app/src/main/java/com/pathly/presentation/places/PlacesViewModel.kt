@@ -323,12 +323,7 @@ class PlacesViewModel @Inject constructor(
   fun toggleWishlist(item: PlaceListItem) {
     viewModelScope.launch {
       try {
-        val wishlistId = item.wishlistId
-        if (wishlistId != null) {
-          wishlistRepository.removeFromWishlist(wishlistId)
-        } else {
-          wishlistRepository.addToWishlist(item.place.id, Priority.MEDIUM)
-        }
+        placeEditUseCase.toggleWishlist(item.place.id)
       } catch (e: Exception) {
         _uiState.update { it.copy(errorMessage = "更新に失敗しました: ${e.message}") }
       }

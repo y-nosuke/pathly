@@ -108,6 +108,8 @@ fun TrackDetailScreen(
   onDeleteStops: (stopIds: List<Long>) -> Unit = {},
   // 同じ場所への複数の訪問を1件にまとめる（→ adr/0024）。判定は ViewModel/Repository 側。
   onMergeStops: (stopIds: List<Long>) -> Unit = {},
+  // 立ち寄りの行の旗で、その場所の「行きたい」をワンタップで付け外しする（#92）。
+  onToggleStopWishlist: (placeId: Long) -> Unit = {},
   // 滞在期間の手直し。GPS 点・補正後の点は触らない。
   onUpdateStopDuration: (stopId: Long, arrival: Date, departure: Date) -> Unit = { _, _, _ -> },
   onUndoStopChange: () -> Unit = {},
@@ -564,6 +566,11 @@ fun TrackDetailScreen(
           selectionMode = selectionMode,
           selectedStopIds = selectedStopIds,
           highlightedStopId = highlightedStopId,
+          // 行きたいの状態は登録済みの場所の一覧（全場所・DB の変化で流れ直す）から引く。
+          wishlistedPlaceIds = remember(registeredPlaces) {
+            registeredPlaces.filter { it.isWishlisted }.map { it.placeId }.toSet()
+          },
+          onToggleWishlist = { onToggleStopWishlist(it.place.id) },
           modifier = Modifier
             .weight(1f)
             .fillMaxWidth(),

@@ -3,11 +3,13 @@ package com.pathly.presentation.history
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertHasClickAction
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.longClick
+import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
@@ -21,6 +23,7 @@ import com.pathly.domain.model.MapPlaceFilter
 import com.pathly.domain.model.Place
 import com.pathly.domain.model.PlacePrediction
 import com.pathly.domain.model.PlaceSearchResult
+import com.pathly.domain.model.RegisteredPlace
 import com.pathly.domain.model.Stop
 import com.pathly.ui.theme.PathlyAndroidTheme
 import io.mockk.mockk
@@ -507,6 +510,66 @@ class TrackDetailScreenTest {
     composeTestRule.onNodeWithText("削除").performClick()
 
     verify { onDeleteStops(listOf(1L)) }
+  }
+
+  @Test
+  fun trackDetailScreen_stopWishlistFlag_showsStateByPlaceAndTogglesByPlaceId() {
+    val onToggle = mockk<(Long) -> Unit>(relaxed = true)
+    val track = createSampleTrack()
+    // 動物園（place 9）に 2 回、売店（place 10）に 1 回。行きたいに入っているのは動物園だけ。
+    val stops = listOf(
+      sampleStop(id = 1L, placeId = 9L, name = "動物園"),
+      sampleStop(id = 2L, placeId = 10L, name = "売店"),
+      sampleStop(id = 3L, placeId = 9L, name = "動物園"),
+    )
+    var registered by mutableStateOf(
+      listOf(
+        RegisteredPlace(placeId = 9L, name = "動物園", latitude = 35.0, longitude = 139.0, isWishlisted = true),
+        RegisteredPlace(placeId = 10L, name = "売店", latitude = 35.0, longitude = 139.0),
+      ),
+    )
+
+    composeTestRule.setContent {
+      PathlyAndroidTheme {
+        TrackDetailScreen(
+          track = track,
+          onBackClick = mockOnBackClick,
+          mapContent = {},
+          stops = stops,
+          registeredPlaces = registered,
+          onToggleStopWishlist = onToggle,
+        )
+      }
+    }
+
+    // 旗は場所単位: 動物園の 2 行は塗り（外す）、売店は輪郭（追加）。
+    composeTestRule.onAllNodesWithContentDescription("行きたいから外す").assertCountEquals(2)
+    composeTestRule.onAllNodesWithContentDescription("行きたいに追加").assertCountEquals(1)
+
+    // ワンタップで、その立ち寄りの場所の id を渡す。
+    composeTestRule.onNodeWithContentDescription("行きたいに追加").performClick()
+    verify { onToggle(10L) }
+
+    // DB の変化（登録済みの場所の一覧が流れ直す）で、旗の見た目が変わる。
+    registered = registered.map { it.copy(isWishlisted = true) }
+    composeTestRule.onAllNodesWithContentDescription("行きたいから外す").assertCountEquals(3)
+    composeTestRule.onAllNodesWithContentDescription("行きたいに追加").assertCountEquals(0)
+  }
+
+  @Test
+  fun trackDetailScreen_stopWishlistFlag_hiddenInSelectionMode() {
+    val track = createSampleTrack()
+    val stops = listOf(sampleStop(id = 1L, placeId = 9L, name = "動物園"))
+
+    composeTestRule.setContent {
+      PathlyAndroidTheme {
+        TrackDetailScreen(track = track, onBackClick = mockOnBackClick, mapContent = {}, stops = stops)
+      }
+    }
+
+    composeTestRule.onNodeWithContentDescription("行きたいに追加").assertIsDisplayed()
+    composeTestRule.onNodeWithText("動物園").performTouchInput { longClick() }
+    composeTestRule.onAllNodesWithContentDescription("行きたいに追加").assertCountEquals(0)
   }
 
   @Test

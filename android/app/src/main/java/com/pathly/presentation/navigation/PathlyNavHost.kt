@@ -275,6 +275,7 @@ private fun TrackDetailRoute(
     onDismissReanalyze = { viewModel.dismissReanalyze() },
     onDeleteStops = { stopIds -> viewModel.deleteStops(stopIds) },
     onMergeStops = { stopIds -> viewModel.mergeStops(stopIds) },
+    onToggleStopWishlist = viewModel::toggleStopWishlist,
     onUpdateStopDuration = { stopId, arrival, departure -> viewModel.updateStopDuration(stopId, arrival, departure) },
     onUndoStopChange = { viewModel.undoStopChange() },
     onAddManualStop = viewModel::addManualStopWithNearbyCheck,

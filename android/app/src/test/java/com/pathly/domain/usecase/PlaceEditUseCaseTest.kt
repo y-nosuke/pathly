@@ -11,8 +11,11 @@ import com.pathly.domain.repository.WishlistRepository
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.mockk
+import kotlinx.coroutines.async
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -338,5 +341,62 @@ class PlaceEditUseCaseTest {
 
     coVerify { wishlistRepository.linkPlaceToGoogle(1L, link) }
     coVerify { wishlistRepository.renamePlace(1L, "新しい名前") }
+  }
+
+  // ---- 行きたいのワンタップの付け外し ----
+
+  @Test
+  fun `行きたい切替_入っていなければ優先度「中」で入れる`() = runTest {
+    coEvery { wishlistRepository.getPlace(1L) } returns item(wishlistId = null)
+
+    val result = useCase.toggleWishlist(1L)
+
+    assertEquals(true, result)
+    coVerify { wishlistRepository.addToWishlist(1L, Priority.MEDIUM) }
+    coVerify(exactly = 0) { wishlistRepository.removeFromWishlist(any()) }
+  }
+
+  @Test
+  fun `行きたい切替_入っていれば外し、訪問済みには触らない`() = runTest {
+    coEvery { wishlistRepository.getPlace(1L) } returns
+      item(wishlistId = 7L, priority = Priority.HIGH, markedVisitedAt = Date())
+
+    val result = useCase.toggleWishlist(1L)
+
+    assertEquals(false, result)
+    coVerify { wishlistRepository.removeFromWishlist(7L) }
+    coVerify(exactly = 0) { wishlistRepository.addToWishlist(any(), any()) }
+    coVerify(exactly = 0) { wishlistRepository.setVisited(any(), any()) }
+  }
+
+  @Test
+  fun `行きたい切替_素早い2回押しは順に処理し、入れて外す`() = runTest {
+    // DB の代わりに今の状態を持つ。書き込みに時間がかかる間にもう 1 回押される状況を作る。
+    var wishlistId: Long? = null
+    coEvery { wishlistRepository.getPlace(1L) } coAnswers { item(wishlistId = wishlistId) }
+    coEvery { wishlistRepository.addToWishlist(1L, any()) } coAnswers {
+      delay(100)
+      wishlistId = 7L
+      7L
+    }
+    coEvery { wishlistRepository.removeFromWishlist(7L) } coAnswers { wishlistId = null }
+
+    val first = async { useCase.toggleWishlist(1L) }
+    val second = async { useCase.toggleWishlist(1L) }
+
+    assertEquals(true, first.await())
+    assertEquals(false, second.await())
+    coVerify(exactly = 1) { wishlistRepository.addToWishlist(1L, Priority.MEDIUM) }
+    coVerify(exactly = 1) { wishlistRepository.removeFromWishlist(7L) }
+  }
+
+  @Test
+  fun `行きたい切替_場所が無ければ何もしない`() = runTest {
+    coEvery { wishlistRepository.getPlace(1L) } returns null
+
+    assertNull(useCase.toggleWishlist(1L))
+
+    coVerify(exactly = 0) { wishlistRepository.addToWishlist(any(), any()) }
+    coVerify(exactly = 0) { wishlistRepository.removeFromWishlist(any()) }
   }
 }

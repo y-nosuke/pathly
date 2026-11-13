@@ -5,6 +5,8 @@ import com.pathly.domain.model.PlaceSearchResult
 import com.pathly.domain.model.Priority
 import com.pathly.domain.model.RegisteredPlace
 import com.pathly.domain.repository.WishlistRepository
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -166,6 +168,31 @@ class PlaceEditUseCase @Inject constructor(
     }
     return SaveResult(linkRefused = linkRefused)
   }
+
+  /**
+   * 「行きたい」をワンタップで付け外しする（場所タブの一覧の旗・経路詳細の立ち寄りの旗）。
+   *
+   * 今の状態は**画面が持っている値ではなく DB から読み直して**決める。経路詳細では同じ場所への
+   * 立ち寄りが何行もあり、画面の値が古いまま押されると、付けたつもりで外す（逆も）ことになるため。
+   * 付けるときの優先度は「中」（場所タブの一覧の旗と同じ）。訪問済みの印には触らない（→ adr/0020）。
+   *
+   * @return 付け外しのあとに行きたいに入っているか。場所が無ければ null（何もしない）。
+   */
+  suspend fun toggleWishlist(placeId: Long): Boolean? = wishlistToggleMutex.withLock {
+    // 読んでから書くまでを直列にする。旗を素早く 2 回押すと、どちらも「未登録」を読んで
+    // 2 回入れようとし、wishlist.placeId の一意制約で 2 回目が失敗するため。
+    val item = wishlistRepository.getPlace(placeId) ?: return@withLock null
+    val wishlistId = item.wishlistId
+    if (wishlistId != null) {
+      wishlistRepository.removeFromWishlist(wishlistId)
+      false
+    } else {
+      wishlistRepository.addToWishlist(placeId, Priority.MEDIUM)
+      true
+    }
+  }
+
+  private val wishlistToggleMutex = Mutex()
 
   /** [saveEdits] の結果。保存そのものは常に行い、施設の紐付けだけが断られることがある。 */
   data class SaveResult(

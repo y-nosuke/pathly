@@ -208,6 +208,21 @@ class TrackDetailViewModel @Inject constructor(
     }
   }
 
+  /**
+   * 立ち寄りの行の旗から、その場所の「行きたい」をワンタップで付け外しする。
+   * 付け外しの判断は DB の今の状態で行う（[PlaceEditUseCase.toggleWishlist]）。
+   * 旗の見た目は [registeredPlaces] の更新で変わるので、成功時のメッセージは出さない（場所タブと同じ）。
+   */
+  fun toggleStopWishlist(placeId: Long) {
+    viewModelScope.launch {
+      try {
+        placeEditUseCase.toggleWishlist(placeId)
+      } catch (e: Exception) {
+        _message.value = "行きたいの更新に失敗しました: ${e.message}"
+      }
+    }
+  }
+
   /** 直近の削除・統合を取り消して元に戻す（スナックバーの「取り消す」）。 */
   fun undoStopChange() {
     viewModelScope.launch { placeRepository.undoLastStopChange() }
