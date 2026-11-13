@@ -123,6 +123,7 @@ import com.pathly.presentation.common.RegisteredPlaceMarker
 import com.pathly.presentation.common.RegisteredPlaceMarkers
 import com.pathly.presentation.common.ScrollToTopButton
 import com.pathly.presentation.common.ScrollToTopButtonClearance
+import com.pathly.presentation.common.WishlistFlagButton
 import com.pathly.presentation.common.categoryChipLabel
 import com.pathly.presentation.common.categoryGlyph
 import com.pathly.presentation.common.choiceLabel
@@ -679,27 +680,6 @@ private fun PlaceItemRow(
         )
       }
     }
-  }
-}
-
-@Composable
-private fun WishlistFlagButton(
-  active: Boolean,
-  onClick: () -> Unit,
-  modifier: Modifier = Modifier,
-) {
-  IconButton(onClick = onClick, modifier = modifier) {
-    Icon(
-      painter = painterResource(
-        if (active) R.drawable.ic_flag_filled else R.drawable.ic_flag,
-      ),
-      contentDescription = if (active) "行きたいから外す" else "行きたいに追加",
-      tint = if (active) {
-        MaterialTheme.colorScheme.primary
-      } else {
-        MaterialTheme.colorScheme.onSurfaceVariant
-      },
-    )
   }
 }
 
