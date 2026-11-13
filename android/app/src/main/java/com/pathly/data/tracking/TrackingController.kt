@@ -1,6 +1,7 @@
 package com.pathly.data.tracking
 
 import android.annotation.SuppressLint
+import android.content.ActivityNotFoundException
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
@@ -208,6 +209,21 @@ class TrackingController @Inject constructor(
   fun isIgnoringBatteryOptimizations(): Boolean {
     val powerManager = context.getSystemService(Context.POWER_SERVICE) as PowerManager
     return powerManager.isIgnoringBatteryOptimizations(context.packageName)
+  }
+
+  /**
+   * 端末の位置情報の設定画面を開く。この画面を持たない端末もある（API の注記）ので、
+   * 無ければ設定アプリのトップで代える。
+   */
+  fun openLocationSettings() {
+    try {
+      context.startActivity(
+        Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+      )
+    } catch (e: ActivityNotFoundException) {
+      logger.w("Location settings screen not found; opening top-level settings", e)
+      context.startActivity(Intent(Settings.ACTION_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+    }
   }
 
   /**

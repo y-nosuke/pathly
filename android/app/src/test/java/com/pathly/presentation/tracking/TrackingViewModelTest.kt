@@ -162,7 +162,7 @@ class TrackingViewModelTest {
   }
 
   @Test
-  fun `startTracking_位置情報がオフなら記録中にせずエラーを出す`() = runTest {
+  fun `startTracking_位置情報がオフなら記録中にせず設定への導線を出す`() = runTest {
     every { mockController.start() } returns TrackingController.StartFailure.LOCATION_DISABLED
     val viewModel = createViewModel()
 
@@ -170,7 +170,86 @@ class TrackingViewModelTest {
 
     val state = viewModel.uiState.value
     assertFalse("記録中にはならない", state.isTracking)
-    assertEquals("端末の位置情報がオフです。設定でオンにしてください", state.errorMessage)
+    assertTrue("位置情報 OFF の案内（設定を開くボタン付き）を出す", state.isLocationDisabled)
+    // 案内は専用のカードで出す。errorMessage に載せると他のエラーに上書きされる
+    assertNull(state.errorMessage)
+  }
+
+  @Test
+  fun `中断記録の再開_位置情報がオフなら設定への導線を出す`() = runTest {
+    every { mockController.resume(any()) } returns TrackingController.StartFailure.LOCATION_DISABLED
+    val viewModel = createViewModel()
+    // 予期せぬ切断のあと復帰しなかった → 中断された記録として再開を選べる状態にする
+    coEvery { mockRepository.getActiveTrack() } returns activeTrack(id = 9L)
+    every { mockController.reattach() } returns false
+    disconnects.tryEmit(Unit)
+    testDispatcher.scheduler.advanceUntilIdle()
+
+    viewModel.resumeTracking()
+
+    verify { mockController.resume(9L) }
+    assertFalse(viewModel.uiState.value.isTracking)
+    assertTrue(viewModel.uiState.value.isLocationDisabled)
+  }
+
+  @Test
+  fun `位置情報がオフなら前の失敗のメッセージを下ろす`() = runTest {
+    every { mockController.start() } returns TrackingController.StartFailure.MISSING_PERMISSION
+    val viewModel = createViewModel()
+    viewModel.startTracking()
+
+    every { mockController.start() } returns TrackingController.StartFailure.LOCATION_DISABLED
+    viewModel.startTracking()
+
+    assertNull("権限のメッセージが案内と並んで残らない", viewModel.uiState.value.errorMessage)
+    assertTrue(viewModel.uiState.value.isLocationDisabled)
+  }
+
+  @Test
+  fun `位置情報の設定を開くはコントローラに任せる`() = runTest {
+    val viewModel = createViewModel()
+
+    viewModel.openLocationSettings()
+
+    verify { mockController.openLocationSettings() }
+  }
+
+  @Test
+  fun `設定から戻って位置情報がオンなら案内を下ろす`() = runTest {
+    every { mockController.start() } returns TrackingController.StartFailure.LOCATION_DISABLED
+    val viewModel = createViewModel()
+    viewModel.startTracking()
+
+    every { mockController.isLocationEnabled() } returns true
+    viewModel.checkLocationEnabled()
+
+    assertFalse(viewModel.uiState.value.isLocationDisabled)
+    assertFalse("自動では記録を始めない", viewModel.uiState.value.isTracking)
+  }
+
+  @Test
+  fun `設定から戻っても位置情報がオフなら案内を残す`() = runTest {
+    every { mockController.start() } returns TrackingController.StartFailure.LOCATION_DISABLED
+    val viewModel = createViewModel()
+    viewModel.startTracking()
+
+    every { mockController.isLocationEnabled() } returns false
+    viewModel.checkLocationEnabled()
+
+    assertTrue(viewModel.uiState.value.isLocationDisabled)
+  }
+
+  @Test
+  fun `位置情報をオンにして開始できれば案内を下ろす`() = runTest {
+    every { mockController.start() } returns TrackingController.StartFailure.LOCATION_DISABLED
+    val viewModel = createViewModel()
+    viewModel.startTracking()
+
+    every { mockController.start() } returns null
+    viewModel.startTracking()
+
+    assertTrue(viewModel.uiState.value.isTracking)
+    assertFalse(viewModel.uiState.value.isLocationDisabled)
   }
 
   @Test

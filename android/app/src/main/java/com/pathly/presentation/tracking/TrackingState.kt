@@ -14,6 +14,9 @@ data class TrackingState(
   val hasLocationPermission: Boolean = false,
   val currentTrackId: Long? = null,
   val errorMessage: String? = null,
+  // 端末の位置情報が OFF で開始できなかった。「位置情報の設定を開く」付きの案内を出し、
+  // 設定から戻って ON になっていれば下ろす（errorMessage とは別に持つ）。
+  val isLocationDisabled: Boolean = false,
   val currentLocation: LocationInfo? = null,
   val locationCount: Int = 0,
   val currentTrack: GpsTrack? = null,

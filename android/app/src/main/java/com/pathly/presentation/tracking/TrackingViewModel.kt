@@ -219,10 +219,10 @@ class TrackingViewModel @Inject constructor(
     // 開始できない理由があればサービスは起動せず、そのままエラーを出す
     // （起動してから失敗すると「記録中なのに何も記録されない」状態になるため）。
     trackingController.start()?.let { failure ->
-      _uiState.update { it.copy(errorMessage = failure.message()) }
+      reportStartFailure(failure)
       return
     }
-    _uiState.update { it.copy(isTracking = true, errorMessage = null) }
+    _uiState.update { it.copy(isTracking = true, errorMessage = null, isLocationDisabled = false) }
   }
 
   fun stopTracking() {
@@ -243,7 +243,7 @@ class TrackingViewModel @Inject constructor(
   fun resumeTracking() {
     val interrupted = _uiState.value.interruptedTrack ?: return
     trackingController.resume(interrupted.id)?.let { failure ->
-      _uiState.update { it.copy(errorMessage = failure.message()) }
+      reportStartFailure(failure)
       return
     }
     _uiState.update {
@@ -252,13 +252,39 @@ class TrackingViewModel @Inject constructor(
         currentTrackId = interrupted.id,
         interruptedTrack = null,
         errorMessage = null,
+        isLocationDisabled = false,
       )
     }
   }
 
-  private fun TrackingController.StartFailure.message(): String = when (this) {
-    TrackingController.StartFailure.MISSING_PERMISSION -> "位置情報の権限が必要です"
-    TrackingController.StartFailure.LOCATION_DISABLED -> "端末の位置情報がオフです。設定でオンにしてください"
+  /**
+   * 開始できなかった理由を出す。位置情報 OFF は設定への導線を添えた専用の案内にするため
+   * [TrackingState.errorMessage] には載せない（他のエラーに上書きされてボタンだけ残るのを避ける）。
+   */
+  private fun reportStartFailure(failure: TrackingController.StartFailure) {
+    _uiState.update {
+      when (failure) {
+        TrackingController.StartFailure.MISSING_PERMISSION ->
+          it.copy(errorMessage = "位置情報の権限が必要です", isLocationDisabled = false)
+
+        // 前の失敗のメッセージ（権限が無い等）が残って案内と食い違わないよう下ろす。
+        TrackingController.StartFailure.LOCATION_DISABLED -> it.copy(errorMessage = null, isLocationDisabled = true)
+      }
+    }
+  }
+
+  /** 端末の位置情報の設定画面を開く（位置情報 OFF で開始できなかったときの導線）。 */
+  fun openLocationSettings() {
+    trackingController.openLocationSettings()
+  }
+
+  /**
+   * 位置情報 OFF のエラーを出しているとき、設定から戻って ON になっていればエラーを下ろす。
+   * 記録は自動では始めない（開始は本人が押す）。
+   */
+  fun checkLocationEnabled() {
+    if (!_uiState.value.isLocationDisabled || !trackingController.isLocationEnabled()) return
+    _uiState.update { it.copy(isLocationDisabled = false) }
   }
 
   /**

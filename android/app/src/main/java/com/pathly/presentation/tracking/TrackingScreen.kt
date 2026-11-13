@@ -143,6 +143,7 @@ fun TrackingScreen(
   LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
     viewModel.checkLocationPermission()
     viewModel.checkBatteryOptimization()
+    viewModel.checkLocationEnabled()
   }
 
   // 中断された記録の再開/完了を確認するダイアログ
@@ -150,7 +151,23 @@ fun TrackingScreen(
     AlertDialog(
       onDismissRequest = viewModel::finishInterruptedTracking,
       title = { Text("前回の記録が中断されています") },
-      text = { Text("アプリの更新などで記録が中断されました。続けて記録を再開しますか？") },
+      text = {
+        Column {
+          Text("アプリの更新などで記録が中断されました。続けて記録を再開しますか？")
+          // 再開が位置情報 OFF で断られたとき。画面側の案内はダイアログの裏に隠れて押せず、
+          // 外側のタップは「完了にする」になってしまうので、ダイアログの中に導線を出す。
+          if (uiState.isLocationDisabled) {
+            Text(
+              text = "端末の位置情報がオフのため再開できません。",
+              modifier = Modifier.padding(top = 12.dp),
+              color = MaterialTheme.colorScheme.error,
+            )
+            TextButton(onClick = viewModel::openLocationSettings) {
+              Text("位置情報の設定を開く")
+            }
+          }
+        }
+      },
       confirmButton = {
         TextButton(onClick = viewModel::resumeTracking) {
           Text("再開する")
@@ -563,6 +580,10 @@ fun TrackingScreen(
             color = MaterialTheme.colorScheme.onErrorContainer,
           )
         }
+      }
+
+      if (uiState.isLocationDisabled && uiState.interruptedTrack == null) {
+        LocationDisabledCard(onOpenSettings = viewModel::openLocationSettings)
       }
 
       if (uiState.hasLocationPermission) {
@@ -1288,6 +1309,30 @@ private fun BatteryOptimizationCard(
       Button(onClick = onDisable) {
         Text("電池の最適化を無効にする")
       }
+    }
+  }
+}
+
+/** 端末の位置情報が OFF で記録を開始できなかったときの案内。設定画面への導線を添える。 */
+@Composable
+private fun LocationDisabledCard(
+  onOpenSettings: () -> Unit,
+  modifier: Modifier = Modifier,
+) {
+  Card(
+    modifier = modifier,
+    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer),
+  ) {
+    Text(
+      text = "端末の位置情報がオフです。オンにしてから記録を開始してください",
+      modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 8.dp),
+      color = MaterialTheme.colorScheme.onErrorContainer,
+    )
+    TextButton(
+      onClick = onOpenSettings,
+      modifier = Modifier.align(Alignment.End).padding(end = 8.dp),
+    ) {
+      Text("位置情報の設定を開く")
     }
   }
 }
