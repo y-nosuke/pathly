@@ -278,6 +278,7 @@ private fun countLines(c: BackupCounts): String = buildList {
   val placeDetail = listOfNotNull(
     c.wishlist?.let { "行きたい ${number(it)}件" },
     c.visited?.let { "訪問済み ${number(it)}件" },
+    c.fulfilledWishes?.let { "行きたいで行った ${number(it)}回" },
   ).joinToString("・")
   add("・場所 ${number(c.places)}件" + if (placeDetail.isNotEmpty()) "（$placeDetail）" else "")
 }.joinToString("\n")

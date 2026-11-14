@@ -547,6 +547,59 @@ class MigrationTest {
     db.close()
   }
 
+  @Test
+  fun migrate19To20_addsWishlistHistory_keepsCurrentWishes() {
+    helper.createDatabase(TEST_DB, 19).apply {
+      // 1: 入れた後に行った（旧仕様の「また行きたい」）。2: 入れる前にだけ行った。3: まだ行っていない。
+      execSQL(
+        "INSERT INTO places (id, name, latitude, longitude, note, source, createdAt, updatedAt) VALUES " +
+          "(1, 'カフェ', 35.68, 139.76, NULL, 'USER', 0, 0), " +
+          "(2, '公園', 35.69, 139.76, NULL, 'USER', 0, 0), " +
+          "(3, '寺', 35.70, 139.76, NULL, 'USER', 0, 0)",
+      )
+      execSQL(
+        "INSERT INTO gps_tracks (id, startTime, endTime, isActive, isFavorite, createdAt, updatedAt) VALUES (1, 0, 1000, 0, 0, 0, 0)",
+      )
+      execSQL(
+        "INSERT INTO stops (id, placeId, trackId, arrivalTime, departureTime, note, createdAt) VALUES " +
+          "(1, 1, 1, 200, 250, NULL, 0), (2, 1, 1, 400, 450, NULL, 0), (3, 2, 1, 50, 60, NULL, 0)",
+      )
+      execSQL(
+        "INSERT INTO wishlist (id, placeId, priority, createdAt, updatedAt) VALUES " +
+          "(1, 1, 2, 100, 100), (2, 2, 1, 100, 100), (3, 3, 0, 100, 100)",
+      )
+      close()
+    }
+
+    // 足した表の DDL が Room の生成物とずれていればここで失敗する。
+    val db = helper.runMigrationsAndValidate(TEST_DB, 20, true, DatabaseMigrations.MIGRATION_19_20)
+
+    // いまの行きたいはさかのぼって終わらせない（全部残る）。入れた後に行ったものだけ、
+    // 入れた日時を最後の立ち寄りの直後へ寄せ、次の終了の判定でまとめて終わらないようにする。
+    db.query("SELECT placeId, priority, createdAt FROM wishlist ORDER BY placeId").use { cursor ->
+      assertTrue(cursor.moveToNext())
+      assertEquals(1L, cursor.getLong(0))
+      assertEquals(2, cursor.getInt(1))
+      assertEquals("最後の立ち寄りの直後", 401L, cursor.getLong(2))
+      assertTrue(cursor.moveToNext())
+      assertEquals("入れる前にだけ行った場所はそのまま", 100L, cursor.getLong(2))
+      assertTrue(cursor.moveToNext())
+      assertEquals("まだ行っていない場所はそのまま", 100L, cursor.getLong(2))
+    }
+    db.query(
+      "SELECT COUNT(*) FROM wishlist w WHERE EXISTS " +
+        "(SELECT 1 FROM stops s WHERE s.placeId = w.placeId AND s.arrivalTime >= w.createdAt)",
+    ).use { cursor ->
+      assertTrue(cursor.moveToNext())
+      assertEquals("終わる条件に当たる行きたいは無い", 0, cursor.getInt(0))
+    }
+    db.query("SELECT COUNT(*) FROM wishlist_fulfillments").use { cursor ->
+      assertTrue(cursor.moveToNext())
+      assertEquals(0, cursor.getInt(0))
+    }
+    db.close()
+  }
+
   companion object {
     private const val TEST_DB = "migration-test"
   }

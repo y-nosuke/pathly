@@ -36,6 +36,9 @@ data class PlaceWithWishlist(
   val visitCount: Int,
   // 直近の立ち寄り（arrivalTime の最大）。立ち寄りが無ければ null。訪問順の並べ替えに使う。
   val lastStopAt: Date?,
+  // 行きたいの履歴（wishlist_fulfillments）の件数＝行きたいで行った回数と、最後に行った日時（→ adr/0036）。
+  val fulfilledWishCount: Int = 0,
+  val lastFulfilledAt: Date? = null,
   // 地域（places の列。まだ引いていない・分からなければ null。→ adr/0029）。
   val regionCountryCode: String? = null,
   val regionPrefecture: String? = null,

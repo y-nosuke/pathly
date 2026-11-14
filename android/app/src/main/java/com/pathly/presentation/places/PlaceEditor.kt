@@ -34,6 +34,7 @@ import com.pathly.domain.model.PlaceSearchResult
 import com.pathly.domain.model.PlaceVisit
 import com.pathly.domain.model.Priority
 import com.pathly.presentation.common.NearbyCandidatePickerDialog
+import com.pathly.util.DateFormatters
 
 /**
  * **登録済みの場所を編集する唯一の本体。**
@@ -108,6 +109,7 @@ internal fun PlaceEditorBody(
       priority = priority,
       onPriorityChange = { priority = it },
       wishlistOffHint = "「行きたい」に登録すると、優先度を付けられます。",
+      wishlistHistory = wishlistHistoryText(item),
       // 立ち寄り記録がある場所は自動で訪問済み（切替不可・件数を表示）。無ければ手動トグル。
       visitedContent = if (item.visitCount > 0) {
         {
@@ -248,4 +250,13 @@ internal fun PlaceEditorBody(
       onFetchPrediction = onFetchPrediction,
     )
   }
+}
+
+/**
+ * 行きたいの切り替えの下に出す「行きたいで 3 回行った（最後は 2026/10/02(金)）」。0 回なら null（出さない）。
+ */
+internal fun wishlistHistoryText(item: PlaceListItem): String? {
+  if (item.fulfilledWishCount <= 0) return null
+  val last = item.lastFulfilledAt?.let { "（最後は ${DateFormatters.shortDate(it)}）" } ?: ""
+  return "行きたいで ${item.fulfilledWishCount} 回行った$last"
 }

@@ -13,6 +13,7 @@ import com.pathly.data.local.dao.SmoothedPointDao
 import com.pathly.data.local.dao.StopDao
 import com.pathly.data.local.dao.VisitedPlaceDao
 import com.pathly.data.local.dao.WishlistDao
+import com.pathly.data.local.dao.WishlistFulfillmentDao
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -60,4 +61,7 @@ object DatabaseModule {
 
   @Provides
   fun provideVisitedPlaceDao(database: PathlyDatabase): VisitedPlaceDao = database.visitedPlaceDao()
+
+  @Provides
+  fun provideWishlistFulfillmentDao(database: PathlyDatabase): WishlistFulfillmentDao = database.wishlistFulfillmentDao()
 }

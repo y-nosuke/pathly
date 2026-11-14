@@ -40,6 +40,9 @@ enum class PlaceSort(val label: String, val defaultDescending: Boolean) {
   REGISTERED("登録順", true),
   VISITED("訪問順", true),
   VISIT_COUNT("訪問回数順", true),
+
+  /** 行きたいで行った回数（行きたいに入れて実際に行った回数 → adr/0036）。 */
+  FULFILLED_WISH_COUNT("行きたいで行った回数順", true),
   PRIORITY("優先度順", true),
   NAME("名前順", false),
   UPDATED("更新順", true),
@@ -153,6 +156,8 @@ data class PlacesState(
         PlaceSort.VISITED -> compareBy(nullsFirst()) { it.visitRecencyAt }
 
         PlaceSort.VISIT_COUNT -> compareBy { it.visitCount }
+
+        PlaceSort.FULFILLED_WISH_COUNT -> compareBy { it.fulfilledWishCount }
 
         // 行きたい未登録は value 無し（-1）扱いで最下位。
         PlaceSort.PRIORITY -> compareBy { it.priority?.value ?: -1 }

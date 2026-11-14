@@ -17,6 +17,12 @@ Google 由来データを別テーブルにした判断は [ADR-0001](../adr/000
 - **`place_resolutions` は「行の有無」が意味を持つ**ログ。主役は `resolvedAt`（叩いた事実）で、
   結果そのものは `google_places` に入る。
 - `wishlist(placeId)` は **UNIQUE**（重複登録の防止と find-or-add に使う）。`places` に従属し CASCADE。
+  行がある＝**いま**行きたい。
+- **`wishlist_fulfillments` は行きたいの履歴**（行った 1 回ごとに 1 行・作るだけ）。行きたいを終わらせるのは
+  `PlaceRepositoryImpl` で、立ち寄りを足す・付け替える・期間を変える・戻すたびに `WishlistFulfillmentDao.fulfillReachedWishes()` を呼ぶ。
+  どの場所が変わったかは追わず、入れた後（到着が `wishlist.createdAt` 以降）の立ち寄りがある行きたいを**全部まとめて**
+  1 トランザクションで移す（行きたいは少なく、立ち寄りは placeId で引けるので軽い。呼び忘れの経路を作らないため）。
+  手動の訪問済みの印では終わらせない（→ [ADR-0036](../adr/0036-wishlist-ends-on-visit-and-keeps-history.md)）。
 - **`visited_places` も「行の有無」が意味を持つ**（行の存在＝手動で訪問済みにした）。付ける＝挿入・外す＝削除だけで
   行を書き換えない。`markedAt` は**印を付けた日時**で、訪れた日時ではない（→ [ADR-0020](../adr/0020-visited-independent-from-wishlist.md)）。
   **行きたいとは独立**なので、行きたいを外しても印は残る。二度付けても最初の日時を残す（挿入は IGNORE）。
@@ -65,14 +71,14 @@ POI タップで登録済みだったときに座標が動かないのはこの�
 1. アンカー座標の近傍（30m）に既存があれば再利用する。**DB だけで完結し Places は叩かない。**
 2. 無ければ新規作成して 1 回だけ解決し、`googlePlaceId` が判明した時点で**同じ ID を持つ place が
    あればそちらへ統合**する（`stops` の参照を寄せ先へ付け替えてから、作ったばかりの行を消す。
-   統合するのは下の条件を満たす place だけなので、付け替える wishlist・visited_places は無い）。
+   統合するのは下の条件を満たす place だけなので、付け替える wishlist・wishlist_fulfillments・visited_places は無い）。
    引くのは **`google_places` を upsert する前**。後だと自分自身が当たる。
 
 `googlePlaceId` は「検索前の鍵」ではなく「**解決後の統合キー**」。だから Places の呼び出しは
 place 1 件 1 回のままで増えない（→ [ADR-0014](../adr/0014-place-naming-cost-policy.md)）。
 
 **自動統合してよいのは、まだ誰も触っていない `DETECTED` の place だけ。** 自分で付けた名前・メモ・
-行きたい・訪問済みの印が付いた place と `USER` 由来は、ID が同じでも自動では吸収しない。
+行きたい（履歴を含む）・訪問済みの印が付いた place と `USER` 由来は、ID が同じでも自動では吸収しない。
 自動命名は半径 50m の最寄り 1 件しか見ないので**別の場所が同じ施設に解決されることがあり**、
 融合してしまうと分け直せないため。
 

@@ -16,11 +16,18 @@ data class PlaceListItem(
   val visitCount: Int,
   /** 直近の立ち寄り日時（arrivalTime の最大）。立ち寄りが無ければ null。 */
   val lastStopAt: Date? = null,
+  /** 行きたいで行った回数（行きたいに入れて、実際に行った回数。訪問回数とは別 → adr/0036）。 */
+  val fulfilledWishCount: Int = 0,
+  /** 行きたいで最後に行った日時（履歴が無ければ null）。 */
+  val lastFulfilledAt: Date? = null,
   /** 地域（都道府県・市区町村）。まだ引いていない・分からなければ地域不明（→ adr/0029）。 */
   val region: PlaceRegion = PlaceRegion.UNKNOWN,
 ) {
   /** 行きたいに登録済みか。 */
   val isWishlisted: Boolean get() = wishlistId != null
+
+  /** 旗の見た目（いま行きたい／行きたいで行ったことがある／それ以外）。 */
+  val wishlistFlag: WishlistFlag get() = WishlistFlag.of(isWishlisted, fulfilledWishCount)
 
   /** 手動で訪問済みにしたか。 */
   val isManuallyVisited: Boolean get() = markedVisitedAt != null

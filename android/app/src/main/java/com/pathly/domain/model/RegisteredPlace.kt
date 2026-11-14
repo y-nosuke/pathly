@@ -19,6 +19,8 @@ data class RegisteredPlace(
   val longitude: Double,
   val isWishlisted: Boolean = false,
   val isVisited: Boolean = false,
+  /** 行きたいで行った回数（行きたいの履歴の件数 → adr/0036）。旗の見た目に使う。 */
+  val fulfilledWishCount: Int = 0,
   val categoryCode: String? = null,
   /** Google の施設情報があるか。業種の絞り込みで「未分類」と「その他」を分けるのに使う（一覧と同じ判定）。 */
   val hasGoogleInfo: Boolean = categoryCode != null,

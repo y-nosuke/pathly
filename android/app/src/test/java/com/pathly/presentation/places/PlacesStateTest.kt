@@ -20,6 +20,20 @@ class PlacesStateTest {
   private val uncategorized = item(id = 4, googlePlaceId = null, code = null)
   private val items = listOf(cafe, park, cafe2, uncategorized)
 
+  // 行きたいで行った回数の多い順。同じ回数なら登録の新しい順（元の並び）を保つ。
+  @Test
+  fun sortByFulfilledWishCount_descending_keepsRegisteredOrderOnTies() {
+    val list = listOf(
+      item(id = 4, googlePlaceId = null, code = null).copy(fulfilledWishCount = 1),
+      item(id = 3, googlePlaceId = null, code = null).copy(fulfilledWishCount = 3),
+      item(id = 2, googlePlaceId = null, code = null),
+      item(id = 1, googlePlaceId = null, code = null).copy(fulfilledWishCount = 1),
+    )
+    val state = PlacesState(items = list, sort = PlaceSort.FULFILLED_WISH_COUNT, sortDescending = true)
+
+    assertEquals(listOf(3L, 4L, 1L, 2L), state.visibleItems.map { it.place.id })
+  }
+
   @Test
   fun categoryFilter_keepsPlacesInAnySelectedCategory() {
     val state = PlacesState(items = items, categoryFilter = setOf(PlaceCategoryFacet.CAFE, PlaceCategoryFacet.UNCATEGORIZED))

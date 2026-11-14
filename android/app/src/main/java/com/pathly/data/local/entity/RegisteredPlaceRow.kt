@@ -26,4 +26,6 @@ data class RegisteredPlaceRow(
   val categoryCode: String?,
   /** Google の施設情報（google_places の行）があるか。業種の絞り込みで「未分類」を分けるのに使う。 */
   val hasGoogleInfo: Boolean,
+  /** 行きたいの履歴の件数（>0 で、行きたいで行ったことがある → adr/0036）。 */
+  val fulfilledWishCount: Int = 0,
 )

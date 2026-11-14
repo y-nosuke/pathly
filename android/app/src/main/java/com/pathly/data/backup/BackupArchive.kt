@@ -129,6 +129,7 @@ object BackupArchive {
       places = required("places"),
       wishlist = optional("wishlist"),
       visited = optional("visited_places"),
+      fulfilledWishes = optional("wishlist_fulfillments"),
     )
   }
 
@@ -250,6 +251,8 @@ data class BackupCounts(
   val places: Int,
   val wishlist: Int?,
   val visited: Int?,
+  /** 行きたいの履歴（行きたいに入れて行った回数の合計 → adr/0036）。 */
+  val fulfilledWishes: Int? = null,
 )
 
 /** 書き出し・読み込みの失敗。[reason] で利用者に見せる文言を分ける。 */

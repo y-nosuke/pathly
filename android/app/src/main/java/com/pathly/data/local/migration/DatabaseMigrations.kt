@@ -675,6 +675,45 @@ object DatabaseMigrations {
     }
   }
 
+  /**
+   * 行きたいの履歴（行きたいに入れて実際に行った記録）を足す（→ adr/0036）。
+   * 既存の行きたいはさかのぼって終わらせず、そのまま残す。
+   */
+  val MIGRATION_19_20 = object : Migration(19, 20) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+      try {
+        logger.i("Starting migration from version 19 to 20")
+
+        db.execSQL(
+          "CREATE TABLE IF NOT EXISTS `wishlist_fulfillments` (" +
+            "`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+            "`placeId` INTEGER NOT NULL, " +
+            "`priority` INTEGER NOT NULL, " +
+            "`wishedAt` INTEGER NOT NULL, " +
+            "`fulfilledAt` INTEGER NOT NULL, " +
+            "FOREIGN KEY(`placeId`) REFERENCES `places`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+        )
+        db.execSQL(
+          "CREATE INDEX IF NOT EXISTS `index_wishlist_fulfillments_placeId` ON `wishlist_fulfillments` (`placeId`)",
+        )
+        // 既存の行きたいをさかのぼって終わらせない。入れた後に行った（旧仕様の「また行きたい」として残していた）
+        // 行きたいは、入れた日時を最後の立ち寄りの直後へ寄せる。寄せないと、次に立ち寄りを書いたときの
+        // 終了の判定でまとめて終わってしまう。これからの立ち寄りでは今までどおり終わる。
+        db.execSQL(
+          "UPDATE `wishlist` SET `createdAt` = " +
+            "(SELECT MAX(s.`arrivalTime`) FROM `stops` s WHERE s.`placeId` = `wishlist`.`placeId`) + 1 " +
+            "WHERE EXISTS (SELECT 1 FROM `stops` s WHERE s.`placeId` = `wishlist`.`placeId` " +
+            "AND s.`arrivalTime` >= `wishlist`.`createdAt`)",
+        )
+
+        logger.i("Migration from version 19 to 20 completed successfully")
+      } catch (e: Exception) {
+        logger.e("Migration from version 19 to 20 failed", e)
+        throw e
+      }
+    }
+  }
+
   val ALL_MIGRATIONS = arrayOf(
     MIGRATION_1_2,
     MIGRATION_2_3,
@@ -694,6 +733,7 @@ object DatabaseMigrations {
     MIGRATION_16_17,
     MIGRATION_17_18,
     MIGRATION_18_19,
+    MIGRATION_19_20,
     // 将来のマイグレーションをここに追加
   )
 
