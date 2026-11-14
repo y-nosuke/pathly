@@ -611,8 +611,8 @@ private fun PlaceItemRow(
           )
         }
 
-        // バッジ行（行きたい／訪問済み）。無いときは出さない。
-        if (item.isWishlisted || item.isVisited) {
+        // バッジ行（行きたい／訪問済み／行きたいで行った回数）。無いときは出さない。
+        if (item.isWishlisted || item.isVisited || item.fulfilledWishCount > 0) {
           Spacer(modifier = Modifier.height(4.dp))
           Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             if (item.isWishlisted) {
@@ -625,6 +625,13 @@ private fun PlaceItemRow(
             if (item.isVisited) {
               Text(
                 text = if (item.visitCount > 0) "✓ 訪問${item.visitCount}回" else "✓ 訪問済み",
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.secondary,
+              )
+            }
+            if (item.fulfilledWishCount > 0) {
+              Text(
+                text = "行きたいで行った ${item.fulfilledWishCount}回",
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.secondary,
               )
@@ -652,8 +659,8 @@ private fun PlaceItemRow(
 
           PlaceSort.VISITED -> item.visitRecencyAt?.let { "訪問 " + DateFormatters.shortDate(it) }
 
-          // 訪問回数は既存の「✓ 訪問N回」バッジで分かるので追加表示しない。
-          PlaceSort.VISIT_COUNT, PlaceSort.PRIORITY, PlaceSort.NAME -> null
+          // 回数はバッジ（「✓ 訪問N回」「行きたいで行った N回」）で分かるので追加表示しない。
+          PlaceSort.VISIT_COUNT, PlaceSort.FULFILLED_WISH_COUNT, PlaceSort.PRIORITY, PlaceSort.NAME -> null
         }
         sortDate?.let {
           Spacer(modifier = Modifier.height(2.dp))
@@ -665,7 +672,7 @@ private fun PlaceItemRow(
         }
       }
 
-      WishlistFlagButton(active = item.isWishlisted, onClick = onToggleWishlist)
+      WishlistFlagButton(flag = item.wishlistFlag, onClick = onToggleWishlist)
       // 立ち寄り記録がある場所は削除不可（記録を残すため）。
       val canDelete = item.visitCount == 0
       IconButton(onClick = onDelete, enabled = canDelete) {
@@ -917,7 +924,7 @@ private fun PlaceDetailContent(
       MapMarker(
         "place-detail",
         item.place.id,
-        item.isWishlisted,
+        item.wishlistFlag,
         item.isVisited,
         group,
         infoWindow = infoWindow,
@@ -931,7 +938,7 @@ private fun PlaceDetailContent(
         RegisteredPlaceMarker(
           bg = if (item.isVisited) MarkerVisitedGreen else MarkerUnvisitedGray,
           glyph = categoryGlyph(group),
-          wishlisted = item.isWishlisted,
+          wishlistFlag = item.wishlistFlag,
         )
       }
       // この画面はこの場所が主題なので、他の画面でマーカーをタップしたときと同じく吹き出しも出す。
@@ -1236,6 +1243,8 @@ internal fun PlaceFormBody(
   // 専用にしたので、施設名を少し変えたいだけのときに打ち直さずに済むようにする。
   namePrefill: String? = null,
   wishlistOffHint: String? = null,
+  // 行きたいで行ったことがあるとき、行きたいの切り替えの下に出す一文（「行きたいで 3 回行った…」）。
+  wishlistHistory: String? = null,
   visitedContent: (@Composable () -> Unit)? = null,
 ) {
   Column(modifier = modifier) {
@@ -1307,6 +1316,15 @@ internal fun PlaceFormBody(
     ) {
       Text("行きたいに登録")
       Switch(checked = wishlist, onCheckedChange = onWishlistChange)
+    }
+
+    // 行きたいは行けば終わるので、かつて行きたいだったことをここで見せる（→ adr/0036）。
+    wishlistHistory?.let {
+      Text(
+        text = it,
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.secondary,
+      )
     }
 
     // 優先度は「行きたい」に属する情報なので、こちらは入れ子のままにする。
@@ -1387,6 +1405,7 @@ private fun PlaceListItem.toRegisteredPlace(): RegisteredPlace = RegisteredPlace
   longitude = place.longitude,
   isWishlisted = isWishlisted,
   isVisited = isVisited,
+  fulfilledWishCount = fulfilledWishCount,
   // 業種のグリフと、地図の絞り込みの業種（未分類／その他の分け方）に使う。
   categoryCode = place.category?.code,
   hasGoogleInfo = place.googlePlaceId != null,

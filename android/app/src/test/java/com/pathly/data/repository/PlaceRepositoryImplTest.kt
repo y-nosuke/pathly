@@ -9,6 +9,7 @@ import com.pathly.data.local.dao.SmoothedPointDao
 import com.pathly.data.local.dao.StopDao
 import com.pathly.data.local.dao.VisitedPlaceDao
 import com.pathly.data.local.dao.WishlistDao
+import com.pathly.data.local.dao.WishlistFulfillmentDao
 import com.pathly.data.local.entity.GooglePlaceEntity
 import com.pathly.data.local.entity.GpsPointEntity
 import com.pathly.data.local.entity.NamedPlaceRow
@@ -48,6 +49,7 @@ class PlaceRepositoryImplTest {
   private val googlePlaceCategoryDao = mockk<GooglePlaceCategoryDao>(relaxed = true)
   private val wishlistDao = mockk<WishlistDao>(relaxed = true)
   private val visitedPlaceDao = mockk<VisitedPlaceDao>(relaxed = true)
+  private val wishlistFulfillmentDao = mockk<WishlistFulfillmentDao>(relaxed = true)
   private val resolver = mockk<PlacesNameResolver>(relaxed = true)
 
   @Before
@@ -67,6 +69,7 @@ class PlaceRepositoryImplTest {
     googlePlaceCategoryDao,
     wishlistDao,
     visitedPlaceDao,
+    wishlistFulfillmentDao,
     resolver,
   )
 

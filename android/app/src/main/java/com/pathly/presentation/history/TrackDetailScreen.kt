@@ -60,6 +60,7 @@ import com.pathly.domain.model.SmoothingParams
 import com.pathly.domain.model.Stop
 import com.pathly.domain.model.StopCandidate
 import com.pathly.domain.model.TrackSmoother
+import com.pathly.domain.model.WishlistFlag
 import com.pathly.presentation.common.CloseInfoWindowWithSheet
 import com.pathly.presentation.common.FloatingSheet
 import com.pathly.presentation.common.MapPlaceFilterButton
@@ -567,8 +568,8 @@ fun TrackDetailScreen(
           selectedStopIds = selectedStopIds,
           highlightedStopId = highlightedStopId,
           // 行きたいの状態は登録済みの場所の一覧（全場所・DB の変化で流れ直す）から引く。
-          wishlistedPlaceIds = remember(registeredPlaces) {
-            registeredPlaces.filter { it.isWishlisted }.map { it.placeId }.toSet()
+          wishlistFlags = remember(registeredPlaces) {
+            registeredPlaces.associate { it.placeId to WishlistFlag.of(it.isWishlisted, it.fulfilledWishCount) }
           },
           onToggleWishlist = { onToggleStopWishlist(it.place.id) },
           modifier = Modifier

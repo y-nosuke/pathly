@@ -13,10 +13,12 @@ import com.pathly.data.local.entity.PlaceResolutionEntity
 import com.pathly.data.local.entity.StopEntity
 import com.pathly.data.local.entity.VisitedPlaceEntity
 import com.pathly.data.local.entity.WishlistEntity
+import com.pathly.data.local.entity.WishlistFulfillmentEntity
 import com.pathly.data.places.PlacesNameResolver
 import com.pathly.data.places.PlacesTextSearcher
 import com.pathly.domain.model.PlaceSearchResult
 import com.pathly.domain.model.PlaceSource
+import com.pathly.domain.model.WishlistFlag
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.runTest
 import org.junit.After
@@ -67,11 +69,13 @@ class StopAndPlaceChangeIntegrationTest {
       database.googlePlaceCategoryDao(),
       database.wishlistDao(),
       database.visitedPlaceDao(),
+      database.wishlistFulfillmentDao(),
       PlacesNameResolver(context),
     )
     wishlistRepository = WishlistRepositoryImpl(
       database.wishlistDao(),
       database.visitedPlaceDao(),
+      database.wishlistFulfillmentDao(),
       database.placeDao(),
       database.placeResolutionDao(),
       database.googlePlaceDao(),
@@ -252,6 +256,112 @@ class StopAndPlaceChangeIntegrationTest {
     assertEquals(stopsBefore, database.stopDao().getByTrack(trackId).sortedBy { it.id })
   }
 
+  // ---- 行きたいの終わり（→ adr/0036） ----
+
+  @Test
+  fun stopAfterWish_fulfillsWish_movesItToHistory() = runTest {
+    val placeId = insertPlace(PlaceSource.USER)
+    wish(placeId, at = BASE, priority = 2)
+
+    placeRepository.addManualStopForPlace(trackId, placeId, Date(BASE + HOUR), Date(BASE + 2 * HOUR))
+
+    assertNull("行ったら行きたいは終わる", database.wishlistDao().getByPlaceId(placeId))
+    val history = database.wishlistFulfillmentDao().getByPlaceId(placeId).single()
+    assertEquals(2, history.priority)
+    assertEquals("入れた日時", BASE, history.wishedAt.time)
+    assertEquals("行った日時は立ち寄りの到着", BASE + HOUR, history.fulfilledAt.time)
+    val item = wishlistRepository.getPlace(placeId)!!
+    assertEquals(1, item.fulfilledWishCount)
+    assertEquals(BASE + HOUR, item.lastFulfilledAt?.time)
+    assertEquals(WishlistFlag.FULFILLED, item.wishlistFlag)
+  }
+
+  @Test
+  fun stopBeforeWish_doesNotFulfillWish() = runTest {
+    val placeId = insertPlace(PlaceSource.USER)
+    // 過去の経路の立ち寄りから行きたいに入れた（入れた日時の方が後）。
+    wish(placeId, at = BASE + 3 * HOUR)
+
+    placeRepository.addManualStopForPlace(trackId, placeId, Date(BASE + HOUR), Date(BASE + 2 * HOUR))
+
+    assertNotNull("入れる前の立ち寄りでは終わらない", database.wishlistDao().getByPlaceId(placeId))
+    assertEquals(0, database.wishlistFulfillmentDao().countByPlace(placeId))
+    assertEquals(WishlistFlag.ACTIVE, wishlistRepository.getPlace(placeId)!!.wishlistFlag)
+  }
+
+  @Test
+  fun wishAgainAfterVisit_countsEachFulfilledWish() = runTest {
+    val placeId = insertPlace(PlaceSource.USER)
+    wish(placeId, at = BASE)
+    placeRepository.addManualStopForPlace(trackId, placeId, Date(BASE + HOUR), Date(BASE + 2 * HOUR))
+    // 行った後に入れ直して、また行く。
+    wish(placeId, at = BASE + 5 * HOUR)
+    placeRepository.addManualStopForPlace(trackId, placeId, Date(BASE + 6 * HOUR), Date(BASE + 7 * HOUR))
+
+    val item = wishlistRepository.getPlace(placeId)!!
+    assertEquals(2, item.fulfilledWishCount)
+    assertEquals("最後に行った日時", BASE + 6 * HOUR, item.lastFulfilledAt?.time)
+    assertNull(database.wishlistDao().getByPlaceId(placeId))
+  }
+
+  @Test
+  fun reassignStopToWishedPlace_fulfillsWish() = runTest {
+    val detected = insertPlace(PlaceSource.DETECTED)
+    database.placeResolutionDao().upsert(PlaceResolutionEntity(detected, Date(BASE)))
+    val wished = insertPlace(PlaceSource.USER, latitude = LAT + 0.001)
+    database.googlePlaceDao().upsert(GooglePlaceEntity(wished, "g-wished", "本屋"))
+    wish(wished, at = BASE)
+    val stopId = insertStop(detected, arrival = BASE + HOUR, departure = BASE + 2 * HOUR)
+
+    placeRepository.reassignStopPlace(stopId, PlaceSearchResult("g-wished", "本屋", null, null, LAT + 0.001, LNG), customName = null)
+
+    assertNull("付け替えた先の行きたいは、入れた後の立ち寄りになったので終わる", database.wishlistDao().getByPlaceId(wished))
+    assertEquals(1, database.wishlistFulfillmentDao().countByPlace(wished))
+  }
+
+  @Test
+  fun moveArrivalAfterWish_fulfillsWish() = runTest {
+    val placeId = insertPlace(PlaceSource.USER)
+    val stopId = insertStop(placeId, arrival = BASE, departure = BASE + 2 * HOUR)
+    wish(placeId, at = BASE + HOUR)
+
+    placeRepository.updateStopDuration(stopId, Date(BASE + HOUR + MINUTE), Date(BASE + 2 * HOUR))
+
+    assertNull("到着を入れた後へずらすと終わる", database.wishlistDao().getByPlaceId(placeId))
+    assertEquals(BASE + HOUR + MINUTE, database.wishlistFulfillmentDao().getByPlaceId(placeId).single().fulfilledAt.time)
+  }
+
+  @Test
+  fun deleteStops_keepsDetectedPlaceWithWishHistory_andHistoryStays() = runTest {
+    val placeId = insertPlace(PlaceSource.DETECTED)
+    wish(placeId, at = BASE)
+    placeRepository.addManualStopForPlace(trackId, placeId, Date(BASE + HOUR), Date(BASE + 2 * HOUR))
+    val stopId = database.stopDao().getByTrack(trackId).single().id
+
+    val result = placeRepository.deleteStops(listOf(stopId))
+
+    assertEquals("行きたいと思ったことがある場所は自動では消さない", 0, result.placesDeleted)
+    assertNotNull(database.placeDao().getById(placeId))
+    assertEquals("立ち寄りを消しても履歴は残る", 1, database.wishlistFulfillmentDao().countByPlace(placeId))
+  }
+
+  @Test
+  fun deletePlace_undoRestoresWishHistory() = runTest {
+    val placeId = insertPlace(PlaceSource.USER)
+    database.wishlistFulfillmentDao().insertAll(
+      listOf(
+        WishlistFulfillmentEntity(placeId = placeId, priority = 1, wishedAt = Date(BASE), fulfilledAt = Date(BASE + HOUR)),
+      ),
+    )
+    val before = database.wishlistFulfillmentDao().getByPlaceId(placeId)
+
+    wishlistRepository.deletePlace(placeId)
+    assertEquals("場所を消すと履歴も消える", 0, database.wishlistFulfillmentDao().countByPlace(placeId))
+    assertTrue(wishlistRepository.undoLastPlaceDeletion())
+
+    assertEquals(before, database.wishlistFulfillmentDao().getByPlaceId(placeId))
+  }
+
   // ---- 場所の削除 ----
 
   @Test
@@ -370,6 +480,10 @@ class StopAndPlaceChangeIntegrationTest {
       createdAt = Date(BASE),
     ),
   )
+
+  private suspend fun wish(placeId: Long, at: Long, priority: Int = 1) {
+    database.wishlistDao().insert(WishlistEntity(placeId = placeId, priority = priority, createdAt = Date(at), updatedAt = Date(at)))
+  }
 
   private suspend fun stopOf(stopId: Long): StopEntity = database.stopDao().getByIds(listOf(stopId)).single()
 

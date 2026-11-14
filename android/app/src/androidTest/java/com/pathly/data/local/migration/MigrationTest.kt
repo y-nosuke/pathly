@@ -547,6 +547,53 @@ class MigrationTest {
     db.close()
   }
 
+  @Test
+  fun migrate19To20_addsWishlistHistory_endsWishesAlreadyVisited() {
+    helper.createDatabase(TEST_DB, 19).apply {
+      // 1: 入れた後に行った（旧仕様の「また行きたい」）。2: 入れる前にだけ行った。3: まだ行っていない。
+      execSQL(
+        "INSERT INTO places (id, name, latitude, longitude, note, source, createdAt, updatedAt) VALUES " +
+          "(1, 'カフェ', 35.68, 139.76, NULL, 'USER', 0, 0), " +
+          "(2, '公園', 35.69, 139.76, NULL, 'USER', 0, 0), " +
+          "(3, '寺', 35.70, 139.76, NULL, 'USER', 0, 0)",
+      )
+      execSQL(
+        "INSERT INTO gps_tracks (id, startTime, endTime, isActive, isFavorite, createdAt, updatedAt) VALUES (1, 0, 1000, 0, 0, 0, 0)",
+      )
+      execSQL(
+        "INSERT INTO stops (id, placeId, trackId, arrivalTime, departureTime, note, createdAt) VALUES " +
+          "(1, 1, 1, 200, 250, NULL, 0), (2, 1, 1, 400, 450, NULL, 0), (3, 2, 1, 50, 60, NULL, 0)",
+      )
+      execSQL(
+        "INSERT INTO wishlist (id, placeId, priority, createdAt, updatedAt) VALUES " +
+          "(1, 1, 2, 100, 100), (2, 2, 1, 100, 100), (3, 3, 0, 100, 100)",
+      )
+      close()
+    }
+
+    // 足した表の DDL が Room の生成物とずれていればここで失敗する。
+    val db = helper.runMigrationsAndValidate(TEST_DB, 20, true, DatabaseMigrations.MIGRATION_19_20)
+
+    // 入れた後に行っていた行きたい（1）は終わって履歴へ。入れる前にだけ行った（2）・まだ行っていない（3）は残る。
+    db.query("SELECT placeId, createdAt FROM wishlist ORDER BY placeId").use { cursor ->
+      assertTrue(cursor.moveToNext())
+      assertEquals(2L, cursor.getLong(0))
+      assertEquals("入れた日時はそのまま", 100L, cursor.getLong(1))
+      assertTrue(cursor.moveToNext())
+      assertEquals(3L, cursor.getLong(0))
+      assertFalse(cursor.moveToNext())
+    }
+    db.query("SELECT placeId, priority, wishedAt, fulfilledAt FROM wishlist_fulfillments").use { cursor ->
+      assertTrue(cursor.moveToNext())
+      assertEquals(1L, cursor.getLong(0))
+      assertEquals(2, cursor.getInt(1))
+      assertEquals(100L, cursor.getLong(2))
+      assertEquals("入れた後の最初の到着", 200L, cursor.getLong(3))
+      assertFalse(cursor.moveToNext())
+    }
+    db.close()
+  }
+
   companion object {
     private const val TEST_DB = "migration-test"
   }

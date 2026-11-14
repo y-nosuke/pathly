@@ -9,6 +9,7 @@ import com.pathly.data.local.dao.SmoothedPointDao
 import com.pathly.data.local.dao.StopDao
 import com.pathly.data.local.dao.VisitedPlaceDao
 import com.pathly.data.local.dao.WishlistDao
+import com.pathly.data.local.dao.WishlistFulfillmentDao
 import com.pathly.data.local.dao.idOf
 import com.pathly.data.local.entity.GooglePlaceEntity
 import com.pathly.data.local.entity.GooglePlaceWithCategory
@@ -57,6 +58,7 @@ class PlaceRepositoryImpl @Inject constructor(
   private val googlePlaceCategoryDao: GooglePlaceCategoryDao,
   private val wishlistDao: WishlistDao,
   private val visitedPlaceDao: VisitedPlaceDao,
+  private val wishlistFulfillmentDao: WishlistFulfillmentDao,
   private val placesNameResolver: PlacesNameResolver,
 ) : PlaceRepository {
 
@@ -112,6 +114,7 @@ class PlaceRepositoryImpl @Inject constructor(
     latitude = latitude,
     longitude = longitude,
     isWishlisted = wishlistCount > 0,
+    fulfilledWishCount = fulfilledWishCount,
     // 「場所」タブと同じ判定: 立ち寄り記録があるか、手動で訪問済みにしたら訪問済み。
     isVisited = visitCount > 0 || markedVisitedAt != null,
     categoryCode = categoryCode,
@@ -234,6 +237,7 @@ class PlaceRepositoryImpl @Inject constructor(
     for (place in placeDao.getUnresolvedPlacesForTrack(trackId)) {
       resolvePlace(place)
     }
+    fulfillReachedWishes()
     logger.i("Added ${candidates.size} stops for track $trackId")
     candidates.size
   }
@@ -281,6 +285,7 @@ class PlaceRepositoryImpl @Inject constructor(
     if (placeResolutionDao.getByPlace(placeId) == null) {
       placeResolutionDao.upsert(PlaceResolutionEntity(placeId, Date()))
     }
+    fulfillReachedWishes()
     logger.i("Added manual stop $stopId (place $placeId) for track $trackId")
     stopId
   }
@@ -300,6 +305,7 @@ class PlaceRepositoryImpl @Inject constructor(
         departureTime = departureTime,
       ),
     )
+    fulfillReachedWishes()
     logger.i("Added manual stop $stopId linked to existing place $placeId for track $trackId")
     stopId
   }
@@ -353,15 +359,16 @@ class PlaceRepositoryImpl @Inject constructor(
 
     if (newPlaceId == oldPlaceId) return@withLock // 同じ場所なら変更なし
     stopDao.updatePlace(stopId, newPlaceId)
+    fulfillReachedWishes()
     // 付け替えで参照が無くなった元の場所が検出由来なら回収する（誤検知の後始末）。
     recycleIfOrphanedDetected(oldPlaceId)
     logger.i("Reassigned stop $stopId from place $oldPlaceId to $newPlaceId")
   }
 
-  /** 参照（訪問・行きたい）が無くなった場所が検出由来（DETECTED）なら回収する。子は CASCADE で消える。 */
+  /** 参照（訪問・行きたい・行きたいの履歴）が無くなった場所が検出由来（DETECTED）なら回収する。子は CASCADE で消える。 */
   private suspend fun recycleIfOrphanedDetected(placeId: Long) {
     val place = placeDao.getById(placeId) ?: return
-    val referenced = stopDao.countByPlace(placeId) > 0 || wishlistDao.countByPlace(placeId) > 0
+    val referenced = stopDao.countByPlace(placeId) > 0 || hasWishes(placeId)
     if (!referenced && place.source == PlaceSource.DETECTED.name) {
       placeDao.deleteById(placeId)
     }
@@ -413,6 +420,8 @@ class PlaceRepositoryImpl @Inject constructor(
       return
     }
     stopDao.updateDuration(stopId, arrivalTime, departureTime)
+    // 到着を後ろへずらすと、行きたいに入れた後の立ち寄りになることがある。
+    fulfillReachedWishes()
   }
 
   override suspend fun mergeStops(stopIds: List<Long>): StopMergeResult? = mutex.withLock {
@@ -457,10 +466,10 @@ class PlaceRepositoryImpl @Inject constructor(
     var placesDeleted = 0
     var placesKept = 0
     for (placeId in affectedPlaceIds) {
-      // 他の訪問が残る（他の履歴など）か、行きたい登録がある場所は保持する。
-      // wishlist は place を消すと CASCADE で消えるため、ここで巻き込まないよう明示的に守る。
+      // 他の訪問が残る（他の履歴など）か、行きたい登録・行きたいの履歴がある場所は保持する。
+      // どちらも place を消すと CASCADE で消えるため、ここで巻き込まないよう明示的に守る。
       val place = placeDao.getById(placeId)
-      val stillReferenced = stopDao.countByPlace(placeId) > 0 || wishlistDao.countByPlace(placeId) > 0
+      val stillReferenced = stopDao.countByPlace(placeId) > 0 || hasWishes(placeId)
       // ユーザーが明示的に作った場所（USER）は、参照ゼロでも自動では消さない（意図的な登録を守る）。
       // 自動回収するのは検出が作った使い捨て（DETECTED）だけ。
       val autoDisposable = place != null && place.source == PlaceSource.DETECTED.name
@@ -490,6 +499,7 @@ class PlaceRepositoryImpl @Inject constructor(
     for (stop in snap.stops) stopDao.insert(stop)
     // 統合で期間・メモを書き換えた行は、消さずに変更前の内容へ戻す。
     for (stop in snap.modifiedStops) stopDao.update(stop)
+    fulfillReachedWishes()
     lastStopChange = null
     logger.i(
       "Undid stop change: restored ${snap.stops.size} stops, ${snap.places.size} places, " +
@@ -559,9 +569,13 @@ class PlaceRepositoryImpl @Inject constructor(
     }
 
     // 確定した立ち寄りの未解決 place をオンラインなら命名する（オフラインは行を作らずキャッチアップ）。
-    for (place in placeDao.getUnresolvedPlacesForTrack(trackId)) {
+    val unresolved = placeDao.getUnresolvedPlacesForTrack(trackId)
+    for (place in unresolved) {
       resolvePlace(place)
     }
+    // 立ち寄りを確定したか、解決で同じ施設の場所へ寄せた（立ち寄りが付け替わった）ときだけ見る。
+    // このメソッドは位置のバッチごとに呼ばれるので、何も変わらないティックでは問い合わせない。
+    if (finalized.isNotEmpty() || unresolved.isNotEmpty()) fulfillReachedWishes()
 
     // 「立ち寄り中」: place を先行確定＋命名し、メモリで公開する。ただし表示は、生の現在地が
     // その立ち寄りの中心の半径内にある間だけ出す。補正の確定ラグ（末尾の未確定分）や、50m を
@@ -665,8 +679,21 @@ class PlaceRepositoryImpl @Inject constructor(
   private suspend fun isUntouchedDetected(place: PlaceEntity): Boolean = place.source == PlaceSource.DETECTED.name &&
     place.name == null &&
     place.note == null &&
-    wishlistDao.countByPlace(place.id) == 0 &&
+    !hasWishes(place.id) &&
     visitedPlaceDao.countByPlace(place.id) == 0
+
+  /** 行きたいに入っているか、行きたいの履歴があるか（本人が行きたいと思ったことがある場所 → adr/0036）。 */
+  private suspend fun hasWishes(placeId: Long): Boolean = wishlistDao.countByPlace(placeId) > 0 ||
+    wishlistFulfillmentDao.countByPlace(placeId) > 0
+
+  /**
+   * 行った行きたいを終わらせる（入れた後の立ち寄りが記録された行きたいを履歴へ移す → adr/0036）。
+   * 立ち寄りを足す・付け替える・期間を変える・戻す、のどれの後にも呼ぶ。
+   */
+  private suspend fun fulfillReachedWishes() {
+    val count = wishlistFulfillmentDao.fulfillReachedWishes()
+    if (count > 0) logger.i("Fulfilled $count wishlist items by recorded stops")
+  }
 
   /** 立ち寄りの参照を移してから、統合される側の place を消す（子は CASCADE で消える）。 */
   private suspend fun mergeIntoExistingPlace(fromPlaceId: Long, intoPlaceId: Long) {

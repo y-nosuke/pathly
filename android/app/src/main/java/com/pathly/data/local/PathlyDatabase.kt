@@ -18,6 +18,7 @@ import com.pathly.data.local.dao.SmoothedPointDao
 import com.pathly.data.local.dao.StopDao
 import com.pathly.data.local.dao.VisitedPlaceDao
 import com.pathly.data.local.dao.WishlistDao
+import com.pathly.data.local.dao.WishlistFulfillmentDao
 import com.pathly.data.local.entity.GooglePlaceCategoryEntity
 import com.pathly.data.local.entity.GooglePlaceEntity
 import com.pathly.data.local.entity.GpsPointEntity
@@ -28,6 +29,7 @@ import com.pathly.data.local.entity.SmoothedPointEntity
 import com.pathly.data.local.entity.StopEntity
 import com.pathly.data.local.entity.VisitedPlaceEntity
 import com.pathly.data.local.entity.WishlistEntity
+import com.pathly.data.local.entity.WishlistFulfillmentEntity
 import com.pathly.data.local.migration.DatabaseMigrations
 import com.pathly.util.Logger
 
@@ -43,6 +45,7 @@ import com.pathly.util.Logger
     GooglePlaceCategoryEntity::class,
     WishlistEntity::class,
     VisitedPlaceEntity::class,
+    WishlistFulfillmentEntity::class,
   ],
   version = PathlyDatabase.VERSION,
   exportSchema = true,
@@ -60,13 +63,14 @@ abstract class PathlyDatabase : RoomDatabase() {
   abstract fun googlePlaceCategoryDao(): GooglePlaceCategoryDao
   abstract fun wishlistDao(): WishlistDao
   abstract fun visitedPlaceDao(): VisitedPlaceDao
+  abstract fun wishlistFulfillmentDao(): WishlistFulfillmentDao
   abstract fun placeRegionDao(): PlaceRegionDao
 
   companion object {
     const val DATABASE_NAME = "pathly_database"
 
     /** スキーマのバージョン。上げるときは DatabaseMigrations にマイグレーションを足す。 */
-    const val VERSION = 19
+    const val VERSION = 20
     private val logger = Logger("PathlyDatabase")
 
     @Volatile

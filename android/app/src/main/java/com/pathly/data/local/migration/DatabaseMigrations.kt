@@ -675,6 +675,49 @@ object DatabaseMigrations {
     }
   }
 
+  /**
+   * 行きたいの履歴（行きたいに入れて実際に行った記録）を足す（→ adr/0036）。
+   * 既存の行きたいはさかのぼって終わらせず、そのまま残す。
+   */
+  val MIGRATION_19_20 = object : Migration(19, 20) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+      try {
+        logger.i("Starting migration from version 19 to 20")
+
+        db.execSQL(
+          "CREATE TABLE IF NOT EXISTS `wishlist_fulfillments` (" +
+            "`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+            "`placeId` INTEGER NOT NULL, " +
+            "`priority` INTEGER NOT NULL, " +
+            "`wishedAt` INTEGER NOT NULL, " +
+            "`fulfilledAt` INTEGER NOT NULL, " +
+            "FOREIGN KEY(`placeId`) REFERENCES `places`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+        )
+        db.execSQL(
+          "CREATE INDEX IF NOT EXISTS `index_wishlist_fulfillments_placeId` ON `wishlist_fulfillments` (`placeId`)",
+        )
+        // 入れた後にすでに行っていた行きたいは、ここで終わらせて履歴に 1 回として移す（→ adr/0036）。
+        // 判定と移し方は WishlistFulfillmentDao.fulfillReachedWishes と同じ（fulfilledAt は入れた後の最初の到着）。
+        // また行きたい場所は、旗を押して入れ直す。
+        val reached = "EXISTS (SELECT 1 FROM `stops` s WHERE s.`placeId` = w.`placeId` " +
+          "AND s.`arrivalTime` >= w.`createdAt`)"
+        db.execSQL(
+          "INSERT INTO `wishlist_fulfillments` (`placeId`, `priority`, `wishedAt`, `fulfilledAt`) " +
+            "SELECT w.`placeId`, w.`priority`, w.`createdAt`, " +
+            "(SELECT MIN(s.`arrivalTime`) FROM `stops` s WHERE s.`placeId` = w.`placeId` " +
+            "AND s.`arrivalTime` >= w.`createdAt`) " +
+            "FROM `wishlist` w WHERE $reached",
+        )
+        db.execSQL("DELETE FROM `wishlist` WHERE `id` IN (SELECT w.`id` FROM `wishlist` w WHERE $reached)")
+
+        logger.i("Migration from version 19 to 20 completed successfully")
+      } catch (e: Exception) {
+        logger.e("Migration from version 19 to 20 failed", e)
+        throw e
+      }
+    }
+  }
+
   val ALL_MIGRATIONS = arrayOf(
     MIGRATION_1_2,
     MIGRATION_2_3,
@@ -694,6 +737,7 @@ object DatabaseMigrations {
     MIGRATION_16_17,
     MIGRATION_17_18,
     MIGRATION_18_19,
+    MIGRATION_19_20,
     // 将来のマイグレーションをここに追加
   )
 

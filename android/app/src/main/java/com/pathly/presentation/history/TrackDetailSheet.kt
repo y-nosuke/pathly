@@ -54,6 +54,7 @@ import androidx.compose.ui.unit.sp
 import com.pathly.R
 import com.pathly.domain.model.GpsTrack
 import com.pathly.domain.model.Stop
+import com.pathly.domain.model.WishlistFlag
 import com.pathly.presentation.common.MarkerStopViolet
 import com.pathly.presentation.common.WishlistFlagButton
 import com.pathly.util.DateFormatters
@@ -153,8 +154,8 @@ internal fun TrackDetailSheet(
   modifier: Modifier = Modifier,
   // 期間の編集は軌跡点のインデックスで調整するので、点が2つ以上ある経路でだけ出す。
   canEditDuration: Boolean = true,
-  // 行きたいに入っている場所の id。立ち寄りの行の旗（塗り＝行きたい）に使う。
-  wishlistedPlaceIds: Set<Long> = emptySet(),
+  // 場所 id ごとの行きたいの旗の見た目。立ち寄りの行の旗に使う（無ければ輪郭の旗）。
+  wishlistFlags: Map<Long, WishlistFlag> = emptyMap(),
   onToggleWishlist: (Stop) -> Unit = {},
 ) {
   val listState = rememberLazyListState()
@@ -216,7 +217,7 @@ internal fun TrackDetailSheet(
           onDelete = { onDeleteStop(stop) },
           onToggleSelect = { onToggleSelect(stop) },
           onEnterSelection = { onEnterSelection(stop) },
-          wishlisted = stop.place.id in wishlistedPlaceIds,
+          wishlistFlag = wishlistFlags[stop.place.id] ?: WishlistFlag.NONE,
           onToggleWishlist = { onToggleWishlist(stop) },
         )
       }
@@ -433,7 +434,7 @@ internal fun StopRow(
   onDelete: () -> Unit,
   onToggleSelect: () -> Unit,
   onEnterSelection: () -> Unit,
-  wishlisted: Boolean = false,
+  wishlistFlag: WishlistFlag = WishlistFlag.NONE,
   onToggleWishlist: () -> Unit = {},
 ) {
   val title = stop.place.displayName
@@ -499,7 +500,7 @@ internal fun StopRow(
     if (!selectionMode) {
       // 気に入った場所をその場で「行きたい」へ（ワンタップ・もう一度で外す）。場所タブの一覧の旗と同じ見た目。
       // 同じ場所への立ち寄りが何行あっても、旗は場所単位なので全部そろって変わる。
-      WishlistFlagButton(active = wishlisted, onClick = onToggleWishlist)
+      WishlistFlagButton(flag = wishlistFlag, onClick = onToggleWishlist)
       // ほかの操作はまとめてオーバーフローメニューに（行の横幅を圧迫して場所名が潰れるのを防ぐ）。
       Box {
         var menuOpen by remember { mutableStateOf(false) }

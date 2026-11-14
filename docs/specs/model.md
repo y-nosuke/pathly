@@ -22,6 +22,7 @@ erDiagram
   google_places }o--|| google_place_categories : "業種"
   places ||--o| wishlist : "行きたい"
   places ||--o| visited_places : "訪問済みの印"
+  places ||--o{ wishlist_fulfillments : "行きたいの履歴"
   gps_points |o--o{ smoothed_points : "由来(sourcePointId)"
 
   gps_tracks {
@@ -105,6 +106,13 @@ erDiagram
     Long placeId FK
     Date markedAt
   }
+  wishlist_fulfillments {
+    Long id PK
+    Long placeId FK
+    Int priority
+    Date wishedAt
+    Date fulfilledAt
+  }
 ```
 
 ## エンティティ一覧
@@ -121,11 +129,12 @@ erDiagram
 | **google_place_categories** | 業種のマスタ（`code`＝Google の primaryType・表示名）                                                                                                                                                                                                                                                                                     | google_places から参照される（多対 1）                 |
 | **wishlist**                | 行きたい場所（優先度のみ。メモは places.note）                                                                                                                                                                                                                                                                                            | places に 1:0..1                                       |
 | **visited_places**          | 手動で「訪問済み」にした印（行の存在＝訪問済み・`markedAt`＝印を付けた日時）                                                                                                                                                                                                                                                              | places に 1:0..1                                       |
+| **wishlist_fulfillments**   | 行きたいの履歴。行きたいに入れて実際に行った 1 回ぶん（`wishedAt`＝入れた日時・`fulfilledAt`＝行った立ち寄りの到着）。件数が「行きたいで行った回数」                                                                                                                                                                                      | places に 1:0..N                                       |
 
 ### 関連と削除規則（要点）
 
 - `gps_tracks` を削除すると、配下の `gps_points` / `smoothed_points` / `stops` も削除される（CASCADE）。
-- `stops` を削除しても概念上は `places` を残す（場所は複数の立ち寄りで再利用されるため）。ただし履歴画面の削除ではアプリ側で**孤立回収**を行い、削除後にどの `stops` からも参照されず `wishlist` にも無い place は場所ごと消す。
+- `stops` を削除しても概念上は `places` を残す（場所は複数の立ち寄りで再利用されるため）。ただし履歴画面の削除ではアプリ側で**孤立回収**を行い、削除後にどの `stops` からも参照されず `wishlist`・`wishlist_fulfillments` にも無い place は場所ごと消す。
 - `place_resolutions` / `google_places` は `places` に従属し、場所の削除で一緒に消える。
   Google 由来（名前・住所・カテゴリ・座標）は `google_places` に分離し、`places` は自分の名前・メモと
   **同定用のアンカー座標**のみ保持する。
@@ -140,6 +149,9 @@ erDiagram
 - `wishlist` / `visited_places` は `places` に従属し（1 place 1件・placeId は UNIQUE）、place の削除で一緒に消える。ただし place は通常消さない（再利用のため静的に保つ）。
 - **行きたいと訪問済みは別の軸**で、片方が他方の前提にならない。行きたいを外しても訪問済みの印は残る → [ADR-0020](../adr/0020-visited-independent-from-wishlist.md)。
   訪問済みの判定は「`stops` がある **or** `visited_places` に印がある」。`markedAt` は**印を付けた日時**で、実際に訪れた日時（`stops.arrivalTime`）ではない。
+- **行きたいは行けば終わる。** 入れた後（到着が `wishlist.createdAt` 以降）の `stops` が記録されたら、`wishlist` の行を消して
+  `wishlist_fulfillments` に 1 行足す（同じトランザクション）。履歴は 1 place に何行あってもよく、作るだけで書き換えない。
+  `stops` は参照しないので、立ち寄りを消しても残る。place の削除で一緒に消える → [ADR-0036](../adr/0036-wishlist-ends-on-visit-and-keeps-history.md)。
 
 ### 索引
 

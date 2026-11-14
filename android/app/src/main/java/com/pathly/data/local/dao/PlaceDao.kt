@@ -81,6 +81,8 @@ interface PlaceDao {
       "w.id AS wishlistId, w.priority AS priority, v.markedAt AS markedVisitedAt, " +
       "(SELECT COUNT(*) FROM stops s WHERE s.placeId = p.id) AS visitCount, " +
       "(SELECT MAX(s.arrivalTime) FROM stops s WHERE s.placeId = p.id) AS lastStopAt, " +
+      "(SELECT COUNT(*) FROM wishlist_fulfillments f WHERE f.placeId = p.id) AS fulfilledWishCount, " +
+      "(SELECT MAX(f.fulfilledAt) FROM wishlist_fulfillments f WHERE f.placeId = p.id) AS lastFulfilledAt, " +
       "p.countryCode AS regionCountryCode, p.prefecture AS regionPrefecture, p.city AS regionCity " +
       "FROM places p " +
       "LEFT JOIN google_places g ON g.placeId = p.id " +
@@ -101,6 +103,8 @@ interface PlaceDao {
       "w.id AS wishlistId, w.priority AS priority, v.markedAt AS markedVisitedAt, " +
       "(SELECT COUNT(*) FROM stops s WHERE s.placeId = p.id) AS visitCount, " +
       "(SELECT MAX(s.arrivalTime) FROM stops s WHERE s.placeId = p.id) AS lastStopAt, " +
+      "(SELECT COUNT(*) FROM wishlist_fulfillments f WHERE f.placeId = p.id) AS fulfilledWishCount, " +
+      "(SELECT MAX(f.fulfilledAt) FROM wishlist_fulfillments f WHERE f.placeId = p.id) AS lastFulfilledAt, " +
       "p.countryCode AS regionCountryCode, p.prefecture AS regionPrefecture, p.city AS regionCity " +
       "FROM places p " +
       "LEFT JOIN google_places g ON g.placeId = p.id " +
@@ -125,6 +129,7 @@ interface PlaceDao {
     "SELECT p.id AS placeId, COALESCE(p.name, g.name, g.address) AS name, " +
       "COALESCE(g.latitude, p.latitude) AS latitude, COALESCE(g.longitude, p.longitude) AS longitude, " +
       "(SELECT COUNT(*) FROM wishlist w WHERE w.placeId = p.id) AS wishlistCount, " +
+      "(SELECT COUNT(*) FROM wishlist_fulfillments f WHERE f.placeId = p.id) AS fulfilledWishCount, " +
       "(SELECT COUNT(*) FROM stops s WHERE s.placeId = p.id) AS visitCount, " +
       "(SELECT v.markedAt FROM visited_places v WHERE v.placeId = p.id LIMIT 1) AS markedVisitedAt, " +
       "c.code AS categoryCode, (g.placeId IS NOT NULL) AS hasGoogleInfo " +
@@ -146,6 +151,7 @@ interface PlaceDao {
     "SELECT p.id AS placeId, COALESCE(p.name, g.name, g.address) AS name, " +
       "COALESCE(g.latitude, p.latitude) AS latitude, COALESCE(g.longitude, p.longitude) AS longitude, " +
       "(SELECT COUNT(*) FROM wishlist w WHERE w.placeId = p.id) AS wishlistCount, " +
+      "(SELECT COUNT(*) FROM wishlist_fulfillments f WHERE f.placeId = p.id) AS fulfilledWishCount, " +
       "(SELECT COUNT(*) FROM stops s WHERE s.placeId = p.id) AS visitCount, " +
       "(SELECT v.markedAt FROM visited_places v WHERE v.placeId = p.id LIMIT 1) AS markedVisitedAt, " +
       "c.code AS categoryCode, (g.placeId IS NOT NULL) AS hasGoogleInfo " +

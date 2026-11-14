@@ -130,7 +130,7 @@
 
 削除は単体・複数とも `deleteStops(stopIds)` に集約し、常に**訪問（stop）を消す**動作にする。
 消した結果どこからも参照されなくなった place のうち、**検出由来（`DETECTED`）だけ**を回収する
-（条件は「残る stop がゼロ かつ wishlist 登録もゼロ」）。由来の扱いは [places.md](places.md)。
+（条件は「残る stop がゼロ かつ wishlist 登録も行きたいの履歴もゼロ」）。由来の扱いは [places.md](places.md)。
 
 取り消しのために、削除前に **stop・回収する place・解決ログの実体を 1 件分だけ控える**。
 取り消し時は**元の id のまま再挿入**して復元する（`undoLastStopChange`）。

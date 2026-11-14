@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  行きたいで行ったことがある（いまは行きたいでない）旗。輪郭の旗の右下に、チェックを白抜きにした丸を重ねる。
+  細い線のチェックだと輪郭の旗と見分けにくいため、塗りの丸にして形で区別できるようにした。
+  丸の周りは旗を切り抜いて（clip-path の内側の円は逆回り＝穴）、旗の線と丸がくっつかないようにする。
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+  <group>
+    <clip-path
+        android:pathData="M0,0H24V24H0Z M17,8.5A8.5,8.5 0 1,0 17,25.5A8.5,8.5 0 1,0 17,8.5Z"/>
+    <path
+        android:fillColor="#FF000000"
+        android:pathData="M12.36,6l0.4,2H18v6h-3.36l-0.4,-2H7V6h5.36M14,4H5v17h2v-7h5.6l0.4,2h7V6h-5.6L14,4L14,4z"/>
+  </group>
+  <path
+      android:fillColor="#FF000000"
+      android:fillType="evenOdd"
+      android:pathData="M17,10.5a6.5,6.5 0 1,1 0,13a6.5,6.5 0 1,1 0,-13z M14.21,15.69L16,17.49L19.79,13.69L21.21,15.11L16,20.31L12.79,17.11Z"/>
+</vector>
