@@ -11,7 +11,7 @@ import com.pathly.domain.model.WishlistFlag
 
 /**
  * 「行きたい」の旗。タップで付け外しする。
- * 見た目は 3 通り（いま行きたい＝塗り・行きたいで行ったことがある＝輪郭にチェック・それ以外＝輪郭）。
+ * 見た目は 3 通り（いま行きたい＝塗り・行きたいで行ったことがある＝緑の輪郭の旗に丸いチェック・それ以外＝輪郭）。
  * 行きたいは行けば終わるので、終わった後も「かつて行きたいだった」ことが分かるようにする（→ adr/0036）。
  * 場所タブの一覧の行と、経路詳細の立ち寄りの行で同じ見た目にする。
  */
@@ -35,10 +35,12 @@ internal fun WishlistFlagButton(
         WishlistFlag.FULFILLED -> "行きたいにまた入れる"
         WishlistFlag.NONE -> "行きたいに追加"
       },
-      tint = if (flag == WishlistFlag.ACTIVE) {
-        MaterialTheme.colorScheme.primary
-      } else {
-        MaterialTheme.colorScheme.onSurfaceVariant
+      // 行きたいで行った旗は、形（丸いチェック）だけだと輪郭の旗と見分けにくいので、「行った」の緑で塗る
+      // （地図の訪問済みの丸と同じ色）。
+      tint = when (flag) {
+        WishlistFlag.ACTIVE -> MaterialTheme.colorScheme.primary
+        WishlistFlag.FULFILLED -> MarkerVisitedGreen
+        WishlistFlag.NONE -> MaterialTheme.colorScheme.onSurfaceVariant
       },
     )
   }

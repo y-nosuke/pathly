@@ -696,15 +696,19 @@ object DatabaseMigrations {
         db.execSQL(
           "CREATE INDEX IF NOT EXISTS `index_wishlist_fulfillments_placeId` ON `wishlist_fulfillments` (`placeId`)",
         )
-        // 既存の行きたいをさかのぼって終わらせない。入れた後に行った（旧仕様の「また行きたい」として残していた）
-        // 行きたいは、入れた日時を最後の立ち寄りの直後へ寄せる。寄せないと、次に立ち寄りを書いたときの
-        // 終了の判定でまとめて終わってしまう。これからの立ち寄りでは今までどおり終わる。
+        // 入れた後にすでに行っていた行きたいは、ここで終わらせて履歴に 1 回として移す（→ adr/0036）。
+        // 判定と移し方は WishlistFulfillmentDao.fulfillReachedWishes と同じ（fulfilledAt は入れた後の最初の到着）。
+        // また行きたい場所は、旗を押して入れ直す。
+        val reached = "EXISTS (SELECT 1 FROM `stops` s WHERE s.`placeId` = w.`placeId` " +
+          "AND s.`arrivalTime` >= w.`createdAt`)"
         db.execSQL(
-          "UPDATE `wishlist` SET `createdAt` = " +
-            "(SELECT MAX(s.`arrivalTime`) FROM `stops` s WHERE s.`placeId` = `wishlist`.`placeId`) + 1 " +
-            "WHERE EXISTS (SELECT 1 FROM `stops` s WHERE s.`placeId` = `wishlist`.`placeId` " +
-            "AND s.`arrivalTime` >= `wishlist`.`createdAt`)",
+          "INSERT INTO `wishlist_fulfillments` (`placeId`, `priority`, `wishedAt`, `fulfilledAt`) " +
+            "SELECT w.`placeId`, w.`priority`, w.`createdAt`, " +
+            "(SELECT MIN(s.`arrivalTime`) FROM `stops` s WHERE s.`placeId` = w.`placeId` " +
+            "AND s.`arrivalTime` >= w.`createdAt`) " +
+            "FROM `wishlist` w WHERE $reached",
         )
+        db.execSQL("DELETE FROM `wishlist` WHERE `id` IN (SELECT w.`id` FROM `wishlist` w WHERE $reached)")
 
         logger.i("Migration from version 19 to 20 completed successfully")
       } catch (e: Exception) {

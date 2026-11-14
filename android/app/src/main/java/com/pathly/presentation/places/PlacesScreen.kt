@@ -924,7 +924,7 @@ private fun PlaceDetailContent(
       MapMarker(
         "place-detail",
         item.place.id,
-        item.isWishlisted,
+        item.wishlistFlag,
         item.isVisited,
         group,
         infoWindow = infoWindow,
@@ -938,7 +938,7 @@ private fun PlaceDetailContent(
         RegisteredPlaceMarker(
           bg = if (item.isVisited) MarkerVisitedGreen else MarkerUnvisitedGray,
           glyph = categoryGlyph(group),
-          wishlisted = item.isWishlisted,
+          wishlistFlag = item.wishlistFlag,
         )
       }
       // この画面はこの場所が主題なので、他の画面でマーカーをタップしたときと同じく吹き出しも出す。
@@ -1405,6 +1405,7 @@ private fun PlaceListItem.toRegisteredPlace(): RegisteredPlace = RegisteredPlace
   longitude = place.longitude,
   isWishlisted = isWishlisted,
   isVisited = isVisited,
+  fulfilledWishCount = fulfilledWishCount,
   // 業種のグリフと、地図の絞り込みの業種（未分類／その他の分け方）に使う。
   categoryCode = place.category?.code,
   hasGoogleInfo = place.googlePlaceId != null,

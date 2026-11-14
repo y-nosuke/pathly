@@ -548,7 +548,7 @@ class MigrationTest {
   }
 
   @Test
-  fun migrate19To20_addsWishlistHistory_keepsCurrentWishes() {
+  fun migrate19To20_addsWishlistHistory_endsWishesAlreadyVisited() {
     helper.createDatabase(TEST_DB, 19).apply {
       // 1: 入れた後に行った（旧仕様の「また行きたい」）。2: 入れる前にだけ行った。3: まだ行っていない。
       execSQL(
@@ -574,28 +574,22 @@ class MigrationTest {
     // 足した表の DDL が Room の生成物とずれていればここで失敗する。
     val db = helper.runMigrationsAndValidate(TEST_DB, 20, true, DatabaseMigrations.MIGRATION_19_20)
 
-    // いまの行きたいはさかのぼって終わらせない（全部残る）。入れた後に行ったものだけ、
-    // 入れた日時を最後の立ち寄りの直後へ寄せ、次の終了の判定でまとめて終わらないようにする。
-    db.query("SELECT placeId, priority, createdAt FROM wishlist ORDER BY placeId").use { cursor ->
+    // 入れた後に行っていた行きたい（1）は終わって履歴へ。入れる前にだけ行った（2）・まだ行っていない（3）は残る。
+    db.query("SELECT placeId, createdAt FROM wishlist ORDER BY placeId").use { cursor ->
+      assertTrue(cursor.moveToNext())
+      assertEquals(2L, cursor.getLong(0))
+      assertEquals("入れた日時はそのまま", 100L, cursor.getLong(1))
+      assertTrue(cursor.moveToNext())
+      assertEquals(3L, cursor.getLong(0))
+      assertFalse(cursor.moveToNext())
+    }
+    db.query("SELECT placeId, priority, wishedAt, fulfilledAt FROM wishlist_fulfillments").use { cursor ->
       assertTrue(cursor.moveToNext())
       assertEquals(1L, cursor.getLong(0))
       assertEquals(2, cursor.getInt(1))
-      assertEquals("最後の立ち寄りの直後", 401L, cursor.getLong(2))
-      assertTrue(cursor.moveToNext())
-      assertEquals("入れる前にだけ行った場所はそのまま", 100L, cursor.getLong(2))
-      assertTrue(cursor.moveToNext())
-      assertEquals("まだ行っていない場所はそのまま", 100L, cursor.getLong(2))
-    }
-    db.query(
-      "SELECT COUNT(*) FROM wishlist w WHERE EXISTS " +
-        "(SELECT 1 FROM stops s WHERE s.placeId = w.placeId AND s.arrivalTime >= w.createdAt)",
-    ).use { cursor ->
-      assertTrue(cursor.moveToNext())
-      assertEquals("終わる条件に当たる行きたいは無い", 0, cursor.getInt(0))
-    }
-    db.query("SELECT COUNT(*) FROM wishlist_fulfillments").use { cursor ->
-      assertTrue(cursor.moveToNext())
-      assertEquals(0, cursor.getInt(0))
+      assertEquals(100L, cursor.getLong(2))
+      assertEquals("入れた後の最初の到着", 200L, cursor.getLong(3))
+      assertFalse(cursor.moveToNext())
     }
     db.close()
   }

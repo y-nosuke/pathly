@@ -51,6 +51,7 @@ import com.pathly.domain.model.PlaceCategoryGroup
 import com.pathly.domain.model.RegisteredPlace
 import com.pathly.domain.model.Stop
 import com.pathly.domain.model.TrackSegments
+import com.pathly.domain.model.WishlistFlag
 import com.pathly.ui.theme.TrackLineOrange
 import com.pathly.util.DateFormatters
 import kotlinx.coroutines.flow.filterNotNull
@@ -291,14 +292,15 @@ private fun RegisteredPlaceSingleMarker(
   val placeMarkerState = remember(place.latitude, place.longitude) {
     MarkerState(position = LatLng(place.latitude, place.longitude))
   }
-  // 色＝訪問状態、グリフ＝業種、右上の旗＝行きたい。バッジの見た目はこの 3 つだけで決まるので、それを画像のキーにする。
+  // 色＝訪問状態、グリフ＝業種、右上の旗＝行きたい（いま行きたい／行きたいで行ったことがある）。バッジの見た目はこの 3 つだけで決まるので、それを画像のキーにする。
   // バッジの下に名前を添える（→ specs/map.md）。名前は場所ごとに違うので、キャッシュが Canvas で書き足す。
   val group = place.categoryGroup
-  val icon = icons.getLabeled(RegisteredPlaceIconKey(place.isVisited, group, place.isWishlisted), place.displayName) {
+  val flag = WishlistFlag.of(place.isWishlisted, place.fulfilledWishCount)
+  val icon = icons.getLabeled(RegisteredPlaceIconKey(place.isVisited, group, flag), place.displayName) {
     RegisteredPlaceMarker(
       bg = if (place.isVisited) MarkerVisitedGreen else MarkerUnvisitedGray,
       glyph = categoryGlyph(group),
-      wishlisted = place.isWishlisted,
+      wishlistFlag = flag,
     )
   }
   MapMarker(
@@ -314,7 +316,7 @@ private fun RegisteredPlaceSingleMarker(
 }
 
 // 登録済みの場所のマーカー画像のキー（[MarkerIconCache]）。見た目を決める値をすべて持つ。
-private data class RegisteredPlaceIconKey(val visited: Boolean, val group: PlaceCategoryGroup, val wishlisted: Boolean)
+private data class RegisteredPlaceIconKey(val visited: Boolean, val group: PlaceCategoryGroup, val flag: WishlistFlag)
 
 private data class ClusterIconKey(val label: String, val wishlisted: Boolean)
 
@@ -333,7 +335,7 @@ private fun RegisteredPlaceClusterMarker(cluster: PlaceMapEntry.Cluster, icons: 
   }
   val label = if (cluster.places.size > 99) "99+" else cluster.places.size.toString()
   val icon = icons.get(ClusterIconKey(label, cluster.hasWishlisted)) {
-    WithWishlistFlag(cluster.hasWishlisted) {
+    WithWishlistFlag(if (cluster.hasWishlisted) WishlistFlag.ACTIVE else WishlistFlag.NONE) {
       RouteBadgeMarker(bg = MarkerClusterSlate, size = ClusterBadgeSize) {
         Text(text = label, color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Bold)
       }
@@ -355,18 +357,20 @@ private val ClusterBadgeSize = 38.dp
 internal val MarkerClusterSlate = Color(0xFF263238)
 
 /**
- * 登録済みの場所のマーカー。丸バッジ（色＝訪問状態／グリフ＝業種）に、行きたい登録があれば
- * 右上へ小さな旗を重ねる。
+ * 登録済みの場所のマーカー。丸バッジ（色＝訪問状態／グリフ＝業種）の右上に、[wishlistFlag] に応じた
+ * 小さな旗を重ねる。
  */
 @Composable
-internal fun RegisteredPlaceMarker(bg: Color, @DrawableRes glyph: Int, wishlisted: Boolean) {
-  WithWishlistFlag(wishlisted) {
+internal fun RegisteredPlaceMarker(bg: Color, @DrawableRes glyph: Int, wishlistFlag: WishlistFlag) {
+  WithWishlistFlag(wishlistFlag) {
     RouteBadgeMarker(bg = bg) { MarkerGlyph(glyph) }
   }
 }
 
 /**
- * [wishlisted] なら [badge] の右上へ「行きたい」の小さな旗を重ねる。1 件のマーカーとまとまりで共用。
+ * [badge] の右上へ「行きたい」の小さな旗を重ねる。1 件のマーカーとまとまりで共用。
+ * いま行きたい＝橙の丸に塗りの旗、行きたいで行ったことがある＝緑の丸に、輪郭の旗と丸いチェック
+ * （一覧の旗 [WishlistFlagButton] と同じ 3 通り。色で「いま」を目立たせる → adr/0036）、それ以外＝旗なし。
  *
  * 業種をグリフに使うようになって、旗をグリフで示せなくなったため別の場所へ逃がした。
  * 余白を左右対称に取り、下端をバッジの下端に揃えているのは、**マーカーの基準点（下端中央）を
@@ -377,8 +381,8 @@ internal fun RegisteredPlaceMarker(bg: Color, @DrawableRes glyph: Int, wishliste
  * マーカーに取られるため。
  */
 @Composable
-private fun WithWishlistFlag(wishlisted: Boolean, badge: @Composable () -> Unit) {
-  if (!wishlisted) {
+private fun WithWishlistFlag(flag: WishlistFlag, badge: @Composable () -> Unit) {
+  if (flag == WishlistFlag.NONE) {
     badge()
     return
   }
@@ -389,15 +393,18 @@ private fun WithWishlistFlag(wishlisted: Boolean, badge: @Composable () -> Unit)
     Box(
       modifier = Modifier
         .size(16.dp)
-        .background(MarkerWishlistAmber, CircleShape)
+        .background(if (flag == WishlistFlag.ACTIVE) MarkerWishlistAmber else MarkerVisitedGreen, CircleShape)
         .border(1.5.dp, Color.White, CircleShape),
       contentAlignment = Alignment.Center,
     ) {
       Icon(
-        painter = painterResource(R.drawable.ic_flag_filled),
+        painter = painterResource(
+          if (flag == WishlistFlag.ACTIVE) R.drawable.ic_flag_filled else R.drawable.ic_flag_check,
+        ),
         contentDescription = null,
         tint = Color.White,
-        modifier = Modifier.size(9.dp),
+        // 輪郭の旗は細いので、塗りの旗より一回り大きくして潰れないようにする。
+        modifier = Modifier.size(if (flag == WishlistFlag.ACTIVE) 9.dp else 11.dp),
       )
     }
   }
