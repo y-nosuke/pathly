@@ -107,8 +107,9 @@ class WishlistRepositoryImplTest {
   }
 
   @Test
-  fun linkPlaceToGoogle_whenAnotherPlaceHoldsTheFacility_refusesAndWritesNothing() = runTest {
-    // 同じ施設を他の場所が既に持っていたら紐付けない（→ adr/0025）。まとめるかはユーザーの判断。
+  fun linkPlaceToGoogle_whenAnotherPlaceHoldsTheFacility_refusesAndRecordsTheFacility() = runTest {
+    // 同じ施設を他の場所が既に持っていたら紐付けない（→ adr/0025）。まとめるかはユーザーの判断なので、
+    // どの施設とぶつかったかだけを記録し、確認待ちとして出す（→ adr/0037）。
     val result = PlaceSearchResult(
       googlePlaceId = "gp-42",
       name = "清瀧神社",
@@ -122,7 +123,9 @@ class WishlistRepositoryImplTest {
     assertFalse(repository.linkPlaceToGoogle(7L, result))
 
     coVerify(exactly = 0) { googlePlaceDao.upsert(any()) }
-    coVerify(exactly = 0) { placeResolutionDao.upsert(any()) }
+    coVerify {
+      placeResolutionDao.upsert(match { it.placeId == 7L && it.sameFacilityGooglePlaceId == "gp-42" && !it.keptSeparate })
+    }
   }
 
   @Test

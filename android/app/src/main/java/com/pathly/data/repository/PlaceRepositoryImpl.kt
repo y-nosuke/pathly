@@ -4,6 +4,7 @@ import com.pathly.data.local.dao.GooglePlaceCategoryDao
 import com.pathly.data.local.dao.GooglePlaceDao
 import com.pathly.data.local.dao.GpsPointDao
 import com.pathly.data.local.dao.PlaceDao
+import com.pathly.data.local.dao.PlaceMergeDao
 import com.pathly.data.local.dao.PlaceResolutionDao
 import com.pathly.data.local.dao.SmoothedPointDao
 import com.pathly.data.local.dao.StopDao
@@ -29,6 +30,8 @@ import com.pathly.domain.model.PlaceCategory
 import com.pathly.domain.model.PlaceSearchResult
 import com.pathly.domain.model.PlaceSource
 import com.pathly.domain.model.RegisteredPlace
+import com.pathly.domain.model.SameFacilityPending
+import com.pathly.domain.model.SameFacilityPlace
 import com.pathly.domain.model.Stop
 import com.pathly.domain.model.StopCandidate
 import com.pathly.domain.model.StopDeletionResult
@@ -59,6 +62,7 @@ class PlaceRepositoryImpl @Inject constructor(
   private val wishlistDao: WishlistDao,
   private val visitedPlaceDao: VisitedPlaceDao,
   private val wishlistFulfillmentDao: WishlistFulfillmentDao,
+  private val placeMergeDao: PlaceMergeDao,
   private val placesNameResolver: PlacesNameResolver,
 ) : PlaceRepository {
 
@@ -73,6 +77,12 @@ class PlaceRepositoryImpl @Inject constructor(
   // 直近の破壊的な変更（削除・統合）の取り消し用スナップショット（1件だけ保持。次の変更で置き換わる）。
   // 画面のスナックバーは常に最新の1件しか出さないため、単一スロットで十分。
   private var lastStopChange: StopChangeSnapshot? = null
+
+  // 直近の場所のまとめの取り消し用（1件だけ。立ち寄りの変更とは別に持つ → adr/0037）。
+  private var lastPlaceMerge: PlaceMergeDao.MergeSnapshot? = null
+
+  // 直近のまとめで、滞在中の place を差し替えた経路（取り消しで元に戻す）。
+  private var lastMergeLiveTracks: Set<Long> = emptySet()
 
   // 記録中に確定・追記した立ち寄りの「最後の departure（ミリ秒）」をトラック単位で覚える。
   // これを削除では下げずセッション中は単調増加させることで、ユーザーが記録中に削除した
@@ -405,6 +415,46 @@ class PlaceRepositoryImpl @Inject constructor(
     }
   }
 
+  override fun observeSameFacilityPending(trackId: Long): Flow<List<SameFacilityPending>> = placeDao.observeSameFacilityPendingForTrack(trackId).map { rows ->
+    rows.map { SameFacilityPending(it.placeId, it.placeName, SameFacilityPlace(it.otherPlaceId, it.otherName)) }
+  }
+
+  override suspend fun mergePlaces(fromPlaceId: Long, intoPlaceId: Long): Boolean = mutex.withLock {
+    val snapshot = placeMergeDao.merge(fromPlaceId, intoPlaceId, Date()) ?: return@withLock false
+    // 滞在中に覚えていたのがまとめられた側なら、残る方に差し替える（消えた id で立ち寄りを作らない）。
+    // 取り消したときに戻せるよう、差し替えた経路を覚えておく。
+    lastMergeLiveTracks = liveStopPlaces.filterValues { it.placeId == fromPlaceId }.keys.toSet()
+    repointLiveStopPlace(fromPlaceId, intoPlaceId)
+    // 付け替えた立ち寄りが、残る方の行きたいを「行った」にすることがある（→ adr/0036）。
+    fulfillReachedWishes()
+    lastPlaceMerge = snapshot
+    // 立ち寄りの変更の控えは、消えた場所を指していることがあるので捨てる（取り消すと外部キーで失敗する）。
+    lastStopChange = null
+    logger.i("Merged place $fromPlaceId into $intoPlaceId by user (${snapshot.movedStopIds.size} stops)")
+    true
+  }
+
+  override suspend fun undoLastPlaceMerge(): Boolean = mutex.withLock {
+    val snapshot = lastPlaceMerge ?: return@withLock false
+    placeMergeDao.restore(snapshot)
+    // まとめたときに差し替えた滞在中の place を、元の場所へ戻す。
+    for (trackId in lastMergeLiveTracks) {
+      val live = liveStopPlaces[trackId] ?: continue
+      if (live.placeId == snapshot.into.place.id) {
+        liveStopPlaces[trackId] = LiveStopPlace(live.arrivalMillis, snapshot.from.place.id)
+      }
+    }
+    lastMergeLiveTracks = emptySet()
+    lastPlaceMerge = null
+    logger.i("Undid place merge: restored ${snapshot.from.place.id}")
+    true
+  }
+
+  override suspend fun keepAsSeparatePlace(placeId: Long) {
+    placeResolutionDao.keepSeparate(placeId)
+    logger.i("Kept place $placeId separate from the place of the same facility")
+  }
+
   override suspend fun updatePlaceName(placeId: Long, name: String) {
     placeDao.updateName(placeId, name.trim().ifBlank { null }, Date())
   }
@@ -636,9 +686,13 @@ class PlaceRepositoryImpl @Inject constructor(
             return ResolveResult(existing)
           }
           // 触られている place は勝手に寄せられない。同じ施設を 2 つ持たせるわけにもいかないので、
-          // **施設情報を付けずに残す**（→ adr/0025）。解決記録は残して、同じ問い合わせを繰り返さない。
+          // **施設情報を付けずに残す**（→ adr/0025）。相手の施設を記録し、まとめるか別のまま残すかを
+          // ユーザーに選んでもらう（場所詳細・経路詳細の「確認待ち」 → adr/0037）。解決記録があるので、
+          // 同じ問い合わせは繰り返さない。
           logger.i("Skipped linking place ${place.id}: the same Google place is already held by place $existing")
-          placeResolutionDao.upsert(PlaceResolutionEntity(place.id, Date()))
+          placeResolutionDao.upsert(
+            PlaceResolutionEntity(place.id, Date(), sameFacilityGooglePlaceId = outcome.googlePlaceId),
+          )
           return ResolveResult(place.id, skippedByConflict = true)
         }
         // 施設の座標は google_places に入れる（表示用）。places の座標＝同定のアンカーは
@@ -699,11 +753,15 @@ class PlaceRepositoryImpl @Inject constructor(
   private suspend fun mergeIntoExistingPlace(fromPlaceId: Long, intoPlaceId: Long) {
     stopDao.repointPlace(fromPlaceId, intoPlaceId)
     placeDao.deleteById(fromPlaceId)
-    // 滞在中に覚えていたのが統合された側なら、寄せ先に差し替える（消えた id を使い続けない）。
+    repointLiveStopPlace(fromPlaceId, intoPlaceId)
+    logger.i("Merged place $fromPlaceId into $intoPlaceId (same googlePlaceId)")
+  }
+
+  /** 滞在中に覚えていたのが統合された側なら、寄せ先に差し替える（消えた id を使い続けない）。 */
+  private fun repointLiveStopPlace(fromPlaceId: Long, intoPlaceId: Long) {
     for ((trackId, live) in liveStopPlaces.toList()) {
       if (live.placeId == fromPlaceId) liveStopPlaces[trackId] = LiveStopPlace(live.arrivalMillis, intoPlaceId)
     }
-    logger.i("Merged place $fromPlaceId into $intoPlaceId (same googlePlaceId)")
   }
 
   /**

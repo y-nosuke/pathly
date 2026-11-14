@@ -15,4 +15,11 @@ interface PlaceResolutionDao {
 
   @Query("SELECT * FROM place_resolutions WHERE placeId = :placeId")
   suspend fun getByPlace(placeId: Long): PlaceResolutionEntity?
+
+  /**
+   * 同じ施設の相手がいても、施設情報なしで別の場所として残すと決める（→ adr/0037）。
+   * 以後は聞かず、「未取得」にも数えない。確認待ちの場所には必ず解決記録があるので、行を足す必要はない。
+   */
+  @Query("UPDATE place_resolutions SET keptSeparate = 1 WHERE placeId = :placeId")
+  suspend fun keepSeparate(placeId: Long)
 }

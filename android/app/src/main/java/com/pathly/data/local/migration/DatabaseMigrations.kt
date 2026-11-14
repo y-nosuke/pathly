@@ -718,6 +718,30 @@ object DatabaseMigrations {
     }
   }
 
+  /**
+   * v20 → v21: 同じ施設と分かったときに、ユーザーに選んでもらうための記録を `place_resolutions` に足す（→ adr/0037）。
+   *
+   * - `sameFacilityGooglePlaceId`: 問い合わせで分かった施設を既に別の place が持っていたときの、その施設の ID。
+   * - `keptSeparate`: 施設情報なしで別の場所として残すと決めた（二度と聞かず、「未取得」に数えない）。
+   *
+   * 既存の行はどちらも空（相手なし・未決定）。これまでに同じ施設で施設情報を付けなかった場所は、
+   * どの施設とぶつかったかを持っていないので埋められない。「未取得」に数えられたままなので、
+   * 経路詳細の「場所を取得」を押すと問い合わせ直し、そこで選択肢が出る。
+   */
+  val MIGRATION_20_21 = object : Migration(20, 21) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+      try {
+        logger.i("Starting migration from version 20 to 21")
+        db.execSQL("ALTER TABLE `place_resolutions` ADD COLUMN `sameFacilityGooglePlaceId` TEXT")
+        db.execSQL("ALTER TABLE `place_resolutions` ADD COLUMN `keptSeparate` INTEGER NOT NULL DEFAULT 0")
+        logger.i("Migration from version 20 to 21 completed successfully")
+      } catch (e: Exception) {
+        logger.e("Migration from version 20 to 21 failed", e)
+        throw e
+      }
+    }
+  }
+
   val ALL_MIGRATIONS = arrayOf(
     MIGRATION_1_2,
     MIGRATION_2_3,
@@ -738,6 +762,7 @@ object DatabaseMigrations {
     MIGRATION_17_18,
     MIGRATION_18_19,
     MIGRATION_19_20,
+    MIGRATION_20_21,
     // 将来のマイグレーションをここに追加
   )
 
