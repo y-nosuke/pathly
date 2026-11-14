@@ -681,11 +681,11 @@ class PlaceRepositoryImpl @Inject constructor(
         // 施設の同一性でまとまる）。**upsert より先に**引くこと。後だと自分自身が当たる。
         val existing = googlePlaceDao.getPlaceIdByGoogleId(outcome.googlePlaceId)
         if (existing != null && existing != place.id) {
-          if (isUntouchedDetected(place)) {
-            mergeIntoExistingPlace(place.id, existing)
+          if (hasNoUserContent(place)) {
+            mergeIntoExistingPlace(place, existing)
             return ResolveResult(existing)
           }
-          // 触られている place は勝手に寄せられない。同じ施設を 2 つ持たせるわけにもいかないので、
+          // 名前・メモなどを入れた place は勝手に寄せられない（混ざると分け直せない）。同じ施設を 2 つ持たせるわけにもいかないので、
           // **施設情報を付けずに残す**（→ adr/0025）。相手の施設を記録し、まとめるか別のまま残すかを
           // ユーザーに選んでもらう（場所詳細・経路詳細の「確認待ち」 → adr/0037）。解決記録があるので、
           // 同じ問い合わせは繰り返さない。
@@ -720,18 +720,17 @@ class PlaceRepositoryImpl @Inject constructor(
   }
 
   /**
-   * 自動でまとめてよい place か（**検出が作った**もので、まだ誰も中身を入れていない → adr/0023）。
+   * 聞かずにまとめてよい place か（**名前・メモ・行きたい・訪問済みの印が何も無い** → adr/0037）。
    *
    * 自動命名は半径 50m の最寄り1件しか見ないので、別の場所が同じ施設に解決されることがある。
-   * 融合すると分け直せないため、ユーザーが名前・メモを入れた place、行きたい・訪問済みの印が
-   * 付いた place は、ID が同じでも吸収しない。
+   * 中身を入れた place をまとめると、名前・メモが相手に混ざって分け直せないため、それは聞く。
+   * 中身が無ければ、まとめても失うものが無い。違っていたら立ち寄りの「場所を選び直す」で直せる。
    *
-   * **由来も見る。** ユーザーが地図で指して作った place（`USER`）は、たとえ中身が空でも
-   * まとめない。**地点を指したこと自体が「ここを別の場所として残したい」という意思表示**
-   * だから（→ adr/0025）。同じ施設の別の入口を、別の場所として持っておきたいことがある。
+   * **由来（`USER`／`DETECTED`）は見ない。** 以前は地図で指して作った place を中身が空でも
+   * まとめなかった（指したこと自体を「別の場所にしたい」意思表示とみなした → adr/0025）が、
+   * 「場所を取得」を押して同じ施設が出たら、そのまま紐付いてほしい、に改めた（→ adr/0037）。
    */
-  private suspend fun isUntouchedDetected(place: PlaceEntity): Boolean = place.source == PlaceSource.DETECTED.name &&
-    place.name == null &&
+  private suspend fun hasNoUserContent(place: PlaceEntity): Boolean = place.name == null &&
     place.note == null &&
     !hasWishes(place.id) &&
     visitedPlaceDao.countByPlace(place.id) == 0
@@ -749,8 +748,13 @@ class PlaceRepositoryImpl @Inject constructor(
     if (count > 0) logger.i("Fulfilled $count wishlist items by recorded stops")
   }
 
-  /** 立ち寄りの参照を移してから、統合される側の place を消す（子は CASCADE で消える）。 */
-  private suspend fun mergeIntoExistingPlace(fromPlaceId: Long, intoPlaceId: Long) {
+  /**
+   * 立ち寄りの参照を移してから、統合される側の place を消す（子は CASCADE で消える）。
+   * 統合される側が自分で作った場所（USER）なら、寄せ先も USER にする（自動回収から守る）。
+   */
+  private suspend fun mergeIntoExistingPlace(from: PlaceEntity, intoPlaceId: Long) {
+    val fromPlaceId = from.id
+    if (from.source == PlaceSource.USER.name) placeDao.updateSource(intoPlaceId, PlaceSource.USER.name)
     stopDao.repointPlace(fromPlaceId, intoPlaceId)
     placeDao.deleteById(fromPlaceId)
     repointLiveStopPlace(fromPlaceId, intoPlaceId)

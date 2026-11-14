@@ -1033,23 +1033,26 @@ class PlaceRepositoryImplTest {
   }
 
   @Test
-  fun resolve_whenUserPlaceHitsSameFacility_keepsItSeparate() = runTest {
-    // 地図で指して作った place（USER）は、中身が空でもまとめない。指したこと自体が
-    // 「ここを別の場所として残したい」という意思表示だから（→ adr/0025）。
+  fun resolve_whenEmptyUserPlaceHitsSameFacility_mergesAndKeepsItUser() = runTest {
+    // 自分で作った place（USER）でも、名前・メモなど中身が無ければ聞かずにまとめる（→ adr/0037）。
+    // 「場所を取得」を押して同じ施設が出たら、そのまま紐付いてほしいため。違っていたら選び直せる。
     val place = PlaceEntity(id = 31L, latitude = 35.0, longitude = 139.0, source = PlaceSource.USER.name)
     coEvery { placeDao.getUnresolvedPlaces() } returns listOf(place)
     coEvery { placeDao.getById(31L) } returns place
     coEvery { resolver.resolve(any(), any()) } returns
       PlacesNameResolver.Outcome.Found("神社", "住所", null, "gp-same", 35.7, 139.7)
     coEvery { googlePlaceDao.getPlaceIdByGoogleId("gp-same") } returns 7L
+    coEvery { wishlistDao.countByPlace(31L) } returns 0
+    coEvery { wishlistFulfillmentDao.countByPlace(31L) } returns 0
+    coEvery { visitedPlaceDao.countByPlace(31L) } returns 0
 
     repository.resolveAllUnresolvedNames()
 
-    coVerify(exactly = 0) { stopDao.repointPlace(any(), any()) }
-    coVerify(exactly = 0) { placeDao.deleteById(any()) }
-    // 別の場所として残すが、同じ施設を2つに持たせられないので施設情報は付かない。
+    coVerify { stopDao.repointPlace(31L, 7L) }
+    coVerify { placeDao.deleteById(31L) }
+    // 寄せ先は自動回収されないよう USER にする。
+    coVerify { placeDao.updateSource(7L, PlaceSource.USER.name) }
     coVerify(exactly = 0) { googlePlaceDao.upsert(any()) }
-    coVerify { placeResolutionDao.upsert(match { it.placeId == 31L }) }
   }
 
   @Test
