@@ -42,6 +42,7 @@ import com.pathly.presentation.places.AddPlaceRoute
 import com.pathly.presentation.places.PlaceDetailRoute
 import com.pathly.presentation.places.PlacesListRoute
 import com.pathly.presentation.places.PlacesViewModel
+import com.pathly.presentation.places.SameFacilityActions
 import com.pathly.presentation.places.SearchAddRoute
 import com.pathly.presentation.settings.SettingsScreen
 import com.pathly.presentation.tracking.TrackingScreen
@@ -257,6 +258,8 @@ private fun TrackDetailRoute(
   val nearbyRegisterPrompt by viewModel.nearbyRegisterPrompt.collectAsStateWithLifecycle()
   val nearbyStopPrompt by viewModel.nearbyStopPrompt.collectAsStateWithLifecycle()
   val placeDeleteUndo by viewModel.deleteUndo.collectAsStateWithLifecycle()
+  val sameFacilityPending by viewModel.sameFacilityPending.collectAsStateWithLifecycle()
+  val sameFacilityDialogOpen by viewModel.sameFacilityDialogOpen.collectAsStateWithLifecycle()
 
   TrackDetailScreen(
     track = track,
@@ -269,6 +272,16 @@ private fun TrackDetailRoute(
     onRenameTrack = { name -> viewModel.renameTrack(name) },
     onEditStopNote = { stopId, note -> viewModel.updateStopNote(stopId, note) },
     onResolveNames = { viewModel.resolveNames() },
+    sameFacilityPending = sameFacilityPending,
+    sameFacilityDialogOpen = sameFacilityDialogOpen,
+    onOpenSameFacility = viewModel::openSameFacilityDialog,
+    onDismissSameFacility = viewModel::dismissSameFacilityDialog,
+    onMergeSameFacility = viewModel::mergeSameFacility,
+    onKeepSameFacilitySeparate = viewModel::keepAsSeparatePlace,
+    sameFacilityActions = SameFacilityActions(
+      onMerge = { item, other -> viewModel.mergeIntoSameFacility(item.place.id, item.displayName, other) },
+      onKeepSeparate = { viewModel.keepAsSeparatePlace(it.place.id) },
+    ),
     onReanalyze = { viewModel.reanalyze() },
     reanalyzeCandidates = reanalyzeCandidates,
     onAddStops = { viewModel.addStops(it) },

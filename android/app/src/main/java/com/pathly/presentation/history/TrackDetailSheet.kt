@@ -142,6 +142,9 @@ internal fun TrackDetailSheet(
   onReassignStop: (Stop) -> Unit,
   onDeleteStop: (Stop) -> Unit,
   onResolveNames: () -> Unit,
+  // 同じ施設の確認待ち（→ adr/0037）の件数と、それを聞くダイアログを開く。
+  sameFacilityPendingCount: Int,
+  onOpenSameFacility: () -> Unit,
   onReanalyze: () -> Unit,
   onManualAdd: () -> Unit,
   onRenameTrack: () -> Unit,
@@ -187,6 +190,8 @@ internal fun TrackDetailSheet(
         stops = stops,
         unresolvedCount = unresolvedCount,
         onResolveNames = onResolveNames,
+        sameFacilityPendingCount = sameFacilityPendingCount,
+        onOpenSameFacility = onOpenSameFacility,
         onReanalyze = onReanalyze,
         onManualAdd = onManualAdd,
         onRenameTrack = onRenameTrack,
@@ -239,6 +244,8 @@ internal fun TrackSummaryHeader(
   onReanalyze: () -> Unit,
   onManualAdd: () -> Unit,
   onRenameTrack: () -> Unit,
+  sameFacilityPendingCount: Int = 0,
+  onOpenSameFacility: () -> Unit = {},
 ) {
   Column(
     modifier = Modifier
@@ -367,6 +374,15 @@ internal fun TrackSummaryHeader(
           container = MaterialTheme.colorScheme.secondaryContainer,
           content = MaterialTheme.colorScheme.onSecondaryContainer,
           onClick = onResolveNames,
+        )
+      }
+      // 同じ施設の場所があって、まとめるか別のまま残すかを決めていない（→ adr/0037）。
+      if (sameFacilityPendingCount > 0) {
+        ActionChip(
+          text = "同じ施設の確認待ち ${sameFacilityPendingCount}件",
+          container = MaterialTheme.colorScheme.tertiaryContainer,
+          content = MaterialTheme.colorScheme.onTertiaryContainer,
+          onClick = onOpenSameFacility,
         )
       }
     }

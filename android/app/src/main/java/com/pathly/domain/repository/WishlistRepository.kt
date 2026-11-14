@@ -76,7 +76,7 @@ interface WishlistRepository {
    *
    * **同じ施設を他の場所が既に持っていたら紐付けず false を返す。**同じ施設を 2 つの場所が持つと
    * 「この施設の場所はどれか」の答えがブレるため（→ adr/0025）。まとめるかはユーザーの判断なので、
-   * 勝手には寄せない。呼び出し側は false のとき理由を伝えること。
+   * 勝手には寄せない。断ったときは相手を記録し、場所詳細の「確認待ち」から選んでもらう（→ adr/0037）。
    */
   suspend fun linkPlaceToGoogle(placeId: Long, result: PlaceSearchResult): Boolean
 

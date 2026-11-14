@@ -16,12 +16,20 @@ import androidx.compose.runtime.LaunchedEffect
 data class PlaceDeleteUndo(
   val token: Int = 0,
   val name: String? = null,
+  /** 削除ではなく「まとめる」だったときの、まとめた先の表示名（→ adr/0037）。削除なら null。 */
+  val mergedInto: String? = null,
 ) {
+  /** 取り消すのが「まとめる」か（削除なら false）。 */
+  val isMerge: Boolean get() = mergedInto != null
+
   /** 削除を1件控えた新しい状態を返す（ViewModel 側で `_uiState.update { it.copy(...) }` に使う）。 */
   fun deleted(name: String?) = PlaceDeleteUndo(token = token + 1, name = name)
 
+  /** 場所を [into] にまとめたことを1件控えた新しい状態を返す（取り消し方は削除と同じスナックバー）。 */
+  fun merged(name: String?, into: String?) = PlaceDeleteUndo(token = token + 1, name = name, mergedInto = into ?: "場所")
+
   /** 通知を出し終えた状態（＝出すものが無い）。同じ通知を画面に戻るたび出さないために使う。 */
-  fun shown() = PlaceDeleteUndo(token = 0, name = null)
+  fun shown() = PlaceDeleteUndo()
 }
 
 /**
@@ -37,7 +45,7 @@ data class PlaceDeleteUndo(
 fun PlaceDeleteUndoEffect(
   undo: PlaceDeleteUndo,
   snackbarHostState: SnackbarHostState,
-  onUndo: () -> Unit,
+  onUndo: (isMerge: Boolean) -> Unit,
   onShown: () -> Unit,
 ) {
   LaunchedEffect(undo.token) {
@@ -45,11 +53,15 @@ fun PlaceDeleteUndoEffect(
     if (undo.token == 0) return@LaunchedEffect
     try {
       val result = snackbarHostState.showSnackbar(
-        message = "「${undo.name ?: "場所"}」を削除しました",
+        message = if (undo.isMerge) {
+          "「${undo.name ?: "場所"}」を「${undo.mergedInto}」にまとめました"
+        } else {
+          "「${undo.name ?: "場所"}」を削除しました"
+        },
         actionLabel = "取り消す",
         duration = SnackbarDuration.Short,
       )
-      if (result == SnackbarResult.ActionPerformed) onUndo()
+      if (result == SnackbarResult.ActionPerformed) onUndo(undo.isMerge)
     } finally {
       onShown()
     }

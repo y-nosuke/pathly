@@ -56,6 +56,7 @@ import com.pathly.domain.model.PlaceSearchResult
 import com.pathly.domain.model.PlaceVisit
 import com.pathly.domain.model.Priority
 import com.pathly.domain.model.RegisteredPlace
+import com.pathly.domain.model.SameFacilityPending
 import com.pathly.domain.model.SmoothingParams
 import com.pathly.domain.model.Stop
 import com.pathly.domain.model.StopCandidate
@@ -65,6 +66,7 @@ import com.pathly.presentation.common.CloseInfoWindowWithSheet
 import com.pathly.presentation.common.FloatingSheet
 import com.pathly.presentation.common.MapPlaceFilterButton
 import com.pathly.presentation.common.NearbyPlaceConfirmDialog
+import com.pathly.presentation.common.SameFacilityDialog
 import com.pathly.presentation.common.SheetDetent
 import com.pathly.presentation.common.heightOf
 import com.pathly.presentation.common.rememberFloatingSheetState
@@ -74,6 +76,7 @@ import com.pathly.presentation.places.PlaceActionSheet
 import com.pathly.presentation.places.PlaceDeleteUndo
 import com.pathly.presentation.places.PlaceDeleteUndoEffect
 import com.pathly.presentation.places.PlaceSheetTarget
+import com.pathly.presentation.places.SameFacilityActions
 import com.pathly.presentation.stops.ManualStopOrigin
 import com.pathly.presentation.stops.ManualStopSheet
 import com.pathly.presentation.stops.ManualStopTarget
@@ -102,6 +105,15 @@ fun TrackDetailScreen(
   onRenameTrack: (name: String) -> Unit = {},
   onEditStopNote: (stopId: Long, note: String?) -> Unit = { _, _ -> },
   onResolveNames: () -> Unit = {},
+  // 同じ施設の確認待ち（→ adr/0037）。[sameFacilityDialogOpen] の間、先頭から 1 件ずつ聞く。
+  sameFacilityPending: List<SameFacilityPending> = emptyList(),
+  sameFacilityDialogOpen: Boolean = false,
+  onOpenSameFacility: () -> Unit = {},
+  onDismissSameFacility: () -> Unit = {},
+  onMergeSameFacility: (SameFacilityPending) -> Unit = {},
+  onKeepSameFacilitySeparate: (placeId: Long) -> Unit = {},
+  // 場所シートの編集部で、確認待ちに答える（場所詳細と同じ）。
+  sameFacilityActions: SameFacilityActions? = null,
   onReanalyze: () -> Unit = {},
   reanalyzeCandidates: List<StopCandidate>? = null,
   onAddStops: (List<StopCandidate>) -> Unit = {},
@@ -138,7 +150,7 @@ fun TrackDetailScreen(
   onDeletePlace: (placeId: Long) -> Unit = {},
   // 場所を削除した直後の取り消し待ち（スナックバーで「取り消す」を出す）。
   placeDeleteUndo: PlaceDeleteUndo = PlaceDeleteUndo(),
-  onUndoPlaceDelete: () -> Unit = {},
+  onUndoPlaceDelete: (isMerge: Boolean) -> Unit = {},
   onPlaceDeleteUndoShown: () -> Unit = {},
   // 場所シートの訪問履歴から、その訪問のお出掛け（別の経路詳細）を開く。
   onOpenTrack: (trackId: Long) -> Unit = {},
@@ -590,6 +602,8 @@ fun TrackDetailScreen(
           },
           onDeleteStop = { deleteWithUndo(listOf(it.id)) },
           onResolveNames = onResolveNames,
+          sameFacilityPendingCount = sameFacilityPending.size,
+          onOpenSameFacility = onOpenSameFacility,
           onReanalyze = onReanalyze,
           onManualAdd = {
             manualPick = null
@@ -778,10 +792,36 @@ fun TrackDetailScreen(
         onFetchNearbyPois = onFetchNearbyPois,
         onSearchPredictions = onSearchPredictions,
         onFetchPrediction = onFetchPrediction,
+        sameFacilityActions = sameFacilityActions,
         modifier = Modifier.align(Alignment.BottomCenter),
         sheetState = placeSheetState,
       )
     }
+  }
+
+  // 同じ施設の確認待ちを 1 件ずつ聞く。答えると一覧から外れ、次の 1 件が出る。
+  // 名前は一覧の行と同じ表示名で呼ぶ（名前も施設も無い場所は座標）。
+  val firstPending = sameFacilityPending.firstOrNull()?.let { pending ->
+    pending.copy(placeName = stops.firstOrNull { it.place.id == pending.placeId }?.place?.displayName ?: pending.placeName)
+  }
+  if (sameFacilityDialogOpen && firstPending != null) {
+    SameFacilityDialog(
+      placeName = firstPending.placeName,
+      otherName = firstPending.other.name,
+      remaining = sameFacilityPending.size - 1,
+      // まとめたら閉じる。開いたままだとスナックバーの「取り消す」が押せない。残りはチップから続けて聞く。
+      onMerge = {
+        onMergeSameFacility(firstPending)
+        onDismissSameFacility()
+      },
+      // 選び直しは、その場所の編集部の「Google施設を選び直す」を開いて行う（場所詳細と同じ）。
+      onPickAnother = {
+        onDismissSameFacility()
+        placeSheetTarget = PlaceSheetTarget.Existing(firstPending.placeId, openLinkPicker = true)
+      },
+      onKeepSeparate = { onKeepSameFacilitySeparate(firstPending.placeId) },
+      onDismiss = onDismissSameFacility,
+    )
   }
 
   if (renamingTrack) {

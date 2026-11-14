@@ -22,6 +22,11 @@ data class PlaceListItem(
   val lastFulfilledAt: Date? = null,
   /** 地域（都道府県・市区町村）。まだ引いていない・分からなければ地域不明（→ adr/0029）。 */
   val region: PlaceRegion = PlaceRegion.UNKNOWN,
+  /**
+   * 同じ施設の相手がいて、まとめるか別のまま残すかをまだ決めていないときの相手（→ adr/0037）。
+   * いなければ（決めた・相手が消えた・同じ施設でない）null。
+   */
+  val sameFacility: SameFacilityPlace? = null,
 ) {
   /** 行きたいに登録済みか。 */
   val isWishlisted: Boolean get() = wishlistId != null

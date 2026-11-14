@@ -4,6 +4,7 @@ import com.pathly.data.local.dao.GooglePlaceCategoryDao
 import com.pathly.data.local.dao.GooglePlaceDao
 import com.pathly.data.local.dao.GpsPointDao
 import com.pathly.data.local.dao.PlaceDao
+import com.pathly.data.local.dao.PlaceMergeDao
 import com.pathly.data.local.dao.PlaceResolutionDao
 import com.pathly.data.local.dao.SmoothedPointDao
 import com.pathly.data.local.dao.StopDao
@@ -50,6 +51,7 @@ class PlaceRepositoryImplTest {
   private val wishlistDao = mockk<WishlistDao>(relaxed = true)
   private val visitedPlaceDao = mockk<VisitedPlaceDao>(relaxed = true)
   private val wishlistFulfillmentDao = mockk<WishlistFulfillmentDao>(relaxed = true)
+  private val placeMergeDao = mockk<PlaceMergeDao>(relaxed = true)
   private val resolver = mockk<PlacesNameResolver>(relaxed = true)
 
   @Before
@@ -70,6 +72,7 @@ class PlaceRepositoryImplTest {
     wishlistDao,
     visitedPlaceDao,
     wishlistFulfillmentDao,
+    placeMergeDao,
     resolver,
   )
 
@@ -488,6 +491,32 @@ class PlaceRepositoryImplTest {
     coEvery { googlePlaceDao.getPlaceIdByGoogleId("gp-same") } returns 7L
 
     assertEquals(1, repository.resolveUnresolvedNames(1L))
+    // どの施設とぶつかったかを記録し、確認待ちとして出す（→ adr/0037）。施設情報は付けない。
+    coVerify { placeResolutionDao.upsert(match { it.sameFacilityGooglePlaceId == "gp-same" && !it.keptSeparate }) }
+    coVerify(exactly = 0) { googlePlaceDao.upsert(any()) }
+  }
+
+  @Test
+  fun mergePlaces_ranThroughDao_endsReachedWishes_andUndoRestoresSnapshot() = runTest {
+    val snapshot = mockk<PlaceMergeDao.MergeSnapshot>(relaxed = true)
+    coEvery { placeMergeDao.merge(3L, 7L, any()) } returns snapshot
+
+    assertTrue(repository.mergePlaces(3L, 7L))
+    // 付け替えた立ち寄りで、残る方の行きたいが「行った」になることがある（→ adr/0036）。
+    coVerify { wishlistFulfillmentDao.fulfillReachedWishes() }
+
+    assertTrue(repository.undoLastPlaceMerge())
+    coVerify { placeMergeDao.restore(snapshot) }
+    // 控えは 1 回で使い切る。
+    assertFalse(repository.undoLastPlaceMerge())
+  }
+
+  @Test
+  fun mergePlaces_whenDaoRefuses_returnsFalseAndKeepsNoUndo() = runTest {
+    coEvery { placeMergeDao.merge(any(), any(), any()) } returns null
+
+    assertFalse(repository.mergePlaces(3L, 3L))
+    assertFalse(repository.undoLastPlaceMerge())
   }
 
   @Test
@@ -1004,23 +1033,26 @@ class PlaceRepositoryImplTest {
   }
 
   @Test
-  fun resolve_whenUserPlaceHitsSameFacility_keepsItSeparate() = runTest {
-    // 地図で指して作った place（USER）は、中身が空でもまとめない。指したこと自体が
-    // 「ここを別の場所として残したい」という意思表示だから（→ adr/0025）。
+  fun resolve_whenEmptyUserPlaceHitsSameFacility_mergesAndKeepsItUser() = runTest {
+    // 自分で作った place（USER）でも、名前・メモなど中身が無ければ聞かずにまとめる（→ adr/0037）。
+    // 「場所を取得」を押して同じ施設が出たら、そのまま紐付いてほしいため。違っていたら選び直せる。
     val place = PlaceEntity(id = 31L, latitude = 35.0, longitude = 139.0, source = PlaceSource.USER.name)
     coEvery { placeDao.getUnresolvedPlaces() } returns listOf(place)
     coEvery { placeDao.getById(31L) } returns place
     coEvery { resolver.resolve(any(), any()) } returns
       PlacesNameResolver.Outcome.Found("神社", "住所", null, "gp-same", 35.7, 139.7)
     coEvery { googlePlaceDao.getPlaceIdByGoogleId("gp-same") } returns 7L
+    coEvery { wishlistDao.countByPlace(31L) } returns 0
+    coEvery { wishlistFulfillmentDao.countByPlace(31L) } returns 0
+    coEvery { visitedPlaceDao.countByPlace(31L) } returns 0
 
     repository.resolveAllUnresolvedNames()
 
-    coVerify(exactly = 0) { stopDao.repointPlace(any(), any()) }
-    coVerify(exactly = 0) { placeDao.deleteById(any()) }
-    // 別の場所として残すが、同じ施設を2つに持たせられないので施設情報は付かない。
+    coVerify { stopDao.repointPlace(31L, 7L) }
+    coVerify { placeDao.deleteById(31L) }
+    // 寄せ先は自動回収されないよう USER にする。
+    coVerify { placeDao.updateSource(7L, PlaceSource.USER.name) }
     coVerify(exactly = 0) { googlePlaceDao.upsert(any()) }
-    coVerify { placeResolutionDao.upsert(match { it.placeId == 31L }) }
   }
 
   @Test

@@ -4,6 +4,7 @@ import com.pathly.domain.model.PlaceListItem
 import com.pathly.domain.model.PlaceSearchResult
 import com.pathly.domain.model.Priority
 import com.pathly.domain.model.RegisteredPlace
+import com.pathly.domain.repository.PlaceRepository
 import com.pathly.domain.repository.WishlistRepository
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -24,6 +25,7 @@ import javax.inject.Singleton
 @Singleton
 class PlaceEditUseCase @Inject constructor(
   private val wishlistRepository: WishlistRepository,
+  private val placeRepository: PlaceRepository,
 ) {
 
   /** 登録の結果。 */
@@ -193,6 +195,18 @@ class PlaceEditUseCase @Inject constructor(
   }
 
   private val wishlistToggleMutex = Mutex()
+
+  /**
+   * 同じ施設と分かった場所を、相手（その施設を持っている方）にまとめる（→ adr/0037）。
+   * 取り消しは [undoMerge]。まとめられたら true。
+   */
+  suspend fun mergeIntoSameFacility(placeId: Long, otherPlaceId: Long): Boolean = placeRepository.mergePlaces(placeId, otherPlaceId)
+
+  /** 直近のまとめを取り消す（スナックバーの「取り消す」）。 */
+  suspend fun undoMerge(): Boolean = placeRepository.undoLastPlaceMerge()
+
+  /** 同じ施設の相手がいても、施設情報なしで別の場所として残す（二度と聞かない → adr/0037）。 */
+  suspend fun keepAsSeparatePlace(placeId: Long) = placeRepository.keepAsSeparatePlace(placeId)
 
   /** [saveEdits] の結果。保存そのものは常に行い、施設の紐付けだけが断られることがある。 */
   data class SaveResult(

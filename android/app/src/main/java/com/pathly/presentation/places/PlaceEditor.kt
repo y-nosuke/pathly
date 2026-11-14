@@ -10,6 +10,8 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material3.Button
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -17,6 +19,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -33,8 +36,21 @@ import com.pathly.domain.model.PlacePrediction
 import com.pathly.domain.model.PlaceSearchResult
 import com.pathly.domain.model.PlaceVisit
 import com.pathly.domain.model.Priority
+import com.pathly.domain.model.SameFacilityPlace
 import com.pathly.presentation.common.NearbyCandidatePickerDialog
+import com.pathly.presentation.common.SameFacilityDialog
 import com.pathly.util.DateFormatters
+
+/**
+ * 同じ施設と分かった場所への答え（→ adr/0037）。「別の施設を選び直す」は編集部の中で
+ * 「Google施設を選び直す」を開くので、ここには持たない。
+ */
+class SameFacilityActions(
+  /** [item] を相手 [other] にまとめる（[item] は消える）。 */
+  val onMerge: (item: PlaceListItem, other: SameFacilityPlace) -> Unit,
+  /** 施設情報なしで、別の場所として残す。 */
+  val onKeepSeparate: (item: PlaceListItem) -> Unit,
+)
 
 /**
  * **登録済みの場所を編集する唯一の本体。**
@@ -59,7 +75,11 @@ internal fun PlaceEditorBody(
   // 座標がずれて周辺に出ない施設用: 名前で検索するフォールバック。
   onSearchPredictions: suspend (query: String) -> List<PlacePrediction>,
   onFetchPrediction: suspend (placeId: String) -> PlaceSearchResult?,
+  // 同じ施設の確認待ちへの答え。null なら確認待ちを出さない。
+  sameFacilityActions: SameFacilityActions?,
   modifier: Modifier = Modifier,
+  // 開いてすぐ「Google施設を選び直す」を出す（経路詳細の確認待ちで「別の施設を選び直す」を選んだとき）。
+  initiallyOpenLinkPicker: Boolean = false,
   // 記録中に地図から開いたときだけ出る「立ち寄りに追加」。null なら出さない。
   onAddStop: (() -> Unit)? = null,
   // シートから開いたときの「閉じる」など、保存ボタンの並びに足したいもの。
@@ -67,7 +87,7 @@ internal fun PlaceEditorBody(
 ) {
   val context = LocalContext.current
   // 「Googleで情報を取得」ダイアログの開閉。
-  var linkDialogOpen by remember { mutableStateOf(false) }
+  var linkDialogOpen by remember(item.place.id) { mutableStateOf(initiallyOpenLinkPicker) }
 
   val savedName = item.place.name ?: ""
   val savedNote = item.note ?: ""
@@ -81,6 +101,20 @@ internal fun PlaceEditorBody(
   var visited by remember(item.place.id) { mutableStateOf(item.isManuallyVisited) }
   // 「Googleで情報を取得」で選んだ施設は即保存せず、ここに溜めて「保存」で確定する。
   var pendingLink by remember(item.place.id) { mutableStateOf<PlaceSearchResult?>(null) }
+  // 同じ施設の確認ダイアログの開閉。
+  var sameFacilityDialogOpen by remember(item.place.id) { mutableStateOf(false) }
+  // 施設を選んで保存した直後か。保存で同じ施設の相手が見つかったら、その場でダイアログを出すため
+  // （保存は ViewModel で非同期に走るので、結果は購読している [item] の変化で知る）。
+  var awaitingLinkResult by remember(item.place.id) { mutableStateOf(false) }
+  LaunchedEffect(item.sameFacility, item.place.googlePlaceId) {
+    if (!awaitingLinkResult) return@LaunchedEffect
+    if (item.sameFacility != null) {
+      sameFacilityDialogOpen = true
+      awaitingLinkResult = false
+    } else if (item.place.googlePlaceId != null) {
+      awaitingLinkResult = false
+    }
+  }
 
   val hasChanges = name.trim() != savedName.trim() ||
     note.trim() != savedNote.trim() ||
@@ -124,6 +158,13 @@ internal fun PlaceEditorBody(
       },
     )
 
+    // 同じ施設の確認待ち（場所を取得・自動の名前付けで分かったもの → adr/0037）。
+    val sameFacility = item.sameFacility
+    if (sameFacility != null && sameFacilityActions != null) {
+      Spacer(modifier = Modifier.height(8.dp))
+      SameFacilityPendingCard(otherName = sameFacility.name, onOpen = { sameFacilityDialogOpen = true })
+    }
+
     // Google 施設情報の取得・紐付け。ID の無い場所（オフライン記録・手動登録）に住所・カテゴリ・正確な座標を補える。
     Spacer(modifier = Modifier.height(8.dp))
     TextButton(
@@ -162,6 +203,7 @@ internal fun PlaceEditorBody(
     Spacer(modifier = Modifier.height(4.dp))
     Button(
       onClick = {
+        if (pendingLink != null) awaitingLinkResult = true
         onSave(name, note, wishlist, priority, visited, pendingLink)
         // 保存したら紐付け予定は消化済み。残すとボタンが活性のまま・予定表示が残るため確実にクリアする。
         pendingLink = null
@@ -229,6 +271,27 @@ internal fun PlaceEditorBody(
     }
   }
 
+  val pendingSameFacility = item.sameFacility
+  if (sameFacilityDialogOpen && pendingSameFacility != null && sameFacilityActions != null) {
+    SameFacilityDialog(
+      placeName = item.displayName,
+      otherName = pendingSameFacility.name,
+      onMerge = {
+        sameFacilityDialogOpen = false
+        sameFacilityActions.onMerge(item, pendingSameFacility)
+      },
+      onPickAnother = {
+        sameFacilityDialogOpen = false
+        linkDialogOpen = true
+      },
+      onKeepSeparate = {
+        sameFacilityDialogOpen = false
+        sameFacilityActions.onKeepSeparate(item)
+      },
+      onDismiss = { sameFacilityDialogOpen = false },
+    )
+  }
+
   if (linkDialogOpen) {
     NearbyCandidatePickerDialog(
       latitude = item.place.latitude,
@@ -249,6 +312,29 @@ internal fun PlaceEditorBody(
       onSearchPredictions = onSearchPredictions,
       onFetchPrediction = onFetchPrediction,
     )
+  }
+}
+
+/** 「◯◯と同じ施設らしい」の確認待ち。押すと選択肢のダイアログを開く。 */
+@Composable
+private fun SameFacilityPendingCard(otherName: String?, onOpen: () -> Unit) {
+  Card(
+    modifier = Modifier.fillMaxWidth(),
+    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer),
+  ) {
+    Column(modifier = Modifier.padding(12.dp)) {
+      Text(
+        text = "確認待ち: 「${otherName ?: "名前の無い場所"}」と同じ施設のようです",
+        style = MaterialTheme.typography.bodyMedium,
+        color = MaterialTheme.colorScheme.onSecondaryContainer,
+      )
+      Text(
+        text = "まとめるか、別の場所として残すかを選んでください。",
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSecondaryContainer,
+      )
+      TextButton(onClick = onOpen, modifier = Modifier.align(Alignment.End)) { Text("選ぶ") }
+    }
   }
 }
 
