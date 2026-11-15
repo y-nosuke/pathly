@@ -39,7 +39,6 @@ class PlaceEditActionsTest {
   private fun TestScope.actions(
     shownOnMap: (Long?) -> (RegisteredPlace) -> Boolean = { { false } },
     placeNameOf: (Long) -> String? = { null },
-    notifySaved: Boolean = true,
   ) = PlaceEditActions(
     scope = this,
     placeEditUseCase = useCase,
@@ -49,7 +48,6 @@ class PlaceEditActionsTest {
     placeNameOf = placeNameOf,
     onMessage = { messages += it },
     onError = { errors += it },
-    notifySaved = notifySaved,
   )
 
   private fun registerReturns(result: PlaceEditUseCase.RegisterResult) {
@@ -184,14 +182,13 @@ class PlaceEditActionsTest {
   // ---- 編集 ----
 
   @Test
-  fun `保存_知らせるかは画面が決める`() = runTest {
+  fun `保存_差分を適用して3画面とも保存しましたと知らせる`() = runTest {
     val item = item(1L)
 
     actions().savePlaceEdits(item, "名前", "", false, Priority.MEDIUM, false)
-    actions(notifySaved = false).savePlaceEdits(item, "名前", "", false, Priority.MEDIUM, false)
     advanceUntilIdle()
 
-    coVerify(exactly = 2) { useCase.saveEdits(item, "名前", "", false, Priority.MEDIUM, false, null) }
+    coVerify { useCase.saveEdits(item, "名前", "", false, Priority.MEDIUM, false, null) }
     assertEquals(listOf("保存しました"), messages)
   }
 

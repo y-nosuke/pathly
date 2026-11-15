@@ -84,10 +84,10 @@ data class PlacesState(
   val isLoading: Boolean = false,
   val errorMessage: String? = null,
   val search: SearchState = SearchState(),
-  // 登録のたびに増やすワンショット通知。一覧側がこれを監視して登録スナックバーを出す（削除と統一）。
+  // 登録・紐付けのたびに増やす合図。地図で追加・検索して追加の画面は、これが進んだら一覧へ戻る。
   // 削除の取り消し・近接確認の確認待ちは場所の編集の部品（PlaceEditActions）が持つ。
   val registerToken: Int = 0,
-  // 直近の登録結果の文言（「「名前」を登録しました」/「この場所は登録済みです」など）。
+  // 下のスナックバーに出す一言（「「名前」を登録しました」/「保存しました」など）。出したら消化して null に戻す。
   val registerMessage: String? = null,
   // 場所詳細の地図に「登録済みの場所」を出すか（画面別トグル）。
   val showRegisteredPlaces: Boolean = false,

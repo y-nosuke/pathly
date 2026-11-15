@@ -89,6 +89,7 @@ import com.pathly.presentation.common.MapMarker
 import com.pathly.presentation.common.MapPinMarker
 import com.pathly.presentation.common.MapPlaceFilterButton
 import com.pathly.presentation.common.MarkerPickBlue
+import com.pathly.presentation.common.NearbyConfirmPurpose
 import com.pathly.presentation.common.NearbyPlaceConfirmDialog
 import com.pathly.presentation.common.RegisteredPlaceMarkers
 import com.pathly.presentation.common.RouteMapContent
@@ -817,6 +818,7 @@ fun TrackingScreen(
   nearbyRegisterPrompt?.let { prompt ->
     NearbyPlaceConfirmDialog(
       place = prompt.nearby,
+      purpose = NearbyConfirmPurpose.REGISTER_PLACE,
       onLink = viewModel.placeEdit::confirmNearbyLink,
       onCreateNew = viewModel.placeEdit::confirmNearbyNew,
       onDismiss = viewModel.placeEdit::dismissNearbyPrompt,
@@ -827,6 +829,7 @@ fun TrackingScreen(
   nearbyStopPrompt?.let { prompt ->
     NearbyPlaceConfirmDialog(
       place = prompt.nearby,
+      purpose = NearbyConfirmPurpose.ADD_STOP,
       onLink = viewModel.manualStop::confirmNearbyStopLink,
       onCreateNew = viewModel.manualStop::confirmNearbyStopNew,
       onDismiss = viewModel.manualStop::dismissNearbyStopPrompt,

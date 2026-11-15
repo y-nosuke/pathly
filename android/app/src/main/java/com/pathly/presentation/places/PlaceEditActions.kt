@@ -30,7 +30,6 @@ import kotlinx.coroutines.launch
  *   登録するときの、その場所（主マーカーで見えている）。
  * - [placeNameOf]: 削除の取り消しのスナックバーに出す名前。
  * - [onMessage]・[onError]: 結果の一言と失敗を出す先（画面ごとに出し方が違う）。
- * - [notifySaved]: 編集を保存したとき「保存しました」を出すか（場所タブは場所詳細を閉じて一覧に戻るので出さない）。
  */
 class PlaceEditActions internal constructor(
   private val scope: CoroutineScope,
@@ -41,7 +40,6 @@ class PlaceEditActions internal constructor(
   private val placeNameOf: (placeId: Long) -> String?,
   private val onMessage: (String) -> Unit,
   private val onError: (String) -> Unit,
-  private val notifySaved: Boolean = true,
 ) {
   private val _nearbyRegisterPrompt = MutableStateFlow<NearbyRegisterPrompt?>(null)
 
@@ -167,7 +165,7 @@ class PlaceEditActions internal constructor(
   ) {
     launchCatching(SAVE_FAILED) {
       placeEditUseCase.saveEdits(item, name, note, wishlist, priority, visited, link)
-      if (notifySaved) onMessage("保存しました")
+      onMessage("保存しました")
     }
   }
 

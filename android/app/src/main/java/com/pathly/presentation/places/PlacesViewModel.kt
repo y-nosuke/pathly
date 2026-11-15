@@ -102,10 +102,7 @@ class PlacesViewModel @Inject constructor(
     settingsRepository.setMapPlaceFilter(MapSurface.PLACE_DETAIL, filter)
   }
 
-  /**
-   * 場所の登録・編集・削除・まとめる（記録画面・経路詳細と共有）。結果の一言は一覧側のスナックバーに出す。
-   * 編集の保存では出さない（場所詳細を閉じて一覧に戻ったときに「保存しました」が出ても何のことか分からないため）。
-   */
+  /** 場所の登録・編集・削除・まとめる（記録画面・経路詳細と共有）。結果の一言は今いる画面（一覧・詳細）の下に出す。 */
   val placeEdit = PlaceEditActions(
     scope = viewModelScope,
     placeEditUseCase = placeEditUseCase,
@@ -121,7 +118,6 @@ class PlacesViewModel @Inject constructor(
     placeNameOf = { placeId -> _uiState.value.items.firstOrNull { it.place.id == placeId }?.displayName },
     onMessage = ::notify,
     onError = { message -> _uiState.update { it.copy(errorMessage = message) } },
-    notifySaved = false,
   )
 
   private fun observePlaces() {
@@ -234,9 +230,6 @@ class PlacesViewModel @Inject constructor(
     updateListOptions { it.copy(sortDescending = !it.sortDescending) }
   }
 
-  /** 統一の場所シートで既存 place を編集するため、単一 place の現在値を取得する。 */
-  suspend fun loadPlace(placeId: Long): PlaceListItem? = wishlistRepository.getPlace(placeId)
-
   /** 一覧の行や詳細から「行きたい」を付け外しする。 */
   fun toggleWishlist(item: PlaceListItem) {
     viewModelScope.launch {
@@ -333,8 +326,8 @@ class PlacesViewModel @Inject constructor(
   }
 
   /**
-   * 一覧側スナックバーに出すワンショット通知（登録・紐付けなど）。地図で追加・検索して追加の画面は、
-   * このトークンが進んだのを合図に一覧へ戻る。
+   * 下のスナックバーに出す一言（登録・紐付け・保存など）。地図で追加・検索して追加の画面は、
+   * トークンが進んだのを合図に一覧へ戻る。
    */
   private fun notify(message: String) {
     _uiState.update {
@@ -343,6 +336,11 @@ class PlacesViewModel @Inject constructor(
         registerMessage = message,
       )
     }
+  }
+
+  /** 一言を出し終えた（一覧と詳細を行き来するたびに同じ一言を出さないよう消化する）。 */
+  fun consumeRegisterMessage() {
+    _uiState.update { it.copy(registerMessage = null) }
   }
 
   /** 確定フォームから戻る（候補選び直し）。 */
