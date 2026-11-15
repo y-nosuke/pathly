@@ -422,5 +422,25 @@ class TrackingScreenTest {
     coVerify { mockViewModel.fetchRegion("r1") }
     composeTestRule.onNodeWithText("登録").assertDoesNotExist()
     composeTestRule.onNodeWithContentDescription("地域へ移動").assertIsDisplayed()
+
+    // 目印がある間は地名のチップを出す。地名を押しても目印は残る（地図を寄せ直すだけ）。
+    composeTestRule.onNodeWithTag("regionMarkerChip").assertIsDisplayed()
+    composeTestRule.onNodeWithText("札幌市").performClick()
+    composeTestRule.onNodeWithTag("regionMarkerChip").assertIsDisplayed()
+
+    // 検索窓を開いている間は、ほかの上端の操作と同じく隠す。
+    composeTestRule.onNodeWithContentDescription("地域へ移動").performClick()
+    composeTestRule.onNodeWithTag("regionMarkerChip").assertDoesNotExist()
+    composeTestRule.onNodeWithContentDescription("検索を閉じる").performClick()
+    composeTestRule.onNodeWithTag("regionMarkerChip").assertIsDisplayed()
+
+    // 記録中も、左上の記録中の操作と並んで出る。
+    uiStateFlow.value = TrackingState(hasLocationPermission = true, isTracking = true)
+    composeTestRule.onNodeWithText("立ち寄りを追加").assertIsDisplayed()
+    composeTestRule.onNodeWithTag("regionMarkerChip").assertIsDisplayed()
+
+    // × で目印ごとチップが消える。
+    composeTestRule.onNodeWithContentDescription("地域の目印を消す").performClick()
+    composeTestRule.onNodeWithTag("regionMarkerChip").assertDoesNotExist()
   }
 }

@@ -3,6 +3,7 @@ package com.pathly.presentation.tracking
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -33,6 +34,7 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -48,6 +50,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -429,53 +432,22 @@ fun TrackingScreen(
       }
     }
 
-    // 記録中の左上操作（縦積み）: 「立ち寄りを追加」モード切替 と 「今ここ」ショートカット。
-    if (uiState.isTracking && mapSearch == null) {
+    // 左上の操作（縦積み）: 記録中は「立ち寄りを追加」モード切替 と 「今ここ」ショートカット、その下に地域の目印のチップ。
+    // 右端は右上のボタン列（幅 64dp）にかからないよう空ける。
+    if ((uiState.isTracking || regionMarker != null) && mapSearch == null) {
       Column(
         modifier = Modifier
           .align(Alignment.TopStart)
           .statusBarsPadding()
-          .padding(12.dp),
+          .padding(start = 12.dp, top = 12.dp, end = 76.dp, bottom = 12.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp),
       ) {
-        // 「立ち寄りを追加」モード（ON=地図タップが立ち寄り追加／OFF=場所登録）。
-        Surface(
-          onClick = { manualMode = !manualMode },
-          shape = RoundedCornerShape(20.dp),
-          color = if (manualMode) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surface,
-          shadowElevation = 4.dp,
-        ) {
-          Row(
-            modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-          ) {
-            Icon(
-              painter = painterResource(R.drawable.ic_place),
-              contentDescription = null,
-              tint = if (manualMode) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.primary,
-              modifier = Modifier.size(18.dp),
-            )
-            Spacer(modifier = Modifier.width(6.dp))
-            Text(
-              text = if (manualMode) "立ち寄り追加中（地図をタップ）" else "立ち寄りを追加",
-              style = MaterialTheme.typography.labelLarge,
-              fontWeight = FontWeight.Medium,
-              color = if (manualMode) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface,
-            )
-          }
-        }
-
-        // 「今ここ」を立ち寄りに追加（現在地あり）。
-        if (uiState.hasLocationPermission) {
-          val loc = uiState.currentLocation
+        if (uiState.isTracking) {
+          // 「立ち寄りを追加」モード（ON=地図タップが立ち寄り追加／OFF=場所登録）。
           Surface(
-            // 地点を指していないので、近くの施設候補から選ばせる。
-            onClick = {
-              loc?.let { manualTarget = ManualStopTarget(it.latitude, it.longitude, ManualStopOrigin.CurrentLocation) }
-            },
-            enabled = loc != null,
+            onClick = { manualMode = !manualMode },
             shape = RoundedCornerShape(20.dp),
-            color = MaterialTheme.colorScheme.surface,
+            color = if (manualMode) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surface,
             shadowElevation = 4.dp,
           ) {
             Row(
@@ -485,17 +457,65 @@ fun TrackingScreen(
               Icon(
                 painter = painterResource(R.drawable.ic_place),
                 contentDescription = null,
-                tint = MaterialTheme.colorScheme.primary,
+                tint = if (manualMode) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.primary,
                 modifier = Modifier.size(18.dp),
               )
               Spacer(modifier = Modifier.width(6.dp))
               Text(
-                text = "今ここを立ち寄り",
+                text = if (manualMode) "立ち寄り追加中（地図をタップ）" else "立ち寄りを追加",
                 style = MaterialTheme.typography.labelLarge,
                 fontWeight = FontWeight.Medium,
+                color = if (manualMode) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface,
               )
             }
           }
+
+          // 「今ここ」を立ち寄りに追加（現在地あり）。
+          if (uiState.hasLocationPermission) {
+            val loc = uiState.currentLocation
+            Surface(
+              // 地点を指していないので、近くの施設候補から選ばせる。
+              onClick = {
+                loc?.let { manualTarget = ManualStopTarget(it.latitude, it.longitude, ManualStopOrigin.CurrentLocation) }
+              },
+              enabled = loc != null,
+              shape = RoundedCornerShape(20.dp),
+              color = MaterialTheme.colorScheme.surface,
+              shadowElevation = 4.dp,
+            ) {
+              Row(
+                modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+              ) {
+                Icon(
+                  painter = painterResource(R.drawable.ic_place),
+                  contentDescription = null,
+                  tint = MaterialTheme.colorScheme.primary,
+                  modifier = Modifier.size(18.dp),
+                )
+                Spacer(modifier = Modifier.width(6.dp))
+                Text(
+                  text = "今ここを立ち寄り",
+                  style = MaterialTheme.typography.labelLarge,
+                  fontWeight = FontWeight.Medium,
+                )
+              }
+            }
+          }
+        }
+
+        // 「地域へ移動」で出した目印の地名のチップ。× で目印ごと消し（地図は動かさない）、地名で地域の範囲へ寄せ直す。
+        regionMarker?.let { region ->
+          RegionMarkerChip(
+            name = region.name,
+            onRefit = {
+              fitBounds = region.bounds
+              fitNonce++
+            },
+            onClear = { regionMarker = null },
+            // 停止中は上部中央のピル（登録の確認・現在地の取得中）の段を避けて、その下に置く。
+            modifier = if (uiState.isTracking) Modifier else Modifier.padding(top = 44.dp),
+          )
         }
       }
     }
@@ -741,9 +761,10 @@ fun TrackingScreen(
         onSelected = { (name, region) ->
           mapSearch = null
           val b = region.bounds
-          fitBounds = LatLngBounds(LatLng(b.south, b.west), LatLng(b.north, b.east))
+          val bounds = LatLngBounds(LatLng(b.south, b.west), LatLng(b.north, b.east))
+          fitBounds = bounds
           fitNonce++
-          regionMarker = RegionMarker(name = name, position = LatLng(region.latitude, region.longitude))
+          regionMarker = RegionMarker(name = name, position = LatLng(region.latitude, region.longitude), bounds = bounds)
         },
         onClose = { mapSearch = null },
         modifier = Modifier.align(Alignment.TopCenter),
@@ -1370,8 +1391,63 @@ private fun CameraPositionState.visibleGeoBounds(): GeoBounds? = projection?.vis
   GeoBounds(b.southwest.latitude, b.southwest.longitude, b.northeast.latitude, b.northeast.longitude)
 }
 
-/** 「地域へ移動」で移した地域の目印（中心と名前）。 */
-private data class RegionMarker(val name: String, val position: LatLng)
+/** 「地域へ移動」で移した地域の目印（中心と名前）。[bounds] はチップの地名から寄せ直すときの範囲（選んだときと同じ）。 */
+private data class RegionMarker(val name: String, val position: LatLng, val bounds: LatLngBounds)
+
+/** 地域の目印が出ている間の地名のチップ。地名の部分で [onRefit]（範囲へ寄せ直す）、× で [onClear]（目印を消す）。 */
+@Composable
+private fun RegionMarkerChip(
+  name: String,
+  onRefit: () -> Unit,
+  onClear: () -> Unit,
+  modifier: Modifier = Modifier,
+) {
+  Surface(
+    modifier = modifier.testTag("regionMarkerChip"),
+    shape = RoundedCornerShape(20.dp),
+    color = MaterialTheme.colorScheme.surface,
+    shadowElevation = 4.dp,
+  ) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+      Row(
+        modifier = Modifier
+          .weight(1f, fill = false)
+          .clickable(onClickLabel = "この地域へ地図を寄せる", onClick = onRefit)
+          .padding(start = 14.dp, top = 8.dp, bottom = 8.dp, end = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+      ) {
+        Icon(
+          painter = painterResource(R.drawable.ic_public),
+          contentDescription = null,
+          tint = MarkerRegionIndigo,
+          modifier = Modifier.size(18.dp),
+        )
+        Spacer(modifier = Modifier.width(6.dp))
+        Text(
+          text = name,
+          style = MaterialTheme.typography.labelLarge,
+          fontWeight = FontWeight.Medium,
+          maxLines = 1,
+          overflow = TextOverflow.Ellipsis,
+        )
+      }
+      // × は小さいので、押せる範囲は 48dp 四方を確保する（隣の地名＝寄せ直しを誤って押さないように）。
+      Box(
+        modifier = Modifier
+          .minimumInteractiveComponentSize()
+          .clickable(onClick = onClear),
+        contentAlignment = Alignment.Center,
+      ) {
+        Icon(
+          painter = painterResource(R.drawable.ic_close),
+          contentDescription = "地域の目印を消す",
+          tint = MaterialTheme.colorScheme.onSurfaceVariant,
+          modifier = Modifier.size(18.dp),
+        )
+      }
+    }
+  }
+}
 
 // 地域の目印の色。経路（青）・立ち寄り（紫）・登録済みの場所（緑・灰）・手動の地点（青）と見分ける。
 private val MarkerRegionIndigo = Color(0xFF3949AB)
