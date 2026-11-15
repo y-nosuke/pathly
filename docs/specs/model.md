@@ -81,6 +81,8 @@ erDiagram
   place_resolutions {
     Long placeId PK
     Date resolvedAt
+    String sameFacilityGooglePlaceId
+    Boolean keptSeparate
   }
   google_places {
     Long placeId PK
@@ -124,7 +126,7 @@ erDiagram
 | **smoothed_points**         | 補正（スムージング）後の点列。原データと併存                                                                                                                                                                                                                                                                                              | gps_tracks に属す／sourcePointId で生点を辿れる        |
 | **places**                  | 場所そのもの（自分の名前・メモ・同定用のアンカー座標）。由来（`source`）で自動回収の対象を分ける。地域（国・都道府県・市区町村）はアンカーから Geocoder で引いて後から書き足す（`regionResolvedAt` が null＝まだ。→ [ADR-0029](../adr/0029-place-region-by-geocoder.md)・[ADR-0030](../adr/0030-overseas-region-by-country-and-city.md)） | stops から参照される                                   |
 | **stops**                   | 立ち寄り（訪問）。places と gps_tracks を結ぶ                                                                                                                                                                                                                                                                                             | 経路削除で消える（場所は残す）／訪問メモ `note` を持つ |
-| **place_resolutions**       | Google 問い合わせログ（行の有無＝問い合わせ済みか）                                                                                                                                                                                                                                                                                       | places に 1:0..1                                       |
+| **place_resolutions**       | Google 問い合わせログ（行の有無＝問い合わせ済みか）。同じ施設を既に別の場所が持っていたら、その施設の ID（`sameFacilityGooglePlaceId`）と、別の場所として残すと決めたか（`keptSeparate`）も持つ（→ [ADR-0037](../adr/0037-ask-merge-or-keep-separate-on-same-facility.md)）                                                               | places に 1:0..1                                       |
 | **google_places**           | Google 由来データ（place ID・名前・住所・カテゴリ・施設の座標）                                                                                                                                                                                                                                                                           | places に 1:0..1（行＝該当 POI あり）                  |
 | **google_place_categories** | 業種のマスタ（`code`＝Google の primaryType・表示名）                                                                                                                                                                                                                                                                                     | google_places から参照される（多対 1）                 |
 | **wishlist**                | 行きたい場所（優先度のみ。メモは places.note）                                                                                                                                                                                                                                                                                            | places に 1:0..1                                       |

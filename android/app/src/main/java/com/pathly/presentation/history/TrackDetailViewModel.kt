@@ -15,6 +15,8 @@ import com.pathly.domain.model.PlaceSearchResult
 import com.pathly.domain.model.PlaceVisit
 import com.pathly.domain.model.Priority
 import com.pathly.domain.model.RegisteredPlace
+import com.pathly.domain.model.SameFacilityPending
+import com.pathly.domain.model.SameFacilityPlace
 import com.pathly.domain.model.Stop
 import com.pathly.domain.model.StopCandidate
 import com.pathly.domain.repository.GpsTrackRepository
@@ -31,8 +33,10 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import java.util.Date
@@ -119,6 +123,24 @@ class TrackDetailViewModel @Inject constructor(
     .flatMapLatest { id -> if (id == null) flowOf(0) else placeRepository.unresolvedCountForTrack(id) }
     .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 0)
 
+  /** この経路の、同じ施設の確認待ち（→ adr/0037）。経路詳細を開くと「確認待ち」として出す。 */
+  val sameFacilityPending: StateFlow<List<SameFacilityPending>> = loadedTrackId
+    .flatMapLatest { id -> if (id == null) flowOf(emptyList()) else placeRepository.observeSameFacilityPending(id) }
+    .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+  // 確認待ちを 1 件ずつ聞くダイアログを出しているか。
+  private val _sameFacilityDialogOpen = MutableStateFlow(false)
+  val sameFacilityDialogOpen: StateFlow<Boolean> = _sameFacilityDialogOpen.asStateFlow()
+
+  init {
+    // 確認待ちを全部答え終えたら閉じる（開いたままだと、あとで裏の名前付けが見つけた分で勝手に開く）。
+    viewModelScope.launch {
+      sameFacilityPending.map { it.isEmpty() }.distinctUntilChanged().collect { empty ->
+        if (empty) _sameFacilityDialogOpen.value = false
+      }
+    }
+  }
+
   private var collectJob: Job? = null
 
   fun load(trackId: Long) {
@@ -164,15 +186,56 @@ class TrackDetailViewModel @Inject constructor(
   /**
    * 未取得の場所を Places で取り直す（手動・googlePlaceId 無しが対象）。
    *
-   * 同じ施設を既に他の場所が持っていると施設情報は付かない（→ adr/0025）。黙って見送ると
-   * 「押しても何も起きない」ように見えるので、その件数だけは伝える。
+   * 同じ施設を既に他の場所が持っていると施設情報は付かない（→ adr/0025）。その場で操作したので、
+   * まとめるか別のまま残すかをその場で聞く（→ adr/0037）。
    */
   fun resolveNames() {
     val trackId = loadedTrackId.value ?: return
     viewModelScope.launch {
       val skipped = placeRepository.resolveUnresolvedNames(trackId)
-      if (skipped > 0) {
-        _message.value = "${skipped}件は、同じ施設の場所が既にあるため施設情報を付けませんでした"
+      if (skipped > 0) _sameFacilityDialogOpen.value = true
+    }
+  }
+
+  /** 同じ施設の確認待ちを聞くダイアログを開く（「確認待ち」のチップ）。 */
+  fun openSameFacilityDialog() {
+    _sameFacilityDialogOpen.value = true
+  }
+
+  /** 「あとで」: 決めずに閉じる（確認待ちのまま残る）。 */
+  fun dismissSameFacilityDialog() {
+    _sameFacilityDialogOpen.value = false
+  }
+
+  /**
+   * 確認待ちの場所を相手にまとめる（→ adr/0037）。スナックバーの「取り消す」で戻せる。
+   * ダイアログは開いたままにし、残りがあれば次の 1 件を聞く。
+   */
+  fun mergeSameFacility(pending: SameFacilityPending) {
+    mergeIntoSameFacility(pending.placeId, pending.placeName, pending.other)
+  }
+
+  /** [placeId] を相手 [other] にまとめる（場所シートの編集部・確認待ちのダイアログの両方から）。 */
+  fun mergeIntoSameFacility(placeId: Long, placeName: String?, other: SameFacilityPlace) {
+    viewModelScope.launch {
+      try {
+        if (placeEditUseCase.mergeIntoSameFacility(placeId, other.placeId)) {
+          _deleteUndo.value = _deleteUndo.value.merged(placeName, other.name)
+        }
+      } catch (e: Exception) {
+        _message.value = "まとめられませんでした: ${e.message}"
+      }
+    }
+  }
+
+  /** 施設情報なしで、別の場所として残す（→ adr/0037）。二度と聞かない。 */
+  fun keepAsSeparatePlace(placeId: Long) {
+    viewModelScope.launch {
+      try {
+        placeEditUseCase.keepAsSeparatePlace(placeId)
+        _message.value = "別の場所として残しました"
+      } catch (e: Exception) {
+        _message.value = "保存に失敗しました: ${e.message}"
       }
     }
   }
@@ -376,12 +439,9 @@ class TrackDetailViewModel @Inject constructor(
   ) {
     viewModelScope.launch {
       try {
-        val result = placeEditUseCase.saveEdits(item, name, note, wishlist, priority, visited, link)
-        _message.value = if (result.linkRefused) {
-          "同じ施設の場所が既にあるため、施設情報は紐付けませんでした（他は保存しました）"
-        } else {
-          "保存しました"
-        }
+        // 同じ施設の場所が既にあって紐付けを断られたときは、編集部が選択肢のダイアログを出す（→ adr/0037）。
+        placeEditUseCase.saveEdits(item, name, note, wishlist, priority, visited, link)
+        _message.value = "保存しました"
       } catch (e: Exception) {
         _message.value = "保存に失敗しました: ${e.message}"
       }
@@ -409,11 +469,11 @@ class TrackDetailViewModel @Inject constructor(
     _deleteUndo.value = _deleteUndo.value.shown()
   }
 
-  /** 直近の削除を取り消して元に戻す（スナックバーの「取り消す」）。 */
-  fun undoDelete() {
+  /** 直近の削除（[isMerge] ならまとめ）を取り消して元に戻す（スナックバーの「取り消す」）。 */
+  fun undoDelete(isMerge: Boolean = false) {
     viewModelScope.launch {
       try {
-        wishlistRepository.undoLastPlaceDeletion()
+        if (isMerge) placeEditUseCase.undoMerge() else wishlistRepository.undoLastPlaceDeletion()
       } catch (e: Exception) {
         _message.value = "取り消しに失敗しました: ${e.message}"
       }

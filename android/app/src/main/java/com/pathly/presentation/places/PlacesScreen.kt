@@ -298,6 +298,11 @@ fun PlaceDetailRoute(
     },
     onObservePlace = viewModel::observePlace,
     onObserveVisits = viewModel::visitsFor,
+    // まとめるとこの場所は消え、一覧へ戻ってスナックバーで取り消せる（削除と同じ）。
+    sameFacilityActions = SameFacilityActions(
+      onMerge = viewModel::mergeIntoSameFacility,
+      onKeepSeparate = { viewModel.keepAsSeparatePlace(it.place.id) },
+    ),
     onFetchPoiDetails = viewModel::fetchPoiDetails,
     // 「Googleで情報を取得」: 登録座標の近くの候補から選ぶ（保存で確定・選び直しと同じ仕組み）。
     onFetchNearbyPois = viewModel::nearbyPois,
@@ -864,6 +869,7 @@ private fun PlaceDetailContent(
   // 座標がずれて周辺に出ない施設用: 名前で検索するフォールバック。
   onSearchPredictions: suspend (query: String) -> List<PlacePrediction>,
   onFetchPrediction: suspend (placeId: String) -> PlaceSearchResult?,
+  sameFacilityActions: SameFacilityActions?,
   modifier: Modifier = Modifier,
   // 登録済みの場所の地図表示（画面別トグル）。この場所自身は主マーカーと重なるので呼び出し側で除外して渡す。
   registeredPlaces: List<RegisteredPlace> = emptyList(),
@@ -1017,6 +1023,7 @@ private fun PlaceDetailContent(
             onFetchNearbyPois = onFetchNearbyPois,
             onSearchPredictions = onSearchPredictions,
             onFetchPrediction = onFetchPrediction,
+            sameFacilityActions = sameFacilityActions,
           )
         }
       }
@@ -1039,6 +1046,7 @@ private fun PlaceDetailContent(
         onFetchNearbyPois = onFetchNearbyPois,
         onSearchPredictions = onSearchPredictions,
         onFetchPrediction = onFetchPrediction,
+        sameFacilityActions = sameFacilityActions,
         modifier = Modifier.align(Alignment.BottomCenter),
       )
     }

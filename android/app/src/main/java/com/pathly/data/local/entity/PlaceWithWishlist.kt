@@ -39,6 +39,9 @@ data class PlaceWithWishlist(
   // 行きたいの履歴（wishlist_fulfillments）の件数＝行きたいで行った回数と、最後に行った日時（→ adr/0036）。
   val fulfilledWishCount: Int = 0,
   val lastFulfilledAt: Date? = null,
+  // 同じ施設の相手がいて、まだ決めていないときの相手の id と表示名（→ adr/0037）。
+  val sameFacilityPlaceId: Long? = null,
+  val sameFacilityName: String? = null,
   // 地域（places の列。まだ引いていない・分からなければ null。→ adr/0029）。
   val regionCountryCode: String? = null,
   val regionPrefecture: String? = null,

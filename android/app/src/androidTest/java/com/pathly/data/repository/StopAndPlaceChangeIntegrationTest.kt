@@ -19,6 +19,7 @@ import com.pathly.data.places.PlacesTextSearcher
 import com.pathly.domain.model.PlaceSearchResult
 import com.pathly.domain.model.PlaceSource
 import com.pathly.domain.model.WishlistFlag
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.runTest
 import org.junit.After
@@ -70,6 +71,7 @@ class StopAndPlaceChangeIntegrationTest {
       database.wishlistDao(),
       database.visitedPlaceDao(),
       database.wishlistFulfillmentDao(),
+      database.placeMergeDao(),
       PlacesNameResolver(context),
     )
     wishlistRepository = WishlistRepositoryImpl(
@@ -449,6 +451,146 @@ class StopAndPlaceChangeIntegrationTest {
     assertEquals(PlaceSource.USER.name, newPlace.source)
     assertEquals("元の場所の座標で作る", LAT, newPlace.latitude, 0.0)
     assertNotNull("ユーザーが作った元の場所は、参照が無くなっても残る", database.placeDao().getById(oldUser))
+  }
+
+  // ---- 同じ施設の場所をまとめる・別のまま残す（→ adr/0037） ----
+
+  @Test
+  fun mergePlaces_followsTheRules_andUndoRestoresBothPlacesWithOriginalIds() = runTest {
+    // 残る方（施設を持っている）: 名前・メモ・低い優先度の行きたい。
+    val holder = insertPlace(PlaceSource.DETECTED, name = "清瀧神社（自分）", note = "残る方のメモ")
+    database.googlePlaceDao().upsert(GooglePlaceEntity(holder, "gp-same", "清瀧神社"))
+    database.placeResolutionDao().upsert(PlaceResolutionEntity(holder, Date(BASE)))
+    wish(holder, at = BASE + 2 * HOUR, priority = 0)
+    // まとめられる方: 名前なし・メモ・高い優先度の行きたい・訪問済みの印・行きたいの履歴・立ち寄り。
+    val dup = insertPlace(PlaceSource.USER, latitude = LAT + 0.001, note = "消える方のメモ")
+    database.placeResolutionDao().upsert(PlaceResolutionEntity(dup, Date(BASE), sameFacilityGooglePlaceId = "gp-same"))
+    wish(dup, at = BASE + 2 * HOUR, priority = 2)
+    database.visitedPlaceDao().insert(VisitedPlaceEntity(placeId = dup, markedAt = Date(BASE)))
+    database.wishlistFulfillmentDao().insertAll(
+      listOf(WishlistFulfillmentEntity(placeId = dup, priority = 1, wishedAt = Date(BASE - HOUR), fulfilledAt = Date(BASE))),
+    )
+    val dupStop = insertStop(dup, arrival = BASE, departure = BASE + 10 * MINUTE)
+    val holderStop = insertStop(holder, arrival = BASE + 20 * MINUTE, departure = BASE + 30 * MINUTE)
+
+    assertTrue(placeRepository.mergePlaces(dup, holder))
+
+    assertNull("まとめられた方は消える", database.placeDao().getById(dup))
+    assertEquals("立ち寄りは残る方へ付け替わる", holder, stopOf(dupStop).placeId)
+    assertEquals(holder, stopOf(holderStop).placeId)
+    val merged = database.placeDao().getById(holder)!!
+    assertEquals("名前は残る方を優先", "清瀧神社（自分）", merged.name)
+    assertEquals("メモは両方をつなげる（残る方が先）", "残る方のメモ\n消える方のメモ", merged.note)
+    assertEquals("どちらかが自分で作った場所なら USER", PlaceSource.USER.name, merged.source)
+    val mergedWish = database.wishlistDao().getByPlaceId(holder)!!
+    assertEquals("優先度は高い方", 2, mergedWish.priority)
+    assertNotNull("訪問済みの印はどちらかにあれば付く", database.visitedPlaceDao().getByPlaceId(holder))
+    assertEquals("行きたいの履歴は残る方へ移る", 1, database.wishlistFulfillmentDao().countByPlace(holder))
+    assertEquals("施設は残る方が持ち続ける", holder, database.googlePlaceDao().getPlaceIdByGoogleId("gp-same"))
+
+    assertTrue(placeRepository.undoLastPlaceMerge())
+
+    val restoredDup = database.placeDao().getById(dup)!!
+    assertEquals("消える方のメモ", restoredDup.note)
+    assertEquals(PlaceSource.USER.name, restoredDup.source)
+    assertEquals("立ち寄りは元の場所へ戻る", dup, stopOf(dupStop).placeId)
+    assertEquals(holder, stopOf(holderStop).placeId)
+    val restoredHolder = database.placeDao().getById(holder)!!
+    assertEquals("残る方のメモ", restoredHolder.note)
+    assertEquals(PlaceSource.DETECTED.name, restoredHolder.source)
+    assertEquals(0, database.wishlistDao().getByPlaceId(holder)!!.priority)
+    assertEquals(2, database.wishlistDao().getByPlaceId(dup)!!.priority)
+    assertNull("残る方に訪問済みの印は無かった", database.visitedPlaceDao().getByPlaceId(holder))
+    assertNotNull(database.visitedPlaceDao().getByPlaceId(dup))
+    assertEquals(0, database.wishlistFulfillmentDao().countByPlace(holder))
+    assertEquals(1, database.wishlistFulfillmentDao().countByPlace(dup))
+    assertEquals(
+      "確認待ちの記録も戻る",
+      "gp-same",
+      database.placeResolutionDao().getByPlace(dup)!!.sameFacilityGooglePlaceId,
+    )
+    assertFalse("取り消しは 1 回だけ", placeRepository.undoLastPlaceMerge())
+  }
+
+  @Test
+  fun mergePlaces_endsHoldersWishByMovedStop_andUndoBringsTheWishBack() = runTest {
+    // 残る方の行きたいは、入れた後の立ち寄りが付け替わってくると「行った」で終わる（→ adr/0036）。
+    val holder = insertPlace(PlaceSource.USER, name = "カフェ")
+    database.googlePlaceDao().upsert(GooglePlaceEntity(holder, "gp-cafe", "カフェ"))
+    wish(holder, at = BASE - HOUR)
+    val dup = insertPlace(PlaceSource.USER, latitude = LAT + 0.001)
+    insertStop(dup, arrival = BASE, departure = BASE + 10 * MINUTE)
+
+    assertTrue(placeRepository.mergePlaces(dup, holder))
+
+    assertNull("行った行きたいは終わる", database.wishlistDao().getByPlaceId(holder))
+    val history = database.wishlistFulfillmentDao().getByPlaceId(holder).single()
+    assertEquals("行った日時は付け替わった立ち寄りの到着", BASE, history.fulfilledAt.time)
+
+    assertTrue(placeRepository.undoLastPlaceMerge())
+
+    assertNotNull("取り消すと行きたいに戻る", database.wishlistDao().getByPlaceId(holder))
+    assertEquals("まとめで増えた履歴は消える", 0, database.wishlistFulfillmentDao().countByPlace(holder))
+  }
+
+  @Test
+  fun mergePlaces_movesFacilityWhenOnlyTheMergedPlaceHasIt() = runTest {
+    val into = insertPlace(PlaceSource.USER, name = "自宅前")
+    val from = insertPlace(PlaceSource.DETECTED, latitude = LAT + 0.001)
+    database.googlePlaceDao().upsert(GooglePlaceEntity(from, "gp-park", "公園"))
+    database.placeResolutionDao().upsert(PlaceResolutionEntity(from, Date(BASE)))
+
+    assertTrue(placeRepository.mergePlaces(from, into))
+
+    assertEquals("施設情報は残る方へ移る", into, database.googlePlaceDao().getPlaceIdByGoogleId("gp-park"))
+    assertNotNull("解決記録も付く（自動の名前付けで問い合わせ直さない）", database.placeResolutionDao().getByPlace(into))
+
+    assertTrue(placeRepository.undoLastPlaceMerge())
+
+    assertEquals(from, database.googlePlaceDao().getPlaceIdByGoogleId("gp-park"))
+    assertNull(database.placeResolutionDao().getByPlace(into))
+  }
+
+  @Test
+  fun sameFacilityPending_isNotCountedAsUnresolved_andKeepSeparateEndsIt() = runTest {
+    val holder = insertPlace(PlaceSource.USER, name = "神社")
+    database.googlePlaceDao().upsert(GooglePlaceEntity(holder, "gp-same", "清瀧神社"))
+    val dup = insertPlace(PlaceSource.USER, latitude = LAT + 0.001, name = "裏の入口")
+    database.placeResolutionDao().upsert(PlaceResolutionEntity(dup, Date(BASE), sameFacilityGooglePlaceId = "gp-same"))
+    insertStop(dup, arrival = BASE, departure = BASE + 10 * MINUTE)
+
+    // 確認待ちは「未取得」に数えず、「場所を取得」でも問い合わせ直さない。
+    assertEquals(0, placeRepository.unresolvedCountForTrack(trackId).first())
+    assertTrue(database.placeDao().getPlacesWithoutGoogleIdForTrack(trackId).isEmpty())
+    val pending = placeRepository.observeSameFacilityPending(trackId).first().single()
+    assertEquals(dup, pending.placeId)
+    assertEquals("裏の入口", pending.placeName)
+    assertEquals(holder, pending.other.placeId)
+    assertEquals("神社", pending.other.name)
+    // 場所詳細にも相手が出る。
+    assertEquals(holder, wishlistRepository.getPlace(dup)!!.sameFacility!!.placeId)
+    assertNull(wishlistRepository.getPlace(holder)!!.sameFacility)
+
+    placeRepository.keepAsSeparatePlace(dup)
+
+    assertTrue("決めたら確認待ちから外れる", placeRepository.observeSameFacilityPending(trackId).first().isEmpty())
+    assertNull(wishlistRepository.getPlace(dup)!!.sameFacility)
+    assertEquals("別のまま残した場所も「未取得」に数えない", 0, placeRepository.unresolvedCountForTrack(trackId).first())
+  }
+
+  @Test
+  fun sameFacilityPending_whenTheOtherPlaceIsGone_countsAsUnresolvedAgain() = runTest {
+    // 相手（立ち寄りの無い登録だけの場所）を消すと施設が空くので、また「場所を取得」で問い合わせられる。
+    val holder = insertPlace(PlaceSource.USER, name = "神社")
+    database.googlePlaceDao().upsert(GooglePlaceEntity(holder, "gp-same", "清瀧神社"))
+    val dup = insertPlace(PlaceSource.USER, latitude = LAT + 0.001)
+    database.placeResolutionDao().upsert(PlaceResolutionEntity(dup, Date(BASE), sameFacilityGooglePlaceId = "gp-same"))
+    insertStop(dup, arrival = BASE, departure = BASE + 10 * MINUTE)
+
+    wishlistRepository.deletePlace(holder)
+
+    assertTrue(placeRepository.observeSameFacilityPending(trackId).first().isEmpty())
+    assertEquals(1, placeRepository.unresolvedCountForTrack(trackId).first())
   }
 
   // ---- helpers ----

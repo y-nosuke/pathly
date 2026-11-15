@@ -3,6 +3,7 @@ package com.pathly.domain.repository
 import com.pathly.domain.model.PlaceSearchResult
 import com.pathly.domain.model.PlaceSource
 import com.pathly.domain.model.RegisteredPlace
+import com.pathly.domain.model.SameFacilityPending
 import com.pathly.domain.model.Stop
 import com.pathly.domain.model.StopCandidate
 import com.pathly.domain.model.StopDeletionResult
@@ -118,6 +119,30 @@ interface PlaceRepository {
    * （→ adr/0025）。押しても何も起きなかったように見えるので、呼び出し側で理由を伝えるために使う。
    */
   suspend fun resolveUnresolvedNames(trackId: Long): Int
+
+  /**
+   * ある経路の場所のうち、同じ施設の相手がいて、まとめるか別のまま残すかをまだ決めていないもの
+   * （経路詳細の「確認待ち」 → adr/0037）。決めたり相手が消えたりすると外れる。
+   */
+  fun observeSameFacilityPending(trackId: Long): Flow<List<SameFacilityPending>>
+
+  /**
+   * [fromPlaceId] を [intoPlaceId] にまとめる（[fromPlaceId] は消える → adr/0037）。立ち寄りは残る方へ
+   * 付け替え、名前・メモは残る方を優先（メモは両方あればつなげる）、行きたい・訪問済みの印はどちらかに
+   * あれば付ける（優先度は高い方）。取り消し（[undoLastPlaceMerge]）用に、変更前の行を控える。
+   *
+   * @return まとめたら true。どちらかが無い・同じ場所なら何もせず false。
+   */
+  suspend fun mergePlaces(fromPlaceId: Long, intoPlaceId: Long): Boolean
+
+  /** 直近の [mergePlaces] を取り消し、両方の場所を元の id のまま戻す。控えが無ければ false。 */
+  suspend fun undoLastPlaceMerge(): Boolean
+
+  /**
+   * 同じ施設の相手がいても、施設情報なしで別の場所として残す（→ adr/0037）。
+   * 以後は聞かず、「未取得」にも数えず、Google に問い合わせ直さない。
+   */
+  suspend fun keepAsSeparatePlace(placeId: Long)
 
   /**
    * 全経路で、まだ一度も解決していない立ち寄り場所をまとめて名前解決する（オンライン復帰後のキャッチアップ）。

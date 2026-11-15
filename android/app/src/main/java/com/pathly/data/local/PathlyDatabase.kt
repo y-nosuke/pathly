@@ -12,6 +12,7 @@ import com.pathly.data.local.dao.GooglePlaceDao
 import com.pathly.data.local.dao.GpsPointDao
 import com.pathly.data.local.dao.GpsTrackDao
 import com.pathly.data.local.dao.PlaceDao
+import com.pathly.data.local.dao.PlaceMergeDao
 import com.pathly.data.local.dao.PlaceRegionDao
 import com.pathly.data.local.dao.PlaceResolutionDao
 import com.pathly.data.local.dao.SmoothedPointDao
@@ -59,6 +60,7 @@ abstract class PathlyDatabase : RoomDatabase() {
   abstract fun stopDao(): StopDao
   abstract fun smoothedPointDao(): SmoothedPointDao
   abstract fun placeResolutionDao(): PlaceResolutionDao
+  abstract fun placeMergeDao(): PlaceMergeDao
   abstract fun googlePlaceDao(): GooglePlaceDao
   abstract fun googlePlaceCategoryDao(): GooglePlaceCategoryDao
   abstract fun wishlistDao(): WishlistDao
@@ -70,7 +72,7 @@ abstract class PathlyDatabase : RoomDatabase() {
     const val DATABASE_NAME = "pathly_database"
 
     /** スキーマのバージョン。上げるときは DatabaseMigrations にマイグレーションを足す。 */
-    const val VERSION = 20
+    const val VERSION = 21
     private val logger = Logger("PathlyDatabase")
 
     @Volatile

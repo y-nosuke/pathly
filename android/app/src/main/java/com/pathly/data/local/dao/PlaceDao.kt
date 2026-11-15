@@ -3,12 +3,34 @@ package com.pathly.data.local.dao
 import androidx.room.Dao
 import androidx.room.Insert
 import androidx.room.Query
+import androidx.room.Update
 import com.pathly.data.local.entity.NamedPlaceRow
 import com.pathly.data.local.entity.PlaceEntity
 import com.pathly.data.local.entity.PlaceWithWishlist
 import com.pathly.data.local.entity.RegisteredPlaceRow
+import com.pathly.data.local.entity.SameFacilityPendingRow
 import kotlinx.coroutines.flow.Flow
 import java.util.Date
+
+/**
+ * 同じ施設の相手（その施設を持っている別の place）がいて、まだ決めていない（→ adr/0037）。
+ * 相手は施設の ID で `google_places` から引く。相手が消えた・別の施設に付け替わったら当たらなくなる。
+ */
+private const val SAME_FACILITY_PENDING =
+  "r.sameFacilityGooglePlaceId IS NOT NULL AND r.keptSeparate = 0 AND h.placeId != p.id"
+
+/** 「未取得」に数えない場所（同じ施設の確認待ち、または施設情報なしで別の場所として残すと決めた → adr/0037）。 */
+private const val NOT_COUNTED_AS_UNRESOLVED =
+  "EXISTS (SELECT 1 FROM place_resolutions r WHERE r.placeId = p.id AND (r.keptSeparate = 1 OR " +
+    "EXISTS (SELECT 1 FROM google_places h WHERE h.googlePlaceId = r.sameFacilityGooglePlaceId AND h.placeId != p.id)))"
+
+/** 場所詳細に出す「同じ施設らしい相手」の id と表示名（いなければ null）。 */
+private const val SAME_FACILITY_COLUMNS =
+  "(SELECT h.placeId FROM place_resolutions r JOIN google_places h ON h.googlePlaceId = r.sameFacilityGooglePlaceId " +
+    "WHERE r.placeId = p.id AND $SAME_FACILITY_PENDING) AS sameFacilityPlaceId, " +
+    "(SELECT COALESCE(hp.name, h.name, h.address) FROM place_resolutions r " +
+    "JOIN google_places h ON h.googlePlaceId = r.sameFacilityGooglePlaceId JOIN places hp ON hp.id = h.placeId " +
+    "WHERE r.placeId = p.id AND $SAME_FACILITY_PENDING) AS sameFacilityName, "
 
 @Dao
 interface PlaceDao {
@@ -83,6 +105,7 @@ interface PlaceDao {
       "(SELECT MAX(s.arrivalTime) FROM stops s WHERE s.placeId = p.id) AS lastStopAt, " +
       "(SELECT COUNT(*) FROM wishlist_fulfillments f WHERE f.placeId = p.id) AS fulfilledWishCount, " +
       "(SELECT MAX(f.fulfilledAt) FROM wishlist_fulfillments f WHERE f.placeId = p.id) AS lastFulfilledAt, " +
+      SAME_FACILITY_COLUMNS +
       "p.countryCode AS regionCountryCode, p.prefecture AS regionPrefecture, p.city AS regionCity " +
       "FROM places p " +
       "LEFT JOIN google_places g ON g.placeId = p.id " +
@@ -105,6 +128,7 @@ interface PlaceDao {
       "(SELECT MAX(s.arrivalTime) FROM stops s WHERE s.placeId = p.id) AS lastStopAt, " +
       "(SELECT COUNT(*) FROM wishlist_fulfillments f WHERE f.placeId = p.id) AS fulfilledWishCount, " +
       "(SELECT MAX(f.fulfilledAt) FROM wishlist_fulfillments f WHERE f.placeId = p.id) AS lastFulfilledAt, " +
+      SAME_FACILITY_COLUMNS +
       "p.countryCode AS regionCountryCode, p.prefecture AS regionPrefecture, p.city AS regionCity " +
       "FROM places p " +
       "LEFT JOIN google_places g ON g.placeId = p.id " +
@@ -192,12 +216,14 @@ interface PlaceDao {
   /**
    * ある経路の場所のうち、Google の place ID が付いていないもの（手動「場所を取得」の対象）。
    * POI 無し・過去失敗・未実施を、ユーザー操作で取り直すため。
+   * 同じ施設の確認待ちと、施設情報なしで残すと決めた場所は除く（問い合わせ直しても付かない → adr/0037）。
    * 「取得済み」は google_places の行の有無で判定する（行がある＝googlePlaceId あり）。
    */
   @Query(
     "SELECT DISTINCT p.* FROM places p INNER JOIN stops s ON s.placeId = p.id " +
       "WHERE s.trackId = :trackId " +
-      "AND NOT EXISTS (SELECT 1 FROM google_places g WHERE g.placeId = p.id)",
+      "AND NOT EXISTS (SELECT 1 FROM google_places g WHERE g.placeId = p.id) " +
+      "AND NOT $NOT_COUNTED_AS_UNRESOLVED",
   )
   suspend fun getPlacesWithoutGoogleIdForTrack(trackId: Long): List<PlaceEntity>
 
@@ -205,9 +231,31 @@ interface PlaceDao {
   @Query(
     "SELECT COUNT(DISTINCT p.id) FROM places p INNER JOIN stops s ON s.placeId = p.id " +
       "WHERE s.trackId = :trackId " +
-      "AND NOT EXISTS (SELECT 1 FROM google_places g WHERE g.placeId = p.id)",
+      "AND NOT EXISTS (SELECT 1 FROM google_places g WHERE g.placeId = p.id) " +
+      "AND NOT $NOT_COUNTED_AS_UNRESOLVED",
   )
   fun countPlacesWithoutGoogleIdForTrack(trackId: Long): Flow<Int>
+
+  /**
+   * ある経路の場所のうち、同じ施設の相手がいて、まとめるか別のまま残すかをまだ決めていないもの（→ adr/0037）。
+   * 経路詳細の「確認待ち」に出す。並びはその経路で最初に立ち寄った順。
+   */
+  @Query(
+    "SELECT p.id AS placeId, COALESCE(p.name, pg.name, pg.address) AS placeName, " +
+      "h.placeId AS otherPlaceId, COALESCE(hp.name, h.name, h.address) AS otherName " +
+      "FROM places p INNER JOIN stops s ON s.placeId = p.id " +
+      "INNER JOIN place_resolutions r ON r.placeId = p.id " +
+      "INNER JOIN google_places h ON h.googlePlaceId = r.sameFacilityGooglePlaceId " +
+      "INNER JOIN places hp ON hp.id = h.placeId " +
+      "LEFT JOIN google_places pg ON pg.placeId = p.id " +
+      "WHERE s.trackId = :trackId AND $SAME_FACILITY_PENDING " +
+      "GROUP BY p.id ORDER BY MIN(s.arrivalTime)",
+  )
+  fun observeSameFacilityPendingForTrack(trackId: Long): Flow<List<SameFacilityPendingRow>>
+
+  /** 実体をそのまま上書きする（場所をまとめる・その取り消しで、名前・メモ・由来を書き換える）。 */
+  @Update
+  suspend fun update(place: PlaceEntity)
 
   @Query("UPDATE places SET name = :name, updatedAt = :updatedAt WHERE id = :id")
   suspend fun updateName(id: Long, name: String?, updatedAt: Date)

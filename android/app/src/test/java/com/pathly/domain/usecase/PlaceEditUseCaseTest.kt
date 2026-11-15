@@ -31,7 +31,7 @@ import java.util.Date
 class PlaceEditUseCaseTest {
 
   private val wishlistRepository = mockk<WishlistRepository>(relaxed = true)
-  private val useCase = PlaceEditUseCase(wishlistRepository)
+  private val useCase = PlaceEditUseCase(wishlistRepository, mockk(relaxed = true))
 
   @Before
   fun setup() {

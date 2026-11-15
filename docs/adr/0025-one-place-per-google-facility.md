@@ -1,6 +1,6 @@
 # 0025. ひとつの Google 施設を持てる場所は 1 つだけにする（v16）
 
-- Status: Accepted
+- Status: Accepted（自動でまとめる条件は [0037](0037-ask-merge-or-keep-separate-on-same-facility.md) で改めた。由来は見ず、中身が無ければまとめる）
 - Date: 2026-08-31
 
 関連: 同一性の決め方は [0023](0023-place-identity-and-coordinate-anchor.md)、ID での同定は

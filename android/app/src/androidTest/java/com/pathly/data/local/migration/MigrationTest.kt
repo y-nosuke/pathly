@@ -594,6 +594,32 @@ class MigrationTest {
     db.close()
   }
 
+  @Test
+  fun migrate20To21_addsSameFacilityColumns_leavingExistingRowsUndecided() {
+    helper.createDatabase(TEST_DB, 20).apply {
+      execSQL(
+        "INSERT INTO places (id, name, latitude, longitude, note, source, createdAt, updatedAt) VALUES " +
+          "(1, '神社', 35.68, 139.76, NULL, 'USER', 0, 0)",
+      )
+      execSQL("INSERT INTO place_resolutions (placeId, resolvedAt) VALUES (1, 100)")
+      close()
+    }
+
+    // 足した列の DDL（既定値を含む）が Room の生成物とずれていればここで失敗する。
+    val db = helper.runMigrationsAndValidate(TEST_DB, 21, true, DatabaseMigrations.MIGRATION_20_21)
+
+    // 既存の行は「相手なし・未決定」。どの施設とぶつかったかは分からないので埋めない。
+    db.query("SELECT placeId, resolvedAt, sameFacilityGooglePlaceId, keptSeparate FROM place_resolutions").use { cursor ->
+      assertTrue(cursor.moveToNext())
+      assertEquals(1L, cursor.getLong(0))
+      assertEquals("問い合わせた日時はそのまま", 100L, cursor.getLong(1))
+      assertTrue(cursor.isNull(2))
+      assertEquals(0, cursor.getInt(3))
+      assertFalse(cursor.moveToNext())
+    }
+    db.close()
+  }
+
   companion object {
     private const val TEST_DB = "migration-test"
   }

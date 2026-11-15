@@ -16,6 +16,7 @@ import com.pathly.domain.model.PlaceVisit
 import com.pathly.domain.model.Priority
 import com.pathly.domain.model.RegionKey
 import com.pathly.domain.model.RegisteredPlace
+import com.pathly.domain.model.SameFacilityPlace
 import com.pathly.domain.repository.WishlistRepository
 import com.pathly.domain.usecase.PlaceEditUseCase
 import com.pathly.presentation.common.toggled
@@ -389,11 +390,8 @@ class PlacesViewModel @Inject constructor(
   ) {
     viewModelScope.launch {
       try {
-        val result = placeEditUseCase.saveEdits(item, name, note, wishlist, priority, visited, link)
-        // 保存自体は通っているので、断られたときだけ理由を出す。
-        if (result.linkRefused) {
-          _uiState.update { it.copy(errorMessage = "同じ施設の場所が既にあるため、施設情報は紐付けませんでした（他は保存しました）") }
-        }
+        // 同じ施設の場所が既にあって紐付けを断られたときは、編集部が選択肢のダイアログを出す（→ adr/0037）。
+        placeEditUseCase.saveEdits(item, name, note, wishlist, priority, visited, link)
       } catch (e: Exception) {
         _uiState.update { it.copy(errorMessage = "保存に失敗しました: ${e.message}") }
       }
@@ -484,16 +482,44 @@ class PlacesViewModel @Inject constructor(
     }
   }
 
+  /**
+   * 同じ施設と分かった場所を相手にまとめる（→ adr/0037）。まとめた場所は消えるので詳細は閉じ、
+   * 削除と同じスナックバーの「取り消す」で戻せる。
+   */
+  fun mergeIntoSameFacility(item: PlaceListItem, other: SameFacilityPlace) {
+    viewModelScope.launch {
+      try {
+        if (placeEditUseCase.mergeIntoSameFacility(item.place.id, other.placeId)) {
+          _uiState.update { it.copy(deleteUndo = it.deleteUndo.merged(item.displayName, other.name)) }
+        }
+      } catch (e: Exception) {
+        _uiState.update { it.copy(errorMessage = "まとめられませんでした: ${e.message}") }
+      }
+    }
+  }
+
+  /** 同じ施設の相手がいても、施設情報なしで別の場所として残す（→ adr/0037）。 */
+  fun keepAsSeparatePlace(placeId: Long) {
+    viewModelScope.launch {
+      try {
+        placeEditUseCase.keepAsSeparatePlace(placeId)
+        notify("別の場所として残しました")
+      } catch (e: Exception) {
+        _uiState.update { it.copy(errorMessage = "保存に失敗しました: ${e.message}") }
+      }
+    }
+  }
+
   /** 削除の通知を出し終えた（画面に戻るたび再表示しないよう消化する）。 */
   fun consumeDeleteUndo() {
     _uiState.update { it.copy(deleteUndo = it.deleteUndo.shown()) }
   }
 
-  /** 直近の削除を取り消して元に戻す（スナックバーの「取り消す」）。 */
-  fun undoDelete() {
+  /** 直近の削除（[isMerge] ならまとめ）を取り消して元に戻す（スナックバーの「取り消す」）。 */
+  fun undoDelete(isMerge: Boolean = false) {
     viewModelScope.launch {
       try {
-        wishlistRepository.undoLastPlaceDeletion()
+        if (isMerge) placeEditUseCase.undoMerge() else wishlistRepository.undoLastPlaceDeletion()
       } catch (e: Exception) {
         _uiState.update { it.copy(errorMessage = "取り消しに失敗しました: ${e.message}") }
       }

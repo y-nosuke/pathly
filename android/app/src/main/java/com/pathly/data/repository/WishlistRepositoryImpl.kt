@@ -26,6 +26,7 @@ import com.pathly.domain.model.PlaceSource
 import com.pathly.domain.model.PlaceVisit
 import com.pathly.domain.model.Priority
 import com.pathly.domain.model.RegisteredPlace
+import com.pathly.domain.model.SameFacilityPlace
 import com.pathly.domain.repository.PlaceRepository
 import com.pathly.domain.repository.WishlistRepository
 import com.pathly.util.Logger
@@ -131,6 +132,9 @@ class WishlistRepositoryImpl @Inject constructor(
     // 答えがブレる（→ adr/0025）。まとめるかどうかはユーザーの判断なので、勝手には寄せない。
     val holder = googlePlaceDao.getPlaceIdByGoogleId(result.googlePlaceId)
     if (holder != null && holder != placeId) {
+      // どちらの施設か分かったことは記録し、まとめる・選び直す・別のまま残すをユーザーに選んでもらう
+      // （場所詳細に「確認待ち」として出る → adr/0037）。Google には問い合わせ直さない。
+      placeResolutionDao.upsert(PlaceResolutionEntity(placeId, Date(), sameFacilityGooglePlaceId = result.googlePlaceId))
       logger.i("Refused to link place $placeId: the same Google place is already held by place $holder")
       return false
     }
@@ -265,5 +269,6 @@ class WishlistRepositoryImpl @Inject constructor(
     fulfilledWishCount = fulfilledWishCount,
     lastFulfilledAt = lastFulfilledAt,
     region = PlaceRegion.of(regionCountryCode, regionPrefecture, regionCity),
+    sameFacility = sameFacilityPlaceId?.let { SameFacilityPlace(it, sameFacilityName) },
   )
 }
