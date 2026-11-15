@@ -67,6 +67,8 @@ import com.pathly.presentation.common.ListNameSearchField
 import com.pathly.presentation.common.RegionFilterSection
 import com.pathly.presentation.common.ScrollToTopButton
 import com.pathly.presentation.common.ScrollToTopButtonClearance
+import com.pathly.presentation.common.StatisticItem
+import com.pathly.presentation.common.StatisticsCard
 import com.pathly.presentation.common.categoryChipLabel
 import com.pathly.presentation.common.choiceLabel
 import com.pathly.presentation.common.flippedChoice
@@ -589,75 +591,26 @@ private fun StatisticsSummaryCard(
     }
   }.sum()
 
-  Card(
-    modifier = modifier.fillMaxWidth(),
-    shape = RoundedCornerShape(8.dp),
-    colors = CardDefaults.cardColors(
-      containerColor = MaterialTheme.colorScheme.primaryContainer,
-    ),
-  ) {
-    Column(
-      modifier = Modifier.padding(16.dp),
-      verticalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
-      Text(
-        text = statisticsTitle(shownCount = tracks.size, totalCount = totalCount, isFiltered = isFiltered),
-        style = MaterialTheme.typography.titleMedium,
-        fontWeight = FontWeight.Bold,
-        color = MaterialTheme.colorScheme.onPrimaryContainer,
-      )
-
-      Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceEvenly,
-      ) {
-        StatisticItem(
-          icon = "🗓️",
-          label = "記録数",
-          value = "${totalTracks}回",
-        )
-        StatisticItem(
-          icon = "📏",
-          label = "総距離",
-          // Composable 内で Locale を直接読むと再コンポーズに追随しないため、
-          // 一覧の各行と同じ「丸めて文字列化」に揃える。
-          value = "${(totalDistance * 10).roundToInt() / 10.0}km",
-        )
-        StatisticItem(
-          icon = "⏱️",
-          label = "総時間",
-          value = "${totalDuration}分",
-        )
-      }
-    }
-  }
-}
-
-@Composable
-private fun StatisticItem(
-  icon: String,
-  label: String,
-  value: String,
-  modifier: Modifier = Modifier,
-) {
-  Column(
+  StatisticsCard(
+    title = statisticsTitle(shownCount = tracks.size, totalCount = totalCount, isFiltered = isFiltered),
     modifier = modifier,
-    horizontalAlignment = Alignment.CenterHorizontally,
   ) {
-    Text(
-      text = icon,
-      style = MaterialTheme.typography.headlineSmall,
+    StatisticItem(
+      icon = "🗓️",
+      label = "記録数",
+      value = "${totalTracks}回",
     )
-    Text(
-      text = value,
-      style = MaterialTheme.typography.titleMedium,
-      fontWeight = FontWeight.Bold,
-      color = MaterialTheme.colorScheme.secondary,
+    StatisticItem(
+      icon = "📏",
+      label = "総距離",
+      // Composable 内で Locale を直接読むと再コンポーズに追随しないため、
+      // 一覧の各行と同じ「丸めて文字列化」に揃える。
+      value = "${(totalDistance * 10).roundToInt() / 10.0}km",
     )
-    Text(
-      text = label,
-      style = MaterialTheme.typography.bodySmall,
-      color = MaterialTheme.colorScheme.onPrimaryContainer,
+    StatisticItem(
+      icon = "⏱️",
+      label = "総時間",
+      value = "${totalDuration}分",
     )
   }
 }

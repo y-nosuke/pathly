@@ -170,6 +170,10 @@ data class PlacesState(
       return filtered.sortedWith(if (sortDescending) ascending.reversed() else ascending)
     }
 
+  /** 一覧の先頭の統計。一覧と同じく、絞り込み・名前の検索の後に残った場所で数える。 */
+  val statistics: PlacesStatistics
+    get() = PlacesStatistics.of(visibleItems)
+
   private fun categoryOk(item: PlaceListItem): Boolean = categoryFilter.isEmpty() || PlaceCategoryFacet.of(item.place) in categoryFilter
 
   private fun regionOk(item: PlaceListItem): Boolean = regionFilter.matchesAnyOf(listOf(item.region))
@@ -189,6 +193,49 @@ data class PlacesState(
     return wishlistOk && visitedOk && matchesNameQuery(item.displayName, nameQuery)
   }
 }
+
+/**
+ * 場所タブの統計（場所の数・訪問済み・行きたいの達成）。
+ *
+ * 行きたいは行くと自動で外れて履歴に移る（→ adr/0036）ので、「いま行きたいのうち訪問済み」では行けたものほど
+ * 数えから抜けてしまう。そこで達成は**行きたいにした場所**（いま行きたい、または行きたいで行ったことがある）を分母に、
+ * そのうち**行きたいで行ったことがある**場所を分子に数える。行った後に入れ直した場所は両方に入る。
+ */
+data class PlacesStatistics(
+  val placeCount: Int,
+  /** 訪問済みの数（判定は一覧と同じ → [PlaceListItem.isVisited]）。 */
+  val visitedCount: Int,
+  /** 行きたいにした場所の数。 */
+  val wishedCount: Int,
+  /** そのうち行きたいで行ったことがある場所の数。 */
+  val fulfilledCount: Int,
+) {
+  /**
+   * 行きたいの達成の割合（%・切り捨て）。行きたいにした場所が無ければ null（割合は出さない）。
+   * 四捨五入だと、まだ残っているのに 100% と出ることがある（199 / 200）ので切り捨てる。
+   */
+  val fulfilledPercent: Int?
+    get() = if (wishedCount == 0) null else fulfilledCount * 100 / wishedCount
+
+  companion object {
+    fun of(items: List<PlaceListItem>): PlacesStatistics = PlacesStatistics(
+      placeCount = items.size,
+      visitedCount = items.count { it.isVisited },
+      wishedCount = items.count { it.isWishlisted || it.fulfilledWishCount > 0 },
+      fulfilledCount = items.count { it.fulfilledWishCount > 0 },
+    )
+  }
+}
+
+/** 統計カードの見出し。絞り込み中は、絞った数字を全体と取り違えないよう「n / 全体 か所」を添える（履歴と同じ）。 */
+internal fun placesStatisticsTitle(shownCount: Int, totalCount: Int, isFiltered: Boolean): String = if (isFiltered) {
+  "📍 場所の統計（絞り込み中 $shownCount / $totalCount か所）"
+} else {
+  "📍 場所の統計"
+}
+
+/** 統計カードの「行きたいで行けた」の値。例「2 / 7（29%）」。行きたいにした場所が無ければ割合を出さない。 */
+internal fun PlacesStatistics.fulfilledLabel(): String = "$fulfilledCount / $wishedCount" + (fulfilledPercent?.let { "（$it%）" } ?: "")
 
 private const val KEY_WISHLIST = "places.wishlistFilter"
 private const val KEY_VISITED = "places.visitedFilter"
