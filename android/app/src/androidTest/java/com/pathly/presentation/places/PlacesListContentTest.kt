@@ -13,11 +13,15 @@ import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performTextInput
 import androidx.test.espresso.Espresso
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.pathly.domain.model.Place
+import com.pathly.domain.model.PlaceGrouping
 import com.pathly.domain.model.PlaceListItem
+import com.pathly.domain.model.PlaceRegion
 import com.pathly.ui.theme.PathlyAndroidTheme
+import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -37,17 +41,18 @@ class PlacesListContentTest {
   private val wished = item(id = 2, wishlisted = true)
 
   @Test
-  fun `切り替えで地図表示になり並べ替えが消えて戻すと一覧に戻る`() {
+  fun `切り替えで地図表示になり分け方・並べ替えが消えて戻すと一覧に戻る`() {
     setContent(PlacesState(items = listOf(plain, wished)))
-    composeTestRule.onNodeWithText("並べ替え", substring = true).assertIsDisplayed()
+    composeTestRule.onNodeWithText("登録順 ▾").assertIsDisplayed()
 
     composeTestRule.onNodeWithContentDescription("地図で見る").performClick()
 
-    composeTestRule.onNodeWithText("並べ替え", substring = true).assertDoesNotExist()
+    composeTestRule.onNodeWithText("登録順 ▾").assertDoesNotExist()
+    composeTestRule.onNodeWithTag("placeGroupingButton").assertDoesNotExist()
     composeTestRule.onNodeWithText("場所1").assertDoesNotExist()
     composeTestRule.onNodeWithContentDescription("一覧で見る").performClick()
 
-    composeTestRule.onNodeWithText("並べ替え", substring = true).assertIsDisplayed()
+    composeTestRule.onNodeWithText("登録順 ▾").assertIsDisplayed()
     composeTestRule.onNodeWithText("場所1").assertIsDisplayed()
   }
 
@@ -200,11 +205,11 @@ class PlacesListContentTest {
   @Test
   fun `初期状態に戻すで絞り込みと並べ替えをまとめて戻す`() {
     setContent(PlacesState(items = listOf(plain, wished), wishlistFilter = WishlistFilter.WISHLISTED, sort = PlaceSort.NAME))
-    composeTestRule.onNodeWithText("並べ替え: 名前順", substring = true).assertIsDisplayed()
+    composeTestRule.onNodeWithText("名前順 ▾").assertIsDisplayed()
 
     composeTestRule.onNodeWithText("初期状態に戻す").performClick()
 
-    composeTestRule.onNodeWithText("並べ替え: 登録順", substring = true).assertIsDisplayed()
+    composeTestRule.onNodeWithText("登録順 ▾").assertIsDisplayed()
     composeTestRule.onNodeWithText("場所1").assertIsDisplayed()
     composeTestRule.onNodeWithText("初期状態に戻す").assertDoesNotExist()
   }
@@ -229,7 +234,7 @@ class PlacesListContentTest {
     // 欄で選ぶたびにチップの行が出たり消えたりして欄がずれないよう、開いている間は出さない。
     composeTestRule.onNodeWithContentDescription("行きたいの絞り込みを外す").assertDoesNotExist()
     composeTestRule.onNodeWithText("初期状態に戻す").assertIsEnabled().performClick()
-    composeTestRule.onNodeWithText("並べ替え: 登録順", substring = true).assertIsDisplayed()
+    composeTestRule.onNodeWithText("登録順 ▾").assertIsDisplayed()
     composeTestRule.onNodeWithText("2 件").assertIsDisplayed()
     composeTestRule.onNodeWithText("初期状態に戻す").assertIsNotEnabled()
 
@@ -269,6 +274,88 @@ class PlacesListContentTest {
     composeTestRule.onNodeWithTag("placesStatistics").assertDoesNotExist()
   }
 
+  private val fuchu = item(id = 11, wishlisted = false, region = PlaceRegion.of("JP", "東京都", "府中市"))
+  private val chofu = item(id = 12, wishlisted = true, region = PlaceRegion.of("JP", "東京都", "調布市"))
+  private val sapporo = item(id = 13, wishlisted = false, region = PlaceRegion.of("JP", "北海道", "札幌市"))
+  private val regional = listOf(fuchu, chofu, sapporo)
+
+  @Test
+  fun `地域で分けるとはじめは見出しだけで_押すと開閉できる`() {
+    setContent(PlacesState(items = regional))
+    composeTestRule.onNodeWithText("場所11").assertIsDisplayed()
+
+    composeTestRule.onNodeWithTag("placeGroupingButton").performClick()
+    composeTestRule.onNodeWithText("地域で分ける").performClick()
+
+    // はじめはすべて閉じて、見出し（名前と件数）だけ。並びは北から。
+    composeTestRule.onNodeWithText("地域で分ける ▾").assertIsDisplayed()
+    composeTestRule.onNodeWithTag("placeGroup:region:JP|東京都|").assertIsDisplayed()
+    composeTestRule.onNodeWithText("2").assertIsDisplayed()
+    composeTestRule.onNodeWithText("場所11").assertDoesNotExist()
+    composeTestRule.onNodeWithText("府中市").assertDoesNotExist()
+    assertTrue(
+      composeTestRule.onNodeWithText("北海道").fetchSemanticsNode().positionInRoot.y <
+        composeTestRule.onNodeWithText("東京都").fetchSemanticsNode().positionInRoot.y,
+    )
+
+    // 都道府県を開くと市区町村の見出し、市区町村を開くと場所。
+    composeTestRule.onNodeWithText("東京都").performClick()
+    composeTestRule.onNodeWithText("府中市").assertIsDisplayed()
+    composeTestRule.onNodeWithText("場所11").assertDoesNotExist()
+    composeTestRule.onNodeWithText("府中市").performClick()
+    composeTestRule.onNodeWithText("場所11").assertIsDisplayed()
+    composeTestRule.onNodeWithText("場所12").assertDoesNotExist()
+
+    // 閉じると中が消える。
+    composeTestRule.onNodeWithText("東京都").performClick()
+    composeTestRule.onNodeWithText("府中市").assertDoesNotExist()
+    composeTestRule.onNodeWithText("場所11").assertDoesNotExist()
+  }
+
+  @Test
+  fun `分けないに戻すと今の一覧と同じになる`() {
+    setContent(PlacesState(items = regional, grouping = PlaceGrouping.CATEGORY))
+    composeTestRule.onNodeWithText("未分類").assertIsDisplayed()
+    composeTestRule.onNodeWithText("場所11").assertDoesNotExist()
+
+    composeTestRule.onNodeWithTag("placeGroupingButton").performClick()
+    composeTestRule.onNodeWithText("分けない").performClick()
+
+    composeTestRule.onNodeWithText("分ける ▾").assertIsDisplayed()
+    composeTestRule.onNodeWithText("未分類").assertDoesNotExist()
+    composeTestRule.onNodeWithText("場所11").assertIsDisplayed()
+    composeTestRule.onNodeWithText("場所13").assertIsDisplayed()
+  }
+
+  @Test
+  fun `名前の検索中は当たったまとまりを開いて見せ_消すと閉じた見出しに戻る`() {
+    setContent(PlacesState(items = regional, grouping = PlaceGrouping.REGION))
+    composeTestRule.onNodeWithText("場所12").assertDoesNotExist()
+
+    composeTestRule.onNodeWithText("名前で検索").performTextInput("12")
+
+    composeTestRule.onNodeWithText("東京都").assertIsDisplayed()
+    composeTestRule.onNodeWithText("調布市").assertIsDisplayed()
+    composeTestRule.onNodeWithText("場所12").assertIsDisplayed()
+    // 当たらなかったまとまりは出さない。
+    composeTestRule.onNodeWithText("北海道").assertDoesNotExist()
+    composeTestRule.onNodeWithText("府中市").assertDoesNotExist()
+
+    composeTestRule.onNodeWithContentDescription("検索語を消す").performClick()
+
+    composeTestRule.onNodeWithText("北海道").assertIsDisplayed()
+    composeTestRule.onNodeWithText("調布市").assertDoesNotExist()
+  }
+
+  @Test
+  fun `絞り込んだ結果を分けて見出しの件数も絞った数になる`() {
+    setContent(PlacesState(items = regional, grouping = PlaceGrouping.REGION, wishlistFilter = WishlistFilter.WISHLISTED))
+
+    composeTestRule.onNodeWithText("東京都").assertIsDisplayed()
+    composeTestRule.onNodeWithText("1").assertIsDisplayed()
+    composeTestRule.onNodeWithText("北海道").assertDoesNotExist()
+  }
+
   // ViewModel の代わりに、状態をこの場で持って操作に応じて書き換える。
   private fun setContent(initial: PlacesState) {
     composeTestRule.setContent {
@@ -296,6 +383,8 @@ class PlacesListContentTest {
       onClearRegionFilter = {},
       onSortChange = {},
       onToggleSortDirection = {},
+      onGroupingChange = { state = state.copy(grouping = it, openGroups = emptySet()) },
+      onToggleGroup = { key -> state = state.copy(openGroups = if (key in state.openGroups) state.openGroups - key else state.openGroups + key) },
       onViewModeChange = { state = state.copy(viewMode = it) },
       onControlsCollapsedChange = { state = state.copy(controlsCollapsed = it) },
       onItemClick = {},
@@ -307,7 +396,7 @@ class PlacesListContentTest {
     )
   }
 
-  private fun item(id: Long, wishlisted: Boolean) = PlaceListItem(
+  private fun item(id: Long, wishlisted: Boolean, region: PlaceRegion = PlaceRegion.UNKNOWN) = PlaceListItem(
     place = Place(
       id = id,
       name = "場所$id",
@@ -325,5 +414,6 @@ class PlacesListContentTest {
     priority = null,
     markedVisitedAt = null,
     visitCount = 0,
+    region = region,
   )
 }

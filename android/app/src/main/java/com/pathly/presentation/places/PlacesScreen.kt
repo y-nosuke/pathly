@@ -63,6 +63,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
@@ -70,6 +71,8 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -94,6 +97,7 @@ import com.pathly.domain.model.Place
 import com.pathly.domain.model.PlaceCategory
 import com.pathly.domain.model.PlaceCategoryFacet
 import com.pathly.domain.model.PlaceCategoryGroup
+import com.pathly.domain.model.PlaceGrouping
 import com.pathly.domain.model.PlaceListItem
 import com.pathly.domain.model.PlacePrediction
 import com.pathly.domain.model.PlaceSearchResult
@@ -186,6 +190,8 @@ fun PlacesListRoute(
       onClearRegionFilter = viewModel::clearRegionFilter,
       onSortChange = viewModel::setSort,
       onToggleSortDirection = viewModel::toggleSortDirection,
+      onGroupingChange = viewModel::setGrouping,
+      onToggleGroup = viewModel::toggleGroup,
       onViewModeChange = viewModel::setViewMode,
       onControlsCollapsedChange = viewModel::setControlsCollapsed,
       onItemClick = { onItemClick(it.place.id) },
@@ -371,6 +377,9 @@ internal fun PlacesListContent(
   onClearRegionFilter: () -> Unit,
   onSortChange: (PlaceSort) -> Unit,
   onToggleSortDirection: () -> Unit,
+  onGroupingChange: (PlaceGrouping) -> Unit,
+  // まとまりの見出しを押したとき（[PlaceGroup.key]）。開く／閉じる。
+  onToggleGroup: (String) -> Unit,
   onViewModeChange: (PlacesViewMode) -> Unit,
   // 地図表示で、地図に重ねた見出し・検索欄・絞り込みをたたむ（true）／ひろげる（false）。
   onControlsCollapsedChange: (Boolean) -> Unit,
@@ -464,11 +473,13 @@ internal fun PlacesListContent(
           panelOpen = panelVisible,
           onPanelOpenChange = { filterPanelOpen = it },
         ) {
-          // 並べ替え（軸メニュー ＋ 昇順/降順トグル）。地図表示では並びに意味が無いので出さない。
-          Box {
+          // 分け方・並べ替え（軸メニュー ＋ 昇順/降順トグル）。地図表示では分け方・並びに意味が無いので出さない。
+          // 横幅が足りないときは、並べ替えの軸の名前を省略する（分け方と向きは常に見える）。
+          PlaceGroupingMenu(grouping = state.grouping, onGroupingChange = onGroupingChange)
+          Box(modifier = Modifier.weight(1f, fill = false)) {
             var sortOpen by remember { mutableStateOf(false) }
-            TextButton(onClick = { sortOpen = true }) {
-              Text(text = "並べ替え: ${state.sort.label} ▾")
+            TextButton(onClick = { sortOpen = true }, contentPadding = CompactButtonPadding) {
+              Text(text = "${state.sort.label} ▾", maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
             DropdownMenu(expanded = sortOpen, onDismissRequest = { sortOpen = false }) {
               PlaceSort.entries.forEach { sort ->
@@ -482,8 +493,8 @@ internal fun PlacesListContent(
               }
             }
           }
-          TextButton(onClick = onToggleSortDirection) {
-            Text(text = if (state.sortDescending) "降順 ↓" else "昇順 ↑")
+          TextButton(onClick = onToggleSortDirection, contentPadding = CompactButtonPadding) {
+            Text(text = if (state.sortDescending) "降順 ↓" else "昇順 ↑", maxLines = 1)
           }
         }
 
@@ -495,6 +506,8 @@ internal fun PlacesListContent(
           }
         } else {
           val listState = rememberLazyListState()
+          // 絞り込み・並べ替え・まとめを状態が変わったときだけ計算し直す（描き直しのたびにやらない）。
+          val rows = remember(state) { state.listRows }
           // 絞り込み・並べ替えを変えたとき、または先頭が変わったとき（＝追加時）に先頭へ戻す。
           // 詳細から戻って一覧を出し直したときは戻さない（前に見ていた位置のまま）。そのため、最後に
           // 先頭へ戻したときの条件を画面の状態として取っておき、条件が変わったときだけ動かす。
@@ -551,14 +564,31 @@ internal fun PlacesListContent(
                   )
                 }
               }
-              items(state.visibleItems, key = { it.place.id }) { item ->
-                PlaceItemRow(
-                  item = item,
-                  sort = state.sort,
-                  onClick = { onItemClick(item) },
-                  onToggleWishlist = { onToggleWishlist(item) },
-                  onDelete = { onDeleteRequest(item) },
-                )
+              // 分けているときは、まとまりの見出しと開いたまとまりの中の場所（段ごとに字下げ）。
+              // 名前の検索中はまとまりをすべて開いて見せるので、見出しを押しても開閉しない。
+              val groupToggle = onToggleGroup.takeIf { state.nameQuery.isBlank() }
+              items(
+                rows,
+                key = { it.listKey },
+                contentType = { it::class },
+              ) { row ->
+                val indent = Modifier.padding(start = GroupIndent * row.depth)
+                when (row) {
+                  is PlacesListRow.Header -> PlaceGroupHeader(
+                    header = row,
+                    onClick = groupToggle?.let { toggle -> { toggle(row.group.key) } },
+                    modifier = indent,
+                  )
+
+                  is PlacesListRow.Item -> PlaceItemRow(
+                    item = row.item,
+                    sort = state.sort,
+                    onClick = { onItemClick(row.item) },
+                    onToggleWishlist = { onToggleWishlist(row.item) },
+                    onDelete = { onDeleteRequest(row.item) },
+                    modifier = indent,
+                  )
+                }
               }
             }
             ScrollToTopButton(
@@ -578,6 +608,82 @@ internal fun PlacesListContent(
           .padding(bottom = 8.dp),
       )
     }
+  }
+}
+
+/** まとまりの段ごとの字下げ。 */
+private val GroupIndent = 16.dp
+
+/** 分け方・並べ替えのボタン。並べて置くので左右の余白を詰める。 */
+private val CompactButtonPadding = PaddingValues(horizontal = 8.dp)
+
+/** 一覧の分け方（分けない／地域／業種）を選ぶメニュー。絞り込みのボタンと並べ替えの間に置く。 */
+@Composable
+private fun PlaceGroupingMenu(grouping: PlaceGrouping, onGroupingChange: (PlaceGrouping) -> Unit) {
+  Box {
+    var open by remember { mutableStateOf(false) }
+    TextButton(
+      onClick = { open = true },
+      contentPadding = CompactButtonPadding,
+      modifier = Modifier.testTag("placeGroupingButton"),
+    ) {
+      // 分けていないときは「分けない」ではなく、分けられることが分かる文言にする。
+      Text(text = (if (grouping == PlaceGrouping.NONE) "分ける" else grouping.label) + " ▾", maxLines = 1)
+    }
+    DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+      PlaceGrouping.entries.forEach { option ->
+        DropdownMenuItem(
+          text = { Text(option.label) },
+          onClick = {
+            open = false
+            onGroupingChange(option)
+          },
+        )
+      }
+    }
+  }
+}
+
+/** まとまりの見出し（開閉の印・名前・件数）。[onClick] が null なら（名前の検索中）押しても開閉しない。 */
+@Composable
+private fun PlaceGroupHeader(header: PlacesListRow.Header, onClick: (() -> Unit)?, modifier: Modifier = Modifier) {
+  val group = header.group
+  Row(
+    modifier = modifier
+      .fillMaxWidth()
+      .testTag("placeGroup:${group.key}")
+      .then(
+        if (onClick != null) {
+          Modifier.clickable(onClickLabel = if (header.expanded) "閉じる" else "開く", onClick = onClick)
+        } else {
+          Modifier
+        },
+      )
+      .semantics { stateDescription = if (header.expanded) "開いている" else "閉じている" }
+      .padding(vertical = 8.dp),
+    verticalAlignment = Alignment.CenterVertically,
+  ) {
+    // 開いていれば ⌄、閉じていれば ›（同じ絵を回す）。
+    Icon(
+      painter = painterResource(R.drawable.ic_expand_more),
+      contentDescription = null,
+      modifier = Modifier.rotate(if (header.expanded) 0f else -90f),
+    )
+    Spacer(modifier = Modifier.width(8.dp))
+    Text(
+      text = group.label,
+      style = if (header.depth == 0) MaterialTheme.typography.titleMedium else MaterialTheme.typography.titleSmall,
+      fontWeight = FontWeight.Bold,
+      maxLines = 1,
+      overflow = TextOverflow.Ellipsis,
+      modifier = Modifier.weight(1f),
+    )
+    Text(
+      text = "${group.count}",
+      style = MaterialTheme.typography.bodyMedium,
+      color = MaterialTheme.colorScheme.onSurfaceVariant,
+      modifier = Modifier.padding(end = 8.dp),
+    )
   }
 }
 
@@ -1504,7 +1610,7 @@ private fun PlacesHeader(
 /**
  * 名前の検索欄と、絞り込みのボタン・効いている条件のチップ。一覧表示と地図表示で同じものを出す。
  * ボタンで絞り込みの欄を開く／閉じる（→ specs/screens.md）。欄は一覧表示では一覧の先頭に入れ、
- * 地図表示（[inlinePanel]）ではここに出す。[trailing] はボタンの右に並べるもの（並べ替え）。
+ * 地図表示（[inlinePanel]）ではここに出す。[trailing] はボタンの右に並べるもの（分け方・並べ替え）。
  */
 @Composable
 private fun PlacesFilterControls(
@@ -1542,8 +1648,13 @@ private fun PlacesFilterControls(
 
   Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
     FilterPanelButton(activeCount = activeFilters.size, expanded = panelOpen, onClick = { onPanelOpenChange(!panelOpen) })
-    Spacer(modifier = Modifier.weight(1f))
-    trailing()
+    // 右に寄せる。幅が足りなければ trailing の中で weight を付けたもの（並べ替えの軸）が縮む。
+    Row(
+      modifier = Modifier.weight(1f),
+      horizontalArrangement = Arrangement.End,
+      verticalAlignment = Alignment.CenterVertically,
+      content = trailing,
+    )
   }
   val onReset = onResetListOptions.takeUnless { state.isInitialListOptions }
   // 欄を開いている間はチップの行を出さない（欄に選んでいるものが見えている。選ぶたびに行が出たり消えたりして

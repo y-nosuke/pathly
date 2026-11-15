@@ -128,7 +128,7 @@ fun <T> regionCounts(
     }
   }
   return topCounts.entries
-    .sortedWith(compareBy(topKeyOrder) { it.key })
+    .sortedWith(compareBy(regionTopKeyOrder) { it.key })
     .map { (k, n) ->
       val cities = cityCounts[k].orEmpty().entries
         .sortedWith(compareByDescending<Map.Entry<String, Int>> { it.value }.thenBy(japaneseCollator) { it.key })
@@ -139,18 +139,19 @@ fun <T> regionCounts(
 
 /** 選んだ地域を、選択肢と同じ並び（1 段目の順 → 市区町村・都市）に揃える。チップの文言を選んだ順に依らせない。 */
 fun Collection<RegionKey>.sortedForDisplay(): List<RegionKey> = sortedWith(
-  compareBy(topKeyOrder) { it: RegionKey -> it.top }
+  compareBy(regionTopKeyOrder) { it: RegionKey -> it.top }
     .thenBy { it.city != null }
     .thenBy(japaneseCollator) { it.city.orEmpty() },
 )
 
-/** 地域の名前の並べ替えに使う（毎回作らない。一覧の件数は描き直しのたびに数え直すため）。 */
-private val japaneseCollator: Collator = Collator.getInstance(Locale.JAPANESE)
+/** 地域の名前の並べ替えに使う（毎回作らない。一覧の件数・まとまりは描き直しのたびに数え直すため）。UI のスレッドから使う。 */
+internal val japaneseCollator: Collator = Collator.getInstance(Locale.JAPANESE)
 
 /**
  * 1 段目の並び。日本の都道府県（全国地方公共団体コード順。知らない名前はその後ろ）→ 海外の国（日本語名の順）→ 地域不明。
+ * 絞り込みの選択肢と、一覧を地域で分けたときのまとまりの並びで共有する。
  */
-private val topKeyOrder: Comparator<RegionKey> = compareBy<RegionKey> {
+val regionTopKeyOrder: Comparator<RegionKey> = compareBy<RegionKey> {
   when (it.countryCode) {
     PlaceRegion.JAPAN -> JAPANESE_PREFECTURES.indexOf(it.prefecture).let { i -> if (i < 0) JAPANESE_PREFECTURES.size else i }
     null -> Int.MAX_VALUE
