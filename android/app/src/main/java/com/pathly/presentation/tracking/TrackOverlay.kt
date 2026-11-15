@@ -247,10 +247,8 @@ internal fun TrackPickerSheet(
       )
 
       else -> {
-        val listedIds = listed.mapTo(mutableSetOf()) { it.id }
-        val outside = selected.map { it.track }.filter { it.id !in listedIds }
-        val canSelectMore = selected.size < TRACK_OVERLAY_MAX
-        val colorOf: (Long) -> Int? = { id -> selected.firstOrNull { it.track.id == id }?.colorIndex }
+        val outside = selected.outsideOf(listed)
+        val canSelectMore = selected.canSelectMore()
         LazyColumn(
           modifier = Modifier
             .weight(1f, fill = false)
@@ -266,7 +264,7 @@ internal fun TrackPickerSheet(
             }
           }
           items(listed, key = { it.id }) { track ->
-            TrackPickerRow(track, colorOf(track.id), canSelectMore, onToggle, onFocus, onOpen, testTagPrefix)
+            TrackPickerRow(track, selected.colorIndexOf(track.id), canSelectMore, onToggle, onFocus, onOpen, testTagPrefix)
           }
           if (outside.isNotEmpty()) {
             item {
@@ -279,7 +277,7 @@ internal fun TrackPickerSheet(
               )
             }
             items(outside, key = { "out-${it.id}" }) { track ->
-              TrackPickerRow(track, colorOf(track.id), canSelectMore, onToggle, onFocus, onOpen, testTagPrefix)
+              TrackPickerRow(track, selected.colorIndexOf(track.id), canSelectMore, onToggle, onFocus, onOpen, testTagPrefix)
             }
           }
         }

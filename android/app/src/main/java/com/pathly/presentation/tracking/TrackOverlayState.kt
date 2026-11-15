@@ -47,22 +47,23 @@ data class TrackOverlayState(
   val errorMessage: String? = null,
   // 地図を寄せる対象（線を読み終えたら画面が寄せて、[TrackOverlayViewModel.consumeFocus] で消す）。
   val focusRequest: TrackFocusRequest? = null,
-) {
-  val selectedIds: Set<Long>
-    get() = selected.mapTo(mutableSetOf()) { it.track.id }
+)
 
-  /** まだ選べるか（上限は [TRACK_OVERLAY_MAX] 本）。 */
-  val canSelectMore: Boolean
-    get() = selected.size < TRACK_OVERLAY_MAX
+// 選んでいる経路（地図に重ねている経路の並び）についての計算。記録画面と履歴の地図表示で共有する。
 
-  /** 選んでいるが、最後に探した範囲には入っていない経路（一覧の下に出し、外せるようにする）。 */
-  val selectedOutOfRange: List<GpsTrack>
-    get() {
-      val inRangeIds = inRange.mapTo(mutableSetOf()) { it.id }
-      return selected.map { it.track }.filter { it.id !in inRangeIds }
-    }
+/** その経路を選んでいるか。 */
+internal fun List<OverlayTrack>.containsTrack(trackId: Long): Boolean = any { it.track.id == trackId }
 
-  fun colorIndexOf(trackId: Long): Int? = selected.firstOrNull { it.track.id == trackId }?.colorIndex
+/** その経路に割り当てた色の番号。選んでいなければ null。 */
+internal fun List<OverlayTrack>.colorIndexOf(trackId: Long): Int? = firstOrNull { it.track.id == trackId }?.colorIndex
+
+/** まだ選べるか（上限は [TRACK_OVERLAY_MAX] 本）。 */
+internal fun List<OverlayTrack>.canSelectMore(): Boolean = size < TRACK_OVERLAY_MAX
+
+/** 選んでいるが、一覧（[listed]）には入っていない経路（一覧の下に出し、外せるようにする）。 */
+internal fun List<OverlayTrack>.outsideOf(listed: List<GpsTrack>): List<GpsTrack> {
+  val listedIds = listed.mapTo(mutableSetOf()) { it.id }
+  return map { it.track }.filter { it.id !in listedIds }
 }
 
 /** 空いている色のうち最も小さい番号。すべて使っていれば null。 */

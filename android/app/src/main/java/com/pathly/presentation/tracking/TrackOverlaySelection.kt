@@ -40,7 +40,7 @@ internal class TrackOverlaySelection<S>(
 
   /** 経路を地図に重ねる／外す。上限まで選んでいれば足さない。 */
   fun toggle(track: GpsTrack) {
-    if (selected.any { it.track.id == track.id }) {
+    if (selected.containsTrack(track.id)) {
       updateSelected { list -> list.filterNot { it.track.id == track.id } }
       return
     }
@@ -70,9 +70,9 @@ internal class TrackOverlaySelection<S>(
    * 実際に寄せるのは画面（線を読み終えてから）。
    */
   fun focus(track: GpsTrack) {
-    if (selected.none { it.track.id == track.id }) {
+    if (!selected.containsTrack(track.id)) {
       toggle(track)
-      if (selected.none { it.track.id == track.id }) return
+      if (!selected.containsTrack(track.id)) return
     }
     state.update { withFocus(it, TrackFocusRequest(track.id, ++focusNonce)) }
   }
