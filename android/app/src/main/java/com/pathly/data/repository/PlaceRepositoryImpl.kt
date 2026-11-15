@@ -29,6 +29,7 @@ import com.pathly.domain.model.Place
 import com.pathly.domain.model.PlaceCategory
 import com.pathly.domain.model.PlaceSearchResult
 import com.pathly.domain.model.PlaceSource
+import com.pathly.domain.model.PlaceWithDistance
 import com.pathly.domain.model.RegisteredPlace
 import com.pathly.domain.model.SameFacilityPending
 import com.pathly.domain.model.SameFacilityPlace
@@ -103,19 +104,20 @@ class PlaceRepositoryImpl @Inject constructor(
     rows.map { it.toRegisteredPlace() }
   }
 
-  override suspend fun findNearbyPlaces(latitude: Double, longitude: Double): List<RegisteredPlace> {
+  override suspend fun findNearbyPlaces(latitude: Double, longitude: Double): List<RegisteredPlace> = findPlacesAround(latitude, longitude, StopDetector.RADIUS_METERS).map { it.place }
+
+  override suspend fun findPlacesAround(latitude: Double, longitude: Double, radiusMeters: Double): List<PlaceWithDistance> {
     // まず矩形（座標索引が効く）で絞り、そのうえで正確な距離で判定する。
-    val bounds = Geo.boundsAround(latitude, longitude, StopDetector.RADIUS_METERS)
+    val bounds = Geo.boundsAround(latitude, longitude, radiusMeters)
     return placeDao.getRegisteredPlacesInBounds(
       bounds.minLatitude,
       bounds.maxLatitude,
       bounds.minLongitude,
       bounds.maxLongitude,
     )
-      .map { it.toRegisteredPlace() to distanceMeters(it.latitude, it.longitude, latitude, longitude) }
-      .filter { it.second <= StopDetector.RADIUS_METERS }
-      .sortedBy { it.second }
-      .map { it.first }
+      .map { PlaceWithDistance(it.toRegisteredPlace(), distanceMeters(it.latitude, it.longitude, latitude, longitude)) }
+      .filter { it.distanceMeters <= radiusMeters }
+      .sortedBy { it.distanceMeters }
   }
 
   private fun RegisteredPlaceRow.toRegisteredPlace(): RegisteredPlace = RegisteredPlace(

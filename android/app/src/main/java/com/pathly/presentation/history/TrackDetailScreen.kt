@@ -75,8 +75,8 @@ import com.pathly.presentation.common.stopSegmentPoints
 import com.pathly.presentation.places.PlaceActionSheet
 import com.pathly.presentation.places.PlaceDeleteUndo
 import com.pathly.presentation.places.PlaceDeleteUndoEffect
+import com.pathly.presentation.places.PlaceMergeActions
 import com.pathly.presentation.places.PlaceSheetTarget
-import com.pathly.presentation.places.SameFacilityActions
 import com.pathly.presentation.stops.ManualStopOrigin
 import com.pathly.presentation.stops.ManualStopSheet
 import com.pathly.presentation.stops.ManualStopTarget
@@ -113,7 +113,7 @@ fun TrackDetailScreen(
   onMergeSameFacility: (SameFacilityPending) -> Unit = {},
   onKeepSameFacilitySeparate: (placeId: Long) -> Unit = {},
   // 場所シートの編集部で、確認待ちに答える（場所詳細と同じ）。
-  sameFacilityActions: SameFacilityActions? = null,
+  mergeActions: PlaceMergeActions? = null,
   onReanalyze: () -> Unit = {},
   reanalyzeCandidates: List<StopCandidate>? = null,
   onAddStops: (List<StopCandidate>) -> Unit = {},
@@ -792,7 +792,7 @@ fun TrackDetailScreen(
         onFetchNearbyPois = onFetchNearbyPois,
         onSearchPredictions = onSearchPredictions,
         onFetchPrediction = onFetchPrediction,
-        sameFacilityActions = sameFacilityActions,
+        mergeActions = mergeActions,
         modifier = Modifier.align(Alignment.BottomCenter),
         sheetState = placeSheetState,
       )

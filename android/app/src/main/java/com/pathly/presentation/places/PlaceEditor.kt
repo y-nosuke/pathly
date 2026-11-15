@@ -35,6 +35,7 @@ import com.pathly.domain.model.PlaceListItem
 import com.pathly.domain.model.PlacePrediction
 import com.pathly.domain.model.PlaceSearchResult
 import com.pathly.domain.model.PlaceVisit
+import com.pathly.domain.model.PlaceWithDistance
 import com.pathly.domain.model.Priority
 import com.pathly.domain.model.SameFacilityPlace
 import com.pathly.presentation.common.NearbyCandidatePickerDialog
@@ -42,14 +43,17 @@ import com.pathly.presentation.common.SameFacilityDialog
 import com.pathly.util.DateFormatters
 
 /**
- * 同じ施設と分かった場所への答え（→ adr/0037）。「別の施設を選び直す」は編集部の中で
- * 「Google施設を選び直す」を開くので、ここには持たない。
+ * 場所をほかの場所にまとめる操作。同じ施設と分かった場所への答え（→ adr/0037）と、
+ * 手でまとめる「ほかの場所とまとめる」（→ docs/specs/places.md）の両方で使う。
+ * 同じ施設のときの「別の施設を選び直す」は編集部の中で「Google施設を選び直す」を開くので、ここには持たない。
  */
-class SameFacilityActions(
+class PlaceMergeActions(
   /** [item] を相手 [other] にまとめる（[item] は消える）。 */
   val onMerge: (item: PlaceListItem, other: SameFacilityPlace) -> Unit,
   /** 施設情報なしで、別の場所として残す。 */
   val onKeepSeparate: (item: PlaceListItem) -> Unit,
+  /** 手でまとめる相手の候補（[item] の近くのほかの場所、近い順）。 */
+  val onFindMergeCandidates: suspend (item: PlaceListItem) -> List<PlaceWithDistance>,
 )
 
 /**
@@ -76,7 +80,7 @@ internal fun PlaceEditorBody(
   onSearchPredictions: suspend (query: String) -> List<PlacePrediction>,
   onFetchPrediction: suspend (placeId: String) -> PlaceSearchResult?,
   // 同じ施設の確認待ちへの答え。null なら確認待ちを出さない。
-  sameFacilityActions: SameFacilityActions?,
+  mergeActions: PlaceMergeActions?,
   modifier: Modifier = Modifier,
   // 開いてすぐ「Google施設を選び直す」を出す（経路詳細の確認待ちで「別の施設を選び直す」を選んだとき）。
   initiallyOpenLinkPicker: Boolean = false,
@@ -103,6 +107,8 @@ internal fun PlaceEditorBody(
   var pendingLink by remember(item.place.id) { mutableStateOf<PlaceSearchResult?>(null) }
   // 同じ施設の確認ダイアログの開閉。
   var sameFacilityDialogOpen by remember(item.place.id) { mutableStateOf(false) }
+  // 「ほかの場所とまとめる」ダイアログの開閉。
+  var mergePickerOpen by remember(item.place.id) { mutableStateOf(false) }
   // 施設を選んで保存した直後か。保存で同じ施設の相手が見つかったら、その場でダイアログを出すため
   // （保存は ViewModel で非同期に走るので、結果は購読している [item] の変化で知る）。
   var awaitingLinkResult by remember(item.place.id) { mutableStateOf(false) }
@@ -160,7 +166,7 @@ internal fun PlaceEditorBody(
 
     // 同じ施設の確認待ち（場所を取得・自動の名前付けで分かったもの → adr/0037）。
     val sameFacility = item.sameFacility
-    if (sameFacility != null && sameFacilityActions != null) {
+    if (sameFacility != null && mergeActions != null) {
       Spacer(modifier = Modifier.height(8.dp))
       SameFacilityPendingCard(otherName = sameFacility.name, onOpen = { sameFacilityDialogOpen = true })
     }
@@ -242,6 +248,17 @@ internal fun PlaceEditorBody(
       }
     }
 
+    // 手でまとめる（Google の施設で見分けられない重複 → docs/specs/places.md）。
+    if (mergeActions != null) {
+      Spacer(modifier = Modifier.height(8.dp))
+      OutlinedButton(
+        onClick = { mergePickerOpen = true },
+        modifier = Modifier.fillMaxWidth(),
+      ) {
+        Text("ほかの場所とまとめる")
+      }
+    }
+
     Spacer(modifier = Modifier.height(8.dp))
     // 立ち寄り記録がある場所は削除不可（記録を残すため）。
     val canDelete = item.visitCount == 0
@@ -272,13 +289,13 @@ internal fun PlaceEditorBody(
   }
 
   val pendingSameFacility = item.sameFacility
-  if (sameFacilityDialogOpen && pendingSameFacility != null && sameFacilityActions != null) {
+  if (sameFacilityDialogOpen && pendingSameFacility != null && mergeActions != null) {
     SameFacilityDialog(
       placeName = item.displayName,
       otherName = pendingSameFacility.name,
       onMerge = {
         sameFacilityDialogOpen = false
-        sameFacilityActions.onMerge(item, pendingSameFacility)
+        mergeActions.onMerge(item, pendingSameFacility)
       },
       onPickAnother = {
         sameFacilityDialogOpen = false
@@ -286,9 +303,21 @@ internal fun PlaceEditorBody(
       },
       onKeepSeparate = {
         sameFacilityDialogOpen = false
-        sameFacilityActions.onKeepSeparate(item)
+        mergeActions.onKeepSeparate(item)
       },
       onDismiss = { sameFacilityDialogOpen = false },
+    )
+  }
+
+  if (mergePickerOpen && mergeActions != null) {
+    PlaceMergePickerDialog(
+      item = item,
+      onFindCandidates = mergeActions.onFindMergeCandidates,
+      onMerge = { other ->
+        mergePickerOpen = false
+        mergeActions.onMerge(item, other)
+      },
+      onDismiss = { mergePickerOpen = false },
     )
   }
 

@@ -5,8 +5,10 @@ import com.pathly.domain.model.PlaceCategory
 import com.pathly.domain.model.PlaceListItem
 import com.pathly.domain.model.PlaceRegistration
 import com.pathly.domain.model.PlaceSearchResult
+import com.pathly.domain.model.PlaceWithDistance
 import com.pathly.domain.model.Priority
 import com.pathly.domain.model.RegisteredPlace
+import com.pathly.domain.repository.PlaceRepository
 import com.pathly.domain.repository.WishlistRepository
 import io.mockk.coEvery
 import io.mockk.coVerify
@@ -31,7 +33,8 @@ import java.util.Date
 class PlaceEditUseCaseTest {
 
   private val wishlistRepository = mockk<WishlistRepository>(relaxed = true)
-  private val useCase = PlaceEditUseCase(wishlistRepository, mockk(relaxed = true))
+  private val placeRepository = mockk<PlaceRepository>(relaxed = true)
+  private val useCase = PlaceEditUseCase(wishlistRepository, placeRepository)
 
   @Before
   fun setup() {
@@ -232,6 +235,19 @@ class PlaceEditUseCaseTest {
     markedVisitedAt = markedVisitedAt,
     visitCount = visitCount,
   )
+
+  // ---- 手でまとめる ----
+
+  @Test
+  fun `まとめる候補は200m以内のほかの場所で自分は含めない`() = runTest {
+    val self = PlaceWithDistance(RegisteredPlace(1L, "自分", 35.0, 139.0), 0.0)
+    val other = PlaceWithDistance(RegisteredPlace(2L, "隣", 35.0005, 139.0), 55.0)
+    coEvery { placeRepository.findPlacesAround(35.0, 139.0, 200.0) } returns listOf(self, other)
+
+    val candidates = useCase.findMergeCandidates(item())
+
+    assertEquals(listOf(2L), candidates.map { it.place.placeId })
+  }
 
   @Test
   fun `編集_変更が無ければ何も書き込まない`() = runTest {
