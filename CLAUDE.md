@@ -49,7 +49,8 @@ Claude Code がこのリポジトリで作業するときの前提と約束。**
 - ブランチ名は `<種類>/<英語のケバブケース>`、コミットと PR タイトルは `<種類>(<範囲>): <日本語の要約>`。PR 本文に `Closes #12`。PR タイトルはリリースノートになる（[development/branch-and-pr.md](docs/development/branch-and-pr.md)）。
 - 設計の判断（なぜ・没案）は ADR、今の姿は specs / designs に書く。終わった作業の記録は設計書に残さない（[docs/README.md](docs/README.md) の運用ルール）。
 - **GitHub の操作は `gh` コマンドで行う**（GitHub MCP は使わない）。Project の操作は `gh` にしかなく、入口を 1 つにすると許可の設定も揃う。本文は `--body-file` で渡す。
-- 繰り返す手順はスキル（`.claude/skills/`）にある: `start-issue`（Issue の着手〜PR）・`emulator-check`（エミュレータでのテスト・確認）・`release`（リリースとスマホの更新）。
+- 繰り返す手順はスキル（`.claude/skills/`）にある: `start-issue`（Issue の着手〜PR）・`emulator-check`（エミュレータでのテスト・確認）・`phone-check`（スマホに開発版を入れて動作確認してもらう）・`release`（リリースとスマホの更新）。
+- 実装の後は、**ユーザーにコードを確認してもらう → OK ならコミット → スマホに開発版を入れて動作確認の手順を示す → ユーザーが確かめてから push・PR** の順（`start-issue` の 7・8）。
 - **commit・push・タグ・マージ・GitHub の設定変更は、ユーザーの確認を取ってから**行う。
 - ユーザーへの返答は**日本語**で書く（途中経過の一言も）。
 
