@@ -291,8 +291,24 @@ fun TrackingScreen(
           }
           focusOn(latLng)
         },
-        // 立ち寄りマーカーのタップで「場所を選び直す」（誤検知の訂正）。
-        onStopClick = { reassignTarget = it },
+        // 立ち寄りマーカーのタップ: 手動追加モード＝その場所にもう 1 件立ち寄りを足す（登録済みマーカーと同じ）／
+        // 通常＝「場所を選び直す」（誤検知の訂正）。
+        onStopClick = { stop ->
+          if (mapSearch != null) {
+            mapSearch = null
+            return@TrackingMapView
+          }
+          if (uiState.isTracking && manualMode) {
+            manualTarget = ManualStopTarget(
+              stop.place.latitude,
+              stop.place.longitude,
+              ManualStopOrigin.ExistingPlace(stop.place.id, stop.place.displayName),
+            )
+            focusOn(LatLng(stop.place.latitude, stop.place.longitude))
+          } else {
+            reassignTarget = stop
+          }
+        },
         modifier = Modifier.fillMaxSize(),
         // 表示 ON のとき、地図の絞り込みに合う場所だけを出す（まとまり・ラベルも絞った後で作られる）。
         registeredPlaces = if (uiState.showRegisteredPlaces) uiState.registeredPlaces.filter(mapPlaceFilter::matches) else emptyList(),

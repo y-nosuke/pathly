@@ -421,8 +421,19 @@ fun TrackDetailScreen(
             focusTarget = latLng
             focusNonce++
           },
-          // 地図の立ち寄りピンをタップ → 一覧の該当行を強調＆スクロール＋「選び直し」を出す（記録画面と統一）。
+          // 地図の立ち寄りピンをタップ: 手動追加モード＝その場所にもう 1 件立ち寄りを足す（登録済みマーカーと同じ）／
+          // 通常＝一覧の該当行を強調＆スクロール＋「選び直し」を出す（記録画面と統一）。
           onStopClick = { stop ->
+            if (manualMode) {
+              manualPick = ManualStopTarget(
+                stop.place.latitude,
+                stop.place.longitude,
+                ManualStopOrigin.ExistingPlace(stop.place.id, stop.place.displayName),
+              )
+              focusTarget = LatLng(stop.place.latitude, stop.place.longitude)
+              focusNonce++
+              return@TrackMapView
+            }
             focusOnStop(stop)
             if (detent == SheetDetent.HIDDEN) sheetState.settleTo(SheetDetent.PEEK)
             reassignTarget = stop
