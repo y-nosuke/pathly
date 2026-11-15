@@ -205,5 +205,6 @@ Intent で Google アプリ／Web に切り替える（API 呼び出しではな
 | キャッチアップ  | `data/work/PlaceNameCatchUpWorker.kt`                                                                       |
 | UseCase         | `domain/usecase/PlaceEditUseCase.kt`（登録・近接確認・紐付け・編集の差分適用を 3 画面で共有）               |
 | 編集の部品      | `presentation/places/PlaceEditActions.kt`（確認待ち・結果の一言・削除の取り消しまで含めて 3 画面で共有）    |
+| 編集の UI       | `presentation/places/PlaceEditHost.kt`（`PlaceEditUi`・場所シートと近接確認・削除の取り消しのつなぎ込み）   |
 | リポジトリ      | `domain/repository/PlaceRepository.kt` / `WishlistRepository.kt` と各実装                                   |
 | 画面            | `presentation/places/`（`PlacesScreen` / `PlaceActionSheet` / `PlacesViewModel` / `PlacesState`）           |

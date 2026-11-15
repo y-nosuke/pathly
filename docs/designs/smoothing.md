@@ -147,7 +147,7 @@ weight_j = 1 / (accuracy_j² + 1)
    - スライダー（速度上限・平滑窓）で地図が即更新
    - 「距離: 生→補正」「曲がり角合計: 生→補正」を数値表示
 
-   実装: `presentation/history/TrackDetailScreen.kt` の `tuningMode` ＋ `TrackTuningPanel.kt`（`BuildConfig.DEBUG` 限定）。
+   実装: `presentation/history/TrackDetailScreenState.kt` の `tuningMode`・`TrackDetailMapLayer.kt`（地図の描き分け）＋ `TrackTuningPanel.kt`（`BuildConfig.DEBUG` 限定）。
 
 2. **指標の「ひざ」を見る**: 窓を上げると曲がり角合計が下がる。**下げ止まる手前**が「ノイズは取れて実形は残る」塩梅。
 3. **正解経路でキャリブレーション（最も客観的）**: 距離が分かる経路を録り、**補正後距離が実測に一致**するよう合わせる。
@@ -162,8 +162,8 @@ weight_j = 1 / (accuracy_j² + 1)
 | -------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
 | 補正ロジック・指標               | `domain/model/TrackSmoother.kt`（`SmoothingParams` 含む）                                                                  |
 | トラックの補正後点・距離         | `domain/model/GpsTrack.kt`（`smoothedPoints` / `totalDistanceMeters`）                                                     |
-| 詳細画面の描画・調整UI           | `presentation/history/TrackDetailScreen.kt`                                                                                |
-| 記録画面のライブ描画             | `presentation/tracking/TrackingScreen.kt`                                                                                  |
+| 詳細画面の描画・調整UI           | `presentation/history/TrackDetailMapLayer.kt`・`TrackDetailMap.kt`                                                         |
+| 記録画面のライブ描画             | `presentation/tracking/TrackingMap.kt`                                                                                     |
 | 記録間隔の設定                   | `data/settings/SettingsRepository.kt` / 設定画面                                                                           |
 | 記録中の増分補正・保存           | `service/LocationTrackingService.kt` → `GpsTrackRepository.updateSmoothedForTrack`（`persistSmoothed` で確定ぶんのみ追記） |
 | 補正後の永続化                   | `data/local/entity/SmoothedPointEntity.kt` / `data/local/dao/SmoothedPointDao.kt`                                          |

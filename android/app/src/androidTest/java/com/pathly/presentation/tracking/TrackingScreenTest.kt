@@ -14,6 +14,7 @@ import androidx.compose.ui.test.performTextInput
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.pathly.domain.model.GeoBounds
+import com.pathly.domain.model.MapPlaceFilter
 import com.pathly.domain.model.MapRegion
 import com.pathly.domain.model.PlacePrediction
 import com.pathly.domain.model.PlaceSearchResult
@@ -73,6 +74,8 @@ class TrackingScreenTest {
     io.mockk.every { mockViewModel.checkLocationPermission() } returns Unit
     io.mockk.every { mockViewModel.startTracking() } returns Unit
     io.mockk.every { mockViewModel.stopTracking() } returns Unit
+    // 地図の「登録済みの場所」の絞り込み（ボタン列が毎回受け取るので、本物の値を返す）。
+    io.mockk.every { mockViewModel.mapPlaceFilter } returns MutableStateFlow(MapPlaceFilter())
     // 場所の編集・立ち寄りの手動追加の部品。確認待ち・取り消しは出していない状態にする。
     placeEdit = mockk(relaxed = true)
     io.mockk.every { placeEdit.nearbyRegisterPrompt } returns MutableStateFlow(null)

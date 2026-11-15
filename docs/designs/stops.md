@@ -145,18 +145,19 @@
 
 ## 実装マップ
 
-| 要素                     | ファイル                                                                                                      |
-| ------------------------ | ------------------------------------------------------------------------------------------------------------- |
-| 検出                     | `domain/model/StopDetector.kt`（返り値は `DetectedStop`・しきい値の定数もここ）                               |
-| ドメイン                 | `domain/model/Stop.kt`, `DetectedStop.kt`                                                                     |
-| Entity / DAO             | `data/local/entity/StopEntity.kt`, `StopWithPlace.kt` / `data/local/dao/StopDao.kt`                           |
-| 記録中の検出・保存       | `service/LocationTrackingService.kt` → `PlaceRepository.updateStopsForTrack`                                  |
-| ライブ立ち寄り中         | 記録中サービスの `StateFlow`（非永続）→ `data/tracking/TrackingController` → `presentation/tracking/`         |
-| 再解析                   | `detectMissingStops` / `addStops`                                                                             |
-| 手動追加                 | `addManualStop` / `domain/usecase/AddManualStopUseCase.kt` ＋ `presentation/stops/ManualStopSheet.kt`         |
-| 手動追加・付け替えの部品 | `presentation/stops/ManualStopActions.kt`（確認待ち・結果の一言まで含めて記録画面と経路詳細で共有）           |
-| 施設の名前検索           | `presentation/common/PlaceNameSearchField.kt`（追加シート・選び直し・場所詳細の紐付けで共用）                 |
-| 付け替え                 | `reassignStopPlace` ＋ `presentation/stops/StopReassignDialog.kt`                                             |
-| 期間の編集               | `updateStopDuration` ＋ `presentation/stops/StopDurationSheet.kt`（区間UIは `ManualStopRange.kt` と共用）     |
-| 統合                     | `mergeStops` ＋ `presentation/history/TrackDetailSheet.kt` の選択バー（「まとめる」）                         |
-| 画面                     | `presentation/history/`（`TrackDetailScreen` / `TrackDetailMap` / `TrackDetailSheet` / `TrackDetailDialogs`） |
+| 要素                     | ファイル                                                                                                           |
+| ------------------------ | ------------------------------------------------------------------------------------------------------------------ |
+| 検出                     | `domain/model/StopDetector.kt`（返り値は `DetectedStop`・しきい値の定数もここ）                                    |
+| ドメイン                 | `domain/model/Stop.kt`, `DetectedStop.kt`                                                                          |
+| Entity / DAO             | `data/local/entity/StopEntity.kt`, `StopWithPlace.kt` / `data/local/dao/StopDao.kt`                                |
+| 記録中の検出・保存       | `service/LocationTrackingService.kt` → `PlaceRepository.updateStopsForTrack`                                       |
+| ライブ立ち寄り中         | 記録中サービスの `StateFlow`（非永続）→ `data/tracking/TrackingController` → `presentation/tracking/`              |
+| 再解析                   | `detectMissingStops` / `addStops`                                                                                  |
+| 手動追加                 | `addManualStop` / `domain/usecase/AddManualStopUseCase.kt` ＋ `presentation/stops/ManualStopSheet.kt`              |
+| 手動追加・付け替えの部品 | `presentation/stops/ManualStopActions.kt`（確認待ち・結果の一言まで含めて記録画面と経路詳細で共有）                |
+| 手動追加・付け替えの UI  | `presentation/stops/ManualStopHost.kt`（`ManualStopUi`・追加のシートと近接確認・選び直しのつなぎ込み）             |
+| 施設の名前検索           | `presentation/common/PlaceNameSearchField.kt`（追加シート・選び直し・場所詳細の紐付けで共用）                      |
+| 付け替え                 | `reassignStopPlace` ＋ `presentation/stops/StopReassignDialog.kt`                                                  |
+| 期間の編集               | `updateStopDuration` ＋ `presentation/stops/StopDurationSheet.kt`（区間UIは `ManualStopRange.kt` と共用）          |
+| 統合                     | `mergeStops` ＋ `presentation/history/TrackDetailSheet.kt` の選択バー（「まとめる」）                              |
+| 画面                     | `presentation/history/`（`TrackDetailScreen` / `TrackDetailMapLayer` / `TrackDetailSheet` / `TrackDetailDialogs`） |
