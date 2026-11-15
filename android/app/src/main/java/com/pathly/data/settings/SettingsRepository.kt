@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.core.content.edit
 import com.pathly.domain.model.MapPlaceFilter
 import com.pathly.domain.model.PlaceCategoryFacet
+import com.pathly.domain.model.PlaceGrouping
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -80,6 +81,36 @@ class SettingsRepository @Inject constructor(
     mapPlaceFilterFlows.getValue(surface).value = filter
   }
 
+  // 場所一覧の分け方。アプリを閉じても残す。知らない値は分けない扱い。
+  private val _placeGrouping = MutableStateFlow(
+    PlaceGrouping.entries.firstOrNull { it.name == prefs.getString(KEY_PLACE_GROUPING, null) } ?: PlaceGrouping.NONE,
+  )
+
+  /** 場所一覧の分け方。UI が購読する。既定は分けない。 */
+  val placeGrouping: StateFlow<PlaceGrouping> = _placeGrouping.asStateFlow()
+
+  fun setPlaceGrouping(grouping: PlaceGrouping) {
+    prefs.edit { putString(KEY_PLACE_GROUPING, grouping.name) }
+    _placeGrouping.value = grouping
+  }
+
+  // 場所一覧で開いているまとまり。分け方ごとに覚える（地域と業種を切り替えても、それぞれの開閉が残る）。
+  private val openPlaceGroupsFlows: Map<PlaceGrouping, MutableStateFlow<Set<String>>> =
+    PlaceGrouping.entries.associateWith { grouping ->
+      MutableStateFlow(
+        prefs.getString(keyOpenPlaceGroups(grouping), null).orEmpty().split(GROUP_KEY_SEPARATOR).filter { it.isNotEmpty() }.toSet(),
+      )
+    }
+
+  /** その分け方で開いているまとまりのキー。UI が購読する。既定はすべて閉じる（空）。 */
+  fun openPlaceGroups(grouping: PlaceGrouping): StateFlow<Set<String>> = openPlaceGroupsFlows.getValue(grouping).asStateFlow()
+
+  fun setOpenPlaceGroups(grouping: PlaceGrouping, keys: Set<String>) {
+    // 書き出し（BackupArchive）が StringSet を扱わないので、改行でつないだ文字列で持つ（地域の名前にカンマが入り得る）。
+    prefs.edit { putString(keyOpenPlaceGroups(grouping), keys.sorted().joinToString(GROUP_KEY_SEPARATOR)) }
+    openPlaceGroupsFlows.getValue(grouping).value = keys
+  }
+
   // 知らない値（版が変わって名前が無くなった業種など）は読み飛ばし、指定なしとして扱う。
   private fun readMapPlaceFilter(surface: MapSurface): MapPlaceFilter {
     val categoryNames = prefs.getString(keyMapFilterCategories(surface), null).orEmpty().split(",").toSet()
@@ -100,6 +131,10 @@ class SettingsRepository @Inject constructor(
     const val PREFS_NAME = "pathly_settings"
     private const val KEY_GPS_INTERVAL = "gps_interval_seconds"
     private const val KEY_LOCATION_ACCURACY = "location_accuracy"
+    private const val KEY_PLACE_GROUPING = "places_list_grouping"
+    private const val GROUP_KEY_SEPARATOR = "\n"
+
+    private fun keyOpenPlaceGroups(grouping: PlaceGrouping): String = "places_list_open_groups_${grouping.name.lowercase()}"
 
     private fun keyShowPlaces(surface: MapSurface): String = "show_registered_places_${surface.key}"
 

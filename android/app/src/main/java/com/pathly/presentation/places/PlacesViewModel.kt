@@ -9,6 +9,7 @@ import com.pathly.data.settings.SettingsRepository
 import com.pathly.domain.model.MapPlaceFilter
 import com.pathly.domain.model.NearbyRegisterPrompt
 import com.pathly.domain.model.PlaceCategoryFacet
+import com.pathly.domain.model.PlaceGrouping
 import com.pathly.domain.model.PlaceListItem
 import com.pathly.domain.model.PlacePrediction
 import com.pathly.domain.model.PlaceSearchResult
@@ -22,12 +23,15 @@ import com.pathly.domain.repository.WishlistRepository
 import com.pathly.domain.usecase.PlaceEditUseCase
 import com.pathly.presentation.common.toggled
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -42,12 +46,40 @@ class PlacesViewModel @Inject constructor(
 ) : ViewModel() {
 
   // 絞り込み・並べ替えはアプリが裏で落とされても戻せるよう savedStateHandle から始める。
-  private val _uiState = MutableStateFlow(PlacesState().withListOptionsFrom(savedStateHandle))
+  // 分け方・開閉は設定から（開いた直下から分けた見た目で出す）。
+  private val _uiState = MutableStateFlow(
+    settingsRepository.placeGrouping.value.let { grouping ->
+      PlacesState(grouping = grouping, openGroups = settingsRepository.openPlaceGroups(grouping).value)
+    }.withListOptionsFrom(savedStateHandle),
+  )
   val uiState: StateFlow<PlacesState> = _uiState.asStateFlow()
 
   init {
     observePlaces()
     observeShowRegisteredPlaces()
+    observeGrouping()
+  }
+
+  /** 一覧の分け方と、その分け方で開いているまとまり（設定に保存・アプリを閉じても残る）。 */
+  @OptIn(ExperimentalCoroutinesApi::class)
+  private fun observeGrouping() {
+    viewModelScope.launch {
+      settingsRepository.placeGrouping
+        .flatMapLatest { grouping -> settingsRepository.openPlaceGroups(grouping).map { grouping to it } }
+        .collect { (grouping, open) -> _uiState.update { it.copy(grouping = grouping, openGroups = open) } }
+    }
+  }
+
+  /** 一覧の分け方（分けない／地域／業種）を変える。開閉は分け方ごとに覚えているものに切り替わる。 */
+  fun setGrouping(grouping: PlaceGrouping) {
+    settingsRepository.setPlaceGrouping(grouping)
+  }
+
+  /** まとまりの見出しを押して開く／閉じる（いまの分け方の開閉として覚える）。 */
+  fun toggleGroup(key: String) {
+    val grouping = _uiState.value.grouping
+    if (grouping == PlaceGrouping.NONE) return
+    settingsRepository.setOpenPlaceGroups(grouping, settingsRepository.openPlaceGroups(grouping).value.toggled(key))
   }
 
   /** 場所詳細の地図に「登録済みの場所」を出すトグル（画面別・永続化）。 */

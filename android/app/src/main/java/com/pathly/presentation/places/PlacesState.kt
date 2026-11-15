@@ -3,6 +3,7 @@ package com.pathly.presentation.places
 import androidx.lifecycle.SavedStateHandle
 import com.pathly.domain.model.NearbyRegisterPrompt
 import com.pathly.domain.model.PlaceCategoryFacet
+import com.pathly.domain.model.PlaceGrouping
 import com.pathly.domain.model.PlaceListItem
 import com.pathly.domain.model.PlacePrediction
 import com.pathly.domain.model.PlaceSearchResult
@@ -73,6 +74,10 @@ data class PlacesState(
   val nameQuery: String = "",
   val sort: PlaceSort = PlaceSort.REGISTERED,
   val sortDescending: Boolean = PlaceSort.REGISTERED.defaultDescending,
+  // 一覧の分け方と、いまの分け方で開いているまとまり（[PlaceGroup.key]）。絞り込みとは独立した見せ方の設定で、
+  // アプリを閉じても残す（設定に保存する。「初期状態に戻す」では変えない）。
+  val grouping: PlaceGrouping = PlaceGrouping.NONE,
+  val openGroups: Set<String> = emptySet(),
   // 一覧で見るか地図で見るか。絞り込みと同じく、アプリを使っている間は保つ。
   val viewMode: PlacesViewMode = PlacesViewMode.LIST,
   // 地図表示で、地図に重ねた見出し・検索欄・絞り込みをたたんでいるか。たたんでも小さな帯は残る。
@@ -126,7 +131,9 @@ data class PlacesState(
       nameQuery.trim(),
       sort.name,
       sortDescending.toString(),
-      visibleItems.firstOrNull()?.place?.id?.toString().orEmpty(),
+      grouping.name,
+      // 分けているときは先頭の行（見出し）で見る。閉じたまとまりに場所が足されただけでは動かさない。
+      listRows.firstOrNull()?.listKey?.toString().orEmpty(),
     ).joinToString("|")
 
   /**
@@ -168,6 +175,18 @@ data class PlacesState(
         }
       }
       return filtered.sortedWith(if (sortDescending) ascending.reversed() else ascending)
+    }
+
+  /**
+   * 一覧に並べる行。分けないなら場所だけ、分けるならまとまりの見出しと、開いたまとまりの中の場所。
+   * 名前の検索中は、当たった場所が見えるよう（残ったまとまりはどれも当たった場所を含む）すべて開いて見せる。
+   * 覚えている開閉（[openGroups]）は変えないので、検索語を消すと元に戻る。
+   */
+  val listRows: List<PlacesListRow>
+    get() {
+      val items = visibleItems
+      if (grouping == PlaceGrouping.NONE) return items.map { PlacesListRow.Item(it, depth = 0) }
+      return flattenGroups(groupPlaces(items, grouping), openGroups, expandAll = nameQuery.isNotBlank())
     }
 
   /** 一覧の先頭の統計。一覧と同じく、絞り込み・名前の検索の後に残った場所で数える。 */
