@@ -97,8 +97,8 @@ import com.pathly.presentation.common.rememberMarkerIconCache
 import com.pathly.presentation.common.stopSegmentPoints
 import com.pathly.presentation.places.PlaceActionSheet
 import com.pathly.presentation.places.PlaceDeleteUndoEffect
+import com.pathly.presentation.places.PlaceMergeActions
 import com.pathly.presentation.places.PlaceSheetTarget
-import com.pathly.presentation.places.SameFacilityActions
 import com.pathly.presentation.stops.ManualStopOrigin
 import com.pathly.presentation.stops.ManualStopSheet
 import com.pathly.presentation.stops.ManualStopTarget
@@ -624,9 +624,10 @@ fun TrackingScreen(
         onSaveExisting = { item, name, note, wishlist, priority, visited, link ->
           viewModel.savePlaceEdits(item, name, note, wishlist, priority, visited, link)
         },
-        sameFacilityActions = SameFacilityActions(
+        mergeActions = PlaceMergeActions(
           onMerge = viewModel::mergeIntoSameFacility,
           onKeepSeparate = { viewModel.keepAsSeparatePlace(it.place.id) },
+          onFindMergeCandidates = viewModel::mergeCandidates,
         ),
         onDeletePlace = viewModel::deletePlace,
         onOpenTrack = onOpenTrack,

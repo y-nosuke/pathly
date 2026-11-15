@@ -40,9 +40,9 @@ import com.pathly.presentation.history.TrackDetailScreen
 import com.pathly.presentation.history.TrackDetailViewModel
 import com.pathly.presentation.places.AddPlaceRoute
 import com.pathly.presentation.places.PlaceDetailRoute
+import com.pathly.presentation.places.PlaceMergeActions
 import com.pathly.presentation.places.PlacesListRoute
 import com.pathly.presentation.places.PlacesViewModel
-import com.pathly.presentation.places.SameFacilityActions
 import com.pathly.presentation.places.SearchAddRoute
 import com.pathly.presentation.settings.SettingsScreen
 import com.pathly.presentation.tracking.TrackingScreen
@@ -278,9 +278,10 @@ private fun TrackDetailRoute(
     onDismissSameFacility = viewModel::dismissSameFacilityDialog,
     onMergeSameFacility = viewModel::mergeSameFacility,
     onKeepSameFacilitySeparate = viewModel::keepAsSeparatePlace,
-    sameFacilityActions = SameFacilityActions(
+    mergeActions = PlaceMergeActions(
       onMerge = { item, other -> viewModel.mergeIntoSameFacility(item.place.id, item.displayName, other) },
       onKeepSeparate = { viewModel.keepAsSeparatePlace(it.place.id) },
+      onFindMergeCandidates = viewModel::mergeCandidates,
     ),
     onReanalyze = { viewModel.reanalyze() },
     reanalyzeCandidates = reanalyzeCandidates,

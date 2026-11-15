@@ -2,6 +2,7 @@ package com.pathly.domain.repository
 
 import com.pathly.domain.model.PlaceSearchResult
 import com.pathly.domain.model.PlaceSource
+import com.pathly.domain.model.PlaceWithDistance
 import com.pathly.domain.model.RegisteredPlace
 import com.pathly.domain.model.SameFacilityPending
 import com.pathly.domain.model.Stop
@@ -85,6 +86,12 @@ interface PlaceRepository {
    * 近接確認の対象になり、「近くに既存あり→紐付け/新規」を出す。
    */
   suspend fun findNearbyPlaces(latitude: Double, longitude: Double): List<RegisteredPlace>
+
+  /**
+   * 座標から [radiusMeters] 以内の既存の場所を、距離つきで近い順に返す（無ければ空）。
+   * 手でまとめる相手の候補に使う（場所の編集の「ほかの場所とまとめる」）。
+   */
+  suspend fun findPlacesAround(latitude: Double, longitude: Double, radiusMeters: Double): List<PlaceWithDistance>
 
   /**
    * 地図の「登録済みの場所」マーカーを選んで、**既存の [placeId]** にこの訪問を紐付ける（新規 place を作らない）。

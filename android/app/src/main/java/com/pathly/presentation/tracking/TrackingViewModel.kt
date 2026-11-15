@@ -15,6 +15,7 @@ import com.pathly.domain.model.PlaceListItem
 import com.pathly.domain.model.PlacePrediction
 import com.pathly.domain.model.PlaceSearchResult
 import com.pathly.domain.model.PlaceVisit
+import com.pathly.domain.model.PlaceWithDistance
 import com.pathly.domain.model.Priority
 import com.pathly.domain.model.RegisteredPlace
 import com.pathly.domain.model.SameFacilityPlace
@@ -531,6 +532,9 @@ class TrackingViewModel @Inject constructor(
       }
     }
   }
+
+  /** 手でまとめる相手の候補（場所の編集の「ほかの場所とまとめる」）。近くのほかの場所を近い順に返す。 */
+  suspend fun mergeCandidates(item: PlaceListItem): List<PlaceWithDistance> = placeEditUseCase.findMergeCandidates(item)
 
   /** 施設情報なしで、別の場所として残す（→ adr/0037）。二度と聞かない。 */
   fun keepAsSeparatePlace(placeId: Long) {

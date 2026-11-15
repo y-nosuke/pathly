@@ -84,7 +84,7 @@ internal fun PlaceActionSheet(
   // 既存 place に「立ち寄りに追加」（記録中のみ）。null なら出さない。
   onAddStop: ((item: PlaceListItem) -> Unit)? = null,
   // 既存 place の同じ施設の確認待ちへの答え（→ adr/0037）。null なら確認待ちを出さない。
-  sameFacilityActions: SameFacilityActions? = null,
+  mergeActions: PlaceMergeActions? = null,
   // 地図を見ながら操作できるよう、スクリムを持たない自前のシートで出す。
   // ModalBottomSheet はスクリムがタップを吸うため、色を透明にしても地図を動かせず、
   // 触ると閉じてしまう。ここでは地図のパン・ズーム・タップをそのまま生かす（ADR-0010）。
@@ -149,7 +149,7 @@ internal fun PlaceActionSheet(
           onSearchPredictions = onSearchPredictions,
           onFetchPrediction = onFetchPrediction,
           onAddStop = onAddStop,
-          sameFacilityActions = sameFacilityActions,
+          mergeActions = mergeActions,
           openLinkPicker = target.openLinkPicker,
           onDismiss = onDismiss,
         )
@@ -239,7 +239,7 @@ private fun ExistingPlaceEditor(
   onSearchPredictions: suspend (query: String) -> List<PlacePrediction>,
   onFetchPrediction: suspend (placeId: String) -> PlaceSearchResult?,
   onAddStop: ((item: PlaceListItem) -> Unit)?,
-  sameFacilityActions: SameFacilityActions?,
+  mergeActions: PlaceMergeActions?,
   openLinkPicker: Boolean,
   onDismiss: () -> Unit,
 ) {
@@ -280,7 +280,7 @@ private fun ExistingPlaceEditor(
     onFetchNearbyPois = onFetchNearbyPois,
     onSearchPredictions = onSearchPredictions,
     onFetchPrediction = onFetchPrediction,
-    sameFacilityActions = sameFacilityActions,
+    mergeActions = mergeActions,
     initiallyOpenLinkPicker = openLinkPicker,
     onAddStop = onAddStop?.let { add ->
       {

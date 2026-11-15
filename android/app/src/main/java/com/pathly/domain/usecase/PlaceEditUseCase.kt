@@ -2,6 +2,7 @@ package com.pathly.domain.usecase
 
 import com.pathly.domain.model.PlaceListItem
 import com.pathly.domain.model.PlaceSearchResult
+import com.pathly.domain.model.PlaceWithDistance
 import com.pathly.domain.model.Priority
 import com.pathly.domain.model.RegisteredPlace
 import com.pathly.domain.repository.PlaceRepository
@@ -197,7 +198,14 @@ class PlaceEditUseCase @Inject constructor(
   private val wishlistToggleMutex = Mutex()
 
   /**
-   * 同じ施設と分かった場所を、相手（その施設を持っている方）にまとめる（→ adr/0037）。
+   * 手でまとめる相手の候補（場所の編集の「ほかの場所とまとめる」→ docs/specs/places.md）。
+   * [item] から [MERGE_RADIUS_METERS] 以内のほかの場所を、近い順に返す（[item] 自身は除く）。
+   */
+  suspend fun findMergeCandidates(item: PlaceListItem): List<PlaceWithDistance> = placeRepository.findPlacesAround(item.place.latitude, item.place.longitude, MERGE_RADIUS_METERS)
+    .filter { it.place.placeId != item.place.id }
+
+  /**
+   * 場所を相手にまとめる（[placeId] は消える → adr/0037）。同じ施設と分かったときと、手でまとめるときの両方で使う。
    * 取り消しは [undoMerge]。まとめられたら true。
    */
   suspend fun mergeIntoSameFacility(placeId: Long, otherPlaceId: Long): Boolean = placeRepository.mergePlaces(placeId, otherPlaceId)
@@ -207,6 +215,14 @@ class PlaceEditUseCase @Inject constructor(
 
   /** 同じ施設の相手がいても、施設情報なしで別の場所として残す（二度と聞かない → adr/0037）。 */
   suspend fun keepAsSeparatePlace(placeId: Long) = placeRepository.keepAsSeparatePlace(placeId)
+
+  companion object {
+    /**
+     * 手でまとめる相手を探す半径。重複はたいてい近くにできるが、立ち寄りの判定に使う 30m では
+     * 同じ敷地の別の入口・駐車場などが入りきらないので広めに取る。
+     */
+    const val MERGE_RADIUS_METERS = 200.0
+  }
 
   /** [saveEdits] の結果。保存そのものは常に行い、施設の紐付けだけが断られることがある。 */
   data class SaveResult(

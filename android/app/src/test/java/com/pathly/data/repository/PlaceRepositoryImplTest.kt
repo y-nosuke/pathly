@@ -1108,6 +1108,22 @@ class PlaceRepositoryImplTest {
   }
 
   @Test
+  fun findPlacesAround_returnsWithinGivenRadiusNearestFirstWithDistance() = runTest {
+    coEvery { placeDao.getRegisteredPlacesInBounds(any(), any(), any(), any()) } returns listOf(
+      RegisteredPlaceRow(3L, "約150m先", 35.00135, 139.0, 0, 0, null, null, false),
+      RegisteredPlaceRow(1L, "同じ地点", 35.0, 139.0, 0, 0, null, null, false),
+      RegisteredPlaceRow(2L, "約1km先", 35.01, 139.0, 0, 0, null, null, false),
+    )
+
+    val around = repository.findPlacesAround(35.0, 139.0, 200.0)
+
+    // 半径の外（約1km）は出さず、近い順に距離を付けて返す。
+    assertEquals(listOf(1L, 3L), around.map { it.place.placeId })
+    assertEquals(0.0, around[0].distanceMeters, 0.01)
+    assertTrue(around[1].distanceMeters in 140.0..160.0)
+  }
+
+  @Test
   fun addManualStop_forceNewPlace_insertsNewPlaceWithoutCoordinateDedup() = runTest {
     coEvery { placeDao.insert(any()) } returns 42L
     coEvery { stopDao.insert(any()) } returns 100L

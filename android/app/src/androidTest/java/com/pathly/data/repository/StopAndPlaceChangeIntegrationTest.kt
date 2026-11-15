@@ -552,6 +552,29 @@ class StopAndPlaceChangeIntegrationTest {
   }
 
   @Test
+  fun mergePlaces_whenBothHaveFacilities_keepsTheRemainingOnes_andUndoBringsBothBack() = runTest {
+    // 手でまとめる（#86）: 別の施設を持つ場所どうしでもまとめられる。施設は 1 つの場所にしか持てないので、
+    // まとめられる方の施設情報は外れる。
+    val into = insertPlace(PlaceSource.USER, name = "駐車場")
+    database.googlePlaceDao().upsert(GooglePlaceEntity(into, "gp-parking", "第一駐車場"))
+    val from = insertPlace(PlaceSource.DETECTED, latitude = LAT + 0.001)
+    database.googlePlaceDao().upsert(GooglePlaceEntity(from, "gp-gate", "北門"))
+    val stop = insertStop(from, arrival = BASE, departure = BASE + 10 * MINUTE)
+
+    assertTrue(placeRepository.mergePlaces(from, into))
+
+    assertEquals(into, stopOf(stop).placeId)
+    assertEquals("残る方の施設はそのまま", into, database.googlePlaceDao().getPlaceIdByGoogleId("gp-parking"))
+    assertNull("まとめられた方の施設情報は外れる", database.googlePlaceDao().getPlaceIdByGoogleId("gp-gate"))
+
+    assertTrue(placeRepository.undoLastPlaceMerge())
+
+    assertEquals(from, stopOf(stop).placeId)
+    assertEquals(into, database.googlePlaceDao().getPlaceIdByGoogleId("gp-parking"))
+    assertEquals("取り消すと施設情報も戻る", from, database.googlePlaceDao().getPlaceIdByGoogleId("gp-gate"))
+  }
+
+  @Test
   fun sameFacilityPending_isNotCountedAsUnresolved_andKeepSeparateEndsIt() = runTest {
     val holder = insertPlace(PlaceSource.USER, name = "神社")
     database.googlePlaceDao().upsert(GooglePlaceEntity(holder, "gp-same", "清瀧神社"))
