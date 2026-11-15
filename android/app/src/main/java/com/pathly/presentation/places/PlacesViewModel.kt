@@ -102,13 +102,23 @@ class PlacesViewModel @Inject constructor(
     settingsRepository.setMapPlaceFilter(MapSurface.PLACE_DETAIL, filter)
   }
 
-  // 近接確認で「見えている」とみなす場所（表示 ON で、地図の絞り込みに合うか、[mainPlaceId]＝場所詳細の
-  // 主マーカーとして出ている）。押した時点の条件で判断する。
-  private fun shownOnMap(mainPlaceId: Long?): (RegisteredPlace) -> Boolean {
-    val show = _uiState.value.showRegisteredPlaces
-    val filter = mapPlaceFilter.value
-    return { place -> show && (place.placeId == mainPlaceId || filter.matches(place)) }
-  }
+  /** 場所の登録・編集・削除・まとめる（記録画面・経路詳細と共有）。結果の一言は今いる画面（一覧・詳細）の下に出す。 */
+  val placeEdit = PlaceEditActions(
+    scope = viewModelScope,
+    placeEditUseCase = placeEditUseCase,
+    wishlistRepository = wishlistRepository,
+    placesTextSearcher = placesTextSearcher,
+    // 近接確認で「見えている」とみなす場所（表示 ON で、地図の絞り込みに合うか、[mainPlaceId]＝場所詳細の
+    // 主マーカーとして出ている）。
+    shownOnMap = { mainPlaceId ->
+      val show = _uiState.value.showRegisteredPlaces
+      val filter = mapPlaceFilter.value
+      ({ place -> show && (place.placeId == mainPlaceId || filter.matches(place)) })
+    },
+    placeNameOf = { placeId -> _uiState.value.items.firstOrNull { it.place.id == placeId }?.displayName },
+    onMessage = ::notify,
+    onError = { message -> _uiState.update { it.copy(errorMessage = message) } },
+  )
 
   private fun observePlaces() {
     viewModelScope.launch {
@@ -220,139 +230,6 @@ class PlacesViewModel @Inject constructor(
     updateListOptions { it.copy(sortDescending = !it.sortDescending) }
   }
 
-  /** その場所を含むお出掛け（経路）の一覧。詳細画面で購読する。 */
-  fun visitsFor(placeId: Long): Flow<List<PlaceVisit>> = wishlistRepository.getVisits(placeId)
-
-  /** 統一の場所シートで既存 place を編集するため、単一 place の現在値を取得する。 */
-  suspend fun loadPlace(placeId: Long): PlaceListItem? = wishlistRepository.getPlace(placeId)
-
-  /** 統一の編集ボディ用: 単一 place をリアクティブに購読する（保存しても値が古くならない）。 */
-  fun observePlace(placeId: Long): Flow<PlaceListItem?> = wishlistRepository.observePlace(placeId)
-
-  /** 場所シートのプレビュー用: placeId から施設情報（カテゴリ等）を取得する。 */
-  suspend fun fetchPoiDetails(googlePlaceId: String): PlaceSearchResult? = wishlistRepository.fetchPlaceDetails(googlePlaceId)
-
-  /** 近接確認で「この場所に紐付け」を選んだとき: 既存 place に行きたい/メモを反映する（新規は作らない）。 */
-  fun linkRegisterToPlace(placeId: Long, wishlist: Boolean, priority: Priority, visited: Boolean, memo: String?) {
-    viewModelScope.launch {
-      try {
-        placeEditUseCase.linkToExisting(placeId, wishlist, priority, visited, memo)
-        notify("この場所に紐付けました")
-      } catch (e: Exception) {
-        _uiState.update { it.copy(errorMessage = "紐付けに失敗しました: ${e.message}") }
-      }
-    }
-  }
-
-  /** 地図タップからの登録。行きたいONのときだけ wishlist にも入れる。 */
-  fun registerPlace(
-    latitude: Double,
-    longitude: Double,
-    name: String?,
-    wishlist: Boolean,
-    priority: Priority,
-    visited: Boolean,
-    memo: String?,
-    googlePlaceId: String? = null,
-    forceNewPlace: Boolean = false,
-  ) {
-    viewModelScope.launch {
-      try {
-        val reg = placeEditUseCase.register(latitude, longitude, name, wishlist, priority, visited, memo, googlePlaceId, forceNewPlace)
-        notifyRegistered(reg.alreadyExisted)
-      } catch (e: Exception) {
-        _uiState.update { it.copy(errorMessage = "登録に失敗しました: ${e.message}") }
-      }
-    }
-  }
-
-  /**
-   * 地図タップ・検索からの場所登録。近くに既存の場所があれば登録せず確認待ちにする。
-   * 「登録済みの場所」を地図に表示中なら、ユーザーは既存を見たうえでの操作なので確認しない。
-   * [knownDetails] は検索結果のように施設情報を取得済みのとき（Google を引き直さない）。
-   */
-  fun registerPlaceWithNearbyCheck(
-    latitude: Double,
-    longitude: Double,
-    name: String?,
-    wishlist: Boolean,
-    priority: Priority,
-    visited: Boolean,
-    memo: String?,
-    googlePlaceId: String?,
-    googleName: String? = null,
-    knownDetails: PlaceSearchResult? = null,
-    // 場所詳細の地図から登録するときの、その場所（主マーカーで見えているので近接確認の対象にしない）。
-    mainPlaceId: Long? = null,
-  ) {
-    viewModelScope.launch {
-      try {
-        val result = placeEditUseCase.registerWithNearbyCheck(
-          latitude,
-          longitude,
-          name,
-          wishlist,
-          priority,
-          visited,
-          memo,
-          googlePlaceId,
-          isShownOnMap = shownOnMap(mainPlaceId),
-          knownDetails = knownDetails,
-          googleName = googleName,
-        )
-        when (result) {
-          is PlaceEditUseCase.RegisterResult.NearbyFound ->
-            _uiState.update {
-              it.copy(
-                nearbyRegisterPrompt = NearbyRegisterPrompt(
-                  result.nearby,
-                  latitude,
-                  longitude,
-                  name,
-                  wishlist,
-                  priority,
-                  visited,
-                  memo,
-                ),
-              )
-            }
-
-          is PlaceEditUseCase.RegisterResult.Registered -> notifyRegistered(result.alreadyExisted)
-        }
-      } catch (e: Exception) {
-        _uiState.update { it.copy(errorMessage = "登録に失敗しました: ${e.message}") }
-      }
-    }
-  }
-
-  /** 近接確認で「この場所に紐付け」を選んだとき。 */
-  fun confirmNearbyLink() {
-    val prompt = _uiState.value.nearbyRegisterPrompt ?: return
-    _uiState.update { it.copy(nearbyRegisterPrompt = null) }
-    linkRegisterToPlace(prompt.nearby.placeId, prompt.wishlist, prompt.priority, prompt.visited, prompt.memo)
-  }
-
-  /** 近接確認で「新規で登録」を選んだとき。座標同定せず必ず新しい場所を作る。 */
-  fun confirmNearbyNew() {
-    val prompt = _uiState.value.nearbyRegisterPrompt ?: return
-    _uiState.update { it.copy(nearbyRegisterPrompt = null) }
-    registerPlace(
-      prompt.latitude,
-      prompt.longitude,
-      prompt.name,
-      prompt.wishlist,
-      prompt.priority,
-      prompt.visited,
-      prompt.memo,
-      googlePlaceId = null,
-      forceNewPlace = true,
-    )
-  }
-
-  fun dismissNearbyPrompt() {
-    _uiState.update { it.copy(nearbyRegisterPrompt = null) }
-  }
-
   /** 一覧の行や詳細から「行きたい」を付け外しする。 */
   fun toggleWishlist(item: PlaceListItem) {
     viewModelScope.launch {
@@ -407,30 +284,6 @@ class PlacesViewModel @Inject constructor(
     }
   }
 
-  /**
-   * 詳細画面の編集を一括で保存する（名前・メモ・行きたい・優先度・訪問済みを差分適用）。
-   * 「行きたい」を今つけた場合は addToWishlist の返す id で訪問済みも設定できるよう、
-   * 1コルーチンで順に処理する（個別コールバックだと新規 wishlistId を掴めないため）。
-   */
-  fun savePlaceEdits(
-    item: PlaceListItem,
-    name: String,
-    note: String,
-    wishlist: Boolean,
-    priority: Priority,
-    visited: Boolean,
-    link: PlaceSearchResult? = null,
-  ) {
-    viewModelScope.launch {
-      try {
-        // 同じ施設の場所が既にあって紐付けを断られたときは、編集部が選択肢のダイアログを出す（→ adr/0037）。
-        placeEditUseCase.saveEdits(item, name, note, wishlist, priority, visited, link)
-      } catch (e: Exception) {
-        _uiState.update { it.copy(errorMessage = "保存に失敗しました: ${e.message}") }
-      }
-    }
-  }
-
   // ---- キーワード検索（追加＞検索して追加） ----
 
   private var predictJob: Job? = null
@@ -472,19 +325,10 @@ class PlacesViewModel @Inject constructor(
     }
   }
 
-  /** 場所詳細の「Googleで情報を取得」で、登録座標の近くの POI 候補を取得する（選び直しと同じ仕組み）。 */
-  suspend fun nearbyPois(latitude: Double, longitude: Double): List<PlaceSearchResult> = wishlistRepository.nearbyPois(latitude, longitude)
-
-  /** 「Googleで情報を取得」の名前検索フォールバック: キーワード候補を返す（座標がずれて周辺に出ない施設用）。 */
-  suspend fun predictPlaces(query: String): List<PlacePrediction> = placesTextSearcher.predict(query)
-
-  /** 名前検索で選んだ候補を、座標つきの施設情報に確定する。 */
-  suspend fun fetchPlaceResult(placeId: String): PlaceSearchResult? = placesTextSearcher.fetch(placeId)
-
-  /** 登録結果を一覧側スナックバーに伝えるワンショット通知（削除と同じ下部表示に統一）。 */
-  private fun notifyRegistered(alreadyExisted: Boolean) = notify(if (alreadyExisted) "この場所は登録済みです" else "登録しました")
-
-  /** 一覧側スナックバーに出すワンショット通知。 */
+  /**
+   * 下のスナックバーに出す一言（登録・紐付け・保存など）。地図で追加・検索して追加の画面は、
+   * トークンが進んだのを合図に一覧へ戻る。
+   */
   private fun notify(message: String) {
     _uiState.update {
       it.copy(
@@ -494,72 +338,14 @@ class PlacesViewModel @Inject constructor(
     }
   }
 
+  /** 一言を出し終えた（一覧と詳細を行き来するたびに同じ一言を出さないよう消化する）。 */
+  fun consumeRegisterMessage() {
+    _uiState.update { it.copy(registerMessage = null) }
+  }
+
   /** 確定フォームから戻る（候補選び直し）。 */
   fun clearSearchResult() {
     _uiState.update { it.copy(search = it.search.copy(result = null)) }
-  }
-
-  /**
-   * 場所そのものを削除する（行きたい登録・解決ログも一緒に消える）。確認ダイアログは出さず
-   * 即時削除し、一覧側のスナックバーから [undoDelete] で取り消せる（undoToken で通知）。
-   */
-  fun deletePlace(placeId: Long) {
-    viewModelScope.launch {
-      val name = _uiState.value.items.firstOrNull { it.place.id == placeId }?.displayName
-      try {
-        wishlistRepository.deletePlace(placeId)
-        _uiState.update { it.copy(deleteUndo = it.deleteUndo.deleted(name)) }
-      } catch (e: Exception) {
-        _uiState.update { it.copy(errorMessage = "削除に失敗しました: ${e.message}") }
-      }
-    }
-  }
-
-  /**
-   * 同じ施設と分かった場所を相手にまとめる（→ adr/0037）。まとめた場所は消えるので詳細は閉じ、
-   * 削除と同じスナックバーの「取り消す」で戻せる。
-   */
-  fun mergeIntoSameFacility(item: PlaceListItem, other: SameFacilityPlace) {
-    viewModelScope.launch {
-      try {
-        if (placeEditUseCase.mergeIntoSameFacility(item.place.id, other.placeId)) {
-          _uiState.update { it.copy(deleteUndo = it.deleteUndo.merged(item.displayName, other.name)) }
-        }
-      } catch (e: Exception) {
-        _uiState.update { it.copy(errorMessage = "まとめられませんでした: ${e.message}") }
-      }
-    }
-  }
-
-  /** 手でまとめる相手の候補（場所の編集の「ほかの場所とまとめる」）。近くのほかの場所を近い順に返す。 */
-  suspend fun mergeCandidates(item: PlaceListItem): List<PlaceWithDistance> = placeEditUseCase.findMergeCandidates(item)
-
-  /** 同じ施設の相手がいても、施設情報なしで別の場所として残す（→ adr/0037）。 */
-  fun keepAsSeparatePlace(placeId: Long) {
-    viewModelScope.launch {
-      try {
-        placeEditUseCase.keepAsSeparatePlace(placeId)
-        notify("別の場所として残しました")
-      } catch (e: Exception) {
-        _uiState.update { it.copy(errorMessage = "保存に失敗しました: ${e.message}") }
-      }
-    }
-  }
-
-  /** 削除の通知を出し終えた（画面に戻るたび再表示しないよう消化する）。 */
-  fun consumeDeleteUndo() {
-    _uiState.update { it.copy(deleteUndo = it.deleteUndo.shown()) }
-  }
-
-  /** 直近の削除（[isMerge] ならまとめ）を取り消して元に戻す（スナックバーの「取り消す」）。 */
-  fun undoDelete(isMerge: Boolean = false) {
-    viewModelScope.launch {
-      try {
-        if (isMerge) placeEditUseCase.undoMerge() else wishlistRepository.undoLastPlaceDeletion()
-      } catch (e: Exception) {
-        _uiState.update { it.copy(errorMessage = "取り消しに失敗しました: ${e.message}") }
-      }
-    }
   }
 
   fun clearError() {

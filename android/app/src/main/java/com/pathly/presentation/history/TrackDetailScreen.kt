@@ -65,6 +65,7 @@ import com.pathly.domain.model.WishlistFlag
 import com.pathly.presentation.common.CloseInfoWindowWithSheet
 import com.pathly.presentation.common.FloatingSheet
 import com.pathly.presentation.common.MapPlaceFilterButton
+import com.pathly.presentation.common.NearbyConfirmPurpose
 import com.pathly.presentation.common.NearbyPlaceConfirmDialog
 import com.pathly.presentation.common.SameFacilityDialog
 import com.pathly.presentation.common.SheetDetent
@@ -889,6 +890,7 @@ fun TrackDetailScreen(
   nearbyStopPrompt?.let { prompt ->
     NearbyPlaceConfirmDialog(
       place = prompt.nearby,
+      purpose = NearbyConfirmPurpose.ADD_STOP,
       onLink = onConfirmNearbyStopLink,
       onCreateNew = onConfirmNearbyStopNew,
       onDismiss = onDismissNearbyStopPrompt,
@@ -916,6 +918,7 @@ fun TrackDetailScreen(
   nearbyRegisterPrompt?.let { prompt ->
     NearbyPlaceConfirmDialog(
       place = prompt.nearby,
+      purpose = NearbyConfirmPurpose.REGISTER_PLACE,
       onLink = onConfirmNearbyLink,
       onCreateNew = onConfirmNearbyNew,
       onDismiss = onDismissNearbyPrompt,

@@ -117,14 +117,14 @@ class TrackingViewModelTest {
   fun `削除の通知は出し終えたら消化する`() = runTest {
     val viewModel = createViewModel()
 
-    viewModel.deletePlace(1L)
+    viewModel.placeEdit.deletePlace(1L)
     testDispatcher.scheduler.advanceUntilIdle()
-    assertEquals("削除で通知が積まれる", 1, viewModel.uiState.value.deleteUndo.token)
+    assertEquals("削除で通知が積まれる", 1, viewModel.placeEdit.deleteUndo.value.token)
 
     // 消化しないと、画面を離れて戻るたびに同じ通知が出てしまう（LaunchedEffect が作り直されるため）。
-    viewModel.consumeDeleteUndo()
+    viewModel.placeEdit.consumeDeleteUndo()
 
-    assertEquals("消化すると出すものが無い状態に戻る", 0, viewModel.uiState.value.deleteUndo.token)
+    assertEquals("消化すると出すものが無い状態に戻る", 0, viewModel.placeEdit.deleteUndo.value.token)
   }
 
   @Test
@@ -367,10 +367,10 @@ class TrackingViewModelTest {
     } returns PlaceEditUseCase.RegisterResult.NearbyFound(nearby)
     val viewModel = createViewModel()
 
-    viewModel.registerPlaceWithNearbyCheck(35.0, 139.0, "新しい場所", false, Priority.MEDIUM, false, null, null)
+    viewModel.placeEdit.registerPlaceWithNearbyCheck(35.0, 139.0, "新しい場所", false, Priority.MEDIUM, false, null, null)
     testDispatcher.scheduler.advanceUntilIdle()
 
-    val prompt = viewModel.uiState.value.nearbyRegisterPrompt
+    val prompt = viewModel.placeEdit.nearbyRegisterPrompt.value
     assertEquals(nearby, prompt?.nearby)
     assertEquals("新しい場所", prompt?.name)
   }
@@ -385,13 +385,13 @@ class TrackingViewModelTest {
       mockPlaceEditUseCase.register(any(), any(), any(), any(), any(), any(), any(), any(), any())
     } returns PlaceEditUseCase.RegisterResult.Registered(9L, alreadyExisted = false)
     val viewModel = createViewModel()
-    viewModel.registerPlaceWithNearbyCheck(35.0, 139.0, "新しい場所", true, Priority.HIGH, false, "メモ", null)
+    viewModel.placeEdit.registerPlaceWithNearbyCheck(35.0, 139.0, "新しい場所", true, Priority.HIGH, false, "メモ", null)
     testDispatcher.scheduler.advanceUntilIdle()
 
-    viewModel.confirmNearbyNew()
+    viewModel.placeEdit.confirmNearbyNew()
     testDispatcher.scheduler.advanceUntilIdle()
 
-    assertNull("確認は閉じる", viewModel.uiState.value.nearbyRegisterPrompt)
+    assertNull("確認は閉じる", viewModel.placeEdit.nearbyRegisterPrompt.value)
     // 座標同定せず必ず新しい場所を作る。
     coVerify { mockPlaceEditUseCase.register(35.0, 139.0, "新しい場所", true, Priority.HIGH, false, "メモ", null, true) }
   }
@@ -403,13 +403,13 @@ class TrackingViewModelTest {
       mockPlaceEditUseCase.registerWithNearbyCheck(any(), any(), any(), any(), any(), any(), any(), any(), any())
     } returns PlaceEditUseCase.RegisterResult.NearbyFound(nearby)
     val viewModel = createViewModel()
-    viewModel.registerPlaceWithNearbyCheck(35.0, 139.0, null, true, Priority.LOW, true, "メモ", null)
+    viewModel.placeEdit.registerPlaceWithNearbyCheck(35.0, 139.0, null, true, Priority.LOW, true, "メモ", null)
     testDispatcher.scheduler.advanceUntilIdle()
 
-    viewModel.confirmNearbyLink()
+    viewModel.placeEdit.confirmNearbyLink()
     testDispatcher.scheduler.advanceUntilIdle()
 
-    assertNull("確認は閉じる", viewModel.uiState.value.nearbyRegisterPrompt)
+    assertNull("確認は閉じる", viewModel.placeEdit.nearbyRegisterPrompt.value)
     coVerify { mockPlaceEditUseCase.linkToExisting(5L, true, Priority.LOW, true, "メモ") }
   }
 
@@ -420,11 +420,11 @@ class TrackingViewModelTest {
     } returns PlaceEditUseCase.RegisterResult.Registered(9L, alreadyExisted = false)
     val viewModel = createViewModel()
 
-    viewModel.registerPlaceWithNearbyCheck(35.0, 139.0, "カフェ", false, Priority.MEDIUM, false, null, "gp-1")
+    viewModel.placeEdit.registerPlaceWithNearbyCheck(35.0, 139.0, "カフェ", false, Priority.MEDIUM, false, null, "gp-1")
     testDispatcher.scheduler.advanceUntilIdle()
 
     val state = viewModel.uiState.value
-    assertNull("確認は出さない", state.nearbyRegisterPrompt)
+    assertNull("確認は出さない", viewModel.placeEdit.nearbyRegisterPrompt.value)
     assertEquals("「カフェ」を登録しました", state.placeRegisteredMessage)
   }
 }

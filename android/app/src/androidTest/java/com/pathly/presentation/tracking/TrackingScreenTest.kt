@@ -17,6 +17,9 @@ import com.pathly.domain.model.GeoBounds
 import com.pathly.domain.model.MapRegion
 import com.pathly.domain.model.PlacePrediction
 import com.pathly.domain.model.PlaceSearchResult
+import com.pathly.presentation.places.PlaceDeleteUndo
+import com.pathly.presentation.places.PlaceEditActions
+import com.pathly.presentation.stops.ManualStopActions
 import com.pathly.ui.theme.PathlyAndroidTheme
 import io.mockk.coEvery
 import io.mockk.coVerify
@@ -38,6 +41,7 @@ class TrackingScreenTest {
   private lateinit var mockViewModel: TrackingViewModel
   private lateinit var overlayViewModel: TrackOverlayViewModel
   private lateinit var uiStateFlow: MutableStateFlow<TrackingState>
+  private lateinit var placeEdit: PlaceEditActions
 
   @Before
   fun setup() {
@@ -69,6 +73,14 @@ class TrackingScreenTest {
     io.mockk.every { mockViewModel.checkLocationPermission() } returns Unit
     io.mockk.every { mockViewModel.startTracking() } returns Unit
     io.mockk.every { mockViewModel.stopTracking() } returns Unit
+    // 場所の編集・立ち寄りの手動追加の部品。確認待ち・取り消しは出していない状態にする。
+    placeEdit = mockk(relaxed = true)
+    io.mockk.every { placeEdit.nearbyRegisterPrompt } returns MutableStateFlow(null)
+    io.mockk.every { placeEdit.deleteUndo } returns MutableStateFlow(PlaceDeleteUndo())
+    io.mockk.every { mockViewModel.placeEdit } returns placeEdit
+    val manualStop = mockk<ManualStopActions>(relaxed = true)
+    io.mockk.every { manualStop.nearbyStopPrompt } returns MutableStateFlow(null)
+    io.mockk.every { mockViewModel.manualStop } returns manualStop
   }
 
   @Test
@@ -325,7 +337,7 @@ class TrackingScreenTest {
   fun trackingScreen_searchAndRegister_selectingPredictionOpensPlaceSheet() {
     coEvery { mockViewModel.predictPlacesNear(any(), any()) } returns
       listOf(PlacePrediction(placeId = "p1", primaryText = "テスト喫茶", secondaryText = "東京都千代田区"))
-    coEvery { mockViewModel.fetchPlaceResult("p1") } returns
+    coEvery { placeEdit.fetchPlaceResult("p1") } returns
       PlaceSearchResult(
         googlePlaceId = "p1",
         name = "テスト喫茶",

@@ -122,6 +122,7 @@ import com.pathly.presentation.common.MapPlaceFilterButton
 import com.pathly.presentation.common.MarkerPickBlue
 import com.pathly.presentation.common.MarkerUnvisitedGray
 import com.pathly.presentation.common.MarkerVisitedGreen
+import com.pathly.presentation.common.NearbyConfirmPurpose
 import com.pathly.presentation.common.NearbyPlaceConfirmDialog
 import com.pathly.presentation.common.RegionFilterSection
 import com.pathly.presentation.common.RegisteredPlaceMarker
@@ -164,15 +165,11 @@ fun PlacesListRoute(
   }
 
   // 削除（一覧・詳細どちらから消しても）を検知して取り消しスナックバーを出す。
-  PlaceDeleteUndoEffect(uiState.deleteUndo, snackbarHostState, viewModel::undoDelete, viewModel::consumeDeleteUndo)
+  val deleteUndo by viewModel.placeEdit.deleteUndo.collectAsStateWithLifecycle()
+  PlaceDeleteUndoEffect(deleteUndo, snackbarHostState, viewModel.placeEdit::undoDelete, viewModel.placeEdit::consumeDeleteUndo)
 
-  // 登録（「登録しました」/「この場所は登録済みです」）を検知して、削除と同じ下部スナックバーで知らせる。
-  LaunchedEffect(uiState.registerToken) {
-    if (uiState.registerToken == 0) return@LaunchedEffect
-    uiState.registerMessage?.let { message ->
-      snackbarHostState.showSnackbar(message, duration = SnackbarDuration.Short)
-    }
-  }
+  // 登録（「「名前」を登録しました」/「この場所は登録済みです」など）を、削除と同じ下部スナックバーで知らせる。
+  PlaceMessageEffect(uiState.registerMessage, snackbarHostState, viewModel::consumeRegisterMessage)
 
   Box(modifier = modifier.fillMaxSize()) {
     PlacesListContent(
@@ -198,7 +195,7 @@ fun PlacesListRoute(
       onMapPlaceClick = onItemClick,
       onToggleWishlist = viewModel::toggleWishlist,
       // 確認ダイアログは出さず即時削除。取り消しは上のスナックバーから。
-      onDeleteRequest = { viewModel.deletePlace(it.place.id) },
+      onDeleteRequest = { viewModel.placeEdit.deletePlace(it.place.id) },
     )
     SnackbarHost(snackbarHostState, modifier = Modifier.align(Alignment.BottomCenter))
   }
@@ -216,6 +213,7 @@ fun AddPlaceRoute(
   // 登録（新規／既存への紐付け）が実際に成立したら一覧へ戻す。近接確認を挟むときは
   // ユーザーが選んだあとになる。判断が ViewModel に移り、この画面からは登録が同期的に
   // 完了しなくなったため、登録通知のトークンを合図に使う。
+  val nearbyRegisterPrompt by viewModel.placeEdit.nearbyRegisterPrompt.collectAsStateWithLifecycle()
   val tokenAtEntry = remember { viewModel.uiState.value.registerToken }
   LaunchedEffect(uiState.registerToken) {
     if (uiState.registerToken != tokenAtEntry) onDone()
@@ -224,12 +222,12 @@ fun AddPlaceRoute(
   AddPlaceContent(
     modifier = modifier,
     onCancel = onDone,
-    onRegister = viewModel::registerPlaceWithNearbyCheck,
-    nearbyRegisterPrompt = uiState.nearbyRegisterPrompt,
-    onConfirmNearbyLink = viewModel::confirmNearbyLink,
-    onConfirmNearbyNew = viewModel::confirmNearbyNew,
-    onDismissNearbyPrompt = viewModel::dismissNearbyPrompt,
-    onFetchDetails = viewModel::fetchPoiDetails,
+    onRegister = viewModel.placeEdit::registerPlaceWithNearbyCheck,
+    nearbyRegisterPrompt = nearbyRegisterPrompt,
+    onConfirmNearbyLink = viewModel.placeEdit::confirmNearbyLink,
+    onConfirmNearbyNew = viewModel.placeEdit::confirmNearbyNew,
+    onDismissNearbyPrompt = viewModel.placeEdit::dismissNearbyPrompt,
+    onFetchDetails = viewModel.placeEdit::fetchPoiDetails,
   )
 }
 
@@ -255,7 +253,7 @@ fun SearchAddRoute(
     onRegister = { lat, lng, name, wishlist, priority, visited, memo, googlePlaceId, googleName ->
       // 地図タップと同じ登録経路に通す（近接確認の要否も UseCase 側の判断に任せる）。
       // 施設情報は検索時に取得済みなので渡して引き直させない。
-      viewModel.registerPlaceWithNearbyCheck(
+      viewModel.placeEdit.registerPlaceWithNearbyCheck(
         lat,
         lng,
         name,
@@ -292,68 +290,90 @@ fun PlaceDetailRoute(
     return
   }
 
-  val visitsFlow = remember(placeId) { viewModel.visitsFor(placeId) }
+  val visitsFlow = remember(placeId) { viewModel.placeEdit.visitsFor(placeId) }
   val visits by visitsFlow.collectAsStateWithLifecycle(emptyList())
   val mapPlaceFilter by viewModel.mapPlaceFilter.collectAsStateWithLifecycle()
+  val nearbyRegisterPrompt by viewModel.placeEdit.nearbyRegisterPrompt.collectAsStateWithLifecycle()
+  val snackbarHostState = remember { SnackbarHostState() }
+  // 保存・紐付けなどの一言は詳細の下に出す（一覧に戻ってから出ると何のことか分からないため、出したら消化する）。
+  PlaceMessageEffect(uiState.registerMessage, snackbarHostState, viewModel::consumeRegisterMessage)
 
-  PlaceDetailContent(
-    modifier = modifier,
-    item = item,
-    visits = visits,
-    onOpenTrack = onOpenTrack,
-    onBack = onBack,
-    onSave = { name, note, wishlist, priority, visited, link ->
-      viewModel.savePlaceEdits(item, name, note, wishlist, priority, visited, link)
-    },
-    onObservePlace = viewModel::observePlace,
-    onObserveVisits = viewModel::visitsFor,
-    // まとめるとこの場所は消え、一覧へ戻ってスナックバーで取り消せる（削除と同じ）。
-    mergeActions = PlaceMergeActions(
-      onMerge = viewModel::mergeIntoSameFacility,
-      onKeepSeparate = { viewModel.keepAsSeparatePlace(it.place.id) },
-      onFindMergeCandidates = viewModel::mergeCandidates,
-    ),
-    onFetchPoiDetails = viewModel::fetchPoiDetails,
-    // 「Googleで情報を取得」: 登録座標の近くの候補から選ぶ（保存で確定・選び直しと同じ仕組み）。
-    onFetchNearbyPois = viewModel::nearbyPois,
-    // 座標がずれて周辺に出ないときの名前検索フォールバック。
-    onSearchPredictions = viewModel::predictPlaces,
-    onFetchPrediction = viewModel::fetchPlaceResult,
-    // 登録済みの場所の地図表示（この場所自身は主マーカーと重なるので除外）。
-    registeredPlaces = uiState.items
-      .filter { it.place.id != placeId }
-      .map { it.toRegisteredPlace() },
-    showRegisteredPlaces = uiState.showRegisteredPlaces,
-    onToggleRegisteredPlaces = { viewModel.toggleShowRegisteredPlaces() },
-    mapPlaceFilter = mapPlaceFilter,
-    onMapPlaceFilterChange = viewModel::setMapPlaceFilter,
-    // 地図タップでの場所登録（POI・空き地点とも）。近接確認の要否は ViewModel が判断する。
-    onRegisterPlaceAtPoint = { lat, lng, name, wishlist, priority, visited, memo, googlePlaceId, googleName ->
-      viewModel.registerPlaceWithNearbyCheck(
-        lat,
-        lng,
-        name,
-        wishlist,
-        priority,
-        visited,
-        memo,
-        googlePlaceId,
-        googleName,
-        mainPlaceId = placeId,
-      )
-    },
-    nearbyRegisterPrompt = uiState.nearbyRegisterPrompt,
-    onConfirmNearbyLink = viewModel::confirmNearbyLink,
-    onConfirmNearbyNew = viewModel::confirmNearbyNew,
-    onDismissNearbyPrompt = viewModel::dismissNearbyPrompt,
-    onSavePlaceEdits = { editItem, name, note, wishlist, priority, visited, link ->
-      viewModel.savePlaceEdits(editItem, name, note, wishlist, priority, visited, link)
-    },
-    onDeletePlace = viewModel::deletePlace,
-    // 確認ダイアログは出さず即時削除。items から消えると item == null になり一覧へ戻り、
-    // 取り消しスナックバーは一覧側で出る。
-    onDeleteRequest = { viewModel.deletePlace(item.place.id) },
-  )
+  Box(modifier = modifier.fillMaxSize()) {
+    PlaceDetailContent(
+      item = item,
+      visits = visits,
+      onOpenTrack = onOpenTrack,
+      onBack = onBack,
+      onSave = { name, note, wishlist, priority, visited, link ->
+        viewModel.placeEdit.savePlaceEdits(item, name, note, wishlist, priority, visited, link)
+      },
+      onObservePlace = viewModel.placeEdit::observePlace,
+      onObserveVisits = viewModel.placeEdit::visitsFor,
+      // まとめるとこの場所は消え、一覧へ戻ってスナックバーで取り消せる（削除と同じ）。
+      mergeActions = PlaceMergeActions(
+        onMerge = viewModel.placeEdit::mergeIntoSameFacility,
+        onKeepSeparate = { viewModel.placeEdit.keepAsSeparatePlace(it.place.id) },
+        onFindMergeCandidates = viewModel.placeEdit::mergeCandidates,
+      ),
+      onFetchPoiDetails = viewModel.placeEdit::fetchPoiDetails,
+      // 「Googleで情報を取得」: 登録座標の近くの候補から選ぶ（保存で確定・選び直しと同じ仕組み）。
+      onFetchNearbyPois = viewModel.placeEdit::nearbyPois,
+      // 座標がずれて周辺に出ないときの名前検索フォールバック。
+      onSearchPredictions = viewModel.placeEdit::predictPlaces,
+      onFetchPrediction = viewModel.placeEdit::fetchPlaceResult,
+      // 登録済みの場所の地図表示（この場所自身は主マーカーと重なるので除外）。
+      registeredPlaces = uiState.items
+        .filter { it.place.id != placeId }
+        .map { it.toRegisteredPlace() },
+      showRegisteredPlaces = uiState.showRegisteredPlaces,
+      onToggleRegisteredPlaces = { viewModel.toggleShowRegisteredPlaces() },
+      mapPlaceFilter = mapPlaceFilter,
+      onMapPlaceFilterChange = viewModel::setMapPlaceFilter,
+      // 地図タップでの場所登録（POI・空き地点とも）。近接確認の要否は ViewModel が判断する。
+      onRegisterPlaceAtPoint = { lat, lng, name, wishlist, priority, visited, memo, googlePlaceId, googleName ->
+        viewModel.placeEdit.registerPlaceWithNearbyCheck(
+          lat,
+          lng,
+          name,
+          wishlist,
+          priority,
+          visited,
+          memo,
+          googlePlaceId,
+          googleName,
+          mainPlaceId = placeId,
+        )
+      },
+      nearbyRegisterPrompt = nearbyRegisterPrompt,
+      onConfirmNearbyLink = viewModel.placeEdit::confirmNearbyLink,
+      onConfirmNearbyNew = viewModel.placeEdit::confirmNearbyNew,
+      onDismissNearbyPrompt = viewModel.placeEdit::dismissNearbyPrompt,
+      onSavePlaceEdits = { editItem, name, note, wishlist, priority, visited, link ->
+        viewModel.placeEdit.savePlaceEdits(editItem, name, note, wishlist, priority, visited, link)
+      },
+      onDeletePlace = viewModel.placeEdit::deletePlace,
+      // 確認ダイアログは出さず即時削除。items から消えると item == null になり一覧へ戻り、
+      // 取り消しスナックバーは一覧側で出る。
+      onDeleteRequest = { viewModel.placeEdit.deletePlace(item.place.id) },
+    )
+    SnackbarHost(snackbarHostState, modifier = Modifier.align(Alignment.BottomCenter))
+  }
+}
+
+/**
+ * 場所タブの一言（登録・紐付け・保存など）を下のスナックバーに出す。出したら（出している途中で画面を離れても）
+ * [onShown] で消化する。消化しないと、一覧と詳細を行き来するたびに同じ一言が出てしまう。
+ */
+@Composable
+private fun PlaceMessageEffect(message: String?, snackbarHostState: SnackbarHostState, onShown: () -> Unit) {
+  LaunchedEffect(message) {
+    val text = message ?: return@LaunchedEffect
+    try {
+      snackbarHostState.showSnackbar(text, duration = SnackbarDuration.Short)
+    } finally {
+      onShown()
+    }
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -978,6 +998,7 @@ private fun AddPlaceContent(
     nearbyRegisterPrompt?.let { prompt ->
       NearbyPlaceConfirmDialog(
         place = prompt.nearby,
+        purpose = NearbyConfirmPurpose.REGISTER_PLACE,
         onLink = onConfirmNearbyLink,
         onCreateNew = onConfirmNearbyNew,
         onDismiss = onDismissNearbyPrompt,
@@ -1190,6 +1211,7 @@ private fun PlaceDetailContent(
   nearbyRegisterPrompt?.let { prompt ->
     NearbyPlaceConfirmDialog(
       place = prompt.nearby,
+      purpose = NearbyConfirmPurpose.REGISTER_PLACE,
       onLink = onConfirmNearbyLink,
       onCreateNew = onConfirmNearbyNew,
       onDismiss = onDismissNearbyPrompt,

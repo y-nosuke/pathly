@@ -1,11 +1,8 @@
 package com.pathly.presentation.tracking
 
 import com.pathly.domain.model.GpsTrack
-import com.pathly.domain.model.NearbyRegisterPrompt
-import com.pathly.domain.model.NearbyStopPrompt
 import com.pathly.domain.model.RegisteredPlace
 import com.pathly.domain.model.Stop
-import com.pathly.presentation.places.PlaceDeleteUndo
 
 data class TrackingState(
   val isTracking: Boolean = false,
@@ -31,14 +28,9 @@ data class TrackingState(
   val interruptedTrack: GpsTrack? = null,
   // 電池の最適化を無効化済みか（バックグラウンド記録の安定性に影響）。既定はtrueで案内を出さない
   val isIgnoringBatteryOptimizations: Boolean = true,
-  // マップ上の POI から場所を登録した直後の一時メッセージ（表示後クリア）
+  // 場所の登録・立ち寄りの追加などの直後の一時メッセージ（表示後クリア）。場所の確認待ち・削除の取り消しは
+  // 部品（PlaceEditActions・ManualStopActions）が持つ。
   val placeRegisteredMessage: String? = null,
-  // 場所を削除した直後の取り消し待ち（スナックバーで「取り消す」を出す）。場所一覧と同じ流儀。
-  val deleteUndo: PlaceDeleteUndo = PlaceDeleteUndo(),
-  // 空き地点の登録で近くに既存の場所が見つかったときの確認待ち（紐付け/新規をユーザーが選ぶ）。
-  val nearbyRegisterPrompt: NearbyRegisterPrompt? = null,
-  // 手動の立ち寄り追加で近くに既存の場所が見つかったときの確認待ち。
-  val nearbyStopPrompt: NearbyStopPrompt? = null,
 )
 
 data class LocationInfo(

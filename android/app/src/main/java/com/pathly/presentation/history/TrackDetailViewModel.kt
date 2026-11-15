@@ -26,6 +26,8 @@ import com.pathly.domain.repository.WishlistRepository
 import com.pathly.domain.usecase.AddManualStopUseCase
 import com.pathly.domain.usecase.PlaceEditUseCase
 import com.pathly.presentation.places.PlaceDeleteUndo
+import com.pathly.presentation.places.PlaceEditActions
+import com.pathly.presentation.stops.ManualStopActions
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.Flow
@@ -101,10 +103,6 @@ class TrackDetailViewModel @Inject constructor(
   private val _message = MutableStateFlow<String?>(null)
   val message: StateFlow<String?> = _message.asStateFlow()
 
-  // 場所を削除した直後の取り消し待ち（スナックバーで「取り消す」を出す）。
-  private val _deleteUndo = MutableStateFlow(PlaceDeleteUndo())
-  val deleteUndo: StateFlow<PlaceDeleteUndo> = _deleteUndo.asStateFlow()
-
   // 再解析の候補（一覧に無い立ち寄り＋表示名）。null=非表示、空リスト=「候補なし」を表示。
   private val _reanalyzeCandidates = MutableStateFlow<List<StopCandidate>?>(null)
   val reanalyzeCandidates: StateFlow<List<StopCandidate>?> = _reanalyzeCandidates.asStateFlow()
@@ -132,6 +130,29 @@ class TrackDetailViewModel @Inject constructor(
   // 確認待ちを 1 件ずつ聞くダイアログを出しているか。
   private val _sameFacilityDialogOpen = MutableStateFlow(false)
   val sameFacilityDialogOpen: StateFlow<Boolean> = _sameFacilityDialogOpen.asStateFlow()
+
+  /** 場所の登録・編集・削除・まとめる（場所タブ・記録画面と共有）。結果も失敗も一時メッセージに出す。 */
+  val placeEdit = PlaceEditActions(
+    scope = viewModelScope,
+    placeEditUseCase = placeEditUseCase,
+    wishlistRepository = wishlistRepository,
+    placesTextSearcher = placesTextSearcher,
+    shownOnMap = { shownOnMap() },
+    placeNameOf = { placeId -> registeredPlaces.value.firstOrNull { it.placeId == placeId }?.displayName },
+    onMessage = { _message.value = it },
+    onError = { _message.value = it },
+  )
+
+  /** この経路に立ち寄りを手で足す・付け直す（記録画面と共有）。 */
+  val manualStop = ManualStopActions(
+    scope = viewModelScope,
+    addManualStopUseCase = addManualStopUseCase,
+    placeRepository = placeRepository,
+    trackId = { loadedTrackId.value },
+    shownOnMap = ::shownOnMap,
+    onMessage = { _message.value = it },
+    onError = { _message.value = it },
+  )
 
   init {
     // 確認待ちを全部答え終えたら閉じる（開いたままだと、あとで裏の名前付けが見つけた分で勝手に開く）。
@@ -213,35 +234,7 @@ class TrackDetailViewModel @Inject constructor(
    * ダイアログは開いたままにし、残りがあれば次の 1 件を聞く。
    */
   fun mergeSameFacility(pending: SameFacilityPending) {
-    mergeIntoSameFacility(pending.placeId, pending.placeName, pending.other)
-  }
-
-  /** [placeId] を相手 [other] にまとめる（場所シートの編集部・確認待ちのダイアログの両方から）。 */
-  fun mergeIntoSameFacility(placeId: Long, placeName: String?, other: SameFacilityPlace) {
-    viewModelScope.launch {
-      try {
-        if (placeEditUseCase.mergeIntoSameFacility(placeId, other.placeId)) {
-          _deleteUndo.value = _deleteUndo.value.merged(placeName, other.name)
-        }
-      } catch (e: Exception) {
-        _message.value = "まとめられませんでした: ${e.message}"
-      }
-    }
-  }
-
-  /** 手でまとめる相手の候補（場所の編集の「ほかの場所とまとめる」）。近くのほかの場所を近い順に返す。 */
-  suspend fun mergeCandidates(item: PlaceListItem): List<PlaceWithDistance> = placeEditUseCase.findMergeCandidates(item)
-
-  /** 施設情報なしで、別の場所として残す（→ adr/0037）。二度と聞かない。 */
-  fun keepAsSeparatePlace(placeId: Long) {
-    viewModelScope.launch {
-      try {
-        placeEditUseCase.keepAsSeparatePlace(placeId)
-        _message.value = "別の場所として残しました"
-      } catch (e: Exception) {
-        _message.value = "保存に失敗しました: ${e.message}"
-      }
-    }
+    placeEdit.mergeIntoSameFacility(pending.placeId, pending.placeName, pending.other)
   }
 
   /**
@@ -295,218 +288,6 @@ class TrackDetailViewModel @Inject constructor(
     viewModelScope.launch { placeRepository.undoLastStopChange() }
   }
 
-  /**
-   * 振り返り中の地図で POI をタップして場所を登録する。メモは常に保存し、行きたい ON なら
-   * 優先度つきで wishlist にも入れる。
-   */
-  fun registerPlace(
-    latitude: Double,
-    longitude: Double,
-    name: String?,
-    wishlist: Boolean,
-    priority: Priority,
-    visited: Boolean,
-    memo: String?,
-    googlePlaceId: String? = null,
-    forceNewPlace: Boolean = false,
-  ) {
-    viewModelScope.launch {
-      try {
-        val reg = placeEditUseCase.register(latitude, longitude, name, wishlist, priority, visited, memo, googlePlaceId, forceNewPlace)
-        _message.value = registeredMessage(reg.alreadyExisted, name)
-      } catch (e: Exception) {
-        _message.value = "場所の登録に失敗しました: ${e.message}"
-      }
-    }
-  }
-
-  private val _nearbyRegisterPrompt = MutableStateFlow<NearbyRegisterPrompt?>(null)
-
-  /** 空き地点の登録で近くに既存の場所が見つかったときの確認待ち（紐付け/新規をユーザーが選ぶ）。 */
-  val nearbyRegisterPrompt: StateFlow<NearbyRegisterPrompt?> = _nearbyRegisterPrompt.asStateFlow()
-
-  /**
-   * 地図タップからの場所登録。近くに既存の場所があれば登録せず確認待ちにする。
-   * 「登録済みの場所」を地図に表示中なら、ユーザーは既存を見たうえでの操作なので確認しない。
-   */
-  fun registerPlaceWithNearbyCheck(
-    latitude: Double,
-    longitude: Double,
-    name: String?,
-    wishlist: Boolean,
-    priority: Priority,
-    visited: Boolean,
-    memo: String?,
-    googlePlaceId: String?,
-    googleName: String? = null,
-  ) {
-    viewModelScope.launch {
-      try {
-        val result = placeEditUseCase.registerWithNearbyCheck(
-          latitude,
-          longitude,
-          name,
-          wishlist,
-          priority,
-          visited,
-          memo,
-          googlePlaceId,
-          isShownOnMap = shownOnMap(),
-          googleName = googleName,
-        )
-        when (result) {
-          is PlaceEditUseCase.RegisterResult.NearbyFound ->
-            _nearbyRegisterPrompt.value = NearbyRegisterPrompt(
-              result.nearby,
-              latitude,
-              longitude,
-              name,
-              wishlist,
-              priority,
-              visited,
-              memo,
-            )
-
-          is PlaceEditUseCase.RegisterResult.Registered ->
-            _message.value = registeredMessage(result.alreadyExisted, name)
-        }
-      } catch (e: Exception) {
-        _message.value = "場所の登録に失敗しました: ${e.message}"
-      }
-    }
-  }
-
-  /** 近接確認で「この場所に紐付け」を選んだとき。 */
-  fun confirmNearbyLink() {
-    val prompt = _nearbyRegisterPrompt.value ?: return
-    _nearbyRegisterPrompt.value = null
-    linkRegisterToPlace(prompt.nearby.placeId, prompt.wishlist, prompt.priority, prompt.visited, prompt.memo)
-  }
-
-  /** 近接確認で「新規で登録」を選んだとき。座標同定せず必ず新しい場所を作る。 */
-  fun confirmNearbyNew() {
-    val prompt = _nearbyRegisterPrompt.value ?: return
-    _nearbyRegisterPrompt.value = null
-    registerPlace(
-      prompt.latitude,
-      prompt.longitude,
-      prompt.name,
-      prompt.wishlist,
-      prompt.priority,
-      prompt.visited,
-      prompt.memo,
-      googlePlaceId = null,
-      forceNewPlace = true,
-    )
-  }
-
-  fun dismissNearbyPrompt() {
-    _nearbyRegisterPrompt.value = null
-  }
-
-  private fun registeredMessage(alreadyExisted: Boolean, name: String?): String = if (alreadyExisted) {
-    "この場所は登録済みです"
-  } else {
-    "「${name?.ifBlank { null } ?: "場所"}」を登録しました"
-  }
-
-  /** 近接確認で「この場所に紐付け」を選んだとき: 既存 place に行きたい/メモを反映する（新規は作らない）。 */
-  fun linkRegisterToPlace(placeId: Long, wishlist: Boolean, priority: Priority, visited: Boolean, memo: String?) {
-    viewModelScope.launch {
-      try {
-        placeEditUseCase.linkToExisting(placeId, wishlist, priority, visited, memo)
-        _message.value = "この場所に紐付けました"
-      } catch (e: Exception) {
-        _message.value = "紐付けに失敗しました: ${e.message}"
-      }
-    }
-  }
-
-  /** 統一の場所シートで既存 place を編集するため、単一 place をリアクティブに購読する。 */
-  fun observePlace(placeId: Long): Flow<PlaceListItem?> = wishlistRepository.observePlace(placeId)
-
-  /** その場所を含むお出掛けの一覧（編集シートの訪問履歴）。 */
-  fun visitsFor(placeId: Long): Flow<List<PlaceVisit>> = wishlistRepository.getVisits(placeId)
-
-  /**
-   * 経路詳細のまま既存 place を編集して保存する（名前・メモ・行きたい・優先度・訪問済み・
-   * Google 施設の紐付けを差分適用）。場所詳細と同じ UseCase で同じことができるようにする。
-   */
-  fun savePlaceEdits(
-    item: PlaceListItem,
-    name: String,
-    note: String,
-    wishlist: Boolean,
-    priority: Priority,
-    visited: Boolean,
-    link: PlaceSearchResult? = null,
-  ) {
-    viewModelScope.launch {
-      try {
-        // 同じ施設の場所が既にあって紐付けを断られたときは、編集部が選択肢のダイアログを出す（→ adr/0037）。
-        placeEditUseCase.saveEdits(item, name, note, wishlist, priority, visited, link)
-        _message.value = "保存しました"
-      } catch (e: Exception) {
-        _message.value = "保存に失敗しました: ${e.message}"
-      }
-    }
-  }
-
-  /**
-   * 場所そのものを削除する。確認ダイアログは出さず即時削除し、スナックバーの「取り消す」
-   * （[undoDelete]）で戻せる（場所一覧・記録画面と同じ流儀）。
-   */
-  fun deletePlace(placeId: Long) {
-    viewModelScope.launch {
-      val name = registeredPlaces.value.firstOrNull { it.placeId == placeId }?.displayName
-      try {
-        wishlistRepository.deletePlace(placeId)
-        _deleteUndo.value = _deleteUndo.value.deleted(name)
-      } catch (e: Exception) {
-        _message.value = "削除に失敗しました: ${e.message}"
-      }
-    }
-  }
-
-  /** 削除の通知を出し終えた（画面に戻るたび再表示しないよう消化する）。 */
-  fun consumeDeleteUndo() {
-    _deleteUndo.value = _deleteUndo.value.shown()
-  }
-
-  /** 直近の削除（[isMerge] ならまとめ）を取り消して元に戻す（スナックバーの「取り消す」）。 */
-  fun undoDelete(isMerge: Boolean = false) {
-    viewModelScope.launch {
-      try {
-        if (isMerge) placeEditUseCase.undoMerge() else wishlistRepository.undoLastPlaceDeletion()
-      } catch (e: Exception) {
-        _message.value = "取り消しに失敗しました: ${e.message}"
-      }
-    }
-  }
-
-  /** 「Googleで情報を取得」の名前検索フォールバック: キーワード候補を返す。 */
-  suspend fun predictPlaces(query: String): List<PlacePrediction> = placesTextSearcher.predict(query)
-
-  /** 名前検索で選んだ候補を、座標つきの施設情報に確定する。 */
-  suspend fun fetchPlaceResult(placeId: String): PlaceSearchResult? = placesTextSearcher.fetch(placeId)
-
-  /** 場所シートのプレビュー用: placeId から施設情報（カテゴリ等）を取得する。 */
-  suspend fun fetchPoiDetails(googlePlaceId: String): PlaceSearchResult? = wishlistRepository.fetchPlaceDetails(googlePlaceId)
-
-  /** 誤検知の選び直し用: 座標の近くの POI 候補を取得する。 */
-  suspend fun nearbyPois(latitude: Double, longitude: Double): List<PlaceSearchResult> = placeRepository.nearbyPois(latitude, longitude)
-
-  /** 誤検知の訂正: この訪問だけを、選んだ候補／手入力名の場所へ付け替える。 */
-  fun reassignStop(stopId: Long, chosen: PlaceSearchResult?, customName: String?) {
-    viewModelScope.launch {
-      try {
-        placeRepository.reassignStopPlace(stopId, chosen, customName)
-      } catch (e: Exception) {
-        _message.value = "場所の選び直しに失敗しました: ${e.message}"
-      }
-    }
-  }
-
   fun clearMessage() {
     _message.value = null
   }
@@ -533,101 +314,5 @@ class TrackDetailViewModel @Inject constructor(
   /** 再解析の候補表示を閉じる（追加しない）。 */
   fun dismissReanalyze() {
     _reanalyzeCandidates.value = null
-  }
-
-  private val _nearbyStopPrompt = MutableStateFlow<NearbyStopPrompt?>(null)
-
-  /** 手動の立ち寄り追加で近くに既存の場所が見つかったときの確認待ち。 */
-  val nearbyStopPrompt: StateFlow<NearbyStopPrompt?> = _nearbyStopPrompt.asStateFlow()
-
-  /**
-   * 手動で立ち寄りを追加する。近くに既存の場所があれば追加せず確認待ちにする。
-   * 「登録済みの場所」を地図に表示中なら、ユーザーは既存を見たうえでの操作なので確認しない。
-   */
-  fun addManualStopWithNearbyCheck(
-    latitude: Double,
-    longitude: Double,
-    arrivalTime: Date,
-    departureTime: Date,
-    name: String?,
-    googlePlaceId: String?,
-    googleName: String? = null,
-    // 地図の空き地点を指した（→ AddManualStopUseCase.addWithNearbyCheck。別の場所として足す）。
-    pointedOnMap: Boolean = false,
-  ) {
-    val trackId = loadedTrackId.value ?: return
-    viewModelScope.launch {
-      try {
-        val result = addManualStopUseCase.addWithNearbyCheck(
-          trackId,
-          latitude,
-          longitude,
-          arrivalTime,
-          departureTime,
-          name,
-          googlePlaceId,
-          isShownOnMap = shownOnMap(),
-          googleName = googleName,
-          pointedOnMap = pointedOnMap,
-        )
-        when (result) {
-          is AddManualStopUseCase.AddResult.NearbyFound ->
-            _nearbyStopPrompt.value = NearbyStopPrompt(
-              result.nearby,
-              latitude,
-              longitude,
-              arrivalTime,
-              departureTime,
-              name,
-            )
-
-          is AddManualStopUseCase.AddResult.Added -> _message.value = "立ち寄りを追加しました"
-        }
-      } catch (e: Exception) {
-        _message.value = "立ち寄りの追加に失敗しました: ${e.message}"
-      }
-    }
-  }
-
-  /** 近接確認で「この場所に紐付け」を選んだとき。 */
-  fun confirmNearbyStopLink() {
-    val prompt = _nearbyStopPrompt.value ?: return
-    _nearbyStopPrompt.value = null
-    addManualStopForPlace(prompt.nearby.placeId, prompt.arrivalTime, prompt.departureTime)
-  }
-
-  /** 近接確認で「新規で追加」を選んだとき。座標同定せず必ず新しい場所を作る。 */
-  fun confirmNearbyStopNew() {
-    val prompt = _nearbyStopPrompt.value ?: return
-    _nearbyStopPrompt.value = null
-    val trackId = loadedTrackId.value ?: return
-    viewModelScope.launch {
-      try {
-        addManualStopUseCase.addAsNew(
-          trackId,
-          prompt.latitude,
-          prompt.longitude,
-          prompt.arrivalTime,
-          prompt.departureTime,
-          prompt.name,
-        )
-        _message.value = "立ち寄りを追加しました"
-      } catch (e: Exception) {
-        _message.value = "立ち寄りの追加に失敗しました: ${e.message}"
-      }
-    }
-  }
-
-  fun dismissNearbyStopPrompt() {
-    _nearbyStopPrompt.value = null
-  }
-
-  /** 地図の登録済みマーカーを選んで、既存 place にこの訪問を紐付ける（新規 place を作らない）。 */
-  fun addManualStopForPlace(placeId: Long, arrivalTime: Date, departureTime: Date) {
-    val trackId = loadedTrackId.value ?: return
-    viewModelScope.launch {
-      addManualStopUseCase.addForExistingPlace(trackId, placeId, arrivalTime, departureTime)
-      _message.value = "立ち寄りを追加しました"
-    }
   }
 }

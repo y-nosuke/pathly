@@ -89,6 +89,7 @@ import com.pathly.presentation.common.MapMarker
 import com.pathly.presentation.common.MapPinMarker
 import com.pathly.presentation.common.MapPlaceFilterButton
 import com.pathly.presentation.common.MarkerPickBlue
+import com.pathly.presentation.common.NearbyConfirmPurpose
 import com.pathly.presentation.common.NearbyPlaceConfirmDialog
 import com.pathly.presentation.common.RegisteredPlaceMarkers
 import com.pathly.presentation.common.RouteMapContent
@@ -133,10 +134,13 @@ fun TrackingScreen(
   val uiState by viewModel.uiState.collectAsStateWithLifecycle()
   val mapPlaceFilter by viewModel.mapPlaceFilter.collectAsStateWithLifecycle()
   val overlayState by trackOverlayViewModel.uiState.collectAsStateWithLifecycle()
+  val nearbyRegisterPrompt by viewModel.placeEdit.nearbyRegisterPrompt.collectAsStateWithLifecycle()
+  val nearbyStopPrompt by viewModel.manualStop.nearbyStopPrompt.collectAsStateWithLifecycle()
+  val placeDeleteUndo by viewModel.placeEdit.deleteUndo.collectAsStateWithLifecycle()
   val snackbarHostState = remember { SnackbarHostState() }
 
   // 場所を削除したら「取り消す」を出す（場所一覧・経路詳細と同じ出し方）。
-  PlaceDeleteUndoEffect(uiState.deleteUndo, snackbarHostState, viewModel::undoDelete, viewModel::consumeDeleteUndo)
+  PlaceDeleteUndoEffect(placeDeleteUndo, snackbarHostState, viewModel.placeEdit::undoDelete, viewModel.placeEdit::consumeDeleteUndo)
 
   // 保存（確定）中はバックで抜けさせない。抜けられると「保存できていないのに終わった」ように
   // 見える。ただしこれで防げるのはバックだけで、タスクから消す・OS に落とされるのは防げない
@@ -638,13 +642,13 @@ fun TrackingScreen(
       PlaceActionSheet(
         target = target,
         onDismiss = { placeSheetTarget = null },
-        onFetchPoiDetails = viewModel::fetchPoiDetails,
-        onObservePlace = viewModel::observePlace,
-        onObserveVisits = viewModel::visitsFor,
+        onFetchPoiDetails = viewModel.placeEdit::fetchPoiDetails,
+        onObservePlace = viewModel.placeEdit::observePlace,
+        onObserveVisits = viewModel.placeEdit::visitsFor,
         // POI か空き地点か、近接確認が要るかの判断は ViewModel（PlaceEditUseCase）が持つ。
         // 検索で選んだ場所は施設情報を取得済みなので、それを渡して引き直させない。
         onRegisterNew = { lat, lng, name, wishlist, priority, visited, memo, googlePlaceId, googleName ->
-          viewModel.registerPlaceWithNearbyCheck(
+          viewModel.placeEdit.registerPlaceWithNearbyCheck(
             lat,
             lng,
             name,
@@ -658,18 +662,18 @@ fun TrackingScreen(
           )
         },
         onSaveExisting = { item, name, note, wishlist, priority, visited, link ->
-          viewModel.savePlaceEdits(item, name, note, wishlist, priority, visited, link)
+          viewModel.placeEdit.savePlaceEdits(item, name, note, wishlist, priority, visited, link)
         },
         mergeActions = PlaceMergeActions(
-          onMerge = viewModel::mergeIntoSameFacility,
-          onKeepSeparate = { viewModel.keepAsSeparatePlace(it.place.id) },
-          onFindMergeCandidates = viewModel::mergeCandidates,
+          onMerge = viewModel.placeEdit::mergeIntoSameFacility,
+          onKeepSeparate = { viewModel.placeEdit.keepAsSeparatePlace(it.place.id) },
+          onFindMergeCandidates = viewModel.placeEdit::mergeCandidates,
         ),
-        onDeletePlace = viewModel::deletePlace,
+        onDeletePlace = viewModel.placeEdit::deletePlace,
         onOpenTrack = onOpenTrack,
-        onFetchNearbyPois = viewModel::nearbyPois,
-        onSearchPredictions = viewModel::predictPlaces,
-        onFetchPrediction = viewModel::fetchPlaceResult,
+        onFetchNearbyPois = viewModel.placeEdit::nearbyPois,
+        onSearchPredictions = viewModel.placeEdit::predictPlaces,
+        onFetchPrediction = viewModel.placeEdit::fetchPlaceResult,
         // 記録中のみ「立ち寄りに追加」。この訪問を既存 place にひも付ける手動追加へ流す。
         onAddStop = if (uiState.isTracking) {
           { item ->
@@ -720,15 +724,15 @@ fun TrackingScreen(
         latitude = target.latitude,
         longitude = target.longitude,
         points = uiState.currentTrack?.smoothedPoints.orEmpty(),
-        onFetchCandidates = viewModel::nearbyPois,
-        onSearchPredictions = viewModel::predictPlaces,
-        onFetchPrediction = viewModel::fetchPlaceResult,
+        onFetchCandidates = viewModel.placeEdit::nearbyPois,
+        onSearchPredictions = viewModel.placeEdit::predictPlaces,
+        onFetchPrediction = viewModel.placeEdit::fetchPlaceResult,
         onConfirm = { input ->
           val origin = target.origin
           if (origin is ManualStopOrigin.ExistingPlace) {
-            viewModel.addManualStopForPlace(origin.placeId, input.arrivalTime, input.departureTime)
+            viewModel.manualStop.addManualStopForPlace(origin.placeId, input.arrivalTime, input.departureTime)
           } else {
-            viewModel.addManualStopWithNearbyCheck(
+            viewModel.manualStop.addManualStopWithNearbyCheck(
               input.latitude,
               input.longitude,
               input.arrivalTime,
@@ -755,7 +759,7 @@ fun TrackingScreen(
         placeholder = "店名・場所名で検索",
         fetchFailedText = "場所の取得に失敗しました（オフライン等）",
         onSearchPredictions = { query -> viewModel.predictPlacesNear(query, mapSearchBias) },
-        onFetchPrediction = { prediction -> viewModel.fetchPlaceResult(prediction.placeId) },
+        onFetchPrediction = { prediction -> viewModel.placeEdit.fetchPlaceResult(prediction.placeId) },
         onSelected = { result ->
           mapSearch = null
           placeSheetTarget = PlaceSheetTarget.NewSearchResult(result)
@@ -811,22 +815,24 @@ fun TrackingScreen(
   }
 
   // 場所登録の近接確認: 近くの既存に紐付け／新規で登録。
-  uiState.nearbyRegisterPrompt?.let { prompt ->
+  nearbyRegisterPrompt?.let { prompt ->
     NearbyPlaceConfirmDialog(
       place = prompt.nearby,
-      onLink = viewModel::confirmNearbyLink,
-      onCreateNew = viewModel::confirmNearbyNew,
-      onDismiss = viewModel::dismissNearbyPrompt,
+      purpose = NearbyConfirmPurpose.REGISTER_PLACE,
+      onLink = viewModel.placeEdit::confirmNearbyLink,
+      onCreateNew = viewModel.placeEdit::confirmNearbyNew,
+      onDismiss = viewModel.placeEdit::dismissNearbyPrompt,
     )
   }
 
   // 近接確認: 近くに既存があれば紐付け／新規を選ぶ。
-  uiState.nearbyStopPrompt?.let { prompt ->
+  nearbyStopPrompt?.let { prompt ->
     NearbyPlaceConfirmDialog(
       place = prompt.nearby,
-      onLink = viewModel::confirmNearbyStopLink,
-      onCreateNew = viewModel::confirmNearbyStopNew,
-      onDismiss = viewModel::dismissNearbyStopPrompt,
+      purpose = NearbyConfirmPurpose.ADD_STOP,
+      onLink = viewModel.manualStop::confirmNearbyStopLink,
+      onCreateNew = viewModel.manualStop::confirmNearbyStopNew,
+      onDismiss = viewModel.manualStop::dismissNearbyStopPrompt,
     )
   }
 
@@ -834,11 +840,11 @@ fun TrackingScreen(
     CloseInfoWindowWithSheet(infoWindow)
     StopReassignDialog(
       stop = stop,
-      onFetchCandidates = viewModel::nearbyPois,
-      onSearchPredictions = viewModel::predictPlaces,
-      onFetchPrediction = viewModel::fetchPlaceResult,
+      onFetchCandidates = viewModel.placeEdit::nearbyPois,
+      onSearchPredictions = viewModel.placeEdit::predictPlaces,
+      onFetchPrediction = viewModel.placeEdit::fetchPlaceResult,
       onConfirm = { chosen, customName ->
-        viewModel.reassignStop(stop.id, chosen, customName)
+        viewModel.manualStop.reassignStop(stop.id, chosen, customName)
         reassignTarget = null
       },
       onDismiss = { reassignTarget = null },

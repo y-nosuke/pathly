@@ -255,9 +255,9 @@ private fun TrackDetailRoute(
   val registeredPlaces by viewModel.registeredPlaces.collectAsStateWithLifecycle()
   val showRegisteredPlaces by viewModel.showRegisteredPlaces.collectAsStateWithLifecycle()
   val mapPlaceFilter by viewModel.mapPlaceFilter.collectAsStateWithLifecycle()
-  val nearbyRegisterPrompt by viewModel.nearbyRegisterPrompt.collectAsStateWithLifecycle()
-  val nearbyStopPrompt by viewModel.nearbyStopPrompt.collectAsStateWithLifecycle()
-  val placeDeleteUndo by viewModel.deleteUndo.collectAsStateWithLifecycle()
+  val nearbyRegisterPrompt by viewModel.placeEdit.nearbyRegisterPrompt.collectAsStateWithLifecycle()
+  val nearbyStopPrompt by viewModel.manualStop.nearbyStopPrompt.collectAsStateWithLifecycle()
+  val placeDeleteUndo by viewModel.placeEdit.deleteUndo.collectAsStateWithLifecycle()
   val sameFacilityPending by viewModel.sameFacilityPending.collectAsStateWithLifecycle()
   val sameFacilityDialogOpen by viewModel.sameFacilityDialogOpen.collectAsStateWithLifecycle()
 
@@ -277,11 +277,11 @@ private fun TrackDetailRoute(
     onOpenSameFacility = viewModel::openSameFacilityDialog,
     onDismissSameFacility = viewModel::dismissSameFacilityDialog,
     onMergeSameFacility = viewModel::mergeSameFacility,
-    onKeepSameFacilitySeparate = viewModel::keepAsSeparatePlace,
+    onKeepSameFacilitySeparate = viewModel.placeEdit::keepAsSeparatePlace,
     mergeActions = PlaceMergeActions(
-      onMerge = { item, other -> viewModel.mergeIntoSameFacility(item.place.id, item.displayName, other) },
-      onKeepSeparate = { viewModel.keepAsSeparatePlace(it.place.id) },
-      onFindMergeCandidates = viewModel::mergeCandidates,
+      onMerge = { item, other -> viewModel.placeEdit.mergeIntoSameFacility(item.place.id, item.displayName, other) },
+      onKeepSeparate = { viewModel.placeEdit.keepAsSeparatePlace(it.place.id) },
+      onFindMergeCandidates = viewModel.placeEdit::mergeCandidates,
     ),
     onReanalyze = { viewModel.reanalyze() },
     reanalyzeCandidates = reanalyzeCandidates,
@@ -292,39 +292,39 @@ private fun TrackDetailRoute(
     onToggleStopWishlist = viewModel::toggleStopWishlist,
     onUpdateStopDuration = { stopId, arrival, departure -> viewModel.updateStopDuration(stopId, arrival, departure) },
     onUndoStopChange = { viewModel.undoStopChange() },
-    onAddManualStop = viewModel::addManualStopWithNearbyCheck,
+    onAddManualStop = viewModel.manualStop::addManualStopWithNearbyCheck,
     nearbyStopPrompt = nearbyStopPrompt,
-    onConfirmNearbyStopLink = viewModel::confirmNearbyStopLink,
-    onConfirmNearbyStopNew = viewModel::confirmNearbyStopNew,
-    onDismissNearbyStopPrompt = viewModel::dismissNearbyStopPrompt,
+    onConfirmNearbyStopLink = viewModel.manualStop::confirmNearbyStopLink,
+    onConfirmNearbyStopNew = viewModel.manualStop::confirmNearbyStopNew,
+    onDismissNearbyStopPrompt = viewModel.manualStop::dismissNearbyStopPrompt,
     onMessageShown = { viewModel.clearMessage() },
-    onRegisterPlace = viewModel::registerPlaceWithNearbyCheck,
+    onRegisterPlace = viewModel.placeEdit::registerPlaceWithNearbyCheck,
     nearbyRegisterPrompt = nearbyRegisterPrompt,
-    onConfirmNearbyLink = viewModel::confirmNearbyLink,
-    onConfirmNearbyNew = viewModel::confirmNearbyNew,
-    onDismissNearbyPrompt = viewModel::dismissNearbyPrompt,
-    onObservePlace = viewModel::observePlace,
-    onObserveVisits = viewModel::visitsFor,
+    onConfirmNearbyLink = viewModel.placeEdit::confirmNearbyLink,
+    onConfirmNearbyNew = viewModel.placeEdit::confirmNearbyNew,
+    onDismissNearbyPrompt = viewModel.placeEdit::dismissNearbyPrompt,
+    onObservePlace = viewModel.placeEdit::observePlace,
+    onObserveVisits = viewModel.placeEdit::visitsFor,
     onSavePlaceEdits = { editItem, name, note, wishlist, priority, visited, link ->
-      viewModel.savePlaceEdits(editItem, name, note, wishlist, priority, visited, link)
+      viewModel.placeEdit.savePlaceEdits(editItem, name, note, wishlist, priority, visited, link)
     },
-    onDeletePlace = viewModel::deletePlace,
+    onDeletePlace = viewModel.placeEdit::deletePlace,
     placeDeleteUndo = placeDeleteUndo,
-    onUndoPlaceDelete = viewModel::undoDelete,
-    onPlaceDeleteUndoShown = viewModel::consumeDeleteUndo,
+    onUndoPlaceDelete = viewModel.placeEdit::undoDelete,
+    onPlaceDeleteUndoShown = viewModel.placeEdit::consumeDeleteUndo,
     onOpenTrack = onOpenTrack,
-    onFetchPoiDetails = viewModel::fetchPoiDetails,
-    onFetchNearbyPois = viewModel::nearbyPois,
-    onSearchPredictions = viewModel::predictPlaces,
-    onFetchPrediction = viewModel::fetchPlaceResult,
-    onReassignStop = { stopId, chosen, customName -> viewModel.reassignStop(stopId, chosen, customName) },
+    onFetchPoiDetails = viewModel.placeEdit::fetchPoiDetails,
+    onFetchNearbyPois = viewModel.placeEdit::nearbyPois,
+    onSearchPredictions = viewModel.placeEdit::predictPlaces,
+    onFetchPrediction = viewModel.placeEdit::fetchPlaceResult,
+    onReassignStop = { stopId, chosen, customName -> viewModel.manualStop.reassignStop(stopId, chosen, customName) },
     registeredPlaces = registeredPlaces,
     showRegisteredPlaces = showRegisteredPlaces,
     onToggleRegisteredPlaces = { viewModel.toggleShowRegisteredPlaces() },
     mapPlaceFilter = mapPlaceFilter,
     onMapPlaceFilterChange = viewModel::setMapPlaceFilter,
     onAddManualStopForPlace = { placeId, arrival, departure ->
-      viewModel.addManualStopForPlace(placeId, arrival, departure)
+      viewModel.manualStop.addManualStopForPlace(placeId, arrival, departure)
     },
   )
 }
