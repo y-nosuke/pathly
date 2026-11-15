@@ -1,146 +1,70 @@
 package com.pathly.presentation.tracking
 
 import androidx.activity.compose.BackHandler
-import androidx.compose.foundation.background
-import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBarsPadding
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.FloatingActionButton
-import androidx.compose.material3.Icon
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
-import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.google.android.gms.location.LocationServices
-import com.google.android.gms.location.Priority
-import com.google.android.gms.maps.CameraUpdateFactory
 import com.google.android.gms.maps.model.CameraPosition
 import com.google.android.gms.maps.model.LatLng
 import com.google.android.gms.maps.model.LatLngBounds
-import com.google.android.gms.maps.model.PointOfInterest
-import com.google.android.gms.tasks.CancellationTokenSource
-import com.google.maps.android.compose.CameraMoveStartedReason
 import com.google.maps.android.compose.CameraPositionState
-import com.google.maps.android.compose.GoogleMap
-import com.google.maps.android.compose.MapProperties
-import com.google.maps.android.compose.MapType
-import com.google.maps.android.compose.MapUiSettings
-import com.google.maps.android.compose.MarkerState
-import com.google.maps.android.compose.Polyline
 import com.google.maps.android.compose.rememberCameraPositionState
-import com.pathly.R
 import com.pathly.domain.model.GeoBounds
-import com.pathly.domain.model.GpsPoint
-import com.pathly.domain.model.GpsTrack
-import com.pathly.domain.model.RegisteredPlace
+import com.pathly.domain.model.MapRegion
+import com.pathly.domain.model.PlacePrediction
+import com.pathly.domain.model.PlaceSearchResult
 import com.pathly.domain.model.Stop
-import com.pathly.presentation.common.CloseInfoWindowWithSheet
-import com.pathly.presentation.common.MapInfoWindowState
-import com.pathly.presentation.common.MapMarker
-import com.pathly.presentation.common.MapPinMarker
-import com.pathly.presentation.common.MapPlaceFilterButton
-import com.pathly.presentation.common.MarkerPickBlue
-import com.pathly.presentation.common.NearbyConfirmPurpose
-import com.pathly.presentation.common.NearbyPlaceConfirmDialog
-import com.pathly.presentation.common.RegisteredPlaceMarkers
-import com.pathly.presentation.common.RouteMapContent
 import com.pathly.presentation.common.SheetDetent
 import com.pathly.presentation.common.heightOf
 import com.pathly.presentation.common.rememberFloatingSheetState
 import com.pathly.presentation.common.rememberMapInfoWindowState
-import com.pathly.presentation.common.rememberMarkerIconCache
-import com.pathly.presentation.common.stopSegmentPoints
-import com.pathly.presentation.places.PlaceActionSheet
-import com.pathly.presentation.places.PlaceDeleteUndoEffect
-import com.pathly.presentation.places.PlaceMergeActions
+import com.pathly.presentation.places.PlaceEditHost
 import com.pathly.presentation.places.PlaceSheetTarget
+import com.pathly.presentation.stops.ManualStopHost
 import com.pathly.presentation.stops.ManualStopOrigin
-import com.pathly.presentation.stops.ManualStopSheet
 import com.pathly.presentation.stops.ManualStopTarget
-import com.pathly.presentation.stops.StopReassignDialog
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
-import java.util.Date
-import kotlin.math.roundToInt
+import com.pathly.presentation.stops.StopReassignHost
 
-/** 手動追加のハイライト（選択した滞在区間）。軌跡・立ち寄りと見分ける青。経路詳細と揃える。 */
-private val manualHighlightColor = Color(0xFF1E88E5)
-
-// 「この経路の全体を見る」で寄せたとき、線の端が画面の縁やボタンに掛からないようにする余白（px）。
-private const val FIT_PADDING_PX = 160
-
+/**
+ * 記録画面。地図を全面に出し、記録の操作・場所の登録・立ち寄りの手での追加・この範囲の経路を地図の上に重ねる。
+ * 場所の操作の UI は [PlaceEditHost]・[ManualStopHost] がつなぐ（経路詳細・場所タブと同じ）。
+ *
+ * @param onOpenTrack 場所シートの訪問履歴から、その訪問のお出掛け（経路詳細）を開く。
+ * @param trackOverlayViewModel 「この範囲の経路」（地図に映っている範囲の過去の経路を選んで重ねる）。記録まわりとは別の ViewModel。
+ * @param mapContent 地図スロット。null（既定）は実マップ（GoogleMap）を描画する。
+ *   テストは空スロット（{}）を渡し、GMS 依存の地図描画を避けてオーバーレイだけを検証する。
+ */
 @Composable
 fun TrackingScreen(
   modifier: Modifier = Modifier,
   onRequestPermission: () -> Unit,
-  // 場所シートの訪問履歴から、その訪問のお出掛け（経路詳細）を開く。
   onOpenTrack: (trackId: Long) -> Unit = {},
   viewModel: TrackingViewModel = hiltViewModel(),
-  // 「この範囲の経路」（地図に映っている範囲の過去の経路を選んで重ねる）。記録まわりとは別の ViewModel。
   trackOverlayViewModel: TrackOverlayViewModel = hiltViewModel(),
-  // 地図スロット。null（既定）は実マップ（GoogleMap）を描画する。
-  // テストは空スロット（{}）を渡し、GMS 依存の地図描画を避けてオーバーレイだけを検証する。
   mapContent: (@Composable () -> Unit)? = null,
 ) {
   val uiState by viewModel.uiState.collectAsStateWithLifecycle()
   val mapPlaceFilter by viewModel.mapPlaceFilter.collectAsStateWithLifecycle()
   val overlayState by trackOverlayViewModel.uiState.collectAsStateWithLifecycle()
-  val nearbyRegisterPrompt by viewModel.placeEdit.nearbyRegisterPrompt.collectAsStateWithLifecycle()
-  val nearbyStopPrompt by viewModel.manualStop.nearbyStopPrompt.collectAsStateWithLifecycle()
-  val placeDeleteUndo by viewModel.placeEdit.deleteUndo.collectAsStateWithLifecycle()
   val snackbarHostState = remember { SnackbarHostState() }
-
-  // 場所を削除したら「取り消す」を出す（場所一覧・経路詳細と同じ出し方）。
-  PlaceDeleteUndoEffect(placeDeleteUndo, snackbarHostState, viewModel.placeEdit::undoDelete, viewModel.placeEdit::consumeDeleteUndo)
 
   // 保存（確定）中はバックで抜けさせない。抜けられると「保存できていないのに終わった」ように
   // 見える。ただしこれで防げるのはバックだけで、タスクから消す・OS に落とされるのは防げない
@@ -156,36 +80,11 @@ fun TrackingScreen(
 
   // 中断された記録の再開/完了を確認するダイアログ
   if (uiState.interruptedTrack != null) {
-    AlertDialog(
-      onDismissRequest = viewModel::finishInterruptedTracking,
-      title = { Text("前回の記録が中断されています") },
-      text = {
-        Column {
-          Text("アプリの更新などで記録が中断されました。続けて記録を再開しますか？")
-          // 再開が位置情報 OFF で断られたとき。画面側の案内はダイアログの裏に隠れて押せず、
-          // 外側のタップは「完了にする」になってしまうので、ダイアログの中に導線を出す。
-          if (uiState.isLocationDisabled) {
-            Text(
-              text = "端末の位置情報がオフのため再開できません。",
-              modifier = Modifier.padding(top = 12.dp),
-              color = MaterialTheme.colorScheme.error,
-            )
-            TextButton(onClick = viewModel::openLocationSettings) {
-              Text("位置情報の設定を開く")
-            }
-          }
-        }
-      },
-      confirmButton = {
-        TextButton(onClick = viewModel::resumeTracking) {
-          Text("再開する")
-        }
-      },
-      dismissButton = {
-        TextButton(onClick = viewModel::finishInterruptedTracking) {
-          Text("完了にする")
-        }
-      },
+    InterruptedTrackDialog(
+      isLocationDisabled = uiState.isLocationDisabled,
+      onResume = viewModel::resumeTracking,
+      onFinish = viewModel::finishInterruptedTracking,
+      onOpenLocationSettings = viewModel::openLocationSettings,
     )
   }
 
@@ -213,9 +112,13 @@ fun TrackingScreen(
   // 経路の一覧は畳みきれないようにする（開け閉めは経路のボタンと × で。畳んだまま閉じて線ごと消えないように）。
   // 地図を広く見られるよう、開いたときは低めにする。
   val overlaySheetState = rememberFloatingSheetState(peekFraction = 0.35f, allowHidden = false)
-  // 一覧の「この経路の全体を見る」で地図を寄せる範囲（同じ範囲でも効くよう nonce で送る）。
+  // 地図を寄せる範囲（一覧の「この経路の全体を見る」・地域へ移動）。同じ範囲でも効くよう nonce で送る。
   var fitBounds by remember { mutableStateOf<LatLngBounds?>(null) }
   var fitNonce by remember { mutableIntStateOf(0) }
+  fun fitTo(bounds: LatLngBounds) {
+    fitBounds = bounds
+    fitNonce++
+  }
   // 線を読み終えてから寄せる（まだ重ねていない経路は、重ねてから読み込みが終わるまで待つ）。
   val overlayFocus = overlayState.focusRequest?.let { req -> overlayState.selected.firstOrNull { it.track.id == req.trackId } }
   LaunchedEffect(overlayState.focusRequest, overlayFocus?.isLoaded) {
@@ -225,10 +128,7 @@ fun TrackingScreen(
       return@LaunchedEffect
     }
     if (!overlayFocus.isLoaded) return@LaunchedEffect
-    overlayFocus.bounds?.let { b ->
-      fitBounds = LatLngBounds(LatLng(b.south, b.west), LatLng(b.north, b.east))
-      fitNonce++
-    }
+    overlayFocus.bounds?.let { b -> fitTo(LatLngBounds(LatLng(b.south, b.west), LatLng(b.north, b.east))) }
     trackOverlayViewModel.consumeFocus()
   }
   // 地図のカメラ。「この範囲の経路」を押したときに、そのとき映っている範囲を読むため画面で持つ。
@@ -248,7 +148,21 @@ fun TrackingScreen(
   }
   // 記録が止まったら手動追加モードは自動で抜ける（立ち寄りを足すトラックが無い）。
   LaunchedEffect(uiState.isTracking) { if (!uiState.isTracking) manualMode = false }
-  val scope = rememberCoroutineScope()
+
+  /**
+   * 地図のタップ。検索窓を開いている間は、窓を閉じるだけ（地図を見たくてタップしたとみなす）。
+   * 手動追加モード（記録中のみ）なら [manual] を立ち寄りを足す地点にして寄せる。それ以外は [onNormal]
+   * （[focusInNormal] なら、その地点へも寄せる）。
+   */
+  fun onMapTap(manual: ManualStopTarget, focusInNormal: Boolean = true, onNormal: () -> Unit) {
+    if (mapSearch != null) {
+      mapSearch = null
+      return
+    }
+    val adding = uiState.isTracking && manualMode
+    if (adding) manualTarget = manual else onNormal()
+    if (adding || focusInNormal) focusOn(LatLng(manual.latitude, manual.longitude))
+  }
 
   Box(modifier = modifier.fillMaxSize()) {
     if (mapContent != null) {
@@ -263,60 +177,31 @@ fun TrackingScreen(
         stops = uiState.stops,
         currentStop = uiState.currentStop,
         infoWindow = infoWindow,
-        // 手動追加モード（記録中のみ）: POIタップも立ち寄り追加に。通常は統一の場所シート（POI登録）。
+        // 施設は確定しているので、名前と placeId を持ったまま渡す（候補の選び直しは出さない）。通常は場所シート（POI登録）。
         onPoiClick = { poi ->
-          // 検索窓を開いている間の地図のタップは、窓を閉じるだけ（地図を見たくてタップしたとみなす）。
-          if (mapSearch != null) {
-            mapSearch = null
-            return@TrackingMapView
-          }
-          if (uiState.isTracking && manualMode) {
-            // 施設は確定しているので、名前と placeId を持ったまま渡す（候補の選び直しは出さない）。
-            manualTarget = ManualStopTarget(
-              poi.latLng.latitude,
-              poi.latLng.longitude,
-              ManualStopOrigin.Poi(poi.name, poi.placeId),
-            )
-          } else {
+          onMapTap(ManualStopTarget(poi.latLng.latitude, poi.latLng.longitude, ManualStopOrigin.Poi(poi.name, poi.placeId))) {
             placeSheetTarget = PlaceSheetTarget.NewPoi(poi)
           }
-          focusOn(poi.latLng)
         },
-        // 手動追加モード＝立ち寄り追加、それ以外（通常/平常時）＝場所シート（空き地点の登録）。
+        // 通常は場所シート（空き地点の登録）。
         onMapClick = { latLng ->
-          if (mapSearch != null) {
-            mapSearch = null
-            return@TrackingMapView
-          }
-          if (uiState.isTracking && manualMode) {
-            manualTarget = ManualStopTarget(latLng.latitude, latLng.longitude, ManualStopOrigin.MapPoint)
-          } else {
+          onMapTap(ManualStopTarget(latLng.latitude, latLng.longitude, ManualStopOrigin.MapPoint)) {
             placeSheetTarget = PlaceSheetTarget.NewPoint(latLng)
           }
-          focusOn(latLng)
         },
-        // 立ち寄りマーカーのタップ: 手動追加モード＝その場所にもう 1 件立ち寄りを足す（登録済みマーカーと同じ）／
+        // 立ち寄りマーカー: 手動追加モード＝その場所にもう 1 件立ち寄りを足す（登録済みマーカーと同じ）／
         // 通常＝「場所を選び直す」（誤検知の訂正）。
         onStopClick = { stop ->
-          if (mapSearch != null) {
-            mapSearch = null
-            return@TrackingMapView
-          }
-          if (uiState.isTracking && manualMode) {
-            manualTarget = ManualStopTarget(
-              stop.place.latitude,
-              stop.place.longitude,
-              ManualStopOrigin.ExistingPlace(stop.place.id, stop.place.displayName),
-            )
-            focusOn(LatLng(stop.place.latitude, stop.place.longitude))
-          } else {
-            reassignTarget = stop
-          }
+          val target = ManualStopTarget(
+            stop.place.latitude,
+            stop.place.longitude,
+            ManualStopOrigin.ExistingPlace(stop.place.id, stop.place.displayName),
+          )
+          onMapTap(target, focusInNormal = false) { reassignTarget = stop }
         },
         modifier = Modifier.fillMaxSize(),
         // 表示 ON のとき、地図の絞り込みに合う場所だけを出す（まとまり・ラベルも絞った後で作られる）。
         registeredPlaces = if (uiState.showRegisteredPlaces) uiState.registeredPlaces.filter(mapPlaceFilter::matches) else emptyList(),
-        // 登録済みマーカーのタップ: 手動追加モード＝既存placeへ紐付け／通常＝場所シート（その場で編集）。
         manualHighlight = manualTarget?.let { _ ->
           val pts = uiState.currentTrack?.smoothedPoints.orEmpty()
           manualRange?.let { (start, end) ->
@@ -342,202 +227,65 @@ fun TrackingScreen(
         regionMarker = regionMarker,
         onRegionMarkerClick = { regionMarker = null },
         onRecenter = { regionMarker = null },
+        // 登録済みマーカーのタップ: 手動追加モード＝既存placeへ紐付け／通常＝場所シート（その場で編集）。
         onRegisteredPlaceClick = { place ->
-          if (mapSearch != null) {
-            mapSearch = null
-            return@TrackingMapView
-          }
-          if (uiState.isTracking && manualMode) {
-            manualTarget = ManualStopTarget(
-              place.latitude,
-              place.longitude,
-              ManualStopOrigin.ExistingPlace(place.placeId, place.displayName),
-            )
-          } else {
-            placeSheetTarget = PlaceSheetTarget.Existing(place.placeId)
-          }
-          focusOn(LatLng(place.latitude, place.longitude))
+          val target = ManualStopTarget(place.latitude, place.longitude, ManualStopOrigin.ExistingPlace(place.placeId, place.displayName))
+          onMapTap(target) { placeSheetTarget = PlaceSheetTarget.Existing(place.placeId) }
         },
       )
     }
 
     // 検索窓を開いている間は、上端の操作（右のボタン列・左上の記録中の操作・記録中のピル）を隠す（窓と重なるため）。
     if (mapSearch == null) {
-      // 登録済みの場所を地図に出すトグル（記録画面・画面別）。上部右に置き、ON のときは下に絞り込みボタンを出す。
-      Column(
-        modifier = Modifier
-          .align(Alignment.TopEnd)
-          .statusBarsPadding()
-          .padding(12.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
-      ) {
-        Surface(
-          onClick = { viewModel.toggleShowRegisteredPlaces() },
-          shape = CircleShape,
-          color = if (uiState.showRegisteredPlaces) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surface,
-          shadowElevation = 4.dp,
-        ) {
-          Icon(
-            painter = painterResource(R.drawable.ic_place),
-            contentDescription = if (uiState.showRegisteredPlaces) "登録済みの場所を隠す" else "登録済みの場所を表示",
-            tint = if (uiState.showRegisteredPlaces) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface,
-            modifier = Modifier.padding(8.dp),
-          )
-        }
-        if (uiState.showRegisteredPlaces) {
-          MapPlaceFilterButton(
-            filter = mapPlaceFilter,
-            places = uiState.registeredPlaces,
-            onFilterChange = viewModel::setMapPlaceFilter,
-          )
-        }
-        // この範囲の経路: 押した時点で地図に映っている範囲で探す（地図を動かすたびには探さない）。
-        TrackOverlayButton(
-          // 押した時点で塗りつぶす（経路を選ぶ前から、一覧を出していることが分かるように）。
-          active = overlayState.isSheetOpen,
-          // 立ち寄りの追加中は一覧を出せない（追加のシートが優先）ので押せなくする。
-          enabled = manualTarget == null,
-          onClick = {
-            // もう一度押すと閉じる（登録済みの場所のトグルと同じ）。閉じると重ねた線も消える。
-            if (overlayState.isSheetOpen) {
-              trackOverlayViewModel.closeSheet()
-            } else {
-              mapCameraState.visibleGeoBounds()?.let { bounds ->
-                placeSheetTarget = null
-                trackOverlayViewModel.search(bounds)
-                overlaySheetState.settleTo(SheetDetent.PEEK)
-              }
+      TrackingMapButtons(
+        showRegisteredPlaces = uiState.showRegisteredPlaces,
+        registeredPlaces = uiState.registeredPlaces,
+        mapPlaceFilter = mapPlaceFilter,
+        onToggleRegisteredPlaces = viewModel::toggleShowRegisteredPlaces,
+        onMapPlaceFilterChange = viewModel::setMapPlaceFilter,
+        overlayActive = overlayState.isSheetOpen,
+        // 立ち寄りの追加中は一覧・検索を出せない（追加のシートが優先）ので押せなくする。
+        actionsEnabled = manualTarget == null,
+        onToggleOverlay = {
+          // もう一度押すと閉じる（登録済みの場所のトグルと同じ）。閉じると重ねた線も消える。
+          if (overlayState.isSheetOpen) {
+            trackOverlayViewModel.closeSheet()
+          } else {
+            mapCameraState.visibleGeoBounds()?.let { bounds ->
+              placeSheetTarget = null
+              trackOverlayViewModel.search(bounds)
+              overlaySheetState.settleTo(SheetDetent.PEEK)
             }
-          },
-        )
-        // 検索して登録: 場所タブへ移らずに、キーワードで探した場所をこの地図の上で登録する。
-        Surface(
-          onClick = {
-            placeSheetTarget = null
-            mapSearchBias = mapCameraState.visibleGeoBounds()
-            viewModel.startPlaceSearch()
-            mapSearch = MapSearchMode.Place
-          },
-          // 立ち寄りの追加中は、そちらのシートが優先なので押せなくする（経路のボタンと同じ）。
-          enabled = manualTarget == null,
-          shape = CircleShape,
-          color = MaterialTheme.colorScheme.surface,
-          shadowElevation = 4.dp,
-        ) {
-          Icon(
-            painter = painterResource(R.drawable.ic_search),
-            contentDescription = "検索して場所を登録",
-            tint = MaterialTheme.colorScheme.onSurface,
-            modifier = Modifier.padding(8.dp),
-          )
-        }
-        // 地域へ移動: 地名を探して、その地域が収まるように地図を移す（登録はしない）。
-        Surface(
-          onClick = {
-            mapSearchBias = mapCameraState.visibleGeoBounds()
-            viewModel.startPlaceSearch()
-            mapSearch = MapSearchMode.Region
-          },
-          shape = CircleShape,
-          color = MaterialTheme.colorScheme.surface,
-          shadowElevation = 4.dp,
-        ) {
-          Icon(
-            painter = painterResource(R.drawable.ic_public),
-            contentDescription = "地域へ移動",
-            tint = MaterialTheme.colorScheme.onSurface,
-            modifier = Modifier.padding(8.dp),
-          )
-        }
-      }
+          }
+        },
+        onSearchPlace = {
+          placeSheetTarget = null
+          mapSearchBias = mapCameraState.visibleGeoBounds()
+          viewModel.startPlaceSearch()
+          mapSearch = MapSearchMode.Place
+        },
+        onSearchRegion = {
+          mapSearchBias = mapCameraState.visibleGeoBounds()
+          viewModel.startPlaceSearch()
+          mapSearch = MapSearchMode.Region
+        },
+        modifier = Modifier.align(Alignment.TopEnd),
+      )
     }
 
-    // 左上の操作（縦積み）: 記録中は「立ち寄りを追加」モード切替 と 「今ここ」ショートカット、その下に地域の目印のチップ。
-    // 右端は右上のボタン列（幅 64dp）にかからないよう空ける。
     if ((uiState.isTracking || regionMarker != null) && mapSearch == null) {
-      Column(
-        modifier = Modifier
-          .align(Alignment.TopStart)
-          .statusBarsPadding()
-          .padding(start = 12.dp, top = 12.dp, end = 76.dp, bottom = 12.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
-      ) {
-        if (uiState.isTracking) {
-          // 「立ち寄りを追加」モード（ON=地図タップが立ち寄り追加／OFF=場所登録）。
-          Surface(
-            onClick = { manualMode = !manualMode },
-            shape = RoundedCornerShape(20.dp),
-            color = if (manualMode) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surface,
-            shadowElevation = 4.dp,
-          ) {
-            Row(
-              modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
-              verticalAlignment = Alignment.CenterVertically,
-            ) {
-              Icon(
-                painter = painterResource(R.drawable.ic_place),
-                contentDescription = null,
-                tint = if (manualMode) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.primary,
-                modifier = Modifier.size(18.dp),
-              )
-              Spacer(modifier = Modifier.width(6.dp))
-              Text(
-                text = if (manualMode) "立ち寄り追加中（地図をタップ）" else "立ち寄りを追加",
-                style = MaterialTheme.typography.labelLarge,
-                fontWeight = FontWeight.Medium,
-                color = if (manualMode) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface,
-              )
-            }
-          }
-
-          // 「今ここ」を立ち寄りに追加（現在地あり）。
-          if (uiState.hasLocationPermission) {
-            val loc = uiState.currentLocation
-            Surface(
-              // 地点を指していないので、近くの施設候補から選ばせる。
-              onClick = {
-                loc?.let { manualTarget = ManualStopTarget(it.latitude, it.longitude, ManualStopOrigin.CurrentLocation) }
-              },
-              enabled = loc != null,
-              shape = RoundedCornerShape(20.dp),
-              color = MaterialTheme.colorScheme.surface,
-              shadowElevation = 4.dp,
-            ) {
-              Row(
-                modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
-                verticalAlignment = Alignment.CenterVertically,
-              ) {
-                Icon(
-                  painter = painterResource(R.drawable.ic_place),
-                  contentDescription = null,
-                  tint = MaterialTheme.colorScheme.primary,
-                  modifier = Modifier.size(18.dp),
-                )
-                Spacer(modifier = Modifier.width(6.dp))
-                Text(
-                  text = "今ここを立ち寄り",
-                  style = MaterialTheme.typography.labelLarge,
-                  fontWeight = FontWeight.Medium,
-                )
-              }
-            }
-          }
-        }
-
-        // 「地域へ移動」で出した目印の地名のチップ。× で目印ごと消し（地図は動かさない）、地名で地域の範囲へ寄せ直す。
-        regionMarker?.let { region ->
-          RegionMarkerChip(
-            name = region.name,
-            onRefit = {
-              fitBounds = region.bounds
-              fitNonce++
-            },
-            onClear = { regionMarker = null },
-            // 停止中は上部中央のピル（登録の確認・現在地の取得中）の段を避けて、その下に置く。
-            modifier = if (uiState.isTracking) Modifier else Modifier.padding(top = 44.dp),
-          )
-        }
-      }
+      TrackingTopStartControls(
+        isTracking = uiState.isTracking,
+        manualMode = manualMode,
+        onToggleManualMode = { manualMode = !manualMode },
+        hasLocationPermission = uiState.hasLocationPermission,
+        currentLocation = uiState.currentLocation,
+        onAddStopHere = { loc -> manualTarget = ManualStopTarget(loc.latitude, loc.longitude, ManualStopOrigin.CurrentLocation) },
+        regionMarker = regionMarker,
+        onRefitRegion = { region -> fitTo(region.bounds) },
+        onClearRegion = { regionMarker = null },
+        modifier = Modifier.align(Alignment.TopStart),
+      )
     }
 
     // 記録中の状態ピル（上部中央）
@@ -552,25 +300,12 @@ fun TrackingScreen(
 
     // 場所を登録した直後の一時メッセージ
     uiState.placeRegisteredMessage?.let { msg ->
-      LaunchedEffect(msg) {
-        delay(2000)
-        viewModel.clearPlaceRegisteredMessage()
-      }
-      Surface(
-        modifier = Modifier
-          .align(Alignment.TopCenter)
-          .padding(top = if (uiState.isTracking) 56.dp else 12.dp),
-        shape = RoundedCornerShape(20.dp),
-        color = MaterialTheme.colorScheme.secondaryContainer,
-        shadowElevation = 4.dp,
-      ) {
-        Text(
-          text = msg,
-          modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-          style = MaterialTheme.typography.labelLarge,
-          color = MaterialTheme.colorScheme.onSecondaryContainer,
-        )
-      }
+      PlaceRegisteredToast(
+        message = msg,
+        isTracking = uiState.isTracking,
+        onShown = viewModel::clearPlaceRegisteredMessage,
+        modifier = Modifier.align(Alignment.TopCenter),
+      )
     }
 
     // 権限がない場合のオーバーレイ（中央）
@@ -583,113 +318,39 @@ fun TrackingScreen(
       )
     }
 
-    // 下部コントロール：電池最適化の案内＋統計カード（記録中）＋エラー＋記録ボタン
-    Column(
-      modifier = Modifier
-        .align(Alignment.BottomCenter)
-        .fillMaxWidth()
-        .padding(horizontal = 16.dp)
-        .padding(bottom = 24.dp),
-      horizontalAlignment = Alignment.CenterHorizontally,
-      verticalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
-      // 電池の最適化が有効なままだとバックグラウンド記録が止まりやすいので案内する
-      if (uiState.hasLocationPermission && !uiState.isIgnoringBatteryOptimizations) {
-        BatteryOptimizationCard(
-          onDisable = viewModel::requestDisableBatteryOptimization,
-          modifier = Modifier.fillMaxWidth(),
-        )
-      }
-
-      if (uiState.isTracking) {
-        // 「立ち寄り中」は地図上のマーカー（滞在時間ラベル付き）で示すので、下部カードは出さない。
-        TrackingStatsCard(
-          track = uiState.currentTrack,
-          locationCount = uiState.locationCount,
-        )
-      }
-
-      uiState.errorMessage?.let { error ->
-        Card(
-          colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.errorContainer,
-          ),
-        ) {
-          Text(
-            text = error,
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-            color = MaterialTheme.colorScheme.onErrorContainer,
-          )
-        }
-      }
-
-      if (uiState.isLocationDisabled && uiState.interruptedTrack == null) {
-        LocationDisabledCard(onOpenSettings = viewModel::openLocationSettings)
-      }
-
-      if (uiState.hasLocationPermission) {
-        RecordFab(
-          isTracking = uiState.isTracking,
-          onStartTracking = viewModel::startTracking,
-          onStopTracking = { showStopConfirm = true },
-        )
-      }
-    }
+    TrackingBottomControls(
+      uiState = uiState,
+      onDisableBatteryOptimization = viewModel::requestDisableBatteryOptimization,
+      onOpenLocationSettings = viewModel::openLocationSettings,
+      onStartTracking = viewModel::startTracking,
+      onStopTracking = { showStopConfirm = true },
+      modifier = Modifier.align(Alignment.BottomCenter),
+    )
 
     // 地図の1点タップで開く統一の「場所シート」。未登録の空き地点/POI＝登録、登録済み＝その場で編集。
-    placeSheetTarget?.let { target ->
-      CloseInfoWindowWithSheet(infoWindow)
-      PlaceActionSheet(
-        target = target,
-        onDismiss = { placeSheetTarget = null },
-        onFetchPoiDetails = viewModel.placeEdit::fetchPoiDetails,
-        onObservePlace = viewModel.placeEdit::observePlace,
-        onObserveVisits = viewModel.placeEdit::visitsFor,
-        // POI か空き地点か、近接確認が要るかの判断は ViewModel（PlaceEditUseCase）が持つ。
-        // 検索で選んだ場所は施設情報を取得済みなので、それを渡して引き直させない。
-        onRegisterNew = { lat, lng, name, wishlist, priority, visited, memo, googlePlaceId, googleName ->
-          viewModel.placeEdit.registerPlaceWithNearbyCheck(
-            lat,
-            lng,
-            name,
-            wishlist,
-            priority,
-            visited,
-            memo,
-            googlePlaceId,
-            googleName,
-            knownDetails = (target as? PlaceSheetTarget.NewSearchResult)?.result,
+    // 場所を削除したら「取り消す」を出す（場所一覧・経路詳細と同じ出し方）。
+    PlaceEditHost(
+      placeEdit = viewModel.placeEdit,
+      target = placeSheetTarget,
+      onDismiss = { placeSheetTarget = null },
+      modifier = Modifier.align(Alignment.BottomCenter),
+      infoWindow = infoWindow,
+      snackbarHostState = snackbarHostState,
+      sheetState = placeSheetState,
+      onOpenTrack = onOpenTrack,
+      // 記録中のみ「立ち寄りに追加」。この訪問を既存 place にひも付ける手動追加へ流す。
+      onAddStop = if (uiState.isTracking) {
+        { item ->
+          manualTarget = ManualStopTarget(
+            item.place.latitude,
+            item.place.longitude,
+            ManualStopOrigin.ExistingPlace(item.place.id, item.displayName),
           )
-        },
-        onSaveExisting = { item, name, note, wishlist, priority, visited, link ->
-          viewModel.placeEdit.savePlaceEdits(item, name, note, wishlist, priority, visited, link)
-        },
-        mergeActions = PlaceMergeActions(
-          onMerge = viewModel.placeEdit::mergeIntoSameFacility,
-          onKeepSeparate = { viewModel.placeEdit.keepAsSeparatePlace(it.place.id) },
-          onFindMergeCandidates = viewModel.placeEdit::mergeCandidates,
-        ),
-        onDeletePlace = viewModel.placeEdit::deletePlace,
-        onOpenTrack = onOpenTrack,
-        onFetchNearbyPois = viewModel.placeEdit::nearbyPois,
-        onSearchPredictions = viewModel.placeEdit::predictPlaces,
-        onFetchPrediction = viewModel.placeEdit::fetchPlaceResult,
-        // 記録中のみ「立ち寄りに追加」。この訪問を既存 place にひも付ける手動追加へ流す。
-        onAddStop = if (uiState.isTracking) {
-          { item ->
-            manualTarget = ManualStopTarget(
-              item.place.latitude,
-              item.place.longitude,
-              ManualStopOrigin.ExistingPlace(item.place.id, item.displayName),
-            )
-          }
-        } else {
-          null
-        },
-        modifier = Modifier.align(Alignment.BottomCenter),
-        sheetState = placeSheetState,
-      )
-    }
+        }
+      } else {
+        null
+      },
+    )
 
     // この範囲の経路の一覧。閉じると重ねた線も消える。
     if (showOverlaySheet) {
@@ -717,685 +378,110 @@ fun TrackingScreen(
         .navigationBarsPadding(),
     )
 
-    manualTarget?.let { target ->
-      CloseInfoWindowWithSheet(infoWindow)
-      ManualStopSheet(
-        origin = target.origin,
-        latitude = target.latitude,
-        longitude = target.longitude,
-        points = uiState.currentTrack?.smoothedPoints.orEmpty(),
-        onFetchCandidates = viewModel.placeEdit::nearbyPois,
-        onSearchPredictions = viewModel.placeEdit::predictPlaces,
-        onFetchPrediction = viewModel.placeEdit::fetchPlaceResult,
-        onConfirm = { input ->
-          val origin = target.origin
-          if (origin is ManualStopOrigin.ExistingPlace) {
-            viewModel.manualStop.addManualStopForPlace(origin.placeId, input.arrivalTime, input.departureTime)
-          } else {
-            viewModel.manualStop.addManualStopWithNearbyCheck(
-              input.latitude,
-              input.longitude,
-              input.arrivalTime,
-              input.departureTime,
-              input.name,
-              input.googlePlaceId,
-              input.googleName,
-              pointedOnMap = origin is ManualStopOrigin.MapPoint,
-            )
-          }
-          manualTarget = null
-        },
-        onCancel = { manualTarget = null },
-        onRangeChange = { start, end -> manualRange = start to end },
-        modifier = Modifier.align(Alignment.BottomCenter),
-        sheetState = manualSheetState,
-      )
-    }
+    ManualStopHost(
+      manualStop = viewModel.manualStop,
+      placeEdit = viewModel.placeEdit,
+      target = manualTarget,
+      points = uiState.currentTrack?.smoothedPoints.orEmpty(),
+      onAdded = { manualTarget = null },
+      onCancel = { manualTarget = null },
+      onRangeChange = { start, end -> manualRange = start to end },
+      modifier = Modifier.align(Alignment.BottomCenter),
+      infoWindow = infoWindow,
+      sheetState = manualSheetState,
+    )
 
     // 地図はそのままに上端へ検索窓を重ねる。
-    when (mapSearch) {
-      // 検索して登録: 候補を選んだら閉じて、その場所へ地図を寄せ、場所シートで登録する。
-      MapSearchMode.Place -> TrackingPlaceSearchBar(
-        placeholder = "店名・場所名で検索",
-        fetchFailedText = "場所の取得に失敗しました（オフライン等）",
-        onSearchPredictions = { query -> viewModel.predictPlacesNear(query, mapSearchBias) },
-        onFetchPrediction = { prediction -> viewModel.placeEdit.fetchPlaceResult(prediction.placeId) },
-        onSelected = { result ->
+    mapSearch?.let { mode ->
+      TrackingMapSearch(
+        mode = mode,
+        bias = mapSearchBias,
+        onPredictPlaces = viewModel::predictPlacesNear,
+        onFetchPlace = viewModel.placeEdit::fetchPlaceResult,
+        onPredictRegions = viewModel::predictRegions,
+        onFetchRegion = viewModel::fetchRegion,
+        // 検索して登録: 候補を選んだら閉じて、その場所へ地図を寄せ、場所シートで登録する。
+        onPlaceSelected = { result ->
           mapSearch = null
           placeSheetTarget = PlaceSheetTarget.NewSearchResult(result)
           focusOn(LatLng(result.latitude, result.longitude))
         },
-        onClose = { mapSearch = null },
-        modifier = Modifier.align(Alignment.TopCenter),
-      )
-
-      // 地域へ移動: 地名を選んだら閉じて、その地域の範囲が収まるように地図を移す（現在地の追従は止まる）。
-      MapSearchMode.Region -> TrackingPlaceSearchBar(
-        placeholder = "地名で探して移動",
-        fetchFailedText = "地域の取得に失敗しました（オフライン等）",
-        onSearchPredictions = { query -> viewModel.predictRegions(query, mapSearchBias) },
-        // 目印の名前は候補の文字を使う（Places から名前を引くと料金の区分が上がるため）。
-        onFetchPrediction = { prediction ->
-          viewModel.fetchRegion(prediction.placeId)?.let { region -> prediction.primaryText to region }
-        },
-        onSelected = { (name, region) ->
+        // 地域へ移動: 地名を選んだら閉じて、その地域の範囲が収まるように地図を移す（現在地の追従は止まる）。
+        onRegionSelected = { region ->
           mapSearch = null
-          val b = region.bounds
-          val bounds = LatLngBounds(LatLng(b.south, b.west), LatLng(b.north, b.east))
-          fitBounds = bounds
-          fitNonce++
-          regionMarker = RegionMarker(name = name, position = LatLng(region.latitude, region.longitude), bounds = bounds)
+          fitTo(region.bounds)
+          regionMarker = region
         },
         onClose = { mapSearch = null },
         modifier = Modifier.align(Alignment.TopCenter),
       )
-
-      null -> Unit
     }
   }
 
   // 停止の確認ダイアログ（誤爆防止）。
   if (showStopConfirm) {
-    AlertDialog(
-      onDismissRequest = { showStopConfirm = false },
-      title = { Text("記録を停止しますか？") },
-      text = { Text("記録を停止して履歴に保存します。") },
-      confirmButton = {
-        TextButton(onClick = {
-          showStopConfirm = false
-          viewModel.stopTracking()
-        }) {
-          Text("停止する")
-        }
+    StopTrackingConfirmDialog(
+      onConfirm = {
+        showStopConfirm = false
+        viewModel.stopTracking()
       },
-      dismissButton = {
-        TextButton(onClick = { showStopConfirm = false }) { Text("続ける") }
-      },
+      onDismiss = { showStopConfirm = false },
     )
   }
 
-  // 場所登録の近接確認: 近くの既存に紐付け／新規で登録。
-  nearbyRegisterPrompt?.let { prompt ->
-    NearbyPlaceConfirmDialog(
-      place = prompt.nearby,
-      purpose = NearbyConfirmPurpose.REGISTER_PLACE,
-      onLink = viewModel.placeEdit::confirmNearbyLink,
-      onCreateNew = viewModel.placeEdit::confirmNearbyNew,
-      onDismiss = viewModel.placeEdit::dismissNearbyPrompt,
-    )
-  }
-
-  // 近接確認: 近くに既存があれば紐付け／新規を選ぶ。
-  nearbyStopPrompt?.let { prompt ->
-    NearbyPlaceConfirmDialog(
-      place = prompt.nearby,
-      purpose = NearbyConfirmPurpose.ADD_STOP,
-      onLink = viewModel.manualStop::confirmNearbyStopLink,
-      onCreateNew = viewModel.manualStop::confirmNearbyStopNew,
-      onDismiss = viewModel.manualStop::dismissNearbyStopPrompt,
-    )
-  }
-
-  reassignTarget?.let { stop ->
-    CloseInfoWindowWithSheet(infoWindow)
-    StopReassignDialog(
-      stop = stop,
-      onFetchCandidates = viewModel.placeEdit::nearbyPois,
-      onSearchPredictions = viewModel.placeEdit::predictPlaces,
-      onFetchPrediction = viewModel.placeEdit::fetchPlaceResult,
-      onConfirm = { chosen, customName ->
-        viewModel.manualStop.reassignStop(stop.id, chosen, customName)
-        reassignTarget = null
-      },
-      onDismiss = { reassignTarget = null },
-    )
-  }
+  StopReassignHost(
+    stop = reassignTarget,
+    manualStop = viewModel.manualStop,
+    placeEdit = viewModel.placeEdit,
+    onDismiss = { reassignTarget = null },
+    infoWindow = infoWindow,
+  )
 }
 
+/** 地図の上端に重ねる検索窓（[MapSearchMode] ごとに、候補の探し方と選んだあとの動きが違う）。 */
 @Composable
-private fun TrackingMapView(
-  cameraPositionState: CameraPositionState,
-  hasPermission: Boolean,
-  track: GpsTrack?,
-  currentLocation: LocationInfo?,
-  stops: List<Stop>,
-  currentStop: Stop?,
-  // 吹き出しの開閉。シートと一緒に閉じられるよう、状態は画面側が持つ。
-  infoWindow: MapInfoWindowState,
-  onPoiClick: (PointOfInterest) -> Unit,
-  onMapClick: (LatLng) -> Unit,
-  onStopClick: (Stop) -> Unit,
+private fun TrackingMapSearch(
+  mode: MapSearchMode,
+  bias: GeoBounds?,
+  onPredictPlaces: suspend (query: String, bias: GeoBounds?) -> List<PlacePrediction>,
+  onFetchPlace: suspend (placeId: String) -> PlaceSearchResult?,
+  onPredictRegions: suspend (query: String, bias: GeoBounds?) -> List<PlacePrediction>,
+  onFetchRegion: suspend (placeId: String) -> MapRegion?,
+  onPlaceSelected: (PlaceSearchResult) -> Unit,
+  onRegionSelected: (RegionMarker) -> Unit,
+  onClose: () -> Unit,
   modifier: Modifier = Modifier,
-  registeredPlaces: List<RegisteredPlace> = emptyList(),
-  onRegisteredPlaceClick: (RegisteredPlace) -> Unit = {},
-  // 手動追加で選んでいる滞在区間（青くハイライト）と、指した地点（青いピン）。
-  manualHighlight: List<GpsPoint> = emptyList(),
-  manualPickTarget: LatLng? = null,
-  // シートが出ている分だけ地図の可視領域を狭める（下に隠れる地点を作らない）。
-  contentPadding: PaddingValues = PaddingValues(0.dp),
-  // 地図で場所を選んだときに、その地点を可視領域へ寄せる。同じ地点を選び直しても
-  // 効くよう、実行の合図は [focusNonce] の変化で受ける（経路詳細と同じ仕組み）。
-  focusTarget: LatLng? = null,
-  focusNonce: Int = 0,
-  // 一覧から選んで重ねている過去の経路（色分け）。
-  overlayTracks: List<OverlayTrack> = emptyList(),
-  // 範囲の経路の一覧で「この経路の全体を見る」を押したとき、その範囲が全部入るまで寄せる（[fitNonce] の変化が合図）。
-  fitBounds: LatLngBounds? = null,
-  fitNonce: Int = 0,
-  // 「地域へ移動」で移した地域の目印。タップ（[onRegionMarkerClick]）・現在地ボタン（[onRecenter]）で消すのは画面側。
-  regionMarker: RegionMarker? = null,
-  onRegionMarkerClick: () -> Unit = {},
-  onRecenter: () -> Unit = {},
 ) {
-  var followUser by remember { mutableStateOf(true) }
-  var isLocating by remember { mutableStateOf(false) }
+  when (mode) {
+    MapSearchMode.Place -> TrackingPlaceSearchBar(
+      placeholder = "店名・場所名で検索",
+      fetchFailedText = "場所の取得に失敗しました（オフライン等）",
+      onSearchPredictions = { query -> onPredictPlaces(query, bias) },
+      onFetchPrediction = { prediction -> onFetchPlace(prediction.placeId) },
+      onSelected = onPlaceSelected,
+      onClose = onClose,
+      modifier = modifier,
+    )
 
-  val context = LocalContext.current
-  val scope = rememberCoroutineScope()
-  val fusedClient = remember { LocationServices.getFusedLocationProviderClient(context) }
-
-  fun applyCamera(latitude: Double, longitude: Double, animate: Boolean) {
-    val update = CameraUpdateFactory.newLatLng(LatLng(latitude, longitude))
-    if (animate) {
-      scope.launch { cameraPositionState.animate(update) }
-    } else {
-      // 初回は横断的なアニメーションを避けるため瞬時に移動する
-      cameraPositionState.move(update)
-    }
-  }
-
-  // 現在地へセンタリングして追従を再開する。
-  // 記録中はサービスの現在地、停止中は単発取得した現在地を使う（取得中はローディング表示）。
-  fun centerOnCurrentLocation(animate: Boolean) {
-    followUser = true
-    val known = currentLocation
-    if (known != null) {
-      applyCamera(known.latitude, known.longitude, animate)
-      return
-    }
-    if (!hasPermission) return
-    isLocating = true
-    try {
-      fusedClient.getCurrentLocation(
-        Priority.PRIORITY_BALANCED_POWER_ACCURACY,
-        CancellationTokenSource().token,
-      ).addOnCompleteListener { task ->
-        isLocating = false
-        val location = if (task.isSuccessful) task.result else null
-        location?.let { applyCamera(it.latitude, it.longitude, animate) }
-      }
-    } catch (e: SecurityException) {
-      isLocating = false
-    }
-  }
-
-  // 画面表示時（権限取得時）に一度、現在地へセンタリングする（初回は瞬時に移動）
-  LaunchedEffect(hasPermission) {
-    if (hasPermission) {
-      centerOnCurrentLocation(animate = false)
-    }
-  }
-
-  // ユーザーが地図を手で操作したら追従を止める（現在地ボタンで再センター可能）
-  LaunchedEffect(cameraPositionState) {
-    snapshotFlow { cameraPositionState.cameraMoveStartedReason }
-      .collect { reason ->
-        if (reason == CameraMoveStartedReason.GESTURE) {
-          followUser = false
-        }
-      }
-  }
-
-  // 追従中のみ現在地へカメラを移動
-  LaunchedEffect(currentLocation, followUser) {
-    if (followUser) {
-      currentLocation?.let { loc ->
-        cameraPositionState.animate(
-          CameraUpdateFactory.newLatLng(LatLng(loc.latitude, loc.longitude)),
-        )
-      }
-    }
-  }
-
-  // 地図で場所を選んだら、そこへ寄せる。関心が現在地から選んだ場所へ移っているので
-  // 追従も止める（現在地ボタンで戻せる）。
-  LaunchedEffect(focusNonce) {
-    if (focusNonce == 0) return@LaunchedEffect
-    focusTarget?.let {
-      followUser = false
-      cameraPositionState.animate(CameraUpdateFactory.newLatLng(it))
-    }
-  }
-
-  LaunchedEffect(fitNonce) {
-    if (fitNonce == 0) return@LaunchedEffect
-    fitBounds?.let {
-      // 追従したままだと次の現在地の更新で引き戻されるので止める（現在地ボタンで戻せる）。
-      followUser = false
-      cameraPositionState.animate(CameraUpdateFactory.newLatLngBounds(it, FIT_PADDING_PX))
-    }
-  }
-
-  Box(modifier = modifier) {
-    GoogleMap(
-      modifier = Modifier.fillMaxSize(),
-      cameraPositionState = cameraPositionState,
-      contentPadding = contentPadding,
-      properties = MapProperties(
-        mapType = MapType.NORMAL,
-        isMyLocationEnabled = hasPermission,
-      ),
-      uiSettings = MapUiSettings(
-        zoomControlsEnabled = false,
-        // 標準ボタンは追従状態を反映しないため無効化し、自作ボタンを使う
-        myLocationButtonEnabled = false,
-        mapToolbarEnabled = false,
-        compassEnabled = false,
-      ),
-      // 施設アイコン（POI）をタップしたら場所シートを開く
-      onPOIClick = onPoiClick,
-      // 空きスペースのタップは手動立ち寄り追加に使う（呼び出し側で記録中のみ受ける）
-      onMapClick = onMapClick,
-    ) {
-      // 過去の経路は記録中の経路の下に描く。
-      TrackOverlayContent(overlayTracks, infoWindow)
-      val displayPoints = track?.smoothedPoints.orEmpty()
-      if (track != null && displayPoints.size >= 2) {
-        // 確定済み立ち寄りの滞在区間（帯）。詳細画面と同じ描画。
-        val stopSegments = remember(displayPoints, stops) {
-          stops.mapNotNull { s ->
-            stopSegmentPoints(displayPoints, s.arrivalTime, s.departureTime).takeIf { it.size >= 2 }
-          }
-        }
-        // 立ち寄り中（ライブ）の滞在区間。
-        val currentSeg = remember(displayPoints, currentStop) {
-          currentStop?.let { stopSegmentPoints(displayPoints, it.arrivalTime, it.departureTime) }.orEmpty()
-        }
-        RouteMapContent(
-          track = track,
-          displayPoints = displayPoints,
-          infoWindow = infoWindow,
-          stops = stops,
-          stopSegments = stopSegments,
-          currentStop = currentStop,
-          currentStopSegment = currentSeg,
-          // 記録中は端末の現在地ドットがあるので、終了/現在地マーカーは重複を避けて出さない。
-          showEndMarker = false,
-          onStopClick = onStopClick,
-        )
-      }
-      // 手動追加: 選んだ滞在区間を青い太線で見せる（経路詳細と同じ描き分け）。
-      if (manualHighlight.size >= 2) {
-        Polyline(
-          points = manualHighlight.map { LatLng(it.latitude, it.longitude) },
-          color = manualHighlightColor,
-          width = 14f,
-        )
-      }
-      // 手動追加で指した地点（青いピン）。いま自分で置いている最中のもの。
-      manualPickTarget?.let { pick ->
-        val pickMarkerState = remember(pick) { MarkerState(position = pick) }
-        MapMarker(
-          "manual-pick",
-          pick.latitude,
-          pick.longitude,
-          infoWindow = infoWindow,
-          state = pickMarkerState,
-          title = "追加する地点",
-        ) {
-          MapPinMarker(bg = MarkerPickBlue, glyph = R.drawable.ic_add)
-        }
-      }
-      // 登録済みの場所（トグルON）。トラック未確定でも出せるよう、経路描画とは独立して描く。
-      // ただし、この経路の立ち寄り（確定＝紫番号／滞在中＝ティール）と同じ場所は二重に出さない
-      // （登録済みピンが立ち寄りマーカーを覆って分かりにくくなるのを防ぐ）。
-      val stopPlaceIds = remember(stops, currentStop) {
-        (stops.map { it.place.id } + listOfNotNull(currentStop?.place?.id)).toSet()
-      }
-      // まとまりをタップして寄ったら追従を止める。止めないと次の現在地の更新でカメラが引き戻される
-      // （寄せたのはジェスチャーではないので、手で動かしたときの判定には掛からない）。
-      RegisteredPlaceMarkers(
-        registeredPlaces.filter { it.placeId !in stopPlaceIds },
-        infoWindow,
-        onClusterExpand = { followUser = false },
-        onRegisteredPlaceClick = onRegisteredPlaceClick,
-      )
-      // 地域へ移動の目印: 地域の中心にピンと名前。見ている地図のどこがその地名かを示す（境界は描かない）。
-      regionMarker?.let { region ->
-        val icons = rememberMarkerIconCache()
-        val icon = remember(icons, region.name) {
-          // 名前はピンの上の札にする（ピンの下に書くと、地図の地名の文字と重なって読めない）。
-          icons.createLabeled(null) { RegionMarkerBadge(region.name) }
-        }
-        val state = remember(region) { MarkerState(position = region.position) }
-        MapMarker(
-          icon = icon.icon,
-          infoWindow = infoWindow,
-          state = state,
-          anchor = icon.anchor,
-          onClick = onRegionMarkerClick,
-        )
-      }
-    }
-
-    // 現在地ボタン：追従中は活性（色付き）、固定中は非活性（グレー）。タップで追従再開＆リセンター。
-    if (hasPermission) {
-      FollowLocationButton(
-        following = followUser,
-        onClick = {
-          onRecenter()
-          centerOnCurrentLocation(animate = true)
-        },
-        modifier = Modifier
-          .align(Alignment.TopEnd)
-          .padding(12.dp),
-      )
-    }
-
-    // 現在地を取得中のローディング表示（上部中央）
-    if (isLocating) {
-      Surface(
-        modifier = Modifier
-          .align(Alignment.TopCenter)
-          .padding(top = 12.dp),
-        shape = RoundedCornerShape(20.dp),
-        color = MaterialTheme.colorScheme.surface,
-        shadowElevation = 4.dp,
-      ) {
-        Row(
-          modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-          verticalAlignment = Alignment.CenterVertically,
-        ) {
-          CircularProgressIndicator(
-            modifier = Modifier.size(16.dp),
-            strokeWidth = 2.dp,
-          )
-          Spacer(modifier = Modifier.width(8.dp))
-          Text(
-            text = "現在地を取得中…",
-            style = MaterialTheme.typography.labelMedium,
-            color = MaterialTheme.colorScheme.onSurface,
+    MapSearchMode.Region -> TrackingPlaceSearchBar(
+      placeholder = "地名で探して移動",
+      fetchFailedText = "地域の取得に失敗しました（オフライン等）",
+      onSearchPredictions = { query -> onPredictRegions(query, bias) },
+      // 目印の名前は候補の文字を使う（Places から名前を引くと料金の区分が上がるため）。
+      onFetchPrediction = { prediction ->
+        onFetchRegion(prediction.placeId)?.let { region ->
+          val b = region.bounds
+          RegionMarker(
+            name = prediction.primaryText,
+            position = LatLng(region.latitude, region.longitude),
+            bounds = LatLngBounds(LatLng(b.south, b.west), LatLng(b.north, b.east)),
           )
         }
-      }
-    }
-  }
-}
-
-@Composable
-private fun FollowLocationButton(
-  following: Boolean,
-  onClick: () -> Unit,
-  modifier: Modifier = Modifier,
-) {
-  Surface(
-    onClick = onClick,
-    modifier = modifier.size(44.dp),
-    shape = CircleShape,
-    color = if (following) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surface,
-    shadowElevation = 4.dp,
-  ) {
-    Box(contentAlignment = Alignment.Center) {
-      Icon(
-        painter = painterResource(R.drawable.ic_my_location),
-        contentDescription = if (following) "現在地に追従中" else "現在地へ移動",
-        tint = if (following) {
-          MaterialTheme.colorScheme.onPrimary
-        } else {
-          MaterialTheme.colorScheme.onSurfaceVariant
-        },
-        modifier = Modifier.size(24.dp),
-      )
-    }
-  }
-}
-
-@Composable
-private fun RecordingStatusPill(
-  startTime: Date?,
-  modifier: Modifier = Modifier,
-) {
-  var nowMs by remember { mutableLongStateOf(System.currentTimeMillis()) }
-  LaunchedEffect(startTime) {
-    while (true) {
-      nowMs = System.currentTimeMillis()
-      delay(1000)
-    }
-  }
-  val elapsedText = startTime?.let { formatElapsed(nowMs - it.time) } ?: "00:00"
-
-  Surface(
-    modifier = modifier,
-    shape = RoundedCornerShape(20.dp),
-    color = MaterialTheme.colorScheme.errorContainer,
-    shadowElevation = 4.dp,
-  ) {
-    Row(
-      modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-      verticalAlignment = Alignment.CenterVertically,
-    ) {
-      Text(
-        text = "● 記録中",
-        style = MaterialTheme.typography.labelLarge,
-        color = MaterialTheme.colorScheme.onErrorContainer,
-        fontWeight = FontWeight.Bold,
-      )
-      Spacer(modifier = Modifier.width(8.dp))
-      Text(
-        text = elapsedText,
-        style = MaterialTheme.typography.labelLarge,
-        color = MaterialTheme.colorScheme.onErrorContainer,
-      )
-    }
-  }
-}
-
-@Composable
-private fun TrackingStatsCard(
-  track: GpsTrack?,
-  locationCount: Int,
-  modifier: Modifier = Modifier,
-) {
-  val distanceKm = ((track?.totalDistanceMeters ?: 0.0) / 1000.0 * 100).roundToInt() / 100.0
-  val pointCount = track?.points?.size ?: locationCount
-
-  Surface(
-    modifier = modifier,
-    shape = RoundedCornerShape(16.dp),
-    color = MaterialTheme.colorScheme.surface,
-    shadowElevation = 4.dp,
-  ) {
-    Row(
-      modifier = Modifier.padding(horizontal = 24.dp, vertical = 12.dp),
-      horizontalArrangement = Arrangement.spacedBy(32.dp),
-    ) {
-      StatColumn(value = "${distanceKm}km", label = "移動距離")
-      StatColumn(value = "$pointCount", label = "地点数")
-    }
-  }
-}
-
-@Composable
-private fun StatColumn(
-  value: String,
-  label: String,
-) {
-  Column(horizontalAlignment = Alignment.CenterHorizontally) {
-    Text(
-      text = value,
-      style = MaterialTheme.typography.titleLarge,
-      fontWeight = FontWeight.Bold,
+      },
+      onSelected = onRegionSelected,
+      onClose = onClose,
+      modifier = modifier,
     )
-    Text(
-      text = label,
-      style = MaterialTheme.typography.bodySmall,
-      color = MaterialTheme.colorScheme.onSurfaceVariant,
-    )
-  }
-}
-
-/**
- * 保存（確定）中の覆い。タップを吸って操作させず、まだ終わっていないことを見せる。
- *
- * 経路が長いほど確定（全点の再平滑化・立ち寄り検出）に時間がかかる。ここで待たせずに
- * 画面を閉じられると、保存が終わっていないのに終わったように見える（→ adr/0021）。
- */
-@Composable
-private fun FinalizingOverlay() {
-  Box(
-    modifier = Modifier
-      .fillMaxSize()
-      .background(MaterialTheme.colorScheme.scrim.copy(alpha = 0.5f))
-      // タップを全部ここで吸う（下の地図やボタンに通さない）。押した見た目は出さない。
-      .pointerInput(Unit) { awaitPointerEventScope { while (true) awaitPointerEvent() } },
-    contentAlignment = Alignment.Center,
-  ) {
-    Card {
-      Column(
-        modifier = Modifier.padding(horizontal = 28.dp, vertical = 24.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(12.dp),
-      ) {
-        CircularProgressIndicator()
-        Text(text = "記録を保存しています", style = MaterialTheme.typography.titleSmall)
-        Text(
-          text = "経路が長いと少し時間がかかります",
-          style = MaterialTheme.typography.bodySmall,
-          color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-      }
-    }
-  }
-}
-
-@Composable
-private fun RecordFab(
-  isTracking: Boolean,
-  onStartTracking: () -> Unit,
-  onStopTracking: () -> Unit,
-  modifier: Modifier = Modifier,
-) {
-  FloatingActionButton(
-    onClick = if (isTracking) onStopTracking else onStartTracking,
-    modifier = modifier.size(72.dp),
-    shape = CircleShape,
-    containerColor = if (isTracking) {
-      MaterialTheme.colorScheme.error
-    } else {
-      MaterialTheme.colorScheme.primary
-    },
-  ) {
-    Icon(
-      painter = painterResource(
-        if (isTracking) R.drawable.ic_stop else R.drawable.ic_play_arrow,
-      ),
-      contentDescription = if (isTracking) "記録停止" else "記録開始",
-      modifier = Modifier.size(32.dp),
-    )
-  }
-}
-
-@Composable
-private fun LocationPermissionOverlay(
-  onRequestPermission: () -> Unit,
-  modifier: Modifier = Modifier,
-) {
-  Card(
-    modifier = modifier,
-    colors = CardDefaults.cardColors(
-      containerColor = MaterialTheme.colorScheme.surface,
-    ),
-  ) {
-    Column(
-      modifier = Modifier.padding(24.dp),
-      horizontalAlignment = Alignment.CenterHorizontally,
-      verticalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
-      Text(
-        text = "位置情報の権限が必要です",
-        style = MaterialTheme.typography.titleMedium,
-        fontWeight = FontWeight.Bold,
-        textAlign = TextAlign.Center,
-      )
-      Text(
-        text = "GPS記録機能を使用するため、位置情報へのアクセスを許可してください。",
-        style = MaterialTheme.typography.bodyMedium,
-        textAlign = TextAlign.Center,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-      )
-      Button(onClick = onRequestPermission) {
-        Text("位置情報を許可")
-      }
-    }
-  }
-}
-
-@Composable
-private fun BatteryOptimizationCard(
-  onDisable: () -> Unit,
-  modifier: Modifier = Modifier,
-) {
-  Surface(
-    modifier = modifier,
-    shape = RoundedCornerShape(12.dp),
-    color = MaterialTheme.colorScheme.secondaryContainer,
-    shadowElevation = 4.dp,
-  ) {
-    Column(
-      modifier = Modifier.padding(16.dp),
-      verticalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-      Text(
-        text = "バックグラウンド記録を安定させる",
-        style = MaterialTheme.typography.titleSmall,
-        fontWeight = FontWeight.Bold,
-        color = MaterialTheme.colorScheme.onSecondaryContainer,
-      )
-      Text(
-        text = "電池の最適化を無効にすると、アプリを閉じても記録が止まりにくくなります。",
-        style = MaterialTheme.typography.bodySmall,
-        color = MaterialTheme.colorScheme.onSecondaryContainer,
-      )
-      Button(onClick = onDisable) {
-        Text("電池の最適化を無効にする")
-      }
-    }
-  }
-}
-
-/** 端末の位置情報が OFF で記録を開始できなかったときの案内。設定画面への導線を添える。 */
-@Composable
-private fun LocationDisabledCard(
-  onOpenSettings: () -> Unit,
-  modifier: Modifier = Modifier,
-) {
-  Card(
-    modifier = modifier,
-    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer),
-  ) {
-    Text(
-      text = "端末の位置情報がオフです。オンにしてから記録を開始してください",
-      modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 8.dp),
-      color = MaterialTheme.colorScheme.onErrorContainer,
-    )
-    TextButton(
-      onClick = onOpenSettings,
-      modifier = Modifier.align(Alignment.End).padding(end = 8.dp),
-    ) {
-      Text("位置情報の設定を開く")
-    }
-  }
-}
-
-private fun formatElapsed(millis: Long): String {
-  val totalSeconds = (millis / 1000).coerceAtLeast(0)
-  val hours = totalSeconds / 3600
-  val minutes = (totalSeconds % 3600) / 60
-  val seconds = totalSeconds % 60
-  return if (hours > 0) {
-    "%d:%02d:%02d".format(hours, minutes, seconds)
-  } else {
-    "%02d:%02d".format(minutes, seconds)
   }
 }
 
@@ -1414,83 +500,4 @@ private fun CameraPositionState.visibleGeoBounds(): GeoBounds? = projection?.vis
 }
 
 /** 「地域へ移動」で移した地域の目印（中心と名前）。[bounds] はチップの地名から寄せ直すときの範囲（選んだときと同じ）。 */
-private data class RegionMarker(val name: String, val position: LatLng, val bounds: LatLngBounds)
-
-/** 地域の目印が出ている間の地名のチップ。地名の部分で [onRefit]（範囲へ寄せ直す）、× で [onClear]（目印を消す）。 */
-@Composable
-private fun RegionMarkerChip(
-  name: String,
-  onRefit: () -> Unit,
-  onClear: () -> Unit,
-  modifier: Modifier = Modifier,
-) {
-  Surface(
-    modifier = modifier.testTag("regionMarkerChip"),
-    shape = RoundedCornerShape(20.dp),
-    color = MaterialTheme.colorScheme.surface,
-    shadowElevation = 4.dp,
-  ) {
-    Row(verticalAlignment = Alignment.CenterVertically) {
-      Row(
-        modifier = Modifier
-          .weight(1f, fill = false)
-          .clickable(onClickLabel = "この地域へ地図を寄せる", onClick = onRefit)
-          .padding(start = 14.dp, top = 8.dp, bottom = 8.dp, end = 4.dp),
-        verticalAlignment = Alignment.CenterVertically,
-      ) {
-        Icon(
-          painter = painterResource(R.drawable.ic_public),
-          contentDescription = null,
-          tint = MarkerRegionIndigo,
-          modifier = Modifier.size(18.dp),
-        )
-        Spacer(modifier = Modifier.width(6.dp))
-        Text(
-          text = name,
-          style = MaterialTheme.typography.labelLarge,
-          fontWeight = FontWeight.Medium,
-          maxLines = 1,
-          overflow = TextOverflow.Ellipsis,
-        )
-      }
-      // × は小さいので、押せる範囲は 48dp 四方を確保する（隣の地名＝寄せ直しを誤って押さないように）。
-      Box(
-        modifier = Modifier
-          .minimumInteractiveComponentSize()
-          .clickable(onClick = onClear),
-        contentAlignment = Alignment.Center,
-      ) {
-        Icon(
-          painter = painterResource(R.drawable.ic_close),
-          contentDescription = "地域の目印を消す",
-          tint = MaterialTheme.colorScheme.onSurfaceVariant,
-          modifier = Modifier.size(18.dp),
-        )
-      }
-    }
-  }
-}
-
-// 地域の目印の色。経路（青）・立ち寄り（紫）・登録済みの場所（緑・灰）・手動の地点（青）と見分ける。
-private val MarkerRegionIndigo = Color(0xFF3949AB)
-
-/** 地域の目印: 藍色の札（地名）の下にピン。札は地図の地名の文字と見分けられるよう塗りつぶす。 */
-@Composable
-private fun RegionMarkerBadge(name: String) {
-  Column(horizontalAlignment = Alignment.CenterHorizontally) {
-    Text(
-      text = name,
-      color = Color.White,
-      style = MaterialTheme.typography.labelLarge,
-      maxLines = 1,
-      overflow = TextOverflow.Ellipsis,
-      modifier = Modifier
-        .widthIn(max = 200.dp)
-        .background(MarkerRegionIndigo, RoundedCornerShape(8.dp))
-        .border(1.dp, Color.White, RoundedCornerShape(8.dp))
-        .padding(horizontal = 8.dp, vertical = 4.dp),
-    )
-    Spacer(modifier = Modifier.height(2.dp))
-    MapPinMarker(bg = MarkerRegionIndigo, glyph = R.drawable.ic_public)
-  }
-}
+internal data class RegionMarker(val name: String, val position: LatLng, val bounds: LatLngBounds)

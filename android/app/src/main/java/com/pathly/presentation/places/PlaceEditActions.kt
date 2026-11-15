@@ -40,16 +40,16 @@ class PlaceEditActions internal constructor(
   private val placeNameOf: (placeId: Long) -> String?,
   private val onMessage: (String) -> Unit,
   private val onError: (String) -> Unit,
-) {
+) : PlaceEditUi {
   private val _nearbyRegisterPrompt = MutableStateFlow<NearbyRegisterPrompt?>(null)
 
   /** 空き地点の登録で近くに既存の場所が見つかったときの確認待ち（紐付け/新規をユーザーが選ぶ）。 */
-  val nearbyRegisterPrompt: StateFlow<NearbyRegisterPrompt?> = _nearbyRegisterPrompt.asStateFlow()
+  override val nearbyRegisterPrompt: StateFlow<NearbyRegisterPrompt?> = _nearbyRegisterPrompt.asStateFlow()
 
   private val _deleteUndo = MutableStateFlow(PlaceDeleteUndo())
 
   /** 場所を削除した（まとめた）直後の取り消し待ち（スナックバーで「取り消す」を出す）。 */
-  val deleteUndo: StateFlow<PlaceDeleteUndo> = _deleteUndo.asStateFlow()
+  override val deleteUndo: StateFlow<PlaceDeleteUndo> = _deleteUndo.asStateFlow()
 
   /** 失敗を [onError] に出す。成功したかどうかは呼び出し側で [onMessage] などに出す。 */
   private fun launchCatching(failure: String, block: suspend () -> Unit) {
@@ -69,7 +69,7 @@ class PlaceEditActions internal constructor(
    * 「登録済みの場所」を地図に表示中なら、ユーザーは既存を見たうえでの操作なので確認しない。
    * [knownDetails] は検索結果のように施設情報を取得済みのとき（Google を引き直さない）。
    */
-  fun registerPlaceWithNearbyCheck(
+  override fun registerPlaceWithNearbyCheck(
     latitude: Double,
     longitude: Double,
     name: String?,
@@ -78,10 +78,9 @@ class PlaceEditActions internal constructor(
     visited: Boolean,
     memo: String?,
     googlePlaceId: String?,
-    googleName: String? = null,
-    knownDetails: PlaceSearchResult? = null,
-    // 場所詳細の地図から登録するときの、その場所（主マーカーで見えているので近接確認の対象にしない）。
-    mainPlaceId: Long? = null,
+    googleName: String?,
+    knownDetails: PlaceSearchResult?,
+    mainPlaceId: Long?,
   ) {
     // 押した時点の条件で判断する。
     val isShownOnMap = shownOnMap(mainPlaceId)
@@ -109,7 +108,7 @@ class PlaceEditActions internal constructor(
   }
 
   /** 近接確認で「この場所に紐付け」を選んだとき: 既存 place に行きたい/メモを反映する（新規は作らない）。 */
-  fun confirmNearbyLink() {
+  override fun confirmNearbyLink() {
     val prompt = _nearbyRegisterPrompt.value ?: return
     _nearbyRegisterPrompt.value = null
     launchCatching("紐付けに失敗しました") {
@@ -119,7 +118,7 @@ class PlaceEditActions internal constructor(
   }
 
   /** 近接確認で「新規で登録」を選んだとき。座標同定せず必ず新しい場所を作る。 */
-  fun confirmNearbyNew() {
+  override fun confirmNearbyNew() {
     val prompt = _nearbyRegisterPrompt.value ?: return
     _nearbyRegisterPrompt.value = null
     launchCatching(REGISTER_FAILED) {
@@ -138,30 +137,30 @@ class PlaceEditActions internal constructor(
     }
   }
 
-  fun dismissNearbyPrompt() {
+  override fun dismissNearbyPrompt() {
     _nearbyRegisterPrompt.value = null
   }
 
   // ---- 編集 ----
 
   /** 編集シートで既存 place を購読する（保存しても値が古くならない）。 */
-  fun observePlace(placeId: Long): Flow<PlaceListItem?> = wishlistRepository.observePlace(placeId)
+  override fun observePlace(placeId: Long): Flow<PlaceListItem?> = wishlistRepository.observePlace(placeId)
 
   /** その場所を含むお出掛けの一覧（編集シートの訪問履歴）。 */
-  fun visitsFor(placeId: Long): Flow<List<PlaceVisit>> = wishlistRepository.getVisits(placeId)
+  override fun visitsFor(placeId: Long): Flow<List<PlaceVisit>> = wishlistRepository.getVisits(placeId)
 
   /**
    * 編集を一括で保存する（名前・メモ・行きたい・優先度・訪問済み・Google 施設の紐付けを差分適用）。
    * 同じ施設の場所が既にあって紐付けを断られたときは、編集部が選択肢のダイアログを出す（→ adr/0037）。
    */
-  fun savePlaceEdits(
+  override fun savePlaceEdits(
     item: PlaceListItem,
     name: String,
     note: String,
     wishlist: Boolean,
     priority: Priority,
     visited: Boolean,
-    link: PlaceSearchResult? = null,
+    link: PlaceSearchResult?,
   ) {
     launchCatching(SAVE_FAILED) {
       placeEditUseCase.saveEdits(item, name, note, wishlist, priority, visited, link)
@@ -170,16 +169,16 @@ class PlaceEditActions internal constructor(
   }
 
   /** 場所シートのプレビュー用: placeId から施設情報（カテゴリ等）を取得する。 */
-  suspend fun fetchPoiDetails(googlePlaceId: String): PlaceSearchResult? = wishlistRepository.fetchPlaceDetails(googlePlaceId)
+  override suspend fun fetchPoiDetails(googlePlaceId: String): PlaceSearchResult? = wishlistRepository.fetchPlaceDetails(googlePlaceId)
 
   /** 「Googleで情報を取得」・選び直し: 座標の近くの POI 候補を取得する。 */
-  suspend fun nearbyPois(latitude: Double, longitude: Double): List<PlaceSearchResult> = wishlistRepository.nearbyPois(latitude, longitude)
+  override suspend fun nearbyPois(latitude: Double, longitude: Double): List<PlaceSearchResult> = wishlistRepository.nearbyPois(latitude, longitude)
 
   /** 「Googleで情報を取得」の名前検索フォールバック: キーワード候補を返す（座標がずれて周辺に出ない施設用）。 */
-  suspend fun predictPlaces(query: String): List<PlacePrediction> = placesTextSearcher.predict(query)
+  override suspend fun predictPlaces(query: String): List<PlacePrediction> = placesTextSearcher.predict(query)
 
   /** 名前検索で選んだ候補を、座標つきの施設情報に確定する。 */
-  suspend fun fetchPlaceResult(placeId: String): PlaceSearchResult? = placesTextSearcher.fetch(placeId)
+  override suspend fun fetchPlaceResult(placeId: String): PlaceSearchResult? = placesTextSearcher.fetch(placeId)
 
   // ---- 削除・まとめる ----
 
@@ -187,7 +186,7 @@ class PlaceEditActions internal constructor(
    * 場所そのものを削除する（行きたい登録・解決ログも一緒に消える）。確認ダイアログは出さず即時削除し、
    * スナックバーの「取り消す」（[undoDelete]）で戻せる。
    */
-  fun deletePlace(placeId: Long) {
+  override fun deletePlace(placeId: Long) {
     val name = placeNameOf(placeId)
     launchCatching("削除に失敗しました") {
       wishlistRepository.deletePlace(placeId)
@@ -196,12 +195,12 @@ class PlaceEditActions internal constructor(
   }
 
   /** 削除の通知を出し終えた（画面に戻るたび再表示しないよう消化する）。 */
-  fun consumeDeleteUndo() {
+  override fun consumeDeleteUndo() {
     _deleteUndo.update { it.shown() }
   }
 
   /** 直近の削除（[isMerge] ならまとめ）を取り消して元に戻す（スナックバーの「取り消す」）。 */
-  fun undoDelete(isMerge: Boolean = false) {
+  override fun undoDelete(isMerge: Boolean) {
     launchCatching("取り消しに失敗しました") {
       if (isMerge) placeEditUseCase.undoMerge() else wishlistRepository.undoLastPlaceDeletion()
     }
@@ -213,7 +212,7 @@ class PlaceEditActions internal constructor(
   }
 
   /** [placeId] を相手 [other] にまとめる（場所シートの編集部・同じ施設の確認待ちのダイアログの両方から）。 */
-  fun mergeIntoSameFacility(placeId: Long, placeName: String?, other: SameFacilityPlace) {
+  override fun mergeIntoSameFacility(placeId: Long, placeName: String?, other: SameFacilityPlace) {
     launchCatching("まとめられませんでした") {
       if (placeEditUseCase.mergeIntoSameFacility(placeId, other.placeId)) {
         _deleteUndo.update { it.merged(placeName, other.name) }
@@ -222,10 +221,10 @@ class PlaceEditActions internal constructor(
   }
 
   /** 手でまとめる相手の候補（場所の編集の「ほかの場所とまとめる」）。近くのほかの場所を近い順に返す。 */
-  suspend fun mergeCandidates(item: PlaceListItem): List<PlaceWithDistance> = placeEditUseCase.findMergeCandidates(item)
+  override suspend fun mergeCandidates(item: PlaceListItem): List<PlaceWithDistance> = placeEditUseCase.findMergeCandidates(item)
 
   /** 同じ施設の相手がいても、施設情報なしで別の場所として残す（→ adr/0037）。二度と聞かない。 */
-  fun keepAsSeparatePlace(placeId: Long) {
+  override fun keepAsSeparatePlace(placeId: Long) {
     launchCatching(SAVE_FAILED) {
       placeEditUseCase.keepAsSeparatePlace(placeId)
       onMessage("別の場所として残しました")

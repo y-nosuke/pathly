@@ -79,6 +79,16 @@ UseCase を呼ぶだけの ViewModel の関数でも、確認待ち・結果の�
 - `presentation/stops/ManualStopActions` … 立ち寄りを手で足す（近接確認）・付け直す。記録画面と経路詳細。
 - `presentation/tracking/TrackOverlaySelection` … 地図に重ねる過去の経路の選び。記録画面と履歴。
 
+画面には部品の実体ではなく、画面が使う操作と状態のインターフェース（`PlaceEditUi`・`ManualStopUi`）を 1 つで渡す。
+画面のテストは何もしない既定（`PlaceEditUi.None` など）から必要なものだけ差し替える。
+部品を使う UI（場所シート・近くに既存の場所があるときの確認・削除の取り消し・立ち寄りの追加のシート・選び直し）のつなぎ込みも
+1 か所にまとめ、各画面はそれを置くだけにする（`PlaceEditHost`・`ManualStopHost`・`StopReassignHost`）。
+画面を組み替えても、場所の操作の出し方が画面ごとにずれないようにするため。
+
+引数の多い画面は、まとまりごとに 1 つの引数にする（経路詳細の `TrackStopActions`・`StopReanalysis`・`SameFacilityReview`・
+`MapRegisteredPlaces`。`presentation/history/TrackDetailActions.kt`）。画面の中だけの状態が多い画面は、状態を 1 つのクラスに持つ
+（経路詳細の `TrackDetailScreenState`）。地図・ボタン列・シート・ダイアログは、まとまりごとの関数やファイルに分ける。
+
 ### Repository インターフェースは domain、実装は data
 
 依存を反転させ、domain を技術（Room/Places）から独立させる。テストでは Repository をモックして

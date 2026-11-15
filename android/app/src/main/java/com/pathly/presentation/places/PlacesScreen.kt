@@ -165,8 +165,7 @@ fun PlacesListRoute(
   }
 
   // 削除（一覧・詳細どちらから消しても）を検知して取り消しスナックバーを出す。
-  val deleteUndo by viewModel.placeEdit.deleteUndo.collectAsStateWithLifecycle()
-  PlaceDeleteUndoEffect(deleteUndo, snackbarHostState, viewModel.placeEdit::undoDelete, viewModel.placeEdit::consumeDeleteUndo)
+  PlaceDeleteUndoEffect(viewModel.placeEdit, snackbarHostState)
 
   // 登録（「「名前」を登録しました」/「この場所は登録済みです」など）を、削除と同じ下部スナックバーで知らせる。
   PlaceMessageEffect(uiState.registerMessage, snackbarHostState, viewModel::consumeRegisterMessage)
@@ -213,7 +212,6 @@ fun AddPlaceRoute(
   // 登録（新規／既存への紐付け）が実際に成立したら一覧へ戻す。近接確認を挟むときは
   // ユーザーが選んだあとになる。判断が ViewModel に移り、この画面からは登録が同期的に
   // 完了しなくなったため、登録通知のトークンを合図に使う。
-  val nearbyRegisterPrompt by viewModel.placeEdit.nearbyRegisterPrompt.collectAsStateWithLifecycle()
   val tokenAtEntry = remember { viewModel.uiState.value.registerToken }
   LaunchedEffect(uiState.registerToken) {
     if (uiState.registerToken != tokenAtEntry) onDone()
@@ -222,12 +220,7 @@ fun AddPlaceRoute(
   AddPlaceContent(
     modifier = modifier,
     onCancel = onDone,
-    onRegister = viewModel.placeEdit::registerPlaceWithNearbyCheck,
-    nearbyRegisterPrompt = nearbyRegisterPrompt,
-    onConfirmNearbyLink = viewModel.placeEdit::confirmNearbyLink,
-    onConfirmNearbyNew = viewModel.placeEdit::confirmNearbyNew,
-    onDismissNearbyPrompt = viewModel.placeEdit::dismissNearbyPrompt,
-    onFetchDetails = viewModel.placeEdit::fetchPoiDetails,
+    placeEdit = viewModel.placeEdit,
   )
 }
 
@@ -293,7 +286,6 @@ fun PlaceDetailRoute(
   val visitsFlow = remember(placeId) { viewModel.placeEdit.visitsFor(placeId) }
   val visits by visitsFlow.collectAsStateWithLifecycle(emptyList())
   val mapPlaceFilter by viewModel.mapPlaceFilter.collectAsStateWithLifecycle()
-  val nearbyRegisterPrompt by viewModel.placeEdit.nearbyRegisterPrompt.collectAsStateWithLifecycle()
   val snackbarHostState = remember { SnackbarHostState() }
   // 保存・紐付けなどの一言は詳細の下に出す（一覧に戻ってから出ると何のことか分からないため、出したら消化する）。
   PlaceMessageEffect(uiState.registerMessage, snackbarHostState, viewModel::consumeRegisterMessage)
@@ -304,23 +296,9 @@ fun PlaceDetailRoute(
       visits = visits,
       onOpenTrack = onOpenTrack,
       onBack = onBack,
-      onSave = { name, note, wishlist, priority, visited, link ->
-        viewModel.placeEdit.savePlaceEdits(item, name, note, wishlist, priority, visited, link)
-      },
-      onObservePlace = viewModel.placeEdit::observePlace,
-      onObserveVisits = viewModel.placeEdit::visitsFor,
+      // 保存・Google 施設の紐付け・まとめる・地図タップでの登録は場所の編集（他の画面と同じ）。
       // まとめるとこの場所は消え、一覧へ戻ってスナックバーで取り消せる（削除と同じ）。
-      mergeActions = PlaceMergeActions(
-        onMerge = viewModel.placeEdit::mergeIntoSameFacility,
-        onKeepSeparate = { viewModel.placeEdit.keepAsSeparatePlace(it.place.id) },
-        onFindMergeCandidates = viewModel.placeEdit::mergeCandidates,
-      ),
-      onFetchPoiDetails = viewModel.placeEdit::fetchPoiDetails,
-      // 「Googleで情報を取得」: 登録座標の近くの候補から選ぶ（保存で確定・選び直しと同じ仕組み）。
-      onFetchNearbyPois = viewModel.placeEdit::nearbyPois,
-      // 座標がずれて周辺に出ないときの名前検索フォールバック。
-      onSearchPredictions = viewModel.placeEdit::predictPlaces,
-      onFetchPrediction = viewModel.placeEdit::fetchPlaceResult,
+      placeEdit = viewModel.placeEdit,
       // 登録済みの場所の地図表示（この場所自身は主マーカーと重なるので除外）。
       registeredPlaces = uiState.items
         .filter { it.place.id != placeId }
@@ -329,29 +307,6 @@ fun PlaceDetailRoute(
       onToggleRegisteredPlaces = { viewModel.toggleShowRegisteredPlaces() },
       mapPlaceFilter = mapPlaceFilter,
       onMapPlaceFilterChange = viewModel::setMapPlaceFilter,
-      // 地図タップでの場所登録（POI・空き地点とも）。近接確認の要否は ViewModel が判断する。
-      onRegisterPlaceAtPoint = { lat, lng, name, wishlist, priority, visited, memo, googlePlaceId, googleName ->
-        viewModel.placeEdit.registerPlaceWithNearbyCheck(
-          lat,
-          lng,
-          name,
-          wishlist,
-          priority,
-          visited,
-          memo,
-          googlePlaceId,
-          googleName,
-          mainPlaceId = placeId,
-        )
-      },
-      nearbyRegisterPrompt = nearbyRegisterPrompt,
-      onConfirmNearbyLink = viewModel.placeEdit::confirmNearbyLink,
-      onConfirmNearbyNew = viewModel.placeEdit::confirmNearbyNew,
-      onDismissNearbyPrompt = viewModel.placeEdit::dismissNearbyPrompt,
-      onSavePlaceEdits = { editItem, name, note, wishlist, priority, visited, link ->
-        viewModel.placeEdit.savePlaceEdits(editItem, name, note, wishlist, priority, visited, link)
-      },
-      onDeletePlace = viewModel.placeEdit::deletePlace,
       // 確認ダイアログは出さず即時削除。items から消えると item == null になり一覧へ戻り、
       // 取り消しスナックバーは一覧側で出る。
       onDeleteRequest = { viewModel.placeEdit.deletePlace(item.place.id) },
@@ -857,15 +812,9 @@ private fun PlaceItemRow(
 @Composable
 private fun AddPlaceContent(
   onCancel: () -> Unit,
-  // 近くに既存があるかの判断は ViewModel（PlaceEditUseCase）側で行う。
-  onRegister: (lat: Double, lng: Double, name: String?, wishlist: Boolean, priority: Priority, visited: Boolean, memo: String?, googlePlaceId: String?, googleName: String?) -> Unit,
-  onFetchDetails: suspend (googlePlaceId: String) -> PlaceSearchResult?,
+  // 登録と、近くに既存があるときの確認（判断は ViewModel の PlaceEditUseCase 側）。
+  placeEdit: PlaceEditUi,
   modifier: Modifier = Modifier,
-  // 近接確認の保留状態（非nullで確認ダイアログを出す）とその選択。
-  nearbyRegisterPrompt: NearbyRegisterPrompt? = null,
-  onConfirmNearbyLink: () -> Unit = {},
-  onConfirmNearbyNew: () -> Unit = {},
-  onDismissNearbyPrompt: () -> Unit = {},
 ) {
   // 選んだ対象。フォームの中身（名前・メモ・行きたい・優先度）と Google 情報の取得は
   // 場所シート側が持つので、この画面は「どこを選んだか」だけを持つ。
@@ -978,32 +927,18 @@ private fun AddPlaceContent(
       ) {
         Text("キャンセル")
       }
-    } else {
-      // 地図タップと同じ「場所シート」。畳めば地図を全画面で確認でき、キャンセル（＝旧「選び直す」）
-      // で選択を解除して地図に戻る。システムバックもシート側が受ける。
-      target?.let { t ->
-        CloseInfoWindowWithSheet(infoWindow)
-        PlaceActionSheet(
-          target = t,
-          onDismiss = { target = null },
-          onFetchPoiDetails = onFetchDetails,
-          onRegisterNew = onRegister,
-          modifier = Modifier.align(Alignment.BottomCenter),
-          sheetState = sheetState,
-        )
-      }
     }
 
-    // 近接確認: 近くの既存に紐付け／新規で登録。
-    nearbyRegisterPrompt?.let { prompt ->
-      NearbyPlaceConfirmDialog(
-        place = prompt.nearby,
-        purpose = NearbyConfirmPurpose.REGISTER_PLACE,
-        onLink = onConfirmNearbyLink,
-        onCreateNew = onConfirmNearbyNew,
-        onDismiss = onDismissNearbyPrompt,
-      )
-    }
+    // 地図タップと同じ「場所シート」（選んだあとだけ出る）。畳めば地図を全画面で確認でき、キャンセル（＝旧「選び直す」）
+    // で選択を解除して地図に戻る。システムバックもシート側が受ける。近接確認もここから出る。
+    PlaceEditHost(
+      placeEdit = placeEdit,
+      target = target,
+      onDismiss = { target = null },
+      modifier = Modifier.align(Alignment.BottomCenter),
+      infoWindow = infoWindow,
+      sheetState = sheetState,
+    )
   }
 }
 
@@ -1016,16 +951,10 @@ private fun PlaceDetailContent(
   item: PlaceListItem,
   visits: List<PlaceVisit>,
   onBack: () -> Unit,
-  onSave: (name: String, note: String, wishlist: Boolean, priority: Priority, visited: Boolean, link: PlaceSearchResult?) -> Unit,
-  onFetchPoiDetails: suspend (googlePlaceId: String) -> PlaceSearchResult?,
   onOpenTrack: (trackId: Long) -> Unit,
   onDeleteRequest: () -> Unit,
-  // 「Googleで情報を取得」用: 登録座標の近くの POI 候補を取得し、選んだ施設を紐付ける。
-  onFetchNearbyPois: suspend (lat: Double, lng: Double) -> List<PlaceSearchResult>,
-  // 座標がずれて周辺に出ない施設用: 名前で検索するフォールバック。
-  onSearchPredictions: suspend (query: String) -> List<PlacePrediction>,
-  onFetchPrediction: suspend (placeId: String) -> PlaceSearchResult?,
-  mergeActions: PlaceMergeActions?,
+  // この場所の保存・Google 施設の紐付け・まとめると、地図タップで開く場所シートの登録・編集。
+  placeEdit: PlaceEditUi,
   modifier: Modifier = Modifier,
   // 登録済みの場所の地図表示（画面別トグル）。この場所自身は主マーカーと重なるので呼び出し側で除外して渡す。
   registeredPlaces: List<RegisteredPlace> = emptyList(),
@@ -1034,19 +963,6 @@ private fun PlaceDetailContent(
   // この画面の地図の「登録済みの場所」の絞り込み（地図ごとに独立。場所一覧とも別）。
   mapPlaceFilter: MapPlaceFilter = MapPlaceFilter(),
   onMapPlaceFilterChange: (MapPlaceFilter) -> Unit = {},
-  // 地図タップでの場所登録（POI・空き地点とも）。近接確認の要否は ViewModel 側で判断する。
-  onRegisterPlaceAtPoint: (lat: Double, lng: Double, name: String?, wishlist: Boolean, priority: Priority, visited: Boolean, memo: String?, googlePlaceId: String?, googleName: String?) -> Unit =
-    { _, _, _, _, _, _, _, _, _ -> },
-  // 近接確認の保留状態（非nullで確認ダイアログを出す）とその選択。
-  nearbyRegisterPrompt: NearbyRegisterPrompt? = null,
-  onConfirmNearbyLink: () -> Unit = {},
-  onConfirmNearbyNew: () -> Unit = {},
-  onDismissNearbyPrompt: () -> Unit = {},
-  // 統一シートで登録済みマーカーをその場で編集するため、単一 place を購読・保存する。
-  onObservePlace: (placeId: Long) -> Flow<PlaceListItem?> = { emptyFlow() },
-  onObserveVisits: (placeId: Long) -> Flow<List<PlaceVisit>> = { emptyFlow() },
-  onSavePlaceEdits: (item: PlaceListItem, name: String, note: String, wishlist: Boolean, priority: Priority, visited: Boolean, link: PlaceSearchResult?) -> Unit = { _, _, _, _, _, _, _ -> },
-  onDeletePlace: (placeId: Long) -> Unit = {},
 ) {
   // 地図の1点タップで開く統一の「場所シート」（未登録の空き地点/POI＝登録、登録済み＝その場で編集）。
   var placeSheetTarget by remember { mutableStateOf<PlaceSheetTarget?>(null) }
@@ -1173,48 +1089,33 @@ private fun PlaceDetailContent(
           PlaceEditorBody(
             item = item,
             visits = visits,
-            onSave = onSave,
+            onSave = { name, note, wishlist, priority, visited, link ->
+              placeEdit.savePlaceEdits(item, name, note, wishlist, priority, visited, link)
+            },
             onDelete = onDeleteRequest,
             onOpenTrack = onOpenTrack,
-            onFetchNearbyPois = onFetchNearbyPois,
-            onSearchPredictions = onSearchPredictions,
-            onFetchPrediction = onFetchPrediction,
-            mergeActions = mergeActions,
+            // 「Googleで情報を取得」: 登録座標の近くの候補から選ぶ（保存で確定・選び直しと同じ仕組み）。
+            onFetchNearbyPois = placeEdit::nearbyPois,
+            // 座標がずれて周辺に出ないときの名前検索フォールバック。
+            onSearchPredictions = placeEdit::predictPlaces,
+            onFetchPrediction = placeEdit::fetchPlaceResult,
+            mergeActions = placeEdit.mergeActions(),
           )
         }
       }
     }
 
     // 地図の1点タップで開く統一の「場所シート」。記録画面と同じ挙動（この画面は記録中でないので立ち寄り追加は出さない）。
-    placeSheetTarget?.let { target ->
-      CloseInfoWindowWithSheet(infoWindow)
-      PlaceActionSheet(
-        target = target,
-        onDismiss = { placeSheetTarget = null },
-        onFetchPoiDetails = onFetchPoiDetails,
-        onObservePlace = onObservePlace,
-        onObserveVisits = onObserveVisits,
-        // POI か空き地点か、近接確認が要るかの判断は ViewModel（PlaceEditUseCase）が持つ。
-        onRegisterNew = onRegisterPlaceAtPoint,
-        onSaveExisting = onSavePlaceEdits,
-        onDeletePlace = onDeletePlace,
-        onOpenTrack = onOpenTrack,
-        onFetchNearbyPois = onFetchNearbyPois,
-        onSearchPredictions = onSearchPredictions,
-        onFetchPrediction = onFetchPrediction,
-        mergeActions = mergeActions,
-        modifier = Modifier.align(Alignment.BottomCenter),
-      )
-    }
-  }
-
-  nearbyRegisterPrompt?.let { prompt ->
-    NearbyPlaceConfirmDialog(
-      place = prompt.nearby,
-      purpose = NearbyConfirmPurpose.REGISTER_PLACE,
-      onLink = onConfirmNearbyLink,
-      onCreateNew = onConfirmNearbyNew,
-      onDismiss = onDismissNearbyPrompt,
+    // 削除の取り消しは一覧に戻ってから出すので、ここではスナックバーを渡さない。
+    PlaceEditHost(
+      placeEdit = placeEdit,
+      target = placeSheetTarget,
+      onDismiss = { placeSheetTarget = null },
+      modifier = Modifier.align(Alignment.BottomCenter),
+      infoWindow = infoWindow,
+      onOpenTrack = onOpenTrack,
+      // この場所は主マーカーで見えているので、近接確認の対象にしない。
+      mainPlaceId = item.place.id,
     )
   }
 }

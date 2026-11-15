@@ -25,6 +25,7 @@ import com.pathly.domain.model.PlacePrediction
 import com.pathly.domain.model.PlaceSearchResult
 import com.pathly.domain.model.RegisteredPlace
 import com.pathly.domain.model.Stop
+import com.pathly.presentation.places.PlaceEditUi
 import com.pathly.ui.theme.PathlyAndroidTheme
 import io.mockk.mockk
 import io.mockk.verify
@@ -55,7 +56,7 @@ class TrackDetailScreenTest {
 
     composeTestRule.setContent {
       PathlyAndroidTheme {
-        TrackDetailScreen(track = track, onBackClick = mockOnBackClick, showRegisteredPlaces = show, mapContent = {})
+        TrackDetailScreen(track = track, onBackClick = mockOnBackClick, mapPlaces = MapRegisteredPlaces(shown = show), mapContent = {})
       }
     }
 
@@ -75,9 +76,7 @@ class TrackDetailScreenTest {
         TrackDetailScreen(
           track = track,
           onBackClick = mockOnBackClick,
-          showRegisteredPlaces = true,
-          mapPlaceFilter = filter,
-          onMapPlaceFilterChange = { filter = it },
+          mapPlaces = MapRegisteredPlaces(shown = true, filter = filter, onFilterChange = { filter = it }),
           mapContent = {},
         )
       }
@@ -422,7 +421,7 @@ class TrackDetailScreenTest {
           onBackClick = mockOnBackClick,
           mapContent = {},
           stops = stops,
-          onEditPlaceName = onEdit,
+          stopActions = TrackStopActions(onEditPlaceName = onEdit),
         )
       }
     }
@@ -449,7 +448,7 @@ class TrackDetailScreenTest {
           onBackClick = mockOnBackClick,
           mapContent = {},
           stops = stops,
-          onDeleteStops = onDeleteStops,
+          stopActions = TrackStopActions(onDelete = onDeleteStops),
         )
       }
     }
@@ -475,7 +474,7 @@ class TrackDetailScreenTest {
           mapContent = {},
           stops = stops,
           unresolvedCount = 1,
-          onResolveNames = onResolve,
+          stopActions = TrackStopActions(onResolveNames = onResolve),
         )
       }
     }
@@ -497,7 +496,7 @@ class TrackDetailScreenTest {
           onBackClick = mockOnBackClick,
           mapContent = {},
           stops = stops,
-          onDeleteStops = onDeleteStops,
+          stopActions = TrackStopActions(onDelete = onDeleteStops),
         )
       }
     }
@@ -536,8 +535,8 @@ class TrackDetailScreenTest {
           onBackClick = mockOnBackClick,
           mapContent = {},
           stops = stops,
-          registeredPlaces = registered,
-          onToggleStopWishlist = onToggle,
+          mapPlaces = MapRegisteredPlaces(places = registered),
+          stopActions = TrackStopActions(onToggleWishlist = onToggle),
         )
       }
     }
@@ -589,7 +588,7 @@ class TrackDetailScreenTest {
           onBackClick = mockOnBackClick,
           mapContent = {},
           stops = stops,
-          onMergeStops = onMergeStops,
+          stopActions = TrackStopActions(onMerge = onMergeStops),
         )
       }
     }
@@ -641,7 +640,7 @@ class TrackDetailScreenTest {
           onBackClick = mockOnBackClick,
           mapContent = {},
           stops = stops,
-          onUpdateStopDuration = onUpdateStopDuration,
+          stopActions = TrackStopActions(onUpdateDuration = onUpdateStopDuration),
         )
       }
     }
@@ -666,11 +665,11 @@ class TrackDetailScreenTest {
           onBackClick = mockOnBackClick,
           mapContent = {},
           stops = emptyList(),
-          onSearchPredictions = { query ->
-            listOf(PlacePrediction(placeId = "gp-zoo", primaryText = "テスト動物園", secondaryText = query))
-          },
-          onFetchPrediction = {
-            PlaceSearchResult(
+          // 名前での検索は場所の編集から引く（ほかは何もしない）。
+          placeEdit = object : PlaceEditUi by PlaceEditUi.None {
+            override suspend fun predictPlaces(query: String) = listOf(PlacePrediction(placeId = "gp-zoo", primaryText = "テスト動物園", secondaryText = query))
+
+            override suspend fun fetchPlaceResult(placeId: String) = PlaceSearchResult(
               googlePlaceId = "gp-zoo",
               name = "テスト動物園",
               address = "東京都",
