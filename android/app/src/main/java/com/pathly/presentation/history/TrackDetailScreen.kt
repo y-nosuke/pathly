@@ -127,8 +127,9 @@ fun TrackDetailScreen(
   onUpdateStopDuration: (stopId: Long, arrival: Date, departure: Date) -> Unit = { _, _, _ -> },
   onUndoStopChange: () -> Unit = {},
   // 手動での立ち寄り追加。近くに既存があるかの判断は ViewModel（AddManualStopUseCase）側で行う。
-  onAddManualStop: (lat: Double, lng: Double, arrival: Date, departure: Date, name: String?, googlePlaceId: String?, googleName: String?) -> Unit =
-    { _, _, _, _, _, _, _ -> },
+  // 最後の引数は「地図の空き地点を指した」（別の場所として足す → AddManualStopUseCase）。
+  onAddManualStop: (lat: Double, lng: Double, arrival: Date, departure: Date, name: String?, googlePlaceId: String?, googleName: String?, pointedOnMap: Boolean) -> Unit =
+    { _, _, _, _, _, _, _, _ -> },
   // 近接確認の保留状態（非nullで確認ダイアログを出す）とその選択。
   nearbyStopPrompt: NearbyStopPrompt? = null,
   onConfirmNearbyStopLink: () -> Unit = {},
@@ -736,6 +737,7 @@ fun TrackDetailScreen(
                 input.name,
                 input.googlePlaceId,
                 input.googleName,
+                origin is ManualStopOrigin.MapPoint,
               )
             }
             exitManual()

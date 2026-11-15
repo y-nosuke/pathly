@@ -71,6 +71,65 @@ class AddManualStopUseCaseTest {
   }
 
   @Test
+  fun `地図の空き地点を指したら見えている既存が近くにあっても別の場所として足す`() = runTest {
+    // #171: 施設の別の入口・隣の駐車場などを、近くの登録済みの場所とは別に足せるように。
+    val nearby = RegisteredPlace(placeId = 5L, name = "隣の店", latitude = 35.0, longitude = 139.0)
+    coEvery { placeRepository.findNearbyPlaces(any(), any()) } returns listOf(nearby)
+
+    val result = useCase.addWithNearbyCheck(
+      trackId = 1L,
+      latitude = 35.0001,
+      longitude = 139.0,
+      arrivalTime = arrival,
+      departureTime = departure,
+      name = null,
+      googlePlaceId = null,
+      isShownOnMap = { true },
+      pointedOnMap = true,
+    )
+
+    assertEquals(AddManualStopUseCase.AddResult.Added(55L), result)
+    coVerify { placeRepository.addManualStop(1L, 35.0001, 139.0, arrival, departure, null, null, true) }
+  }
+
+  @Test
+  fun `今ここでの追加はこれまでどおり近くの既存の場所に寄せる`() = runTest {
+    // 現在地は GPS の誤差があるので、自動検出の立ち寄りと同じく 30m の座標同定に任せる。
+    coEvery { placeRepository.findNearbyPlaces(any(), any()) } returns emptyList()
+
+    useCase.addWithNearbyCheck(
+      trackId = 1L,
+      latitude = 35.0,
+      longitude = 139.0,
+      arrivalTime = arrival,
+      departureTime = departure,
+      name = null,
+      googlePlaceId = null,
+      isShownOnMap = { true },
+      pointedOnMap = false,
+    )
+
+    coVerify { placeRepository.addManualStop(1L, 35.0, 139.0, arrival, departure, null, null, false) }
+  }
+
+  @Test
+  fun `地図の空き地点でも施設を選んだら施設の同一性で同定する`() = runTest {
+    useCase.addWithNearbyCheck(
+      trackId = 1L,
+      latitude = 35.0,
+      longitude = 139.0,
+      arrivalTime = arrival,
+      departureTime = departure,
+      name = "カフェ",
+      googlePlaceId = "gp-1",
+      isShownOnMap = { true },
+      pointedOnMap = true,
+    )
+
+    coVerify { placeRepository.addManualStop(1L, 35.0, 139.0, arrival, departure, "カフェ", "gp-1", false) }
+  }
+
+  @Test
   fun `地図の絞り込みで隠れた既存が近くにあれば確認を返す`() = runTest {
     // 最寄りは見えている。2 番目に近いものが絞り込みで隠れている。
     val visible = RegisteredPlace(placeId = 5L, name = "見えている店", latitude = 35.0, longitude = 139.0, isWishlisted = true)
