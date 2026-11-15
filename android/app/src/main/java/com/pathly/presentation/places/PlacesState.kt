@@ -1,7 +1,6 @@
 package com.pathly.presentation.places
 
 import androidx.lifecycle.SavedStateHandle
-import com.pathly.domain.model.NearbyRegisterPrompt
 import com.pathly.domain.model.PlaceCategoryFacet
 import com.pathly.domain.model.PlaceGrouping
 import com.pathly.domain.model.PlaceListItem
@@ -85,13 +84,10 @@ data class PlacesState(
   val isLoading: Boolean = false,
   val errorMessage: String? = null,
   val search: SearchState = SearchState(),
-  // 削除のたびに増やすワンショット通知。一覧側がこれを監視して取り消しスナックバーを出す。
-  val deleteUndo: PlaceDeleteUndo = PlaceDeleteUndo(),
   // 登録のたびに増やすワンショット通知。一覧側がこれを監視して登録スナックバーを出す（削除と統一）。
-  // 空き地点の登録で近くに既存の場所が見つかったときの確認待ち（紐付け/新規をユーザーが選ぶ）。
-  val nearbyRegisterPrompt: NearbyRegisterPrompt? = null,
+  // 削除の取り消し・近接確認の確認待ちは場所の編集の部品（PlaceEditActions）が持つ。
   val registerToken: Int = 0,
-  // 直近の登録結果の文言（「登録しました」/「この場所は登録済みです」）。
+  // 直近の登録結果の文言（「「名前」を登録しました」/「この場所は登録済みです」など）。
   val registerMessage: String? = null,
   // 場所詳細の地図に「登録済みの場所」を出すか（画面別トグル）。
   val showRegisteredPlaces: Boolean = false,

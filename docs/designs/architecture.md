@@ -69,6 +69,16 @@ UI とサービスの**唯一の合流点が Repository** で、記録中の書�
 「層として全部に置く」のではなく「重複とテスト不能を潰すために置く」という基準にしている。
 1 画面でしか使わない操作は ViewModel に置いたままでよい。
 
+### 画面をまたぐ操作は presentation の部品にまとめる
+
+UseCase を呼ぶだけの ViewModel の関数でも、確認待ち・結果の一言・削除の取り消しといった画面の状態を伴うものが
+複数の ViewModel にコピーされると、文言や置き場所がずれていく。そうしたものは、持ち主の ViewModel が組み立てて
+公開する部品にまとめる。画面ごとの違い（地図に見えている場所の判定・結果の出し先など）は引数で受ける。
+
+- `presentation/places/PlaceEditActions` … 場所の登録（近接確認）・編集・削除と取り消し・まとめる。場所タブ・記録画面・経路詳細。
+- `presentation/stops/ManualStopActions` … 立ち寄りを手で足す（近接確認）・付け直す。記録画面と経路詳細。
+- `presentation/tracking/TrackOverlaySelection` … 地図に重ねる過去の経路の選び。記録画面と履歴。
+
 ### Repository インターフェースは domain、実装は data
 
 依存を反転させ、domain を技術（Room/Places）から独立させる。テストでは Repository をモックして
