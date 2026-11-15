@@ -700,6 +700,7 @@ fun TrackingScreen(
               input.name,
               input.googlePlaceId,
               input.googleName,
+              pointedOnMap = origin is ManualStopOrigin.MapPoint,
             )
           }
           manualTarget = null

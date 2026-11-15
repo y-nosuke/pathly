@@ -77,6 +77,8 @@
 - **立ち寄りを追加**: `addManualStop(trackId, lat, lng, arrival, departure, name, googlePlaceId, googleName)`。
   到着/出発は指した地点の最寄り軌跡点から導出する。近接確認の要否判断まで含めた手順は
   `domain/usecase/AddManualStopUseCase`（記録画面と共有）。
+  - 地図の空き地点（`ManualStopOrigin.MapPoint`）から足すときは、近接確認を通ったら `forceNewPlace = true`
+    （近くの登録済みの場所とは別の場所にする。場所の登録と同じ）。「今ここ」は GPS の誤差があるので `false`（30m の座標同定）。
   - **手動追加した立ち寄りは自動命名しない。** `addManualStop` は常に `place_resolutions` 行を残すので、
     ライブ検出の自動命名がユーザーの入力（または「名前なし」の選択）を上書きしない。
 - **既存の場所へ紐付け**: `addManualStopForPlace`。新規 place を作らずに訪問だけ足す。

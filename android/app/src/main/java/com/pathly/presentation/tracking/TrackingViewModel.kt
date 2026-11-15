@@ -608,6 +608,8 @@ class TrackingViewModel @Inject constructor(
     name: String?,
     googlePlaceId: String?,
     googleName: String? = null,
+    // 地図の空き地点を指した（→ AddManualStopUseCase.addWithNearbyCheck。別の場所として足す）。
+    pointedOnMap: Boolean = false,
   ) {
     val trackId = _uiState.value.currentTrackId ?: return
     viewModelScope.launch {
@@ -622,6 +624,7 @@ class TrackingViewModel @Inject constructor(
           googlePlaceId,
           isShownOnMap = shownOnMap(),
           googleName = googleName,
+          pointedOnMap = pointedOnMap,
         )
         when (result) {
           is AddManualStopUseCase.AddResult.NearbyFound ->

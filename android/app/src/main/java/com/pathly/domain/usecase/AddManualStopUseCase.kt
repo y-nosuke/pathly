@@ -38,6 +38,11 @@ class AddManualStopUseCase @Inject constructor(
    *   地点を指しているので確認しない
    * - 見えていないもの（表示 OFF、または地図の絞り込みで隠れている）が近くにあれば、最寄りのそれを
    *   [AddResult.NearbyFound] で返して判断を委ねる（同じ場所の重複登録を防ぐ）
+   *
+   * 確認を通ったあと、[pointedOnMap]（地図の空き地点を指した）なら**必ず新しい場所を作る**（場所の登録
+   * [PlaceEditUseCase.registerWithNearbyCheck] と同じ。見えている場所の近くの別の地点を指したとみなす）。
+   * 既存の場所にしたいときはそのマーカーを押す（[addForExistingPlace]）。「今ここ」（現在地）は GPS の誤差があるので、
+   * これまでどおり 30m 以内の既存の場所に寄せる（自動検出の立ち寄りと同じ）。
    */
   suspend fun addWithNearbyCheck(
     trackId: Long,
@@ -49,6 +54,7 @@ class AddManualStopUseCase @Inject constructor(
     googlePlaceId: String?,
     isShownOnMap: (RegisteredPlace) -> Boolean,
     googleName: String? = null,
+    pointedOnMap: Boolean = false,
   ): AddResult {
     if (googlePlaceId == null) {
       placeRepository.findNearbyPlaces(latitude, longitude)
@@ -63,7 +69,8 @@ class AddManualStopUseCase @Inject constructor(
       departureTime,
       name,
       googlePlaceId,
-      forceNewPlace = false,
+      // 施設（googlePlaceId あり）は施設の同一性で同定するので、新規にはしない。
+      forceNewPlace = pointedOnMap && googlePlaceId == null,
       googleName = googleName,
     )
     return AddResult.Added(stopId)
