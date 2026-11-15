@@ -68,6 +68,7 @@ import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -123,6 +124,8 @@ import com.pathly.presentation.common.RegisteredPlaceMarker
 import com.pathly.presentation.common.RegisteredPlaceMarkers
 import com.pathly.presentation.common.ScrollToTopButton
 import com.pathly.presentation.common.ScrollToTopButtonClearance
+import com.pathly.presentation.common.StatisticItem
+import com.pathly.presentation.common.StatisticsCard
 import com.pathly.presentation.common.WishlistFlagButton
 import com.pathly.presentation.common.categoryChipLabel
 import com.pathly.presentation.common.categoryGlyph
@@ -528,6 +531,12 @@ internal fun PlacesListContent(
                     onToggleRegionFilter = onToggleRegionFilter,
                   )
                 }
+              } else if (state.items.isNotEmpty()) {
+                // 統計は一覧と同じく絞り込み後の場所で数える。絞り込みの欄を開いている間は、欄と結果の間に挟まって
+                // 邪魔になるので出さない。場所が 1 件も無いときは案内の文言だけにする。
+                item(key = "statistics") {
+                  PlacesStatisticsCard(state = state)
+                }
               }
               if (state.visibleItems.isEmpty()) {
                 item(key = "empty") {
@@ -569,6 +578,25 @@ internal fun PlacesListContent(
           .padding(bottom = 8.dp),
       )
     }
+  }
+}
+
+/** 一覧の先頭の統計カード（場所の数・訪問済み・行きたいの達成）。履歴タブと同じ形。 */
+@Composable
+private fun PlacesStatisticsCard(state: PlacesState, modifier: Modifier = Modifier) {
+  val statistics = state.statistics
+  StatisticsCard(
+    title = placesStatisticsTitle(
+      shownCount = statistics.placeCount,
+      totalCount = state.items.size,
+      isFiltered = !state.noFilter,
+    ),
+    modifier = modifier.testTag("placesStatistics"),
+  ) {
+    // 「行きたいで行けた」は値もラベルも長いので、3 列を同じ幅にして、狭い画面では列の中で折り返す。
+    StatisticItem(icon = "📍", label = "場所の数", value = "${statistics.placeCount}か所", modifier = Modifier.weight(1f))
+    StatisticItem(icon = "👣", label = "訪問済み", value = "${statistics.visitedCount}か所", modifier = Modifier.weight(1f))
+    StatisticItem(icon = "🚩", label = "行きたいで行けた", value = statistics.fulfilledLabel(), modifier = Modifier.weight(1f))
   }
 }
 

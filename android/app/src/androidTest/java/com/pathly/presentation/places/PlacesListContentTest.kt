@@ -238,6 +238,37 @@ class PlacesListContentTest {
     composeTestRule.onNodeWithText("初期状態に戻す").assertDoesNotExist()
   }
 
+  @Test
+  fun `一覧の先頭に統計が出て_絞り込むと数字が変わり全体の数が添えられる`() {
+    setContent(PlacesState(items = listOf(plain, wished)))
+    composeTestRule.onNodeWithText("📍 場所の統計").assertIsDisplayed()
+    composeTestRule.onNodeWithText("2か所").assertIsDisplayed()
+    composeTestRule.onNodeWithText("0 / 1（0%）").assertIsDisplayed()
+
+    composeTestRule.onNodeWithTag("filterPanelButton").performClick()
+    // 絞り込みの欄を開いている間は出さない。
+    composeTestRule.onNodeWithTag("placesStatistics").assertDoesNotExist()
+    composeTestRule.onNodeWithTag("行きたい=行きたい").performClick()
+    composeTestRule.onNodeWithTag("filterPanelButton").performClick()
+
+    composeTestRule.onNodeWithText("📍 場所の統計（絞り込み中 1 / 2 か所）").assertIsDisplayed()
+    composeTestRule.onNodeWithText("1か所").assertIsDisplayed()
+  }
+
+  @Test
+  fun `統計は地図表示と場所が無いときは出ない`() {
+    setContent(PlacesState(items = listOf(plain, wished), viewMode = PlacesViewMode.MAP))
+    composeTestRule.onNodeWithTag("placesStatistics").assertDoesNotExist()
+    composeTestRule.onNodeWithContentDescription("一覧で見る").performClick()
+    composeTestRule.onNodeWithTag("placesStatistics").assertIsDisplayed()
+  }
+
+  @Test
+  fun `場所が1件も無いときは統計を出さない`() {
+    setContent(PlacesState(items = emptyList()))
+    composeTestRule.onNodeWithTag("placesStatistics").assertDoesNotExist()
+  }
+
   // ViewModel の代わりに、状態をこの場で持って操作に応じて書き換える。
   private fun setContent(initial: PlacesState) {
     composeTestRule.setContent {
