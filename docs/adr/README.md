@@ -53,3 +53,5 @@
 | [0035](0035-keep-crash-reports-on-device.md)                | 異常終了の原因は端末の中にだけ残し、設定画面から本人がコピーして渡す                                  | Accepted |
 | [0036](0036-wishlist-ends-on-visit-and-keeps-history.md)    | 行きたいは立ち寄りの記録で終わらせ、終わった行きたいは別テーブルに履歴として残す（v20）               | Accepted |
 | [0037](0037-ask-merge-or-keep-separate-on-same-facility.md) | 同じ施設と分かった場所は、まとめるか別のまま残すかをユーザーに選んでもらう（v21）                     | Accepted |
+| [0038](0038-screen-layouts-four-corners-and-tool-row.md)    | 地図の画面は四隅で役割を固定し、一覧の画面は見出しとツール行にそろえる                                | Accepted |
+| [0039](0039-one-search-box-for-places-and-regions.md)       | 地図の検索窓は 1 つにし、施設（登録）と地域（移動）の候補を一緒に出す                                 | Accepted |
