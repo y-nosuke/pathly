@@ -5,7 +5,6 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import androidx.activity.compose.BackHandler
-import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -52,8 +51,6 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.MutableState
-import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -64,11 +61,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
-import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.semantics
@@ -79,12 +73,10 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.core.net.toUri
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.google.android.gms.location.LocationServices
 import com.google.android.gms.maps.CameraUpdateFactory
 import com.google.android.gms.maps.model.CameraPosition
 import com.google.android.gms.maps.model.LatLng
 import com.google.android.gms.maps.model.LatLngBounds
-import com.google.android.gms.tasks.CancellationTokenSource
 import com.google.maps.android.compose.CameraPositionState
 import com.google.maps.android.compose.GoogleMap
 import com.google.maps.android.compose.MapUiSettings
@@ -109,11 +101,16 @@ import com.pathly.presentation.common.ActiveFilter
 import com.pathly.presentation.common.ActiveFilterChips
 import com.pathly.presentation.common.CategoryFilterSection
 import com.pathly.presentation.common.CloseInfoWindowWithSheet
+import com.pathly.presentation.common.DefaultMapLocation
 import com.pathly.presentation.common.FilterChoiceSection
 import com.pathly.presentation.common.FilterPanelButton
 import com.pathly.presentation.common.FilterPanelCloseButton
 import com.pathly.presentation.common.FloatingSheet
 import com.pathly.presentation.common.ListFilterPanel
+import com.pathly.presentation.common.ListMapCamera
+import com.pathly.presentation.common.ListMapLayout
+import com.pathly.presentation.common.ListMapMode
+import com.pathly.presentation.common.ListMapOverlay
 import com.pathly.presentation.common.ListMapToggle
 import com.pathly.presentation.common.ListNameSearchField
 import com.pathly.presentation.common.MapMarker
@@ -137,9 +134,12 @@ import com.pathly.presentation.common.categoryGlyph
 import com.pathly.presentation.common.choiceLabel
 import com.pathly.presentation.common.flippedChoice
 import com.pathly.presentation.common.heightOf
+import com.pathly.presentation.common.listMapSummary
 import com.pathly.presentation.common.regionChipLabel
 import com.pathly.presentation.common.rememberFloatingSheetState
+import com.pathly.presentation.common.rememberListMapCamera
 import com.pathly.presentation.common.rememberMapInfoWindowState
+import com.pathly.presentation.common.requestCurrentLatLng
 import com.pathly.util.DateFormatters
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.emptyFlow
@@ -355,7 +355,7 @@ internal fun PlacesListContent(
   onGroupingChange: (PlaceGrouping) -> Unit,
   // まとまりの見出しを押したとき（[PlaceGroup.key]）。開く／閉じる。
   onToggleGroup: (String) -> Unit,
-  onViewModeChange: (PlacesViewMode) -> Unit,
+  onViewModeChange: (ListMapMode) -> Unit,
   // 地図表示で、地図に重ねた見出し・検索欄・絞り込みをたたむ（true）／ひろげる（false）。
   onControlsCollapsedChange: (Boolean) -> Unit,
   onItemClick: (PlaceListItem) -> Unit,
@@ -370,17 +370,13 @@ internal fun PlacesListContent(
 ) {
   // 地図表示はタブの中の一段奥の見方として扱い、システムバックで一覧表示へ戻す（タブは離れない）。
   // 吹き出しが出ているときは、後から登録される地図側の処理が先に吹き出しを閉じる。
-  BackHandler(enabled = state.viewMode == PlacesViewMode.MAP) { onViewModeChange(PlacesViewMode.LIST) }
+  BackHandler(enabled = state.viewMode == ListMapMode.MAP) { onViewModeChange(ListMapMode.LIST) }
 
   // 地図表示の範囲は、一覧表示に切り替えても捨てない。地図に戻ったら前に見ていた範囲のまま出す
   // （その間に絞り込みの結果が変わっていれば、戻ったときに合わせ直す）。
-  val mapCamera = rememberPlacesMapCamera()
+  val mapCamera = rememberListMapCamera()
 
-  val isMap = state.viewMode == PlacesViewMode.MAP
-  // 地図は一度開いたら、一覧表示に切り替えても捨てずに一覧の裏に残す。作り直すと、地図の絵が読み込まれる
-  // までの一瞬、何も描かれていない面が見えてちらつくため。
-  var keepMap by rememberSaveable { mutableStateOf(false) }
-  LaunchedEffect(isMap) { if (isMap) keepMap = true }
+  val isMap = state.viewMode == ListMapMode.MAP
   // 絞り込みの欄を開いているか。一覧表示と地図表示で共有する（切り替えても開いたまま）。
   var filterPanelOpen by rememberSaveable { mutableStateOf(false) }
   // 欄を開いているときの戻るは、欄を閉じる（地図表示から一覧へ戻すより先。吹き出しを閉じるのはさらに先）。
@@ -390,39 +386,37 @@ internal fun PlacesListContent(
   BackHandler(enabled = panelVisible) { filterPanelOpen = false }
 
   Box(modifier = modifier.fillMaxSize()) {
-    // 地図表示: 地図をタブいっぱいに広げ、見出し・検索欄・絞り込みは地図の上に重ねる。
-    if (isMap || keepMap) {
-      PlacesMapLayout(
-        state = state,
-        visible = isMap,
-        onAddByMap = onAddByMap,
-        onAddBySearch = onAddBySearch,
-        onClearFilters = onClearFilters,
-        onResetListOptions = onResetListOptions,
-        onNameQueryChange = onNameQueryChange,
-        onWishlistFilterChange = onWishlistFilterChange,
-        onVisitedFilterChange = onVisitedFilterChange,
-        onToggleCategoryFilter = onToggleCategoryFilter,
-        onClearCategoryFilter = onClearCategoryFilter,
-        onToggleRegionFilter = onToggleRegionFilter,
-        onClearRegionFilter = onClearRegionFilter,
-        onViewModeChange = onViewModeChange,
-        onControlsCollapsedChange = onControlsCollapsedChange,
-        filterPanelOpen = filterPanelOpen,
-        onFilterPanelOpenChange = { filterPanelOpen = it },
-        onPlaceClick = onMapPlaceClick,
-        camera = mapCamera,
-        mapContent = mapContent,
-      )
-    }
-
-    if (!isMap) {
+    ListMapLayout(
+      mode = state.viewMode,
+      // 地図表示: 地図をタブいっぱいに広げ、見出し・検索欄・絞り込みは地図の上に重ねる。
+      map = { visible ->
+        PlacesMapLayout(
+          state = state,
+          visible = visible,
+          onAddByMap = onAddByMap,
+          onAddBySearch = onAddBySearch,
+          onClearFilters = onClearFilters,
+          onResetListOptions = onResetListOptions,
+          onNameQueryChange = onNameQueryChange,
+          onWishlistFilterChange = onWishlistFilterChange,
+          onVisitedFilterChange = onVisitedFilterChange,
+          onToggleCategoryFilter = onToggleCategoryFilter,
+          onClearCategoryFilter = onClearCategoryFilter,
+          onToggleRegionFilter = onToggleRegionFilter,
+          onClearRegionFilter = onClearRegionFilter,
+          onViewModeChange = onViewModeChange,
+          onControlsCollapsedChange = onControlsCollapsedChange,
+          filterPanelOpen = filterPanelOpen,
+          onFilterPanelOpenChange = { filterPanelOpen = it },
+          onPlaceClick = onMapPlaceClick,
+          camera = mapCamera,
+          mapContent = mapContent,
+        )
+      },
+    ) {
       Column(
         modifier = Modifier
           .fillMaxSize()
-          // 裏に残した地図を隠し、触っても地図に届かないようにする。
-          .background(MaterialTheme.colorScheme.background)
-          .pointerInput(Unit) {}
           .padding(16.dp),
       ) {
         PlacesHeader(
@@ -827,7 +821,7 @@ private fun AddPlaceContent(
   val context = LocalContext.current
 
   val cameraPositionState = rememberCameraPositionState {
-    position = CameraPosition.fromLatLngZoom(DEFAULT_LOCATION, 12f)
+    position = CameraPosition.fromLatLngZoom(DefaultMapLocation, 12f)
   }
   val sheetState = rememberFloatingSheetState()
 
@@ -839,21 +833,9 @@ private fun AddPlaceContent(
 
   // 現在地へ地図を寄せる（記録画面の現在地ボタンと同じ挙動）。権限が無ければ何もしない。
   val scope = rememberCoroutineScope()
-  val fusedClient = remember { LocationServices.getFusedLocationProviderClient(context) }
   val moveToCurrentLocation: () -> Unit = {
-    try {
-      fusedClient.getCurrentLocation(
-        com.google.android.gms.location.Priority.PRIORITY_BALANCED_POWER_ACCURACY,
-        CancellationTokenSource().token,
-      ).addOnSuccessListener { location ->
-        location?.let {
-          scope.launch {
-            cameraPositionState.animate(CameraUpdateFactory.newLatLngZoom(LatLng(it.latitude, it.longitude), 16f))
-          }
-        }
-      }
-    } catch (e: SecurityException) {
-      // 権限が無ければ何もしない。
+    requestCurrentLatLng(context) { latLng ->
+      scope.launch { cameraPositionState.animate(CameraUpdateFactory.newLatLngZoom(latLng, 16f)) }
     }
   }
 
@@ -1477,14 +1459,13 @@ private fun PlaceListItem.toRegisteredPlace(): RegisteredPlace = RegisteredPlace
   hasGoogleInfo = place.googlePlaceId != null,
 )
 
-/** 場所タブの見出しの行（「場所」・一覧／地図の切り替え・追加）。[onCollapse] があれば右端にたたむボタンを出す。 */
+/** 場所タブの見出しの行（「場所」・一覧／地図の切り替え・追加）。地図表示では右端にたたむボタンが足される。 */
 @Composable
 private fun PlacesHeader(
-  viewMode: PlacesViewMode,
-  onViewModeChange: (PlacesViewMode) -> Unit,
+  viewMode: ListMapMode,
+  onViewModeChange: (ListMapMode) -> Unit,
   onAddByMap: () -> Unit,
   onAddBySearch: () -> Unit,
-  onCollapse: (() -> Unit)? = null,
 ) {
   Row(
     modifier = Modifier.fillMaxWidth(),
@@ -1497,7 +1478,7 @@ private fun PlacesHeader(
       fontWeight = FontWeight.Bold,
     )
     Row(verticalAlignment = Alignment.CenterVertically) {
-      PlacesViewModeToggle(viewMode = viewMode, onChange = onViewModeChange)
+      ListMapToggle(mode = viewMode, onChange = onViewModeChange)
       Box {
         var menuOpen by remember { mutableStateOf(false) }
         Button(onClick = { menuOpen = true }) {
@@ -1519,11 +1500,6 @@ private fun PlacesHeader(
               onAddByMap()
             },
           )
-        }
-      }
-      onCollapse?.let {
-        IconButton(onClick = it) {
-          Icon(painter = painterResource(R.drawable.ic_expand_less), contentDescription = "たたむ")
         }
       }
     }
@@ -1701,17 +1677,15 @@ private fun PlacesMapLayout(
   onClearCategoryFilter: () -> Unit,
   onToggleRegionFilter: (RegionKey) -> Unit,
   onClearRegionFilter: () -> Unit,
-  onViewModeChange: (PlacesViewMode) -> Unit,
+  onViewModeChange: (ListMapMode) -> Unit,
   onControlsCollapsedChange: (Boolean) -> Unit,
   filterPanelOpen: Boolean,
   onFilterPanelOpenChange: (Boolean) -> Unit,
   onPlaceClick: (Long) -> Unit,
-  camera: PlacesMapCamera,
+  camera: ListMapCamera,
   modifier: Modifier = Modifier,
   mapContent: (@Composable () -> Unit)? = null,
 ) {
-  val density = LocalDensity.current
-  val focusManager = LocalFocusManager.current
   // 重ねたものの高さ。地図の上の余白にして、マーカー・範囲合わせ・0 件の文言が隠れないようにする。
   var overlayHeight by remember { mutableStateOf(0.dp) }
 
@@ -1736,114 +1710,43 @@ private fun PlacesMapLayout(
     // 一覧表示の裏にいる間は重ねない。高さは前に測った値のままにし、戻ったときに地図の余白が変わって
     // 範囲がずれないようにする。
     if (visible) {
-      Box(
-        modifier = Modifier
-          .align(Alignment.TopCenter)
-          .fillMaxWidth()
-          .onSizeChanged { overlayHeight = with(density) { it.height.toDp() } },
-      ) {
-        if (state.controlsCollapsed) {
-          PlacesCollapsedBar(
-            state = state,
+      ListMapOverlay(
+        mode = state.viewMode,
+        onModeChange = onViewModeChange,
+        collapsed = state.controlsCollapsed,
+        onCollapsedChange = onControlsCollapsedChange,
+        collapsedSummary = listMapSummary("場所", state.activeFilterCount, state.visibleItems.size, state.items.size),
+        onHeightChange = { overlayHeight = it },
+        header = {
+          PlacesHeader(
+            viewMode = state.viewMode,
             onViewModeChange = onViewModeChange,
-            onExpand = { onControlsCollapsedChange(false) },
-            modifier = Modifier.padding(12.dp),
+            onAddByMap = onAddByMap,
+            onAddBySearch = onAddBySearch,
           )
-        } else {
-          Surface(
-            // 地図の文字が透けると読みにくいので、重ねたものは不透明にする。
-            color = MaterialTheme.colorScheme.surface,
-            shape = RoundedCornerShape(bottomStart = 16.dp, bottomEnd = 16.dp),
-            shadowElevation = 2.dp,
-          ) {
-            // 余白は一覧表示と揃え、切り替えても見出しの位置が動かないようにする。
-            Column(modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 12.dp)) {
-              PlacesHeader(
-                viewMode = state.viewMode,
-                onViewModeChange = onViewModeChange,
-                onAddByMap = onAddByMap,
-                onAddBySearch = onAddBySearch,
-                onCollapse = {
-                  // 検索欄に入力中なら、キーボードも閉じる。
-                  focusManager.clearFocus()
-                  onControlsCollapsedChange(true)
-                },
-              )
-              Spacer(modifier = Modifier.height(12.dp))
-              PlacesFilterControls(
-                state = state,
-                onClearFilters = onClearFilters,
-                onResetListOptions = onResetListOptions,
-                onNameQueryChange = onNameQueryChange,
-                onWishlistFilterChange = onWishlistFilterChange,
-                onVisitedFilterChange = onVisitedFilterChange,
-                onToggleCategoryFilter = onToggleCategoryFilter,
-                onClearCategoryFilter = onClearCategoryFilter,
-                onToggleRegionFilter = onToggleRegionFilter,
-                onClearRegionFilter = onClearRegionFilter,
-                panelOpen = filterPanelOpen,
-                onPanelOpenChange = onFilterPanelOpenChange,
-                // 地図の上では一覧が無いので、欄は重ねたものの中に出す（高さを抑えて中でスクロール）。
-                inlinePanel = true,
-              )
-            }
-          }
-        }
-      }
-    }
-  }
-}
-
-/**
- * 地図表示で見出し・検索欄・絞り込みをたたんだときの帯。一覧へ戻る切り替えと、絞り込んでいることが分かる件数を残す
- * （絞り込みを忘れて「場所が足りない」と思わないように）。件数の部分を押してもひろがる。
- */
-@Composable
-private fun PlacesCollapsedBar(
-  state: PlacesState,
-  onViewModeChange: (PlacesViewMode) -> Unit,
-  onExpand: () -> Unit,
-  modifier: Modifier = Modifier,
-) {
-  Surface(
-    modifier = modifier.fillMaxWidth(),
-    shape = RoundedCornerShape(28.dp),
-    color = MaterialTheme.colorScheme.surface,
-    shadowElevation = 2.dp,
-  ) {
-    Row(
-      modifier = Modifier.padding(horizontal = 4.dp),
-      verticalAlignment = Alignment.CenterVertically,
-    ) {
-      PlacesViewModeToggle(viewMode = state.viewMode, onChange = onViewModeChange)
-      Text(
-        text = state.collapsedSummary(),
-        style = MaterialTheme.typography.bodyLarge,
-        maxLines = 1,
-        overflow = TextOverflow.Ellipsis,
-        modifier = Modifier
-          .weight(1f)
-          .clickable(onClick = onExpand)
-          .padding(horizontal = 4.dp, vertical = 12.dp),
+        },
+        controls = {
+          PlacesFilterControls(
+            state = state,
+            onClearFilters = onClearFilters,
+            onResetListOptions = onResetListOptions,
+            onNameQueryChange = onNameQueryChange,
+            onWishlistFilterChange = onWishlistFilterChange,
+            onVisitedFilterChange = onVisitedFilterChange,
+            onToggleCategoryFilter = onToggleCategoryFilter,
+            onClearCategoryFilter = onClearCategoryFilter,
+            onToggleRegionFilter = onToggleRegionFilter,
+            onClearRegionFilter = onClearRegionFilter,
+            panelOpen = filterPanelOpen,
+            onPanelOpenChange = onFilterPanelOpenChange,
+            // 地図の上では一覧が無いので、欄は重ねたものの中に出す（高さを抑えて中でスクロール）。
+            inlinePanel = true,
+          )
+        },
+        modifier = Modifier.align(Alignment.TopCenter),
       )
-      IconButton(onClick = onExpand) {
-        Icon(painter = painterResource(R.drawable.ic_expand_more), contentDescription = "ひろげる")
-      }
     }
   }
-}
-
-// たたんだ帯の文言。絞り込んでいなければ全件の数、絞り込んでいれば条件の数と「残った数 / 全件」。
-private fun PlacesState.collapsedSummary(): String = if (noFilter) {
-  "場所 ${items.size} 件"
-} else {
-  "絞り込み $activeFilterCount・${visibleItems.size} / ${items.size} 件"
-}
-
-/** 一覧表示と地図表示の切り替え。今と反対の見せ方のアイコンを出し、押すとそちらへ切り替わる。 */
-@Composable
-private fun PlacesViewModeToggle(viewMode: PlacesViewMode, onChange: (PlacesViewMode) -> Unit) {
-  ListMapToggle(isMap = viewMode == PlacesViewMode.MAP) { toMap -> onChange(if (toMap) PlacesViewMode.MAP else PlacesViewMode.LIST) }
 }
 
 /**
@@ -1856,7 +1759,7 @@ private fun PlacesMapView(
   emptyMessage: String?,
   onPlaceClick: (Long) -> Unit,
   visible: Boolean,
-  camera: PlacesMapCamera,
+  camera: ListMapCamera,
   modifier: Modifier = Modifier,
   // 地図に重ねたもの（見出し・検索欄・絞り込み）の分の余白。範囲合わせ・Google のロゴ・0 件の文言がその下に収まる。
   contentPadding: PaddingValues = PaddingValues(),
@@ -1885,21 +1788,10 @@ private fun PlacesMapView(
     when (places.size) {
       // 0 件: 最初に開いたときだけ現在地あたりへ寄る。絞り込みで 0 件になったときは今の範囲のまま。
       0 -> if (firstFit) {
-        try {
-          LocationServices.getFusedLocationProviderClient(context).getCurrentLocation(
-            com.google.android.gms.location.Priority.PRIORITY_BALANCED_POWER_ACCURACY,
-            CancellationTokenSource().token,
-          ).addOnSuccessListener { location ->
-            // 現在地が返るまでに場所が出てきて範囲を合わせ直していたら、そちらを優先する。
-            if (fittedFor != fitKey) return@addOnSuccessListener
-            location?.let {
-              scope.launch {
-                cameraPositionState.animate(CameraUpdateFactory.newLatLngZoom(LatLng(it.latitude, it.longitude), 14f))
-              }
-            }
-          }
-        } catch (e: SecurityException) {
-          // 権限が無ければ既定の位置のまま。
+        requestCurrentLatLng(context) { latLng ->
+          // 現在地が返るまでに場所が出てきて範囲を合わせ直していたら、そちらを優先する。
+          if (fittedFor != fitKey) return@requestCurrentLatLng
+          scope.launch { cameraPositionState.animate(CameraUpdateFactory.newLatLngZoom(latLng, 14f)) }
         }
       }
 
@@ -1958,22 +1850,6 @@ private fun PlacesMapView(
   }
 }
 
-/** 地図表示の見ていた範囲と、最後に範囲を合わせたときの絞り込みの結果（場所の id を並べたもの）。 */
-@Stable
-internal class PlacesMapCamera(val position: CameraPositionState, fittedFor: MutableState<String?>) {
-  var fittedFor: String? by fittedFor
-}
-
-/** 地図表示の外（一覧と切り替える場所）で持つ。どちらも画面の状態として残り、詳細から戻っても保たれる。 */
-@Composable
-private fun rememberPlacesMapCamera(): PlacesMapCamera {
-  val position = rememberCameraPositionState {
-    position = CameraPosition.fromLatLngZoom(DEFAULT_LOCATION, 12f)
-  }
-  val fittedFor = rememberSaveable { mutableStateOf<String?>(null) }
-  return remember(position, fittedFor) { PlacesMapCamera(position, fittedFor) }
-}
-
 // 地図表示で絞り込んだ場所が全部入るよう範囲を合わせるときの、端の余白（マーカーと名前が切れないように）。
 private val PlacesMapBoundsPadding = 56.dp
 
@@ -1982,8 +1858,6 @@ private fun priorityStars(priority: Priority): String = when (priority) {
   Priority.MEDIUM -> "★★☆"
   Priority.LOW -> "★☆☆"
 }
-
-private val DEFAULT_LOCATION = LatLng(35.6762, 139.6503) // 東京駅
 
 /** [Place] を Google マップで開く（詳細画面用の薄いラッパ）。 */
 private fun openInGoogleMaps(context: Context, place: Place) {

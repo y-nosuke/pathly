@@ -31,6 +31,7 @@ import com.pathly.domain.model.RegisteredPlace
 import com.pathly.domain.model.Stop
 import com.pathly.domain.model.StopCandidate
 import com.pathly.domain.model.TrackSegments
+import com.pathly.presentation.common.DefaultMapLocation
 import com.pathly.presentation.common.MapInfoWindowState
 import com.pathly.presentation.common.MapMarker
 import com.pathly.presentation.common.MapPinMarker
@@ -91,7 +92,6 @@ internal fun TrackMapView(
   onRegisteredPlaceClick: (RegisteredPlace) -> Unit = {},
 ) {
   val cameraPositionState = rememberCameraPositionState()
-  val defaultPosition = LatLng(35.6762, 139.6503) // Tokyo Station as default
 
   // カメラ範囲はトラック読み込み時に一度だけ合わせる（スライダー操作では動かさない）
   LaunchedEffect(track.id) {
@@ -99,7 +99,7 @@ internal fun TrackMapView(
     if (bounds != null) {
       cameraPositionState.animate(CameraUpdateFactory.newLatLngBounds(bounds, TRACK_FIT_PADDING_PX))
     } else {
-      cameraPositionState.position = CameraPosition.fromLatLngZoom(defaultPosition, 12f)
+      cameraPositionState.position = CameraPosition.fromLatLngZoom(DefaultMapLocation, 12f)
     }
   }
 

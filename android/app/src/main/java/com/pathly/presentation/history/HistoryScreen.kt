@@ -1,7 +1,6 @@
 package com.pathly.presentation.history
 
 import androidx.activity.compose.BackHandler
-import androidx.compose.foundation.background
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -42,16 +41,12 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.google.android.gms.maps.model.CameraPosition
-import com.google.android.gms.maps.model.LatLng
-import com.google.maps.android.compose.rememberCameraPositionState
 import com.pathly.R
 import com.pathly.domain.model.GpsTrack
 import com.pathly.domain.model.PlaceCategoryFacet
@@ -63,6 +58,8 @@ import com.pathly.presentation.common.FilterChoiceSection
 import com.pathly.presentation.common.FilterPanelButton
 import com.pathly.presentation.common.FilterPanelCloseButton
 import com.pathly.presentation.common.ListFilterPanel
+import com.pathly.presentation.common.ListMapLayout
+import com.pathly.presentation.common.ListMapMode
 import com.pathly.presentation.common.ListNameSearchField
 import com.pathly.presentation.common.RegionFilterSection
 import com.pathly.presentation.common.ScrollToTopButton
@@ -73,6 +70,7 @@ import com.pathly.presentation.common.categoryChipLabel
 import com.pathly.presentation.common.choiceLabel
 import com.pathly.presentation.common.flippedChoice
 import com.pathly.presentation.common.regionChipLabel
+import com.pathly.presentation.common.rememberListMapCamera
 import com.pathly.util.DateFormatters
 import kotlin.math.roundToInt
 
@@ -85,18 +83,12 @@ fun HistoryScreen(
   mapContent: (@Composable () -> Unit)? = null,
 ) {
   val uiState by viewModel.uiState.collectAsStateWithLifecycle()
-  val isMap = uiState.viewMode == HistoryViewMode.MAP
+  val isMap = uiState.viewMode == ListMapMode.MAP
   // 地図表示はタブの中の一段奥の見方として扱い、システムバックで一覧表示へ戻す（タブは離れない。場所タブと同じ）。
   // 吹き出しが出ているときは、後から登録される地図側の処理が先に吹き出しを閉じる。
-  BackHandler(enabled = isMap) { viewModel.setViewMode(HistoryViewMode.LIST) }
+  BackHandler(enabled = isMap) { viewModel.setViewMode(ListMapMode.LIST) }
   // 地図表示の範囲は、一覧表示に切り替えても・経路詳細へ行って戻っても捨てない。
-  val mapCamera = rememberCameraPositionState {
-    position = CameraPosition.fromLatLngZoom(LatLng(35.6762, 139.6503), 12f)
-  }
-  var mapInitialized by rememberSaveable { mutableStateOf(false) }
-  // 地図は一度開いたら、一覧表示に切り替えても捨てずに一覧の裏に残す（作り直すと地図の絵が出るまでちらつくため）。
-  var keepMap by rememberSaveable { mutableStateOf(false) }
-  LaunchedEffect(isMap) { if (isMap) keepMap = true }
+  val mapCamera = rememberListMapCamera()
 
   // 名前を編集中の経路（null=ダイアログ非表示）。
   var renameTarget by remember { mutableStateOf<GpsTrack?>(null) }
@@ -113,14 +105,14 @@ fun HistoryScreen(
   // 欄が出ているときの戻るは、欄を閉じる（地図表示から一覧へ戻すより先）。
   BackHandler(enabled = panelVisible) { filterPanelOpen = false }
 
-  Box(modifier = modifier.fillMaxSize()) {
-    if (isMap || keepMap) {
+  ListMapLayout(
+    mode = uiState.viewMode,
+    modifier = modifier,
+    map = { visible ->
       HistoryMapLayout(
         state = uiState,
-        visible = isMap,
+        visible = visible,
         camera = mapCamera,
-        initialized = mapInitialized,
-        onInitialized = { mapInitialized = true },
         onViewModeChange = viewModel::setViewMode,
         onControlsCollapsedChange = viewModel::setControlsCollapsed,
         onToggle = viewModel::toggleOverlay,
@@ -143,8 +135,8 @@ fun HistoryScreen(
         },
         mapContent = mapContent,
       )
-    }
-    if (!isMap) {
+    },
+    list = {
       HistoryListContent(
         uiState = uiState,
         viewModel = viewModel,
@@ -154,8 +146,8 @@ fun HistoryScreen(
         onRenameClick = { renameTarget = it },
         onDeleteClick = { deleteTarget = it },
       )
-    }
-  }
+    },
+  )
 
   renameTarget?.let { target ->
     RenameTrackDialog(
@@ -190,7 +182,7 @@ fun HistoryScreen(
   }
 }
 
-/** 履歴の一覧表示（見出し・絞り込み・統計・経路の一覧）。裏に残した地図を隠し、触っても地図に届かないようにする。 */
+/** 履歴の一覧表示（見出し・絞り込み・統計・経路の一覧）。 */
 @Composable
 private fun HistoryListContent(
   uiState: HistoryState,
@@ -204,8 +196,6 @@ private fun HistoryListContent(
   Column(
     modifier = Modifier
       .fillMaxSize()
-      .background(MaterialTheme.colorScheme.background)
-      .pointerInput(Unit) {}
       .padding(16.dp),
   ) {
     HistoryHeader(

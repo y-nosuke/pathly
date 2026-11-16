@@ -9,6 +9,7 @@ import com.pathly.domain.model.RegionKey
 import com.pathly.domain.model.categoryFacetCounts
 import com.pathly.domain.model.matchesAnyOf
 import com.pathly.domain.model.regionCounts
+import com.pathly.presentation.common.ListMapMode
 import com.pathly.presentation.common.getEnum
 import com.pathly.presentation.common.getEnumSet
 import com.pathly.presentation.common.getRegionSet
@@ -52,9 +53,6 @@ enum class TrackSort(val label: String, val defaultDescending: Boolean) {
   NAME("名前順", false),
 }
 
-/** 履歴の見せ方（一覧か地図か）。 */
-enum class HistoryViewMode { LIST, MAP }
-
 data class HistoryState(
   val tracks: List<GpsTrack> = emptyList(),
   val activeTrack: GpsTrack? = null,
@@ -73,7 +71,7 @@ data class HistoryState(
   val isLoading: Boolean = false,
   val errorMessage: String? = null,
   // 一覧で見るか地図で見るか。絞り込みは両方で共有する。
-  val viewMode: HistoryViewMode = HistoryViewMode.LIST,
+  val viewMode: ListMapMode = ListMapMode.LIST,
   // 地図表示で、地図に重ねた見出し・検索欄・絞り込みをたたんでいるか。
   val controlsCollapsed: Boolean = false,
   // 地図表示で選んで重ねている経路（選んだ順）。絞り込みから外れても外すまで残す。

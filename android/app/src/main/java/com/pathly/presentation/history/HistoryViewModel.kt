@@ -8,6 +8,7 @@ import com.pathly.domain.model.PlaceCategoryFacet
 import com.pathly.domain.model.RegionKey
 import com.pathly.domain.repository.GpsTrackRepository
 import com.pathly.domain.repository.PlaceRepository
+import com.pathly.presentation.common.ListMapMode
 import com.pathly.presentation.common.toggled
 import com.pathly.presentation.tracking.TrackOverlaySelection
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -163,7 +164,7 @@ class HistoryViewModel @Inject constructor(
   }
 
   /** 一覧で見るか地図で見るかを切り替える（絞り込みはそのまま）。 */
-  fun setViewMode(mode: HistoryViewMode) {
+  fun setViewMode(mode: ListMapMode) {
     updateListOptions { it.copy(viewMode = mode) }
   }
 
