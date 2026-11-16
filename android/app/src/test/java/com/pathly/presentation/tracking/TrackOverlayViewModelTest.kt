@@ -111,8 +111,8 @@ class TrackOverlayViewModelTest {
 
     val state = viewModel.uiState.value
     assertEquals(listOf(2L, 3L), state.selected.map { it.track.id })
-    assertEquals(0, state.colorIndexOf(3L))
-    assertEquals(1, state.colorIndexOf(2L))
+    assertEquals(0, state.selected.colorIndexOf(3L))
+    assertEquals(1, state.selected.colorIndexOf(2L))
   }
 
   @Test
@@ -124,8 +124,8 @@ class TrackOverlayViewModelTest {
 
     val state = viewModel.uiState.value
     assertEquals(TRACK_OVERLAY_MAX, state.selected.size)
-    assertFalse(state.canSelectMore)
-    assertNull(state.colorIndexOf((TRACK_OVERLAY_MAX + 1).toLong()))
+    assertFalse(state.selected.canSelectMore())
+    assertNull(state.selected.colorIndexOf((TRACK_OVERLAY_MAX + 1).toLong()))
   }
 
   @Test
@@ -144,7 +144,7 @@ class TrackOverlayViewModelTest {
     val state = viewModel.uiState.value
     assertEquals(listOf(1L), state.selected.map { it.track.id })
     assertEquals("名前は今の値に揃える", "名前を付けた", state.selected.single().track.name)
-    assertEquals(listOf(1L), state.selectedOutOfRange.map { it.id })
+    assertEquals(listOf(1L), state.selected.outsideOf(state.inRange).map { it.id })
   }
 
   @Test

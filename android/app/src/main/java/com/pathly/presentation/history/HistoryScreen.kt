@@ -130,20 +130,9 @@ fun HistoryScreen(
         onOpenTrack = onTrackClick,
         filterControls = {
           if (uiState.tracks.isNotEmpty()) {
-            FilterSortBar(
+            HistoryFilterSortBar(
               state = uiState,
-              onClearFilters = viewModel::clearFilters,
-              onResetListOptions = viewModel::resetListOptions,
-              onNameQueryChange = viewModel::setNameQuery,
-              onFavoriteFilterChange = viewModel::setFavoriteFilter,
-              onNamedFilterChange = viewModel::setNamedFilter,
-              onStopFilterChange = viewModel::setStopFilter,
-              onToggleCategoryFilter = viewModel::toggleCategoryFilter,
-              onClearCategoryFilter = viewModel::clearCategoryFilter,
-              onToggleRegionFilter = viewModel::toggleRegionFilter,
-              onClearRegionFilter = viewModel::clearRegionFilter,
-              onSortChange = viewModel::setSort,
-              onToggleSortDirection = viewModel::toggleSortDirection,
+              viewModel = viewModel,
               panelOpen = panelVisible,
               onPanelOpenChange = { filterPanelOpen = it },
               // 地図表示では並びに意味が無いので並べ替えは出さない。欄は重ねたものの中に出す（一覧が無いので）。
@@ -227,20 +216,9 @@ private fun HistoryListContent(
 
     // 記録が1件でもあれば絞り込み・並べ替えバーを出す（空・記録中のみのときは邪魔なので隠す）。
     if (uiState.tracks.isNotEmpty()) {
-      FilterSortBar(
+      HistoryFilterSortBar(
         state = uiState,
-        onClearFilters = viewModel::clearFilters,
-        onResetListOptions = viewModel::resetListOptions,
-        onNameQueryChange = viewModel::setNameQuery,
-        onFavoriteFilterChange = viewModel::setFavoriteFilter,
-        onNamedFilterChange = viewModel::setNamedFilter,
-        onStopFilterChange = viewModel::setStopFilter,
-        onToggleCategoryFilter = viewModel::toggleCategoryFilter,
-        onClearCategoryFilter = viewModel::clearCategoryFilter,
-        onToggleRegionFilter = viewModel::toggleRegionFilter,
-        onClearRegionFilter = viewModel::clearRegionFilter,
-        onSortChange = viewModel::setSort,
-        onToggleSortDirection = viewModel::toggleSortDirection,
+        viewModel = viewModel,
         panelOpen = panelVisible,
         onPanelOpenChange = onPanelOpenChange,
       )
@@ -373,9 +351,40 @@ private fun HistoryListContent(
   }
 }
 
+/** [FilterSortBar] を履歴の ViewModel につなぐ（一覧表示と地図表示で同じつなぎ方にする）。 */
+@Composable
+private fun HistoryFilterSortBar(
+  state: HistoryState,
+  viewModel: HistoryViewModel,
+  panelOpen: Boolean,
+  onPanelOpenChange: (Boolean) -> Unit,
+  showSort: Boolean = true,
+  inlinePanel: Boolean = false,
+) {
+  FilterSortBar(
+    state = state,
+    onClearFilters = viewModel::clearFilters,
+    onResetListOptions = viewModel::resetListOptions,
+    onNameQueryChange = viewModel::setNameQuery,
+    onFavoriteFilterChange = viewModel::setFavoriteFilter,
+    onNamedFilterChange = viewModel::setNamedFilter,
+    onStopFilterChange = viewModel::setStopFilter,
+    onToggleCategoryFilter = viewModel::toggleCategoryFilter,
+    onClearCategoryFilter = viewModel::clearCategoryFilter,
+    onToggleRegionFilter = viewModel::toggleRegionFilter,
+    onClearRegionFilter = viewModel::clearRegionFilter,
+    onSortChange = viewModel::setSort,
+    onToggleSortDirection = viewModel::toggleSortDirection,
+    panelOpen = panelOpen,
+    onPanelOpenChange = onPanelOpenChange,
+    showSort = showSort,
+    inlinePanel = inlinePanel,
+  )
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-internal fun FilterSortBar(
+private fun FilterSortBar(
   state: HistoryState,
   onClearFilters: () -> Unit,
   onResetListOptions: () -> Unit,
