@@ -122,6 +122,23 @@ DB に持たないのは、`R.drawable` の ID を DB に入れられず結局�
   地図のマーカーをタップして出るシートは、これを呼ぶ器が違うだけ（→ [ADR-0019](../adr/0019-single-place-editor.md)）。
   片方にだけ機能を足さないこと。
 
+## 一覧のタブの地図表示
+
+場所タブと履歴タブは、一覧表示と地図表示を切り替えられる。その器と地図まわりは `presentation/common/` の
+部品を使い、タブごとに書かない。
+
+- **見せ方は `ListMapMode`**（`ListMapToggle.kt`）。SavedStateHandle には enum の名前で保存するので、値の名前を変えない。
+- **`ListMapLayout`** が、地図を一度開いたら一覧の裏に残し（作り直すと地図が出るまでちらつく）、一覧で裏の地図を隠して
+  触れないようにする。地図表示のときのシステムバック（一覧へ戻す）は呼ぶ側で持つ。戻るの優先は登録の順で決まり、
+  絞り込みの欄を閉じる戻る・吹き出しを閉じる戻るをそれより後に登録するため。
+- **`ListMapOverlay`** が、地図に重ねる見出し・検索・絞り込みの外枠と、たたんだ帯（文言は `listMapSummary`）。
+  高さを返すので、地図の `contentPadding` の上に渡す。
+- **カメラは `ListMapCamera`**（`MapCamera.kt`。地図表示の外で持ち、一覧に切り替えても・詳細から戻っても範囲を保つ）。
+  同じファイルに、既定の位置 `DefaultMapLocation`、`GeoBounds` と `LatLngBounds` の変換、現在地を一度だけ取る
+  `requestCurrentLatLng` がある。
+- 重ねた経路の「この経路の全体を見る」（線を読み終えてから寄せる）は `TrackFocusEffect`（`presentation/tracking/TrackOverlay.kt`。
+  重ねる経路の状態と同じ場所）で、記録画面と履歴の地図表示が使う。
+
 ## 画面をまたぐ部品の置き場
 
 | 置き場                 | 中身                                                                  |

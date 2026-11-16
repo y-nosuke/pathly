@@ -11,6 +11,7 @@ import com.pathly.domain.model.RegionKey
 import com.pathly.domain.model.categoryFacetCounts
 import com.pathly.domain.model.matchesAnyOf
 import com.pathly.domain.model.regionCounts
+import com.pathly.presentation.common.ListMapMode
 import com.pathly.presentation.common.getEnum
 import com.pathly.presentation.common.getEnumSet
 import com.pathly.presentation.common.getRegionSet
@@ -48,9 +49,6 @@ enum class PlaceSort(val label: String, val defaultDescending: Boolean) {
   UPDATED("更新順", true),
 }
 
-/** 場所タブの見せ方（一覧／地図）。絞り込みは両方で共有する。 */
-enum class PlacesViewMode { LIST, MAP }
-
 /** キーワード検索の状態（追加＞検索して追加）。 */
 data class SearchState(
   val query: String = "",
@@ -78,7 +76,7 @@ data class PlacesState(
   val grouping: PlaceGrouping = PlaceGrouping.NONE,
   val openGroups: Set<String> = emptySet(),
   // 一覧で見るか地図で見るか。絞り込みと同じく、アプリを使っている間は保つ。
-  val viewMode: PlacesViewMode = PlacesViewMode.LIST,
+  val viewMode: ListMapMode = ListMapMode.LIST,
   // 地図表示で、地図に重ねた見出し・検索欄・絞り込みをたたんでいるか。たたんでも小さな帯は残る。
   val controlsCollapsed: Boolean = false,
   val isLoading: Boolean = false,

@@ -14,6 +14,7 @@ import androidx.compose.ui.test.performTextInput
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.pathly.domain.model.GpsPoint
 import com.pathly.domain.model.GpsTrack
+import com.pathly.presentation.common.ListMapMode
 import com.pathly.presentation.tracking.OverlayTrack
 import com.pathly.ui.theme.PathlyAndroidTheme
 import io.mockk.mockk
@@ -609,7 +610,7 @@ class HistoryScreenTest {
     }
 
     composeTestRule.onNodeWithContentDescription("地図で見る").performClick()
-    verify { mockViewModel.setViewMode(HistoryViewMode.MAP) }
+    verify { mockViewModel.setViewMode(ListMapMode.MAP) }
   }
 
   @Test
@@ -618,7 +619,7 @@ class HistoryScreenTest {
     val second = createSampleTrack(id = 2L).copy(name = "横浜みなと")
     uiStateFlow.value = HistoryState(
       tracks = listOf(first, second),
-      viewMode = HistoryViewMode.MAP,
+      viewMode = ListMapMode.MAP,
       selected = listOf(OverlayTrack(track = first, colorIndex = 0)),
     )
     composeTestRule.setContent {
@@ -646,7 +647,7 @@ class HistoryScreenTest {
 
     // 一覧へ戻る。
     composeTestRule.onNodeWithContentDescription("一覧で見る").performClick()
-    verify { mockViewModel.setViewMode(HistoryViewMode.LIST) }
+    verify { mockViewModel.setViewMode(ListMapMode.LIST) }
   }
 
   @Test
@@ -656,7 +657,7 @@ class HistoryScreenTest {
     uiStateFlow.value = HistoryState(
       tracks = listOf(favorite, other),
       favoriteFilter = TrackFavoriteFilter.FAVORITE,
-      viewMode = HistoryViewMode.MAP,
+      viewMode = ListMapMode.MAP,
       selected = listOf(OverlayTrack(track = other, colorIndex = 0)),
     )
     composeTestRule.setContent {
@@ -676,7 +677,7 @@ class HistoryScreenTest {
     uiStateFlow.value = HistoryState(
       tracks = listOf(favorite, createSampleTrack(id = 2L)),
       favoriteFilter = TrackFavoriteFilter.FAVORITE,
-      viewMode = HistoryViewMode.MAP,
+      viewMode = ListMapMode.MAP,
       controlsCollapsed = true,
     )
     composeTestRule.setContent {

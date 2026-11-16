@@ -1,20 +1,11 @@
 package com.pathly.presentation.history
 
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -25,30 +16,26 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.platform.LocalFocusManager
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import com.google.android.gms.location.LocationServices
-import com.google.android.gms.location.Priority
 import com.google.android.gms.maps.CameraUpdateFactory
-import com.google.android.gms.maps.model.LatLng
-import com.google.android.gms.maps.model.LatLngBounds
-import com.google.android.gms.tasks.CancellationTokenSource
-import com.google.maps.android.compose.CameraPositionState
 import com.google.maps.android.compose.GoogleMap
 import com.google.maps.android.compose.MapUiSettings
-import com.pathly.R
 import com.pathly.domain.model.GeoBounds
 import com.pathly.domain.model.GpsTrack
+import com.pathly.presentation.common.ListMapCamera
+import com.pathly.presentation.common.ListMapMode
+import com.pathly.presentation.common.ListMapOverlay
 import com.pathly.presentation.common.ListMapToggle
 import com.pathly.presentation.common.heightOf
+import com.pathly.presentation.common.listMapSummary
 import com.pathly.presentation.common.rememberFloatingSheetState
 import com.pathly.presentation.common.rememberMapInfoWindowState
+import com.pathly.presentation.common.requestCurrentLatLng
+import com.pathly.presentation.common.toLatLngBounds
+import com.pathly.presentation.tracking.TrackFocusEffect
 import com.pathly.presentation.tracking.TrackOverlayContent
 import com.pathly.presentation.tracking.TrackPickerSheet
 import kotlinx.coroutines.launch
@@ -59,17 +46,15 @@ import kotlinx.coroutines.launch
  * 行のタップは経路詳細へ。
  *
  * @param visible false のときは一覧表示の裏に地図だけを残している（重ねるもの・シートは出さない）。
- * @param initialized 地図を初めて開いたとき（現在地へ寄せる）を一度だけにするための印。画面の状態として持つ。
+ * @param camera 地図の範囲と、初めて開いたとき（現在地へ寄せる）を一度だけにするための印。画面の状態として持つ。
  * @param filterControls 重ねたものの中に出す、名前の検索・絞り込みのボタンと欄。
  */
 @Composable
 internal fun HistoryMapLayout(
   state: HistoryState,
   visible: Boolean,
-  camera: CameraPositionState,
-  initialized: Boolean,
-  onInitialized: () -> Unit,
-  onViewModeChange: (HistoryViewMode) -> Unit,
+  camera: ListMapCamera,
+  onViewModeChange: (ListMapMode) -> Unit,
   onControlsCollapsedChange: (Boolean) -> Unit,
   onToggle: (GpsTrack) -> Unit,
   onFocus: (GpsTrack) -> Unit,
@@ -83,7 +68,6 @@ internal fun HistoryMapLayout(
 ) {
   val context = LocalContext.current
   val density = LocalDensity.current
-  val focusManager = LocalFocusManager.current
   val scope = rememberCoroutineScope()
   // 重ねたもの（上）の高さ。地図の余白にして、線・寄せた範囲が隠れないようにする（下はシートの高さ）。
   var overlayHeight by remember { mutableStateOf(0.dp) }
@@ -98,46 +82,29 @@ internal fun HistoryMapLayout(
   val fitPaddingPx = with(density) { HistoryMapFitPadding.roundToPx() }
 
   fun fit(bounds: List<GeoBounds>) {
-    if (!mapLoaded || bounds.isEmpty()) return
-    val latLngBounds = LatLngBounds.builder().apply {
-      bounds.forEach {
-        include(LatLng(it.south, it.west))
-        include(LatLng(it.north, it.east))
-      }
-    }.build()
-    scope.launch { camera.animate(CameraUpdateFactory.newLatLngBounds(latLngBounds, fitPaddingPx)) }
+    if (!mapLoaded) return
+    val latLngBounds = bounds.toLatLngBounds() ?: return
+    scope.launch { camera.position.animate(CameraUpdateFactory.newLatLngBounds(latLngBounds, fitPaddingPx)) }
   }
 
   // 初めて地図を開いたときは、現在地あたりを見せる（経路を選ぶまで何も描かないので、見慣れた範囲から始める）。
   LaunchedEffect(mapLoaded) {
-    if (!mapLoaded || initialized) return@LaunchedEffect
-    onInitialized()
+    if (!mapLoaded || camera.isInitialized) return@LaunchedEffect
+    camera.isInitialized = true
     if (state.selected.isNotEmpty()) return@LaunchedEffect
-    try {
-      LocationServices.getFusedLocationProviderClient(context)
-        .getCurrentLocation(Priority.PRIORITY_BALANCED_POWER_ACCURACY, CancellationTokenSource().token)
-        .addOnSuccessListener { location ->
-          location?.let {
-            scope.launch { camera.animate(CameraUpdateFactory.newLatLngZoom(LatLng(it.latitude, it.longitude), 13f)) }
-          }
-        }
-    } catch (e: SecurityException) {
-      // 権限が無ければ既定の位置のまま。
+    requestCurrentLatLng(context) { latLng ->
+      scope.launch { camera.position.animate(CameraUpdateFactory.newLatLngZoom(latLng, 13f)) }
     }
   }
 
-  // 一覧の「この経路の全体を見る」: 線を読み終えてから寄せる（まだ重ねていない経路は、重ねて読み終えるまで待つ）。
-  val focusTarget = state.focusRequest?.let { req -> state.selected.firstOrNull { it.track.id == req.trackId } }
-  LaunchedEffect(state.focusRequest, focusTarget?.isLoaded, mapLoaded) {
-    if (state.focusRequest == null || !mapLoaded) return@LaunchedEffect
-    if (focusTarget == null) {
-      onConsumeFocus()
-      return@LaunchedEffect
-    }
-    if (!focusTarget.isLoaded) return@LaunchedEffect
-    fit(listOfNotNull(focusTarget.bounds))
-    onConsumeFocus()
-  }
+  // 一覧の「この経路の全体を見る」。
+  TrackFocusEffect(
+    focusRequest = state.focusRequest,
+    selected = state.selected,
+    onFit = { fit(listOf(it)) },
+    onConsume = onConsumeFocus,
+    ready = mapLoaded,
+  )
 
   Box(modifier = modifier.fillMaxSize()) {
     if (mapContent != null) {
@@ -145,7 +112,7 @@ internal fun HistoryMapLayout(
     } else {
       GoogleMap(
         modifier = Modifier.fillMaxSize(),
-        cameraPositionState = camera,
+        cameraPositionState = camera.position,
         uiSettings = MapUiSettings(
           zoomControlsEnabled = false,
           mapToolbarEnabled = false,
@@ -160,43 +127,17 @@ internal fun HistoryMapLayout(
 
     // 一覧表示の裏にいる間は重ねない（重ねたもの・シート）。
     if (visible) {
-      Box(
-        modifier = Modifier
-          .align(Alignment.TopCenter)
-          .fillMaxWidth()
-          .onSizeChanged { overlayHeight = with(density) { it.height.toDp() } },
-      ) {
-        if (state.controlsCollapsed) {
-          HistoryCollapsedBar(
-            state = state,
-            onViewModeChange = onViewModeChange,
-            onExpand = { onControlsCollapsedChange(false) },
-            modifier = Modifier.padding(12.dp),
-          )
-        } else {
-          Surface(
-            // 地図の文字が透けると読みにくいので、重ねたものは不透明にする。
-            color = MaterialTheme.colorScheme.surface,
-            shape = RoundedCornerShape(bottomStart = 16.dp, bottomEnd = 16.dp),
-            shadowElevation = 2.dp,
-          ) {
-            // 余白は一覧表示と揃え、切り替えても見出しの位置が動かないようにする。
-            Column(modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 12.dp)) {
-              HistoryHeader(
-                viewMode = state.viewMode,
-                onViewModeChange = onViewModeChange,
-                onCollapse = {
-                  // 検索欄に入力中なら、キーボードも閉じる。
-                  focusManager.clearFocus()
-                  onControlsCollapsedChange(true)
-                },
-              )
-              Spacer(modifier = Modifier.height(12.dp))
-              filterControls()
-            }
-          }
-        }
-      }
+      ListMapOverlay(
+        mode = state.viewMode,
+        onModeChange = onViewModeChange,
+        collapsed = state.controlsCollapsed,
+        onCollapsedChange = onControlsCollapsedChange,
+        collapsedSummary = listMapSummary("経路", state.activeFilterCount, state.visibleTracks.size, state.tracks.size),
+        onHeightChange = { overlayHeight = it },
+        header = { HistoryHeader(viewMode = state.viewMode, onViewModeChange = onViewModeChange) },
+        controls = filterControls,
+        modifier = Modifier.align(Alignment.TopCenter),
+      )
 
       val visibleTracks = state.visibleTracks
       TrackPickerSheet(
@@ -219,13 +160,12 @@ internal fun HistoryMapLayout(
   }
 }
 
-/** 履歴タブの見出しの行（「外出履歴」・一覧／地図の切り替え）。[onCollapse] があれば右端にたたむボタンを出す。 */
+/** 履歴タブの見出しの行（「外出履歴」・一覧／地図の切り替え）。地図表示では右端にたたむボタンが足される。 */
 @Composable
 internal fun HistoryHeader(
-  viewMode: HistoryViewMode,
-  onViewModeChange: (HistoryViewMode) -> Unit,
+  viewMode: ListMapMode,
+  onViewModeChange: (ListMapMode) -> Unit,
   modifier: Modifier = Modifier,
-  onCollapse: (() -> Unit)? = null,
 ) {
   Row(modifier = modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
     Text(
@@ -234,60 +174,7 @@ internal fun HistoryHeader(
       fontWeight = FontWeight.Bold,
       modifier = Modifier.weight(1f),
     )
-    HistoryViewModeToggle(viewMode = viewMode, onChange = onViewModeChange)
-    onCollapse?.let {
-      IconButton(onClick = it) {
-        Icon(painter = painterResource(R.drawable.ic_expand_less), contentDescription = "たたむ")
-      }
-    }
-  }
-}
-
-@Composable
-private fun HistoryViewModeToggle(viewMode: HistoryViewMode, onChange: (HistoryViewMode) -> Unit) {
-  ListMapToggle(isMap = viewMode == HistoryViewMode.MAP) { toMap -> onChange(if (toMap) HistoryViewMode.MAP else HistoryViewMode.LIST) }
-}
-
-/**
- * 地図表示で見出し・検索欄・絞り込みをたたんだときの帯。一覧へ戻る切り替えと、絞り込んでいることが分かる件数を残す
- * （場所タブと同じ）。件数の部分を押してもひろがる。
- */
-@Composable
-private fun HistoryCollapsedBar(
-  state: HistoryState,
-  onViewModeChange: (HistoryViewMode) -> Unit,
-  onExpand: () -> Unit,
-  modifier: Modifier = Modifier,
-) {
-  Surface(
-    modifier = modifier.fillMaxWidth(),
-    shape = RoundedCornerShape(28.dp),
-    color = MaterialTheme.colorScheme.surface,
-    shadowElevation = 2.dp,
-  ) {
-    Row(
-      modifier = Modifier.padding(horizontal = 4.dp),
-      verticalAlignment = Alignment.CenterVertically,
-    ) {
-      HistoryViewModeToggle(viewMode = state.viewMode, onChange = onViewModeChange)
-      Text(
-        text = if (state.noFilter) {
-          "経路 ${state.tracks.size} 件"
-        } else {
-          "絞り込み ${state.activeFilterCount}・${state.visibleTracks.size} / ${state.tracks.size} 件"
-        },
-        style = MaterialTheme.typography.bodyLarge,
-        maxLines = 1,
-        overflow = TextOverflow.Ellipsis,
-        modifier = Modifier
-          .weight(1f)
-          .clickable(onClick = onExpand)
-          .padding(horizontal = 4.dp, vertical = 12.dp),
-      )
-      IconButton(onClick = onExpand) {
-        Icon(painter = painterResource(R.drawable.ic_expand_more), contentDescription = "ひろげる")
-      }
-    }
+    ListMapToggle(mode = viewMode, onChange = onViewModeChange)
   }
 }
 

@@ -21,6 +21,7 @@ import com.pathly.domain.model.RegisteredPlace
 import com.pathly.domain.model.SameFacilityPlace
 import com.pathly.domain.repository.WishlistRepository
 import com.pathly.domain.usecase.PlaceEditUseCase
+import com.pathly.presentation.common.ListMapMode
 import com.pathly.presentation.common.toggled
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -180,7 +181,7 @@ class PlacesViewModel @Inject constructor(
   }
 
   /** 一覧表示と地図表示を切り替える（絞り込みはそのまま）。 */
-  fun setViewMode(mode: PlacesViewMode) {
+  fun setViewMode(mode: ListMapMode) {
     updateListOptions { it.copy(viewMode = mode) }
   }
 

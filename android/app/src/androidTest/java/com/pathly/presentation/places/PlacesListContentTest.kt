@@ -20,6 +20,7 @@ import com.pathly.domain.model.Place
 import com.pathly.domain.model.PlaceGrouping
 import com.pathly.domain.model.PlaceListItem
 import com.pathly.domain.model.PlaceRegion
+import com.pathly.presentation.common.ListMapMode
 import com.pathly.ui.theme.PathlyAndroidTheme
 import org.junit.Assert.assertTrue
 import org.junit.Rule
@@ -76,7 +77,7 @@ class PlacesListContentTest {
 
   @Test
   fun `地図表示でバックを押すと一覧に戻る`() {
-    setContent(PlacesState(items = listOf(plain, wished), viewMode = PlacesViewMode.MAP))
+    setContent(PlacesState(items = listOf(plain, wished), viewMode = ListMapMode.MAP))
 
     Espresso.pressBack()
 
@@ -101,7 +102,7 @@ class PlacesListContentTest {
 
   @Test
   fun `地図表示で欄を開いているときの戻るは欄だけを閉じる`() {
-    setContent(PlacesState(items = listOf(plain, wished), viewMode = PlacesViewMode.MAP))
+    setContent(PlacesState(items = listOf(plain, wished), viewMode = ListMapMode.MAP))
     composeTestRule.onNodeWithTag("filterPanelButton").performClick()
 
     Espresso.pressBack()
@@ -115,14 +116,14 @@ class PlacesListContentTest {
 
   @Test
   fun `地図表示でも0件の文言が出る`() {
-    setContent(PlacesState(items = emptyList(), viewMode = PlacesViewMode.MAP))
+    setContent(PlacesState(items = emptyList(), viewMode = ListMapMode.MAP))
 
     composeTestRule.onNodeWithText("場所がありません", substring = true).assertIsDisplayed()
   }
 
   @Test
   fun `地図表示でたたむと検索と絞り込みが消えて帯に件数が出る`() {
-    setContent(PlacesState(items = listOf(plain, wished), viewMode = PlacesViewMode.MAP))
+    setContent(PlacesState(items = listOf(plain, wished), viewMode = ListMapMode.MAP))
     composeTestRule.onNodeWithTag("filterPanelButton").assertIsDisplayed()
 
     composeTestRule.onNodeWithContentDescription("たたむ").performClick()
@@ -143,7 +144,7 @@ class PlacesListContentTest {
       PlacesState(
         items = listOf(plain, wished),
         wishlistFilter = WishlistFilter.WISHLISTED,
-        viewMode = PlacesViewMode.MAP,
+        viewMode = ListMapMode.MAP,
         controlsCollapsed = true,
       ),
     )
@@ -262,7 +263,7 @@ class PlacesListContentTest {
 
   @Test
   fun `統計は地図表示と場所が無いときは出ない`() {
-    setContent(PlacesState(items = listOf(plain, wished), viewMode = PlacesViewMode.MAP))
+    setContent(PlacesState(items = listOf(plain, wished), viewMode = ListMapMode.MAP))
     composeTestRule.onNodeWithTag("placesStatistics").assertDoesNotExist()
     composeTestRule.onNodeWithContentDescription("一覧で見る").performClick()
     composeTestRule.onNodeWithTag("placesStatistics").assertIsDisplayed()

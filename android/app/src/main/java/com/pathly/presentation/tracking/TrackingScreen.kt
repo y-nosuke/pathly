@@ -32,10 +32,13 @@ import com.pathly.domain.model.MapRegion
 import com.pathly.domain.model.PlacePrediction
 import com.pathly.domain.model.PlaceSearchResult
 import com.pathly.domain.model.Stop
+import com.pathly.presentation.common.DefaultMapLocation
 import com.pathly.presentation.common.SheetDetent
 import com.pathly.presentation.common.heightOf
 import com.pathly.presentation.common.rememberFloatingSheetState
 import com.pathly.presentation.common.rememberMapInfoWindowState
+import com.pathly.presentation.common.toGeoBounds
+import com.pathly.presentation.common.toLatLngBounds
 import com.pathly.presentation.places.PlaceEditHost
 import com.pathly.presentation.places.PlaceSheetTarget
 import com.pathly.presentation.stops.ManualStopHost
@@ -119,21 +122,16 @@ fun TrackingScreen(
     fitBounds = bounds
     fitNonce++
   }
-  // 線を読み終えてから寄せる（まだ重ねていない経路は、重ねてから読み込みが終わるまで待つ）。
-  val overlayFocus = overlayState.focusRequest?.let { req -> overlayState.selected.firstOrNull { it.track.id == req.trackId } }
-  LaunchedEffect(overlayState.focusRequest, overlayFocus?.isLoaded) {
-    if (overlayState.focusRequest == null) return@LaunchedEffect
-    if (overlayFocus == null) {
-      trackOverlayViewModel.consumeFocus()
-      return@LaunchedEffect
-    }
-    if (!overlayFocus.isLoaded) return@LaunchedEffect
-    overlayFocus.bounds?.let { b -> fitTo(LatLngBounds(LatLng(b.south, b.west), LatLng(b.north, b.east))) }
-    trackOverlayViewModel.consumeFocus()
-  }
+  // 一覧の「この経路の全体を見る」。
+  TrackFocusEffect(
+    focusRequest = overlayState.focusRequest,
+    selected = overlayState.selected,
+    onFit = { fitTo(it.toLatLngBounds()) },
+    onConsume = trackOverlayViewModel::consumeFocus,
+  )
   // 地図のカメラ。「この範囲の経路」を押したときに、そのとき映っている範囲を読むため画面で持つ。
   val mapCameraState = rememberCameraPositionState {
-    position = CameraPosition.fromLatLngZoom(LatLng(35.6762, 139.6503), 15f)
+    position = CameraPosition.fromLatLngZoom(DefaultMapLocation, 15f)
   }
   // 場所シート・手動追加のシートが出ている間は、経路の一覧は下がる（閉じれば戻る）。
   val showOverlaySheet = overlayState.isSheetOpen && placeSheetTarget == null && manualTarget == null
@@ -470,11 +468,10 @@ private fun TrackingMapSearch(
       // 目印の名前は候補の文字を使う（Places から名前を引くと料金の区分が上がるため）。
       onFetchPrediction = { prediction ->
         onFetchRegion(prediction.placeId)?.let { region ->
-          val b = region.bounds
           RegionMarker(
             name = prediction.primaryText,
             position = LatLng(region.latitude, region.longitude),
-            bounds = LatLngBounds(LatLng(b.south, b.west), LatLng(b.north, b.east)),
+            bounds = region.bounds.toLatLngBounds(),
           )
         }
       },
@@ -495,9 +492,7 @@ private enum class MapSearchMode {
 }
 
 /** いま地図に映っている範囲（地図の準備前は null）。 */
-private fun CameraPositionState.visibleGeoBounds(): GeoBounds? = projection?.visibleRegion?.latLngBounds?.let { b ->
-  GeoBounds(b.southwest.latitude, b.southwest.longitude, b.northeast.latitude, b.northeast.longitude)
-}
+private fun CameraPositionState.visibleGeoBounds(): GeoBounds? = projection?.visibleRegion?.latLngBounds?.toGeoBounds()
 
 /** 「地域へ移動」で移した地域の目印（中心と名前）。[bounds] はチップの地名から寄せ直すときの範囲（選んだときと同じ）。 */
 internal data class RegionMarker(val name: String, val position: LatLng, val bounds: LatLngBounds)

@@ -22,6 +22,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.key
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
@@ -38,6 +39,7 @@ import com.google.maps.android.compose.GoogleMapComposable
 import com.google.maps.android.compose.MarkerState
 import com.google.maps.android.compose.Polyline
 import com.pathly.R
+import com.pathly.domain.model.GeoBounds
 import com.pathly.domain.model.GpsTrack
 import com.pathly.presentation.common.FloatingSheet
 import com.pathly.presentation.common.FloatingSheetState
@@ -63,6 +65,34 @@ internal val TrackOverlayColors = listOf(
   Color(0xFF9E9D24), // 黄緑
   Color(0xFF37474F), // 墨
 )
+
+/**
+ * 一覧の「この経路の全体を見る」（[focusRequest]）を受けて地図を寄せる（記録画面の経路・履歴の地図表示で共通）。
+ * 線を読み終えてから寄せる（まだ重ねていない経路は、重ねて読み終えるまで待つ）。重ねていない経路なら寄せずに消す。
+ *
+ * @param ready 地図の大きさが決まって範囲で寄せられるか（読み込みを待つ地図向け）。false の間は待つ。
+ * @param onFit 寄せる範囲。寄せたあと [onConsume] で合図を消す。
+ */
+@Composable
+internal fun TrackFocusEffect(
+  focusRequest: TrackFocusRequest?,
+  selected: List<OverlayTrack>,
+  onFit: (GeoBounds) -> Unit,
+  onConsume: () -> Unit,
+  ready: Boolean = true,
+) {
+  val target = focusRequest?.let { req -> selected.firstOrNull { it.track.id == req.trackId } }
+  LaunchedEffect(focusRequest, target?.isLoaded, ready) {
+    if (focusRequest == null || !ready) return@LaunchedEffect
+    if (target == null) {
+      onConsume()
+      return@LaunchedEffect
+    }
+    if (!target.isLoaded) return@LaunchedEffect
+    target.bounds?.let(onFit)
+    onConsume()
+  }
+}
 
 /**
  * 過去の経路の線と立ち寄り。線は地図の上で見失わない太さにし、白い縁取りで地図の道路と分ける。

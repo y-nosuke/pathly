@@ -5,6 +5,7 @@ import com.pathly.domain.model.Place
 import com.pathly.domain.model.PlaceCategory
 import com.pathly.domain.model.PlaceCategoryFacet
 import com.pathly.domain.model.PlaceListItem
+import com.pathly.presentation.common.ListMapMode
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
@@ -142,13 +143,13 @@ class PlacesStateTest {
   @Test
   fun viewMode_roundTripsAndKeepsFilters() {
     val handle = SavedStateHandle()
-    PlacesState(viewMode = PlacesViewMode.MAP, wishlistFilter = WishlistFilter.WISHLISTED).saveListOptionsTo(handle)
+    PlacesState(viewMode = ListMapMode.MAP, wishlistFilter = WishlistFilter.WISHLISTED).saveListOptionsTo(handle)
     val restored = PlacesState().withListOptionsFrom(handle)
-    assertEquals(PlacesViewMode.MAP, restored.viewMode)
-    assertEquals(PlacesViewMode.LIST, PlacesState().withListOptionsFrom(SavedStateHandle()).viewMode)
+    assertEquals(ListMapMode.MAP, restored.viewMode)
+    assertEquals(ListMapMode.LIST, PlacesState().withListOptionsFrom(SavedStateHandle()).viewMode)
 
     val list = PlacesState(items = items, wishlistFilter = WishlistFilter.WISHLISTED)
-    assertEquals(list.visibleItems, list.copy(viewMode = PlacesViewMode.MAP).visibleItems)
+    assertEquals(list.visibleItems, list.copy(viewMode = ListMapMode.MAP).visibleItems)
   }
 
   @Test

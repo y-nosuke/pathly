@@ -6,6 +6,7 @@ import com.pathly.domain.model.GpsTrack
 import com.pathly.domain.model.PlaceCategoryFacet
 import com.pathly.domain.repository.GpsTrackRepository
 import com.pathly.domain.repository.PlaceRepository
+import com.pathly.presentation.common.ListMapMode
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.mockk
@@ -374,14 +375,14 @@ class HistoryViewModelTest {
     testDispatcher.scheduler.advanceUntilIdle()
 
     // When: 地図表示で経路 2 を選び、お気に入りだけに絞る（経路 2 は外れる）
-    viewModel.setViewMode(HistoryViewMode.MAP)
+    viewModel.setViewMode(ListMapMode.MAP)
     viewModel.toggleOverlay(tracks[1])
     testDispatcher.scheduler.advanceUntilIdle()
     viewModel.setFavoriteFilter(TrackFavoriteFilter.FAVORITE)
 
     // Then
     val state = viewModel.uiState.value
-    assertEquals(HistoryViewMode.MAP, state.viewMode)
+    assertEquals(ListMapMode.MAP, state.viewMode)
     assertEquals(listOf(1L), state.visibleTracks.map { it.id })
     assertEquals("絞り込みから外れても選びは残る", listOf(2L), state.selected.map { it.track.id })
     assertTrue("線を読み終えている", state.selected.single().isLoaded)
@@ -417,13 +418,13 @@ class HistoryViewModelTest {
     coEvery { mockRepository.getActiveTrackRealtime() } returns flowOf(null)
     val handle = SavedStateHandle()
     HistoryViewModel(mockRepository, mockPlaceRepository, handle).apply {
-      setViewMode(HistoryViewMode.MAP)
+      setViewMode(ListMapMode.MAP)
       setControlsCollapsed(true)
     }
 
     val state = HistoryViewModel(mockRepository, mockPlaceRepository, handle).uiState.value
 
-    assertEquals(HistoryViewMode.MAP, state.viewMode)
+    assertEquals(ListMapMode.MAP, state.viewMode)
     assertTrue(state.controlsCollapsed)
   }
 
