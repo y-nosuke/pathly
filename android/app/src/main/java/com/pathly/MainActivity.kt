@@ -1,6 +1,7 @@
 package com.pathly
 
 import android.Manifest
+import android.app.UiModeManager
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
@@ -19,13 +20,16 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.lifecycleScope
 import com.pathly.data.settings.SettingsRepository
+import com.pathly.data.settings.ThemeMode
 import com.pathly.presentation.navigation.PathlyNavHost
 import com.pathly.presentation.tracking.TrackingViewModel
 import com.pathly.ui.theme.PathlyAndroidTheme
 import com.pathly.ui.theme.PathlyBuildColors
 import com.pathly.util.PermissionUtils
 import dagger.hilt.android.AndroidEntryPoint
+import kotlinx.coroutines.launch
 import javax.inject.Inject
 import android.graphics.Color as AndroidColor
 
@@ -57,6 +61,25 @@ class MainActivity : ComponentActivity() {
     ActivityResultContracts.RequestPermission(),
   ) { }
 
+  /**
+   * 設定の明暗（端末の設定に従う／明るい／暗い）を、アプリ単位の夜間モードとして OS に渡す（Android 12+）。
+   * Compose の `isSystemInDarkTheme()`・ステータスバーの文字色・ダイアログがそろって従う。明暗が変わると
+   * OS が Activity を作り直す。作り直した後に同じ値を渡しても明暗は変わらないので、繰り返しにはならない。
+   */
+  private fun applyThemeModeOnChange() {
+    val uiModeManager = getSystemService(UiModeManager::class.java)
+    lifecycleScope.launch {
+      settingsRepository.themeMode.collect { mode ->
+        val nightMode = when (mode) {
+          ThemeMode.SYSTEM -> UiModeManager.MODE_NIGHT_AUTO
+          ThemeMode.LIGHT -> UiModeManager.MODE_NIGHT_NO
+          ThemeMode.DARK -> UiModeManager.MODE_NIGHT_YES
+        }
+        uiModeManager.setApplicationNightMode(nightMode)
+      }
+    }
+  }
+
   private fun requestBackgroundLocationIfNeeded() {
     if (!PermissionUtils.hasBackgroundLocationPermission(this)) {
       backgroundLocationLauncher.launch(Manifest.permission.ACCESS_BACKGROUND_LOCATION)
@@ -65,6 +88,7 @@ class MainActivity : ComponentActivity() {
 
   override fun onCreate(savedInstanceState: Bundle?) {
     super.onCreate(savedInstanceState)
+    applyThemeModeOnChange()
     if (BuildConfig.DEBUG) {
       // 開発版は上端を黄に塗るので、明暗の設定によらずステータスバーの文字・アイコンを暗くする。
       enableEdgeToEdge(statusBarStyle = SystemBarStyle.light(AndroidColor.TRANSPARENT, AndroidColor.TRANSPARENT))

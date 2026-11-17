@@ -11,6 +11,7 @@ import com.pathly.data.crash.CrashReport
 import com.pathly.data.crash.CrashReportStore
 import com.pathly.data.settings.LocationAccuracy
 import com.pathly.data.settings.SettingsRepository
+import com.pathly.data.settings.ThemeMode
 import com.pathly.data.tracking.TrackingController
 import com.pathly.util.Logger
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -48,6 +49,14 @@ class SettingsViewModel @Inject constructor(
 
   fun setLocationAccuracy(accuracy: LocationAccuracy) {
     settingsRepository.setLocationAccuracy(accuracy)
+  }
+
+  val themeMode: StateFlow<ThemeMode> = settingsRepository.themeMode
+
+  val themeModeOptions: List<ThemeMode> = ThemeMode.entries
+
+  fun setThemeMode(mode: ThemeMode) {
+    settingsRepository.setThemeMode(mode)
   }
 
   val useDynamicColor: StateFlow<Boolean> = settingsRepository.useDynamicColor

@@ -36,6 +36,7 @@ import com.pathly.BuildConfig
 import com.pathly.data.backup.BackupCounts
 import com.pathly.data.backup.BackupException
 import com.pathly.data.settings.LocationAccuracy
+import com.pathly.data.settings.ThemeMode
 import com.pathly.util.DateFormatters
 import java.util.Date
 
@@ -144,15 +145,37 @@ fun SettingsScreen(
   }
 }
 
-/** 見た目。画面の色に壁紙の色（ダイナミックカラー）を使うか（→ adr/0040）。 */
+/** 見た目。画面の明暗と、画面の色に壁紙の色（ダイナミックカラー）を使うか（→ adr/0040）。 */
 @Composable
 private fun AppearanceSection(viewModel: SettingsViewModel) {
   val useDynamicColor by viewModel.useDynamicColor.collectAsStateWithLifecycle()
+  val themeMode by viewModel.themeMode.collectAsStateWithLifecycle()
   Text(
     text = "見た目",
     style = MaterialTheme.typography.titleMedium,
     modifier = Modifier.padding(top = 24.dp),
   )
+  viewModel.themeModeOptions.forEach { mode ->
+    Row(
+      modifier = Modifier
+        .fillMaxWidth()
+        .selectable(
+          selected = themeMode == mode,
+          onClick = { viewModel.setThemeMode(mode) },
+        )
+        .padding(vertical = 8.dp),
+      verticalAlignment = Alignment.CenterVertically,
+    ) {
+      RadioButton(
+        selected = themeMode == mode,
+        onClick = { viewModel.setThemeMode(mode) },
+      )
+      Text(
+        text = themeModeLabel(mode),
+        style = MaterialTheme.typography.bodyLarge,
+      )
+    }
+  }
   Row(
     modifier = Modifier
       .fillMaxWidth()
@@ -348,6 +371,12 @@ private fun restartApp(context: Context) {
   intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
   context.startActivity(intent)
   Runtime.getRuntime().exit(0)
+}
+
+private fun themeModeLabel(mode: ThemeMode): String = when (mode) {
+  ThemeMode.SYSTEM -> "端末の設定に従う"
+  ThemeMode.LIGHT -> "明るい"
+  ThemeMode.DARK -> "暗い"
 }
 
 private fun locationAccuracyLabel(accuracy: LocationAccuracy): String = when (accuracy) {
