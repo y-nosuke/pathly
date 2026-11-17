@@ -166,3 +166,6 @@ DB に持たないのは、`R.drawable` の ID を DB に入れられず結局�
 - テーマは `PathlyAndroidTheme` に統一。色・文字・角丸は `MaterialTheme` から、余白・影は `PathlySpacing`・`PathlyElevation`、
   地図に描くものの色は `PathlyMapColors` から取り、部品に数値や色を直書きしない（値は [specs/screens.md](../specs/screens.md#デザイントークン)、
   理由は [ADR-0040](../adr/0040-design-tokens-indigo-fixed-colors.md)）。既定は Pathly の色で、設定でダイナミックカラーに切り替えられる。
+- **Material 3 Expressive を使う**（→ [ADR-0041](../adr/0041-adopt-material3-expressive-after-stable.md)）。Compose Material 3 の 1.5.0 安定版が
+  来てから #201 で入れる。それまでに作る部品のうち、**地図の画面の脇役の操作**（浮かぶツールバーにする）・**右下の追加の入口**（FAB のメニューにする）・
+  **一覧のツール行**（ボタンのグループにする）・**読み込み中の表示**は、あとで中身を差し替えるだけで済むよう、それぞれ 1 つの Composable にまとめて作る。
