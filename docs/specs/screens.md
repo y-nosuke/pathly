@@ -205,6 +205,8 @@ Jetpack Compose による Android アプリの画面仕様。**マップを主�
 │   ◉ 省電力（標準）             │
 │   ○ 高精度（電池大）           │
 │ ※ 変更は次に記録を開始した時から│
+│ 見た目                        │
+│  壁紙の色を使う          [  ] │
 │ データ                        │
 │  [書き出す] [読み込む]         │
 │  読み込む前の状態に戻す        │
@@ -221,6 +223,8 @@ Jetpack Compose による Android アプリの画面仕様。**マップを主�
 
 - **GPS記録間隔**: 5 / 10 / 30 / 60 秒からラジオ選択（既定は 10 秒＝標準）。短いほど軌跡が滑らかだが電池を多く使う。
 - 変更は次に記録を開始したときから反映される。
+- **見た目**: 「壁紙の色を使う」を ON にすると、画面の色を端末の壁紙に合わせる（ダイナミックカラー。既定は OFF で Pathly の色）。
+  地図の経路やマーカーの色は変わらない（→ [デザイントークン](#デザイントークン)）。
 - **データ**: 記録・場所・設定を 1 つのファイルに書き出す／読み込んで置き換える（→ [backup.md](backup.md)）。
   「読み込む前の状態に戻す」は、一度読み込んだあとにだけ出る。記録中は読み込めない。
 - **このアプリについて**: バージョン（リリースのタグと同じ番号）とビルド番号を出す。開発版は
@@ -321,20 +325,74 @@ Jetpack Compose による Android アプリの画面仕様。**マップを主�
 
 ## デザイントークン
 
-### カラー（暖色系・Material3）
+値の正はコード（`ui/theme/` の `Color.kt`・`Type.kt`・`Dimens.kt`）。見本は Design System
+（[Pathly Design System](https://claude.ai/artifact/T9PLHBYVuDhiRz7wtqHYRd)）で、値を変えるときはコード・Design System・この節を一緒に直す。
+決めた理由と没案は [ADR-0040](../adr/0040-design-tokens-indigo-fixed-colors.md)。
 
-Material3 のダイナミックカラーに対応（Android 12+）。非対応端末では以下の暖色系スキームを使う。ダークモード対応済み。
+### カラー（藍・Material 3）
 
-| 役割             | 色                       |
-| ---------------- | ------------------------ |
-| primary          | `PathlyOrange` (#FF6B35) |
-| secondary        | `PathlyGreen` (#2ECC71)  |
-| error            | `ErrorRed`               |
-| 軌跡 polyline    | `TrackLineOrange`        |
-| 開始マーカー     | 緑（HUE_GREEN）          |
-| 終了マーカー     | 赤（HUE_RED）            |
-| 現在地マーカー   | 青（HUE_BLUE）           |
-| 立ち寄りマーカー | 紫（HUE_VIOLET）         |
+既定は Pathly の色。設定の「見た目 › 壁紙の色を使う」を ON にすると、画面の色（この表）はダイナミックカラー（壁紙の色）になる。
+明るい・暗いは端末の設定に従う。
+
+| 役割                                   | 明るい                 | 暗い                   | 使うところ                                               |
+| -------------------------------------- | ---------------------- | ---------------------- | -------------------------------------------------------- |
+| primary / onPrimary                    | `#2F5BA8`              | `#AFC6FF`              | 主ボタン・選択中のタブ・強調の文字                       |
+| primaryContainer                       | `#DCE4F4`              | `#23488F`              | 選択中のチップ・記録中のピル                             |
+| secondary                              | `#565F71`              | `#BEC6DC`              | 脇役（控えめな文字・アイコン）                           |
+| secondaryContainer                     | `#DAE2F9`              | `#3E4759`              | 控えめな選択（下のタブの印・選択中の行・案内の帯）       |
+| 行った（`PathlyStatusColors.visited`） | `#2E7D32`              | `#8FD49A`              | 訪問済み・記録中の文字とアイコン（壁紙の色でも変えない） |
+| tertiary                               | `#A8501F`              | `#FFB68F`              | 経路まわりの控えめな強調                                 |
+| tertiaryContainer                      | `#FADFCF`              | `#7E3A12`              | 立ち寄りの操作などの淡い地                               |
+| error                                  | `#BA1A1A`              | `#FFB4AB`              | 失敗・削除                                               |
+| surface / background                   | `#F7F8FA`              | `#121418`              | 画面・シートの地                                         |
+| onSurface                              | `#1C1F26`              | `#E3E5EA`              | 本文                                                     |
+| onSurfaceVariant                       | `#5B6170`              | `#C3C7D0`              | 補足の文字（住所・件数・時刻）                           |
+| surfaceContainerLowest 〜 Highest      | `#FFFFFF` 〜 `#E2E5EB` | `#0D0F12` 〜 `#33353B` | 浮かぶ部品の白（Lowest）・帯・カード・選択中の行         |
+| outline / outlineVariant               | `#747A88` / `#C4C8D2`  | `#8D919B` / `#43474F`  | 枠・区切り線                                             |
+
+#### 地図の色（`PathlyMapColors`）
+
+地図に描くものの色は**テーマにもダイナミックカラーにも従わない**（色が状態を表すため）。マーカーは形で
+「確定（丸バッジ）か、これから決めるか（ピン）」、色で状態を表す（→ [ADR-0018](../adr/0018-marker-shape-conveys-certainty.md)）。
+
+| 対象                   | 色                                                                                                                          |
+| ---------------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| 経路（軌跡）           | `Route` 橙 `#FF6B35`                                                                                                        |
+| 途切れた区間の破線     | `RouteGap` 灰 `#666666`                                                                                                     |
+| 立ち寄りの滞在区間の帯 | `StopSegment` 濃い青・`CurrentStopSegment` ティール（立ち寄り中）                                                           |
+| 出発・終了・現在地     | `Start` 緑 `#2E9E5B`・`End` 赤 `#D24B45`・`Current` 青 `#3B82F6`                                                            |
+| 立ち寄り・立ち寄り中   | `Stop` 紫 `#6A4BBC`・`CurrentStop` ティール `#00BFA5`                                                                       |
+| 登録済みの場所         | `PlaceVisited` 緑 `#2E7D32`・`PlaceUnvisited` 灰 `#6B6B6B`・行きたいの旗 `Wishlist` `#E08A00`・まとまり `Cluster` `#263238` |
+| ピン（これから決める） | 候補 `Candidate` `#F09A2B`・指した地点 `Picked` `#2E86DE`・地域の目印 `Region` `#3949AB`                                    |
+| 重ねた過去の経路       | `Overlay` の 8 色を順に                                                                                                     |
+| 縁取り・グリフ         | `OnMarker` 白                                                                                                               |
+
+### 文字
+
+端末の標準の書体（日本語は Noto Sans CJK）。フォントは同梱しない。太さは標準・中・太の 3 つ。
+
+| スタイル       | 大きさ / 行の高さ | 太さ | 使うところ                             |
+| -------------- | ----------------- | ---- | -------------------------------------- |
+| headlineMedium | 24 / 32sp         | 太   | 画面の見出し（「場所」「設定」）       |
+| headlineSmall  | 22 / 30sp         | 太   | 大きめの見出し                         |
+| titleLarge     | 20 / 28sp         | 太   | シート・詳細の見出し（施設名・経路名） |
+| titleMedium    | 16 / 24sp         | 中   | 節の見出し・行の主な文字               |
+| titleSmall     | 14 / 20sp         | 中   | 小さな見出し                           |
+| bodyLarge      | 16 / 26sp         | 標準 | 本文・設定の項目                       |
+| bodyMedium     | 14 / 22sp         | 標準 | シートの本文・行の 2 行目              |
+| bodySmall      | 12 / 18sp         | 標準 | 補足（住所・件数・時刻）               |
+| labelLarge     | 14 / 20sp         | 中   | ボタン・チップ・タブ                   |
+| labelMedium    | 12 / 16sp         | 中   | 小さなチップ・行の印                   |
+| labelSmall     | 11 / 16sp         | 中   | いちばん小さな印                       |
+
+### 余白・角丸・影
+
+- **余白**（`PathlySpacing`）: 4dp の段 `xxs` 2・`xs` 4・`sm` 8・`md` 12・`lg` 16・`xl` 24・`xxl` 32。
+  一覧・シートの左右は `screenEdge`（16）、地図に浮かべる部品と画面の縁は `mapEdge`（12）。
+  今の画面の余白はまだ数値のままで、画面を型に移すとき（#193〜#197）に置き換える。
+- **角丸**（`MaterialTheme.shapes`・`PathlyShapes`）: `small` 8（チップ・帯）・`medium` 12（カード・案内・入力欄）・
+  `large` 20（複数行になり得る浮かぶ案内・FAB）・`extraLarge` 28（ダイアログ）・`PathlyShapes.sheetTop` 20（シートの上端）・`PathlyShapes.pill`（地図の丸ボタン・検索窓・ピル）。
+- **影**（`PathlyElevation`）: 地図の上に浮かぶものだけに付ける。`low` 2dp（地図に重ねる見出し）・`floating` 4dp（検索窓・地図の操作・ピル・チップ）・`sheet` 8dp（シート）。
 
 ### アイコン
 

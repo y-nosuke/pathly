@@ -52,7 +52,7 @@ import com.pathly.domain.model.RegisteredPlace
 import com.pathly.domain.model.Stop
 import com.pathly.domain.model.TrackSegments
 import com.pathly.domain.model.WishlistFlag
-import com.pathly.ui.theme.TrackLineOrange
+import com.pathly.ui.theme.PathlyMapColors
 import com.pathly.util.DateFormatters
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.launch
@@ -64,21 +64,6 @@ import java.util.Date
 // マーカーは形で「確定しているか、これから決めるものか」を表す（→ adr/0018）。
 // 丸バッジ＝確定（開始・終了・現在地・立ち寄り・登録済みの場所）／ピン＝これから決めるもの
 // （再解析の候補・手動追加で指した地点・登録前に選んだ地点）。色は種別ではなく状態を担当する。
-
-// マーカーのバッジ色（出発=緑/終了=赤/記録中の現在地=青/立ち寄り=紫/立ち寄り中=ティール）。
-internal val MarkerStartGreen = Color(0xFF2E9E5B)
-internal val MarkerEndRed = Color(0xFFD24B45)
-internal val MarkerActiveBlue = Color(0xFF3B82F6)
-internal val MarkerStopViolet = Color(0xFF6A4BBC)
-internal val MarkerCurrentStopTeal = Color(0xFF00BFA5)
-
-// 「登録済みの場所」マーカー（トグルON時）。色で訪問状態（訪問済み=グリーン／未訪問=グレー）を示し、
-// グリフで業種（カフェ・公園・駅…）を示す。立ち寄り（紫の番号）とは色・グリフで見分ける。
-internal val MarkerVisitedGreen = Color(0xFF2E7D32)
-internal val MarkerUnvisitedGray = Color(0xFF6B6B6B)
-
-// 「行きたい」を示す小さな旗のバッジ。訪問状態（緑/グレー）とは別の軸なので、色も別に取る。
-internal val MarkerWishlistAmber = Color(0xFFE08A00)
 
 /**
  * 業種のグリフ。何の場所かを一目で分かるようにする（→ adr/0017）。
@@ -109,10 +94,6 @@ internal fun categoryGlyph(group: PlaceCategoryGroup): Int = when (group) {
   // 業種が分からない場所は、これまでどおりの場所ピン。
   PlaceCategoryGroup.OTHER -> R.drawable.ic_place
 }
-
-// これから決めるもののピン色。候補＝橙（提案）、指した地点＝青（自分で置いた）。
-internal val MarkerCandidateOrange = Color(0xFFF09A2B)
-internal val MarkerPickBlue = Color(0xFF2E86DE)
 
 // ピンの寸法。頭は丸バッジと同じ直径にして、並んだときに大きさが揃って見えるようにする。
 private val PinWidth = 38.dp
@@ -163,7 +144,7 @@ internal fun MapPinMarker(bg: Color, @DrawableRes glyph: Int) {
         close()
       }
       // 白フチは輪郭の外側へ出す（線幅の半分が外に出るので 2 倍で描いてから塗りを重ねる）。
-      drawPath(path, color = Color.White, style = Stroke(width = border * 2f))
+      drawPath(path, color = PathlyMapColors.OnMarker, style = Stroke(width = border * 2f))
       drawPath(path, color = bg)
     }
     // グリフは頭の中心に置く（先端側ではない）。
@@ -188,14 +169,7 @@ internal fun MapPinMarker(bg: Color, @DrawableRes glyph: Int) {
  * 灰色は「分からない区間」を表すのにも素直で、前後をオレンジの実線が挟むので
  * 同じ経路の一部であることは形から分かる。
  */
-internal val TrackGapColor = Color(0xFF666666)
 private val GapPattern = listOf(Dash(12f), Gap(8f))
-
-// 確定した立ち寄りの滞在区間ハイライト（濃い青の帯）。軌跡（オレンジ）の下に太く敷く。
-internal val StopSegmentColor = Color(0xF00D47A1)
-
-// 立ち寄り中（ライブ）の滞在区間ハイライト。確定分（青）と見分けるティール。
-internal val CurrentStopSegmentColor = Color(0xF000BFA5)
 
 /** 立ち寄りの到着〜出発に対応する軌跡点（滞在区間）。時刻で範囲を切り出す（両端含む）。 */
 internal fun stopSegmentPoints(points: List<GpsPoint>, arrival: Date, departure: Date): List<GpsPoint> = points.filter { !it.timestamp.before(arrival) && !it.timestamp.after(departure) }
@@ -298,7 +272,7 @@ private fun RegisteredPlaceSingleMarker(
   val flag = WishlistFlag.of(place.isWishlisted, place.fulfilledWishCount)
   val icon = icons.getLabeled(RegisteredPlaceIconKey(place.isVisited, group, flag), place.displayName) {
     RegisteredPlaceMarker(
-      bg = if (place.isVisited) MarkerVisitedGreen else MarkerUnvisitedGray,
+      bg = if (place.isVisited) PathlyMapColors.PlaceVisited else PathlyMapColors.PlaceUnvisited,
       glyph = categoryGlyph(group),
       wishlistFlag = flag,
     )
@@ -336,8 +310,8 @@ private fun RegisteredPlaceClusterMarker(cluster: PlaceMapEntry.Cluster, icons: 
   val label = if (cluster.places.size > 99) "99+" else cluster.places.size.toString()
   val icon = icons.get(ClusterIconKey(label, cluster.hasWishlisted)) {
     WithWishlistFlag(if (cluster.hasWishlisted) WishlistFlag.ACTIVE else WishlistFlag.NONE) {
-      RouteBadgeMarker(bg = MarkerClusterSlate, size = ClusterBadgeSize) {
-        Text(text = label, color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+      RouteBadgeMarker(bg = PathlyMapColors.Cluster, size = ClusterBadgeSize) {
+        Text(text = label, color = PathlyMapColors.OnMarker, fontSize = 14.sp, fontWeight = FontWeight.Bold)
       }
     }
   }
@@ -354,7 +328,6 @@ private fun RegisteredPlaceClusterMarker(cluster: PlaceMapEntry.Cluster, icons: 
 
 // まとまりの丸。1 件ずつの丸（34dp）より一回り大きくし、訪問状態の緑・グレーと被らない濃い色にする。
 private val ClusterBadgeSize = 38.dp
-internal val MarkerClusterSlate = Color(0xFF263238)
 
 /**
  * 登録済みの場所のマーカー。丸バッジ（色＝訪問状態／グリフ＝業種）の右上に、[wishlistFlag] に応じた
@@ -393,8 +366,8 @@ private fun WithWishlistFlag(flag: WishlistFlag, badge: @Composable () -> Unit) 
     Box(
       modifier = Modifier
         .size(16.dp)
-        .background(if (flag == WishlistFlag.ACTIVE) MarkerWishlistAmber else MarkerVisitedGreen, CircleShape)
-        .border(1.5.dp, Color.White, CircleShape),
+        .background(if (flag == WishlistFlag.ACTIVE) PathlyMapColors.Wishlist else PathlyMapColors.PlaceVisited, CircleShape)
+        .border(1.5.dp, PathlyMapColors.OnMarker, CircleShape),
       contentAlignment = Alignment.Center,
     ) {
       Icon(
@@ -402,7 +375,7 @@ private fun WithWishlistFlag(flag: WishlistFlag, badge: @Composable () -> Unit) 
           if (flag == WishlistFlag.ACTIVE) R.drawable.ic_flag_filled else R.drawable.ic_flag_check,
         ),
         contentDescription = null,
-        tint = Color.White,
+        tint = PathlyMapColors.OnMarker,
         // 輪郭の旗は細いので、塗りの旗より一回り大きくして潰れないようにする。
         modifier = Modifier.size(if (flag == WishlistFlag.ACTIVE) 9.dp else 11.dp),
       )
@@ -416,7 +389,7 @@ private fun MarkerGlyph(@DrawableRes glyph: Int) {
   Icon(
     painter = painterResource(glyph),
     contentDescription = null,
-    tint = Color.White,
+    tint = PathlyMapColors.OnMarker,
     modifier = Modifier.size(18.dp),
   )
 }
@@ -428,7 +401,7 @@ internal fun RouteBadgeMarker(bg: Color, size: Dp = 34.dp, content: @Composable 
     modifier = Modifier
       .size(size)
       .background(bg, CircleShape)
-      .border(2.dp, Color.White, CircleShape),
+      .border(2.dp, PathlyMapColors.OnMarker, CircleShape),
     contentAlignment = Alignment.Center,
   ) {
     content()
@@ -464,7 +437,7 @@ internal fun RouteMapContent(
     if (segment.size >= 2) {
       Polyline(
         points = segment.map { LatLng(it.latitude, it.longitude) },
-        color = StopSegmentColor,
+        color = PathlyMapColors.StopSegment,
         width = 26f,
       )
     }
@@ -474,7 +447,7 @@ internal fun RouteMapContent(
   if (currentStopSegment.size >= 2) {
     Polyline(
       points = currentStopSegment.map { LatLng(it.latitude, it.longitude) },
-      color = CurrentStopSegmentColor,
+      color = PathlyMapColors.CurrentStopSegment,
       width = 26f,
     )
   }
@@ -487,7 +460,7 @@ internal fun RouteMapContent(
       if (segment.size >= 2) {
         Polyline(
           points = segment.map { LatLng(it.latitude, it.longitude) },
-          color = TrackLineOrange,
+          color = PathlyMapColors.Route,
           width = 6f,
         )
       }
@@ -498,7 +471,7 @@ internal fun RouteMapContent(
       if (from != null && to != null) {
         Polyline(
           points = listOf(LatLng(from.latitude, from.longitude), LatLng(to.latitude, to.longitude)),
-          color = TrackGapColor,
+          color = PathlyMapColors.RouteGap,
           width = 6f,
           pattern = GapPattern,
         )
@@ -519,11 +492,11 @@ internal fun RouteMapContent(
       title = "開始",
       snippet = "記録開始地点 - ${DateFormatters.time(track.startTime)}",
     ) {
-      RouteBadgeMarker(bg = MarkerStartGreen) {
+      RouteBadgeMarker(bg = PathlyMapColors.Start) {
         Icon(
           painter = painterResource(R.drawable.ic_play_arrow),
           contentDescription = null,
-          tint = Color.White,
+          tint = PathlyMapColors.OnMarker,
           modifier = Modifier.size(20.dp),
         )
       }
@@ -548,15 +521,15 @@ internal fun RouteMapContent(
         } ?: "記録中の最新地点",
       ) {
         if (track.isActive) {
-          RouteBadgeMarker(bg = MarkerActiveBlue) {
-            Box(modifier = Modifier.size(12.dp).background(Color.White, CircleShape))
+          RouteBadgeMarker(bg = PathlyMapColors.Current) {
+            Box(modifier = Modifier.size(12.dp).background(PathlyMapColors.OnMarker, CircleShape))
           }
         } else {
-          RouteBadgeMarker(bg = MarkerEndRed) {
+          RouteBadgeMarker(bg = PathlyMapColors.End) {
             Icon(
               painter = painterResource(R.drawable.ic_stop),
               contentDescription = null,
-              tint = Color.White,
+              tint = PathlyMapColors.OnMarker,
               modifier = Modifier.size(18.dp),
             )
           }
@@ -588,10 +561,10 @@ internal fun RouteMapContent(
       }
       val number = index + 1
       val icon = icons.getLabeled(StopIconKey(number), stop.place.displayName) {
-        RouteBadgeMarker(bg = MarkerStopViolet) {
+        RouteBadgeMarker(bg = PathlyMapColors.Stop) {
           Text(
             text = "$number",
-            color = Color.White,
+            color = PathlyMapColors.OnMarker,
             fontWeight = FontWeight.Bold,
             fontSize = 14.sp,
           )
@@ -643,24 +616,24 @@ private fun CurrentStopBadge(durationMinutes: Int) {
     Box(
       modifier = Modifier
         .shadow(3.dp, RoundedCornerShape(8.dp))
-        .background(MarkerCurrentStopTeal, RoundedCornerShape(8.dp))
-        .border(1.dp, Color.White, RoundedCornerShape(8.dp))
+        .background(PathlyMapColors.CurrentStop, RoundedCornerShape(8.dp))
+        .border(1.dp, PathlyMapColors.OnMarker, RoundedCornerShape(8.dp))
         .padding(horizontal = 8.dp, vertical = 2.dp),
     ) {
       Text(
         text = "滞在${durationMinutes}分",
-        color = Color.White,
+        color = PathlyMapColors.OnMarker,
         fontWeight = FontWeight.Bold,
         fontSize = 11.sp,
       )
     }
     Box(modifier = Modifier.padding(top = 2.dp)) {
-      RouteBadgeMarker(bg = MarkerCurrentStopTeal) {
+      RouteBadgeMarker(bg = PathlyMapColors.CurrentStop) {
         // 「今ここに滞在中」が一目で分かるよう、白の場所ピンのグリフにする（ただの白丸より識別しやすい）。
         Icon(
           painter = painterResource(R.drawable.ic_location_on),
           contentDescription = null,
-          tint = Color.White,
+          tint = PathlyMapColors.OnMarker,
           modifier = Modifier.size(20.dp),
         )
       }

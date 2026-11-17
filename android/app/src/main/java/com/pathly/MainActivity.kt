@@ -7,11 +7,15 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
+import androidx.compose.runtime.getValue
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.pathly.data.settings.SettingsRepository
 import com.pathly.presentation.navigation.PathlyNavHost
 import com.pathly.presentation.tracking.TrackingViewModel
 import com.pathly.ui.theme.PathlyAndroidTheme
 import com.pathly.util.PermissionUtils
 import dagger.hilt.android.AndroidEntryPoint
+import javax.inject.Inject
 
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
@@ -19,6 +23,9 @@ class MainActivity : ComponentActivity() {
   // 権限ランチャー（Activity 側）と記録画面で同一インスタンスを共有するため、
   // TrackingViewModel は Activity スコープで持つ。
   private val viewModel: TrackingViewModel by viewModels()
+
+  // 画面の色（壁紙の色を使うか）は全画面にかかるので、テーマを置く Activity で読む。
+  @Inject lateinit var settingsRepository: SettingsRepository
 
   private val locationPermissionLauncher = registerForActivityResult(
     ActivityResultContracts.RequestMultiplePermissions(),
@@ -48,7 +55,8 @@ class MainActivity : ComponentActivity() {
     super.onCreate(savedInstanceState)
     enableEdgeToEdge()
     setContent {
-      PathlyAndroidTheme {
+      val useDynamicColor by settingsRepository.useDynamicColor.collectAsStateWithLifecycle()
+      PathlyAndroidTheme(dynamicColor = useDynamicColor) {
         PathlyNavHost(
           trackingViewModel = viewModel,
           onRequestPermission = {

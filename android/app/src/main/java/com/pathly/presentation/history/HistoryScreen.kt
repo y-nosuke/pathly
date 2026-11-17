@@ -71,6 +71,7 @@ import com.pathly.presentation.common.choiceLabel
 import com.pathly.presentation.common.flippedChoice
 import com.pathly.presentation.common.regionChipLabel
 import com.pathly.presentation.common.rememberListMapCamera
+import com.pathly.ui.theme.PathlyTheme
 import com.pathly.util.DateFormatters
 import kotlin.math.roundToInt
 
@@ -624,7 +625,7 @@ private fun ActiveTrackItem(
   Card(
     onClick = onTrackClick,
     modifier = modifier.fillMaxWidth(),
-    shape = RoundedCornerShape(8.dp),
+    shape = MaterialTheme.shapes.small,
     colors = CardDefaults.cardColors(
       containerColor = MaterialTheme.colorScheme.primaryContainer,
     ),
@@ -646,13 +647,13 @@ private fun ActiveTrackItem(
           Icon(
             painter = painterResource(R.drawable.ic_play_arrow),
             contentDescription = null,
-            tint = MaterialTheme.colorScheme.secondary,
+            tint = PathlyTheme.statusColors.visited,
           )
           Text(
             text = "🟢 記録中",
             style = MaterialTheme.typography.titleMedium,
             fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.secondary,
+            color = PathlyTheme.statusColors.visited,
           )
         }
 
@@ -670,7 +671,7 @@ private fun ActiveTrackItem(
         Text(
           text = "移動距離: ${distanceKm}km (${track.pointCount}点)",
           style = MaterialTheme.typography.bodyMedium,
-          color = MaterialTheme.colorScheme.secondary,
+          color = PathlyTheme.statusColors.visited,
           fontWeight = FontWeight.Medium,
         )
       }
@@ -678,7 +679,7 @@ private fun ActiveTrackItem(
       Icon(
         painter = painterResource(R.drawable.ic_location_on),
         contentDescription = "地図で表示",
-        tint = MaterialTheme.colorScheme.secondary,
+        tint = PathlyTheme.statusColors.visited,
       )
     }
   }
@@ -697,7 +698,7 @@ private fun TrackItem(
   Card(
     onClick = onTrackClick,
     modifier = modifier.fillMaxWidth(),
-    shape = RoundedCornerShape(8.dp),
+    shape = MaterialTheme.shapes.small,
     colors = CardDefaults.cardColors(
       containerColor = MaterialTheme.colorScheme.surfaceVariant,
     ),

@@ -49,6 +49,19 @@ class SettingsRepository @Inject constructor(
     _locationAccuracy.value = accuracy
   }
 
+  private val _useDynamicColor = MutableStateFlow(prefs.getBoolean(KEY_USE_DYNAMIC_COLOR, false))
+
+  /**
+   * 画面の色に壁紙の色（ダイナミックカラー）を使うか。既定は使わず Pathly の色（→ adr/0040）。
+   * 使っても地図に描くもの（経路・マーカー）の色は変わらない。
+   */
+  val useDynamicColor: StateFlow<Boolean> = _useDynamicColor.asStateFlow()
+
+  fun setUseDynamicColor(use: Boolean) {
+    prefs.edit { putBoolean(KEY_USE_DYNAMIC_COLOR, use) }
+    _useDynamicColor.value = use
+  }
+
   // 「登録済みの場所」を地図に出すトグル。画面（記録／履歴詳細／場所詳細）ごとに独立して保持する。
   private val showRegisteredPlacesFlows: Map<MapSurface, MutableStateFlow<Boolean>> =
     MapSurface.entries.associateWith { surface ->
@@ -132,6 +145,7 @@ class SettingsRepository @Inject constructor(
     private const val KEY_GPS_INTERVAL = "gps_interval_seconds"
     private const val KEY_LOCATION_ACCURACY = "location_accuracy"
     private const val KEY_PLACE_GROUPING = "places_list_grouping"
+    private const val KEY_USE_DYNAMIC_COLOR = "use_dynamic_color"
     private const val GROUP_KEY_SEPARATOR = "\n"
 
     private fun keyOpenPlaceGroups(grouping: PlaceGrouping): String = "places_list_open_groups_${grouping.name.lowercase()}"

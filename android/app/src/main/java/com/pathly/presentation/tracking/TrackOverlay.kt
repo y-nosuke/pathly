@@ -48,23 +48,10 @@ import com.pathly.presentation.common.MapMarker
 import com.pathly.presentation.common.RouteBadgeMarker
 import com.pathly.presentation.common.rememberMarkerIconCache
 import com.pathly.presentation.history.listTitleOf
+import com.pathly.ui.theme.PathlyElevation
+import com.pathly.ui.theme.PathlyMapColors
 import com.pathly.util.DateFormatters
 import kotlin.math.roundToInt
-
-/**
- * 地図に重ねる過去の経路の色（[TRACK_OVERLAY_MAX] 色）。記録中の経路（オレンジ）・立ち寄りの帯（濃い青・ティール）と
- * 見分けやすく、地図の地の色に埋もれないものを選んである。
- */
-internal val TrackOverlayColors = listOf(
-  Color(0xFF1E88E5), // 青
-  Color(0xFF43A047), // 緑
-  Color(0xFF8E24AA), // 紫
-  Color(0xFFD81B60), // 赤紫
-  Color(0xFF6D4C41), // 茶
-  Color(0xFF00897B), // 青緑
-  Color(0xFF9E9D24), // 黄緑
-  Color(0xFF37474F), // 墨
-)
 
 /**
  * 一覧の「この経路の全体を見る」（[focusRequest]）を受けて地図を寄せる（記録画面の経路・履歴の地図表示で共通）。
@@ -104,13 +91,13 @@ internal fun TrackOverlayContent(tracks: List<OverlayTrack>, infoWindow: MapInfo
   val icons = rememberMarkerIconCache()
   tracks.forEach { overlay ->
     key(overlay.track.id) {
-      val color = TrackOverlayColors[overlay.colorIndex]
+      val color = PathlyMapColors.Overlay[overlay.colorIndex]
       // 記録中は現在地の更新のたびに地図が描き直されるので、点の変換は線が変わったときだけにする。
       val lines = remember(overlay.segments) {
         overlay.segments.map { segment -> segment.map { LatLng(it.latitude, it.longitude) } }
       }
       lines.forEach { points ->
-        Polyline(points = points, color = Color.White, width = 20f, zIndex = -2f)
+        Polyline(points = points, color = PathlyMapColors.OnMarker, width = 20f, zIndex = -2f)
         Polyline(points = points, color = color, width = 12f, zIndex = -1f)
       }
       overlay.stops.forEachIndexed { index, stop ->
@@ -121,7 +108,7 @@ internal fun TrackOverlayContent(tracks: List<OverlayTrack>, infoWindow: MapInfo
           val number = index + 1
           val icon = icons.getLabeled(OverlayStopIconKey(overlay.colorIndex, number), stop.place.displayName) {
             RouteBadgeMarker(bg = color, size = 28.dp) {
-              Text(text = "$number", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+              Text(text = "$number", color = PathlyMapColors.OnMarker, fontWeight = FontWeight.Bold, fontSize = 12.sp)
             }
           }
           MapMarker(
@@ -154,7 +141,7 @@ internal fun TrackOverlayButton(
     enabled = enabled,
     shape = CircleShape,
     color = if (active) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surface,
-    shadowElevation = 4.dp,
+    shadowElevation = PathlyElevation.floating,
     modifier = modifier,
   ) {
     Icon(
@@ -355,7 +342,7 @@ private fun TrackPickerRow(
       modifier = Modifier
         .size(12.dp)
         .background(
-          color = colorIndex?.let { TrackOverlayColors[it] } ?: Color.Transparent,
+          color = colorIndex?.let { PathlyMapColors.Overlay[it] } ?: Color.Transparent,
           shape = CircleShape,
         ),
     )

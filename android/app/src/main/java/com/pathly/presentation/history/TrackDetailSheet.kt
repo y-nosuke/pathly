@@ -55,8 +55,10 @@ import com.pathly.R
 import com.pathly.domain.model.GpsTrack
 import com.pathly.domain.model.Stop
 import com.pathly.domain.model.WishlistFlag
-import com.pathly.presentation.common.MarkerStopViolet
 import com.pathly.presentation.common.WishlistFlagButton
+import com.pathly.ui.theme.PathlyElevation
+import com.pathly.ui.theme.PathlyMapColors
+import com.pathly.ui.theme.PathlyShapes
 import com.pathly.util.DateFormatters
 import kotlin.math.roundToInt
 
@@ -81,9 +83,9 @@ internal fun FloatingStopSheet(
     modifier = modifier
       .fillMaxWidth()
       .height(with(density) { heightPx().toDp() }),
-    shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
+    shape = PathlyShapes.sheetTop,
     color = MaterialTheme.colorScheme.surface,
-    shadowElevation = 12.dp,
+    shadowElevation = PathlyElevation.sheet,
   ) {
     Column(
       modifier = Modifier
@@ -121,7 +123,7 @@ internal fun SheetDragHandle(
         .height(4.dp)
         .background(
           MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f),
-          RoundedCornerShape(2.dp),
+          PathlyShapes.pill,
         ),
     )
   }
@@ -264,7 +266,7 @@ internal fun TrackSummaryHeader(
       Column(
         modifier = Modifier
           .weight(1f)
-          .clip(RoundedCornerShape(8.dp))
+          .clip(MaterialTheme.shapes.small)
           .clickable(onClick = onRenameTrack)
           .padding(vertical = 2.dp),
       ) {
@@ -283,7 +285,7 @@ internal fun TrackSummaryHeader(
       }
       if (track.isActive) {
         Surface(
-          shape = RoundedCornerShape(20.dp),
+          shape = PathlyShapes.pill,
           color = MaterialTheme.colorScheme.primaryContainer,
         ) {
           Text(
@@ -460,7 +462,7 @@ internal fun StopRow(
     // 地図で選ばれている立ち寄りは薄く強調する（地図↔一覧の連動）。
     modifier = Modifier
       .fillMaxWidth()
-      .clip(RoundedCornerShape(10.dp))
+      .clip(MaterialTheme.shapes.medium)
       .background(
         if (highlighted) MaterialTheme.colorScheme.secondaryContainer else Color.Transparent,
       )
@@ -479,10 +481,10 @@ internal fun StopRow(
         modifier = Modifier
           .padding(end = 10.dp)
           .size(26.dp)
-          .background(MarkerStopViolet, CircleShape),
+          .background(PathlyMapColors.Stop, CircleShape),
         contentAlignment = Alignment.Center,
       ) {
-        Text(text = "$number", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+        Text(text = "$number", color = PathlyMapColors.OnMarker, fontWeight = FontWeight.Bold, fontSize = 13.sp)
       }
     }
     Column(
@@ -582,7 +584,7 @@ internal fun ActionChip(
 ) {
   Surface(
     onClick = onClick,
-    shape = RoundedCornerShape(20.dp),
+    shape = PathlyShapes.pill,
     color = container,
   ) {
     Text(

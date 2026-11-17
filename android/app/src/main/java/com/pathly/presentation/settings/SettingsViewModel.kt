@@ -50,6 +50,12 @@ class SettingsViewModel @Inject constructor(
     settingsRepository.setLocationAccuracy(accuracy)
   }
 
+  val useDynamicColor: StateFlow<Boolean> = settingsRepository.useDynamicColor
+
+  fun setUseDynamicColor(use: Boolean) {
+    settingsRepository.setUseDynamicColor(use)
+  }
+
   // ---- 異常終了の記録（→ docs/specs/crash-reports.md） ----
 
   val crashReports: StateFlow<List<CrashReport>> = crashReportStore.reports

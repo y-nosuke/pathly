@@ -2,89 +2,57 @@ package com.pathly.ui.theme
 
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.dynamicDarkColorScheme
 import androidx.compose.material3.dynamicLightColorScheme
-import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.graphics.Color
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.ReadOnlyComposable
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.platform.LocalContext
 
-private val DarkColorScheme = darkColorScheme(
-  primary = PathlyOrange,
-  onPrimary = Color.White,
-  primaryContainer = PathlyDarkOrange,
-  onPrimaryContainer = Color.White,
-
-  secondary = PathlyGreen,
-  onSecondary = Color.White,
-  secondaryContainer = PathlyDarkGreen,
-  onSecondaryContainer = Color.White,
-
-  tertiary = PathlyLightGreen,
-  onTertiary = Color.Black,
-
-  background = SurfaceWarmDark,
-  onBackground = OnSurfaceWarmDark,
-  surface = SurfaceWarmDark,
-  onSurface = OnSurfaceWarmDark,
-  surfaceVariant = SurfaceVariantWarmDark,
-  onSurfaceVariant = OnSurfaceWarmDark,
-
-  error = ErrorRed,
-  onError = Color.White,
-  errorContainer = Color(0xFF93000A),
-  onErrorContainer = Color(0xFFFFDAD6),
-)
-
-private val LightColorScheme = lightColorScheme(
-  primary = PathlyOrange,
-  onPrimary = Color.White,
-  primaryContainer = PathlyLightOrange,
-  onPrimaryContainer = OnSurfaceWarm,
-
-  secondary = PathlyGreen,
-  onSecondary = Color.White,
-  secondaryContainer = PathlyLightGreen,
-  onSecondaryContainer = OnSurfaceWarm,
-
-  tertiary = PathlyDarkGreen,
-  onTertiary = Color.White,
-
-  background = SurfaceWarm,
-  onBackground = OnSurfaceWarm,
-  surface = SurfaceWarm,
-  onSurface = OnSurfaceWarm,
-  surfaceVariant = SurfaceVariantWarm,
-  onSurfaceVariant = OnSurfaceWarm,
-
-  error = ErrorRed,
-  onError = Color.White,
-  errorContainer = Color(0xFFFFDAD6),
-  onErrorContainer = Color(0xFF410002),
-)
-
+/**
+ * Pathly のテーマ。色・文字・角丸のトークンを MaterialTheme に入れる（→ adr/0040）。
+ *
+ * @param dynamicColor 壁紙の色（ダイナミックカラー）を使うか。既定は使わず Pathly の色にする。
+ *   設定の「壁紙の色を使う」で切り替える。使っても地図の色（[PathlyMapColors]）は変わらない。
+ */
 @Composable
 fun PathlyAndroidTheme(
   darkTheme: Boolean = isSystemInDarkTheme(),
-  // Dynamic color は Android 12+ の機能。minSdk 34 なので常に利用できる。
-  dynamicColor: Boolean = true,
+  dynamicColor: Boolean = false,
   content: @Composable () -> Unit,
 ) {
   val colorScheme = when {
+    // minSdk 34 なので、ダイナミックカラー（Android 12+）は常に使える。
     dynamicColor -> {
       val context = LocalContext.current
       if (darkTheme) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
     }
 
-    darkTheme -> DarkColorScheme
+    darkTheme -> PathlyDarkColorScheme
 
-    else -> LightColorScheme
+    else -> PathlyLightColorScheme
   }
 
-  MaterialTheme(
-    colorScheme = colorScheme,
-    typography = Typography,
-    content = content,
-  )
+  val statusColors = if (darkTheme) PathlyDarkStatusColors else PathlyLightStatusColors
+
+  CompositionLocalProvider(LocalPathlyStatusColors provides statusColors) {
+    MaterialTheme(
+      colorScheme = colorScheme,
+      typography = Typography,
+      shapes = PathlyMaterialShapes,
+      content = content,
+    )
+  }
+}
+
+private val LocalPathlyStatusColors = staticCompositionLocalOf { PathlyLightStatusColors }
+
+/** MaterialTheme に無い Pathly のトークンの入口。 */
+object PathlyTheme {
+  /** 状態の色（行った・動いている）。 */
+  val statusColors: PathlyStatusColors
+    @Composable
+    @ReadOnlyComposable
+    get() = LocalPathlyStatusColors.current
 }

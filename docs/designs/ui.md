@@ -163,5 +163,6 @@ DB に持たないのは、`R.drawable` の ID を DB に入れられず結局�
 ## アイコンとテーマ
 
 - **Material Icons は使わない**（非推奨のため）。`res/drawable` のベクター＋`painterResource` で足す。
-- テーマは `PathlyAndroidTheme` に統一。Material3 のダイナミックカラー対応（Android 12+）で、
-  非対応端末では暖色系のスキームにフォールバックする。色の定義は `ui/theme/`。
+- テーマは `PathlyAndroidTheme` に統一。色・文字・角丸は `MaterialTheme` から、余白・影は `PathlySpacing`・`PathlyElevation`、
+  地図に描くものの色は `PathlyMapColors` から取り、部品に数値や色を直書きしない（値は [specs/screens.md](../specs/screens.md#デザイントークン)、
+  理由は [ADR-0040](../adr/0040-design-tokens-indigo-fixed-colors.md)）。既定は Pathly の色で、設定でダイナミックカラーに切り替えられる。

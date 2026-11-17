@@ -31,6 +31,8 @@ import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import com.pathly.ui.theme.PathlyElevation
+import com.pathly.ui.theme.PathlyShapes
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 
@@ -166,9 +168,9 @@ fun FloatingSheet(
     if (restoreLabel != null && state.detent == SheetDetent.HIDDEN) {
       Surface(
         onClick = { state.settleTo(SheetDetent.PEEK) },
-        shape = RoundedCornerShape(20.dp),
+        shape = PathlyShapes.pill,
         color = MaterialTheme.colorScheme.surface,
-        shadowElevation = 4.dp,
+        shadowElevation = PathlyElevation.floating,
         modifier = Modifier
           .navigationBarsPadding()
           .padding(bottom = 24.dp),
@@ -186,10 +188,10 @@ fun FloatingSheet(
       modifier = Modifier
         .fillMaxWidth()
         .height(with(density) { heightPx.toDp() }),
-      shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
+      shape = PathlyShapes.sheetTop,
       color = MaterialTheme.colorScheme.surface,
       // 完全に畳んだときは影を消す（高さ0の面に影が残ると画面下端に線が出る）。
-      shadowElevation = if (heightPx <= 0.5f) 0.dp else 12.dp,
+      shadowElevation = if (heightPx <= 0.5f) 0.dp else PathlyElevation.sheet,
     ) {
       Column(
         modifier = Modifier
@@ -231,7 +233,7 @@ private fun SheetDragHandle(
         .height(4.dp)
         .background(
           MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f),
-          RoundedCornerShape(2.dp),
+          PathlyShapes.pill,
         ),
     )
   }

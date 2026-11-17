@@ -25,6 +25,7 @@ import com.pathly.domain.model.MapPlaceFilter
 import com.pathly.domain.model.PlaceCategoryFacet
 import com.pathly.domain.model.RegisteredPlace
 import com.pathly.domain.model.nextTriState
+import com.pathly.ui.theme.PathlyElevation
 
 /**
  * 地図の「登録済みの場所」の絞り込みボタン。「登録済みの場所を表示」のトグルの隣に、表示 ON のときだけ置く。
@@ -48,7 +49,7 @@ fun MapPlaceFilterButton(
       onClick = { open = true },
       shape = CircleShape,
       color = if (active) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surface,
-      shadowElevation = 4.dp,
+      shadowElevation = PathlyElevation.floating,
     ) {
       Icon(
         painter = painterResource(R.drawable.ic_filter),

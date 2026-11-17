@@ -17,6 +17,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import com.pathly.ui.theme.PathlyTheme
 
 /** 一覧の先頭に置く統計カード（履歴・場所で同じ形）。見出しの下に [StatisticItem] を横に並べる。 */
 @Composable
@@ -27,7 +28,7 @@ internal fun StatisticsCard(
 ) {
   Card(
     modifier = modifier.fillMaxWidth(),
-    shape = RoundedCornerShape(8.dp),
+    shape = MaterialTheme.shapes.small,
     colors = CardDefaults.cardColors(
       containerColor = MaterialTheme.colorScheme.primaryContainer,
     ),
@@ -71,7 +72,7 @@ internal fun StatisticItem(
       text = value,
       style = MaterialTheme.typography.titleMedium,
       fontWeight = FontWeight.Bold,
-      color = MaterialTheme.colorScheme.secondary,
+      color = PathlyTheme.statusColors.visited,
       textAlign = TextAlign.Center,
     )
     Text(

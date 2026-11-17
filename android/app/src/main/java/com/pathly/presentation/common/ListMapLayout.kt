@@ -33,6 +33,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.pathly.R
+import com.pathly.ui.theme.PathlyElevation
+import com.pathly.ui.theme.PathlyShapes
 
 /**
  * 一覧のタブ（場所・履歴）の、一覧表示と地図表示の切り替えの器。
@@ -111,8 +113,8 @@ internal fun ListMapOverlay(
       Surface(
         // 地図の文字が透けると読みにくいので、重ねたものは不透明にする。
         color = MaterialTheme.colorScheme.surface,
-        shape = RoundedCornerShape(bottomStart = 16.dp, bottomEnd = 16.dp),
-        shadowElevation = 2.dp,
+        shape = PathlyShapes.sheetBottom,
+        shadowElevation = PathlyElevation.low,
       ) {
         // 余白は一覧表示と揃え、切り替えても見出しの位置が動かないようにする。
         Column(modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 12.dp)) {
@@ -150,9 +152,9 @@ private fun ListMapCollapsedBar(
 ) {
   Surface(
     modifier = modifier.fillMaxWidth(),
-    shape = RoundedCornerShape(28.dp),
+    shape = PathlyShapes.pill,
     color = MaterialTheme.colorScheme.surface,
-    shadowElevation = 2.dp,
+    shadowElevation = PathlyElevation.low,
   ) {
     Row(
       modifier = Modifier.padding(horizontal = 4.dp),

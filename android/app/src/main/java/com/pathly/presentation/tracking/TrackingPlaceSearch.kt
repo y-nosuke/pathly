@@ -40,6 +40,8 @@ import androidx.compose.ui.unit.dp
 import com.pathly.R
 import com.pathly.domain.model.PlacePrediction
 import com.pathly.presentation.places.PlaceSearchPredictions
+import com.pathly.ui.theme.PathlyElevation
+import com.pathly.ui.theme.PathlyShapes
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -100,9 +102,9 @@ internal fun <T : Any> TrackingPlaceSearchBar(
       .testTag("trackingPlaceSearch"),
   ) {
     Surface(
-      shape = RoundedCornerShape(28.dp),
+      shape = PathlyShapes.pill,
       color = MaterialTheme.colorScheme.surface,
-      shadowElevation = 4.dp,
+      shadowElevation = PathlyElevation.floating,
     ) {
       Row(verticalAlignment = Alignment.CenterVertically) {
         Icon(
@@ -141,9 +143,9 @@ internal fun <T : Any> TrackingPlaceSearchBar(
     // 何か打ってから候補のカードを出す（空のうちは地図を隠さない）。
     if (query.isNotBlank() || fetchFailed) {
       Surface(
-        shape = RoundedCornerShape(16.dp),
+        shape = MaterialTheme.shapes.medium,
         color = MaterialTheme.colorScheme.surface,
-        shadowElevation = 4.dp,
+        shadowElevation = PathlyElevation.floating,
         modifier = Modifier
           .padding(top = 8.dp)
           .fillMaxWidth()
