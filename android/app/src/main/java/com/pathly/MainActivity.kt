@@ -1,17 +1,37 @@
 package com.pathly
 
 import android.Manifest
+import android.app.UiModeManager
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.statusBars
+import androidx.compose.foundation.layout.windowInsetsTopHeight
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.ui.Modifier
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.lifecycleScope
+import com.pathly.data.settings.SettingsRepository
+import com.pathly.data.settings.ThemeMode
 import com.pathly.presentation.navigation.PathlyNavHost
 import com.pathly.presentation.tracking.TrackingViewModel
 import com.pathly.ui.theme.PathlyAndroidTheme
+import com.pathly.ui.theme.PathlyBuildColors
 import com.pathly.util.PermissionUtils
 import dagger.hilt.android.AndroidEntryPoint
+import kotlinx.coroutines.launch
+import javax.inject.Inject
+import android.graphics.Color as AndroidColor
 
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
@@ -19,6 +39,9 @@ class MainActivity : ComponentActivity() {
   // 権限ランチャー（Activity 側）と記録画面で同一インスタンスを共有するため、
   // TrackingViewModel は Activity スコープで持つ。
   private val viewModel: TrackingViewModel by viewModels()
+
+  // 画面の色（壁紙の色を使うか）は全画面にかかるので、テーマを置く Activity で読む。
+  @Inject lateinit var settingsRepository: SettingsRepository
 
   private val locationPermissionLauncher = registerForActivityResult(
     ActivityResultContracts.RequestMultiplePermissions(),
@@ -38,6 +61,25 @@ class MainActivity : ComponentActivity() {
     ActivityResultContracts.RequestPermission(),
   ) { }
 
+  /**
+   * 設定の明暗（端末の設定に従う／明るい／暗い）を、アプリ単位の夜間モードとして OS に渡す（Android 12+）。
+   * Compose の `isSystemInDarkTheme()`・ステータスバーの文字色・ダイアログがそろって従う。明暗が変わると
+   * OS が Activity を作り直す。作り直した後に同じ値を渡しても明暗は変わらないので、繰り返しにはならない。
+   */
+  private fun applyThemeModeOnChange() {
+    val uiModeManager = getSystemService(UiModeManager::class.java)
+    lifecycleScope.launch {
+      settingsRepository.themeMode.collect { mode ->
+        val nightMode = when (mode) {
+          ThemeMode.SYSTEM -> UiModeManager.MODE_NIGHT_AUTO
+          ThemeMode.LIGHT -> UiModeManager.MODE_NIGHT_NO
+          ThemeMode.DARK -> UiModeManager.MODE_NIGHT_YES
+        }
+        uiModeManager.setApplicationNightMode(nightMode)
+      }
+    }
+  }
+
   private fun requestBackgroundLocationIfNeeded() {
     if (!PermissionUtils.hasBackgroundLocationPermission(this)) {
       backgroundLocationLauncher.launch(Manifest.permission.ACCESS_BACKGROUND_LOCATION)
@@ -46,18 +88,42 @@ class MainActivity : ComponentActivity() {
 
   override fun onCreate(savedInstanceState: Bundle?) {
     super.onCreate(savedInstanceState)
-    enableEdgeToEdge()
+    applyThemeModeOnChange()
+    if (BuildConfig.DEBUG) {
+      // 開発版は上端を黄に塗るので、明暗の設定によらずステータスバーの文字・アイコンを暗くする。
+      enableEdgeToEdge(statusBarStyle = SystemBarStyle.light(AndroidColor.TRANSPARENT, AndroidColor.TRANSPARENT))
+    } else {
+      enableEdgeToEdge()
+    }
     setContent {
-      PathlyAndroidTheme {
-        PathlyNavHost(
-          trackingViewModel = viewModel,
-          onRequestPermission = {
-            locationPermissionLauncher.launch(
-              PermissionUtils.PermissionGroups.ALL_REQUIRED_PERMISSIONS,
-            )
-          },
-        )
+      val useDynamicColor by settingsRepository.useDynamicColor.collectAsStateWithLifecycle()
+      PathlyAndroidTheme(dynamicColor = useDynamicColor) {
+        Box(modifier = Modifier.fillMaxSize()) {
+          PathlyNavHost(
+            trackingViewModel = viewModel,
+            onRequestPermission = {
+              locationPermissionLauncher.launch(
+                PermissionUtils.PermissionGroups.ALL_REQUIRED_PERMISSIONS,
+              )
+            },
+          )
+          if (BuildConfig.DEBUG) DevBuildStatusBar()
+        }
       }
     }
   }
+}
+
+/**
+ * 開発版の印。ステータスバーの地をアイコンと同じ黄に塗り、開いているのが開発版だと分かるようにする
+ * （→ docs/designs/release.md）。画面の区画（地図の四隅・検索窓）は使わないので、どの画面にも重ねられる。
+ */
+@Composable
+private fun DevBuildStatusBar() {
+  Box(
+    modifier = Modifier
+      .fillMaxWidth()
+      .windowInsetsTopHeight(WindowInsets.statusBars)
+      .background(PathlyBuildColors.DevBuild),
+  )
 }

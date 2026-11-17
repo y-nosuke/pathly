@@ -40,6 +40,7 @@ import com.pathly.domain.model.Priority
 import com.pathly.domain.model.SameFacilityPlace
 import com.pathly.presentation.common.NearbyCandidatePickerDialog
 import com.pathly.presentation.common.SameFacilityDialog
+import com.pathly.ui.theme.PathlyTheme
 import com.pathly.util.DateFormatters
 
 /**
@@ -156,7 +157,7 @@ internal fun PlaceEditorBody(
           Text(
             text = "訪問済み（立ち寄り記録 ${item.visitCount} 件）",
             style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.secondary,
+            color = PathlyTheme.statusColors.visited,
           )
         }
       } else {

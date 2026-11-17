@@ -8,6 +8,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.painterResource
 import com.pathly.R
 import com.pathly.domain.model.WishlistFlag
+import com.pathly.ui.theme.PathlyMapColors
 
 /**
  * 「行きたい」の旗。タップで付け外しする。
@@ -39,7 +40,7 @@ internal fun WishlistFlagButton(
       // （地図の訪問済みの丸と同じ色）。
       tint = when (flag) {
         WishlistFlag.ACTIVE -> MaterialTheme.colorScheme.primary
-        WishlistFlag.FULFILLED -> MarkerVisitedGreen
+        WishlistFlag.FULFILLED -> PathlyMapColors.PlaceVisited
         WishlistFlag.NONE -> MaterialTheme.colorScheme.onSurfaceVariant
       },
     )

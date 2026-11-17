@@ -49,6 +49,29 @@ class SettingsRepository @Inject constructor(
     _locationAccuracy.value = accuracy
   }
 
+  private val _themeMode = MutableStateFlow(ThemeMode.fromKey(prefs.getString(KEY_THEME_MODE, null)))
+
+  /** 画面の明暗（端末の設定に従う／明るい／暗い）。既定は端末の設定に従う。 */
+  val themeMode: StateFlow<ThemeMode> = _themeMode.asStateFlow()
+
+  fun setThemeMode(mode: ThemeMode) {
+    prefs.edit { putString(KEY_THEME_MODE, mode.key) }
+    _themeMode.value = mode
+  }
+
+  private val _useDynamicColor = MutableStateFlow(prefs.getBoolean(KEY_USE_DYNAMIC_COLOR, false))
+
+  /**
+   * 画面の色に壁紙の色（ダイナミックカラー）を使うか。既定は使わず Pathly の色（→ adr/0040）。
+   * 使っても地図に描くもの（経路・マーカー）の色は変わらない。
+   */
+  val useDynamicColor: StateFlow<Boolean> = _useDynamicColor.asStateFlow()
+
+  fun setUseDynamicColor(use: Boolean) {
+    prefs.edit { putBoolean(KEY_USE_DYNAMIC_COLOR, use) }
+    _useDynamicColor.value = use
+  }
+
   // 「登録済みの場所」を地図に出すトグル。画面（記録／履歴詳細／場所詳細）ごとに独立して保持する。
   private val showRegisteredPlacesFlows: Map<MapSurface, MutableStateFlow<Boolean>> =
     MapSurface.entries.associateWith { surface ->
@@ -132,6 +155,8 @@ class SettingsRepository @Inject constructor(
     private const val KEY_GPS_INTERVAL = "gps_interval_seconds"
     private const val KEY_LOCATION_ACCURACY = "location_accuracy"
     private const val KEY_PLACE_GROUPING = "places_list_grouping"
+    private const val KEY_USE_DYNAMIC_COLOR = "use_dynamic_color"
+    private const val KEY_THEME_MODE = "theme_mode"
     private const val GROUP_KEY_SEPARATOR = "\n"
 
     private fun keyOpenPlaceGroups(grouping: PlaceGrouping): String = "places_list_open_groups_${grouping.name.lowercase()}"
@@ -176,6 +201,25 @@ enum class LocationAccuracy(val key: String) {
     val DEFAULT = BALANCED
 
     fun fromKey(key: String?): LocationAccuracy = entries.firstOrNull { it.key == key } ?: DEFAULT
+  }
+}
+
+/** 画面の明暗。知らない値は端末の設定に従う。 */
+enum class ThemeMode(val key: String) {
+  /** 端末の設定に従う（既定）。 */
+  SYSTEM("system"),
+
+  /** いつも明るい。 */
+  LIGHT("light"),
+
+  /** いつも暗い。 */
+  DARK("dark"),
+  ;
+
+  companion object {
+    val DEFAULT = SYSTEM
+
+    fun fromKey(key: String?): ThemeMode = entries.firstOrNull { it.key == key } ?: DEFAULT
   }
 }
 

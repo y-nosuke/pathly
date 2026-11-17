@@ -35,23 +35,11 @@ import com.pathly.presentation.common.DefaultMapLocation
 import com.pathly.presentation.common.MapInfoWindowState
 import com.pathly.presentation.common.MapMarker
 import com.pathly.presentation.common.MapPinMarker
-import com.pathly.presentation.common.MarkerCandidateOrange
-import com.pathly.presentation.common.MarkerPickBlue
 import com.pathly.presentation.common.RouteMapContent
+import com.pathly.ui.theme.PathlyMapColors
 import com.pathly.util.DateFormatters
 
 // 経路詳細の地図。軌跡・立ち寄り・候補・手動追加のハイライトを重ねて描く。
-
-/**
- * 補正の調整モードで、比較用に重ねる生データの色。
- *
- * **灰色は使えない**（欠落を結ぶ破線が灰色で、意味が違う線が同じ色になるため → adr/0022）。
- * 半透明の紫にして、補正後（橙）とも欠落（灰）とも分ける。
- */
-private val rawTrackColor = Color(0x665E35B1)
-
-/** 手動追加のハイライト（選択した滞在区間）。軌跡（オレンジ）・立ち寄り（紫）と見分ける青。 */
-private val manualHighlightColor = Color(0xFF1E88E5)
 
 // 経路の全体に合わせるときの余白（px）。線の端が画面の縁に掛からないようにする。
 private const val TRACK_FIT_PADDING_PX = 80
@@ -145,7 +133,7 @@ internal fun TrackMapView(
         if (segment.size >= 2) {
           Polyline(
             points = segment.map { LatLng(it.latitude, it.longitude) },
-            color = rawTrackColor,
+            color = PathlyMapColors.RawTrack,
             width = 10f,
           )
         }
@@ -185,7 +173,7 @@ internal fun TrackMapView(
           title = candidate.name ?: "候補（名称未取得）",
           snippet = "${DateFormatters.shortTime(d.arrivalTime)} ・ 滞在${d.durationMinutes}分",
         ) {
-          MapPinMarker(bg = MarkerCandidateOrange, glyph = R.drawable.ic_help)
+          MapPinMarker(bg = PathlyMapColors.Candidate, glyph = R.drawable.ic_help)
         }
       }
     }
@@ -194,7 +182,7 @@ internal fun TrackMapView(
     if (highlightPoints.size >= 2) {
       Polyline(
         points = highlightPoints.map { LatLng(it.latitude, it.longitude) },
-        color = manualHighlightColor,
+        color = PathlyMapColors.ManualHighlight,
         width = 14f,
       )
     }
@@ -210,7 +198,7 @@ internal fun TrackMapView(
         state = pickMarkerState,
         title = "追加する地点",
       ) {
-        MapPinMarker(bg = MarkerPickBlue, glyph = R.drawable.ic_add)
+        MapPinMarker(bg = PathlyMapColors.Picked, glyph = R.drawable.ic_add)
       }
     }
   }

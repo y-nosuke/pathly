@@ -35,14 +35,15 @@
 
 同じ端末に**別アプリとして**両方入る。データも別。
 
-|          | リリース版            | 開発版                                      |
-| -------- | --------------------- | ------------------------------------------- |
-| ID       | `com.pathly`          | `com.pathly.debug`（`applicationIdSuffix`） |
-| 表示名   | Pathly                | Pathly 開発版（`src/debug/res`）            |
-| アイコン | オレンジ              | 青緑（背景だけ `src/debug/res` で差し替え） |
-| 署名     | リリース鍵            | リポジトリのデバッグ鍵                      |
-| 入れ方   | GitHub Release の APK | `./gradlew installDebug`・CI の debug APK   |
-| 用途     | 普段使い（実データ）  | 自由に試す・データをいじる                  |
+|            | リリース版            | 開発版                                                                                                                      |
+| ---------- | --------------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| ID         | `com.pathly`          | `com.pathly.debug`（`applicationIdSuffix`）                                                                                 |
+| 表示名     | Pathly                | Pathly 開発版（`src/debug/res`）                                                                                            |
+| アイコン   | 藍の地に橙の経路      | 黄の地に藍の経路とピン（地の色 `launcher_icon_background` と前景を `src/debug/res` で差し替え。起動時のスプラッシュも同じ） |
+| 開いた画面 | 印なし                | 上端（ステータスバーの地）が黄（`MainActivity` の `DevBuildStatusBar`）                                                     |
+| 署名       | リリース鍵            | リポジトリのデバッグ鍵                                                                                                      |
+| 入れ方     | GitHub Release の APK | `./gradlew installDebug`・CI の debug APK                                                                                   |
+| 用途       | 普段使い（実データ）  | 自由に試す・データをいじる                                                                                                  |
 
 Google Maps / Places の API キーは Cloud Console で**パッケージ名＋署名の SHA-1** に制限している
 （[security.md](security.md)）。**両方の組を登録すること**。登録が無い方は地図と場所検索が動かない。

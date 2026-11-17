@@ -30,6 +30,8 @@ import com.pathly.domain.model.PlacePrediction
 import com.pathly.domain.model.PlaceSearchResult
 import com.pathly.domain.model.StopCandidate
 import com.pathly.presentation.common.PlaceNameSearchField
+import com.pathly.ui.theme.PathlyElevation
+import com.pathly.ui.theme.PathlyShapes
 import com.pathly.util.DateFormatters
 
 // 地図の上に重ねる下部オーバーレイ群（再解析の候補選択・手動追加の案内と入力）。
@@ -56,9 +58,9 @@ internal fun CandidateOverlay(
     modifier = modifier
       .fillMaxWidth()
       .height(height),
-    shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),
+    shape = PathlyShapes.sheetTop,
     color = MaterialTheme.colorScheme.surface,
-    shadowElevation = 8.dp,
+    shadowElevation = PathlyElevation.sheet,
   ) {
     Column(modifier = Modifier.fillMaxSize()) {
       // 固定ヘッダー: 説明と操作。スクロールから外して常に押せるようにする。
@@ -146,9 +148,9 @@ internal fun ManualPickPrompt(
     modifier = modifier
       .fillMaxWidth()
       .padding(16.dp),
-    shape = RoundedCornerShape(16.dp),
+    shape = MaterialTheme.shapes.medium,
     color = MaterialTheme.colorScheme.surface,
-    shadowElevation = 8.dp,
+    shadowElevation = PathlyElevation.sheet,
   ) {
     Column(
       modifier = Modifier

@@ -3,16 +3,16 @@
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
-  <!-- 経路（ルート） -->
+  <!-- 経路（ルート）。地図の経路と同じ橙（PathlyMapColors.Route）。テーマ アイコンでは形だけが使われる -->
   <path
       android:pathData="M33,84 C33,66 57,74 57,58"
-      android:strokeColor="#FFFFFF"
+      android:strokeColor="#FFFF6B35"
       android:strokeWidth="6.5"
       android:strokeLineCap="round"
       android:strokeLineJoin="round" />
-  <!-- 開始地点のドット -->
+  <!-- 開始地点のドット（経路と同じ橙） -->
   <path
-      android:fillColor="#FFFFFF"
+      android:fillColor="#FFFF6B35"
       android:pathData="M27.5,84 A5.5,5.5 0 1,0 38.5,84 A5.5,5.5 0 1,0 27.5,84 Z" />
   <!-- 目的地ピン（中央は evenOdd で抜き） -->
   <path

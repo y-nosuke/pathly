@@ -1,5 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
 
-    <style name="Theme.PathlyAndroid" parent="android:Theme.Material.Light.NoActionBar" />
+    <!-- 起動時のスプラッシュ画面（Android 12+）。地が 1 色のアダプティブアイコンは前景だけが描かれ、
+         丸い地が消えるので、地の色を明示する。色は src/debug/res で開発版の黄に差し替える。 -->
+    <style name="Theme.PathlyAndroid" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:windowSplashScreenAnimatedIcon">@drawable/ic_launcher_foreground</item>
+        <item name="android:windowSplashScreenIconBackgroundColor">@color/launcher_icon_background</item>
+    </style>
 </resources>

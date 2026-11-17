@@ -30,6 +30,8 @@ import com.pathly.R
 import com.pathly.domain.model.MapPlaceFilter
 import com.pathly.domain.model.RegisteredPlace
 import com.pathly.presentation.common.MapPlaceFilterButton
+import com.pathly.ui.theme.PathlyElevation
+import com.pathly.ui.theme.PathlyShapes
 import kotlinx.coroutines.delay
 
 // 記録画面（[TrackingScreen]）のまとまりごとの部品（ダイアログ・上部のボタン列・左上の操作・下部のコントロール）。
@@ -126,7 +128,7 @@ internal fun TrackingMapButtons(
       onClick = onToggleRegisteredPlaces,
       shape = CircleShape,
       color = if (showRegisteredPlaces) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surface,
-      shadowElevation = 4.dp,
+      shadowElevation = PathlyElevation.floating,
     ) {
       Icon(
         painter = painterResource(R.drawable.ic_place),
@@ -155,7 +157,7 @@ internal fun TrackingMapButtons(
       enabled = actionsEnabled,
       shape = CircleShape,
       color = MaterialTheme.colorScheme.surface,
-      shadowElevation = 4.dp,
+      shadowElevation = PathlyElevation.floating,
     ) {
       Icon(
         painter = painterResource(R.drawable.ic_search),
@@ -169,7 +171,7 @@ internal fun TrackingMapButtons(
       onClick = onSearchRegion,
       shape = CircleShape,
       color = MaterialTheme.colorScheme.surface,
-      shadowElevation = 4.dp,
+      shadowElevation = PathlyElevation.floating,
     ) {
       Icon(
         painter = painterResource(R.drawable.ic_public),
@@ -208,9 +210,9 @@ internal fun TrackingTopStartControls(
       // 「立ち寄りを追加」モード（ON=地図タップが立ち寄り追加／OFF=場所登録）。
       Surface(
         onClick = onToggleManualMode,
-        shape = RoundedCornerShape(20.dp),
+        shape = PathlyShapes.pill,
         color = if (manualMode) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surface,
-        shadowElevation = 4.dp,
+        shadowElevation = PathlyElevation.floating,
       ) {
         Row(
           modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
@@ -238,9 +240,9 @@ internal fun TrackingTopStartControls(
           // 地点を指していないので、近くの施設候補から選ばせる。
           onClick = { currentLocation?.let(onAddStopHere) },
           enabled = currentLocation != null,
-          shape = RoundedCornerShape(20.dp),
+          shape = PathlyShapes.pill,
           color = MaterialTheme.colorScheme.surface,
-          shadowElevation = 4.dp,
+          shadowElevation = PathlyElevation.floating,
         ) {
           Row(
             modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
@@ -290,9 +292,10 @@ internal fun PlaceRegisteredToast(
   }
   Surface(
     modifier = modifier.padding(top = if (isTracking) 56.dp else 12.dp),
-    shape = RoundedCornerShape(20.dp),
+    // 文が折り返して複数行になり得るので丸（pill）にはしない（端の文字が欠ける）。
+    shape = MaterialTheme.shapes.large,
     color = MaterialTheme.colorScheme.secondaryContainer,
-    shadowElevation = 4.dp,
+    shadowElevation = PathlyElevation.floating,
   ) {
     Text(
       text = message,

@@ -38,6 +38,8 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.pathly.R
+import com.pathly.ui.theme.PathlyElevation
+import com.pathly.ui.theme.PathlyShapes
 
 /**
  * 一覧の絞り込みで、いま効いている条件 1 つ。一覧の上にチップで並べ、× で外す（→ specs/screens.md）。
@@ -152,7 +154,7 @@ fun ListFilterPanel(
 ) {
   Surface(
     color = MaterialTheme.colorScheme.surfaceContainerLow,
-    shape = RoundedCornerShape(12.dp),
+    shape = MaterialTheme.shapes.medium,
     modifier = modifier
       .fillMaxWidth()
       .testTag("listFilterPanel"),
@@ -187,10 +189,10 @@ fun ListFilterPanel(
 fun FilterPanelCloseButton(onClick: () -> Unit, modifier: Modifier = Modifier) {
   Surface(
     onClick = onClick,
-    shape = RoundedCornerShape(50),
+    shape = PathlyShapes.pill,
     color = MaterialTheme.colorScheme.secondaryContainer,
     contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
-    shadowElevation = 3.dp,
+    shadowElevation = PathlyElevation.floating,
     modifier = modifier
       .height(40.dp)
       .testTag("filterPanelCloseButton"),

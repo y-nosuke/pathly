@@ -116,9 +116,6 @@ import com.pathly.presentation.common.ListNameSearchField
 import com.pathly.presentation.common.MapMarker
 import com.pathly.presentation.common.MapPinMarker
 import com.pathly.presentation.common.MapPlaceFilterButton
-import com.pathly.presentation.common.MarkerPickBlue
-import com.pathly.presentation.common.MarkerUnvisitedGray
-import com.pathly.presentation.common.MarkerVisitedGreen
 import com.pathly.presentation.common.NearbyConfirmPurpose
 import com.pathly.presentation.common.NearbyPlaceConfirmDialog
 import com.pathly.presentation.common.RegionFilterSection
@@ -140,6 +137,9 @@ import com.pathly.presentation.common.rememberFloatingSheetState
 import com.pathly.presentation.common.rememberListMapCamera
 import com.pathly.presentation.common.rememberMapInfoWindowState
 import com.pathly.presentation.common.requestCurrentLatLng
+import com.pathly.ui.theme.PathlyElevation
+import com.pathly.ui.theme.PathlyMapColors
+import com.pathly.ui.theme.PathlyTheme
 import com.pathly.util.DateFormatters
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.emptyFlow
@@ -688,7 +688,7 @@ private fun PlaceItemRow(
   Card(
     onClick = onClick,
     modifier = modifier.fillMaxWidth(),
-    shape = RoundedCornerShape(8.dp),
+    shape = MaterialTheme.shapes.small,
     colors = CardDefaults.cardColors(
       containerColor = MaterialTheme.colorScheme.surfaceVariant,
     ),
@@ -735,14 +735,14 @@ private fun PlaceItemRow(
               Text(
                 text = if (item.visitCount > 0) "✓ 訪問${item.visitCount}回" else "✓ 訪問済み",
                 style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.secondary,
+                color = PathlyTheme.statusColors.visited,
               )
             }
             if (item.fulfilledWishCount > 0) {
               Text(
                 text = "行きたいで行った ${item.fulfilledWishCount}回",
                 style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.secondary,
+                color = PathlyTheme.statusColors.visited,
               )
             }
           }
@@ -862,7 +862,7 @@ private fun AddPlaceContent(
       picked?.let { p ->
         val markerState = remember(p) { MarkerState(position = p) }
         MapMarker("picked", p.latitude, p.longitude, infoWindow = infoWindow, state = markerState, title = "選んだ地点") {
-          MapPinMarker(bg = MarkerPickBlue, glyph = R.drawable.ic_add)
+          MapPinMarker(bg = PathlyMapColors.Picked, glyph = R.drawable.ic_add)
         }
       }
     }
@@ -872,7 +872,7 @@ private fun AddPlaceContent(
       onClick = moveToCurrentLocation,
       shape = CircleShape,
       color = MaterialTheme.colorScheme.surface,
-      shadowElevation = 4.dp,
+      shadowElevation = PathlyElevation.floating,
       modifier = Modifier
         .align(Alignment.TopEnd)
         .padding(12.dp)
@@ -996,7 +996,7 @@ private fun PlaceDetailContent(
         dismissWithBack = false,
       ) {
         RegisteredPlaceMarker(
-          bg = if (item.isVisited) MarkerVisitedGreen else MarkerUnvisitedGray,
+          bg = if (item.isVisited) PathlyMapColors.PlaceVisited else PathlyMapColors.PlaceUnvisited,
           glyph = categoryGlyph(group),
           wishlistFlag = item.wishlistFlag,
         )
@@ -1027,7 +1027,7 @@ private fun PlaceDetailContent(
         onClick = onToggleRegisteredPlaces,
         shape = CircleShape,
         color = if (showRegisteredPlaces) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surface,
-        shadowElevation = 4.dp,
+        shadowElevation = PathlyElevation.floating,
       ) {
         Icon(
           painter = painterResource(R.drawable.ic_place),
@@ -1197,7 +1197,7 @@ private fun SearchResultForm(
         state = markerState,
         title = result.name,
       ) {
-        MapPinMarker(bg = MarkerPickBlue, glyph = R.drawable.ic_add)
+        MapPinMarker(bg = PathlyMapColors.Picked, glyph = R.drawable.ic_add)
       }
     }
 
@@ -1371,7 +1371,7 @@ internal fun PlaceFormBody(
       Text(
         text = it,
         style = MaterialTheme.typography.bodySmall,
-        color = MaterialTheme.colorScheme.secondary,
+        color = PathlyTheme.statusColors.visited,
       )
     }
 
@@ -1833,7 +1833,7 @@ private fun PlacesMapView(
         contentAlignment = Alignment.Center,
       ) {
         Surface(
-          shape = RoundedCornerShape(8.dp),
+          shape = MaterialTheme.shapes.small,
           color = MaterialTheme.colorScheme.surface.copy(alpha = 0.9f),
           modifier = Modifier.padding(16.dp),
         ) {

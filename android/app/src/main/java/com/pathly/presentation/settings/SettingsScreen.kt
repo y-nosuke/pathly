@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
@@ -19,6 +20,7 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.RadioButton
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -26,6 +28,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -33,6 +36,7 @@ import com.pathly.BuildConfig
 import com.pathly.data.backup.BackupCounts
 import com.pathly.data.backup.BackupException
 import com.pathly.data.settings.LocationAccuracy
+import com.pathly.data.settings.ThemeMode
 import com.pathly.util.DateFormatters
 import java.util.Date
 
@@ -130,12 +134,72 @@ fun SettingsScreen(
       modifier = Modifier.padding(top = 8.dp),
     )
 
+    AppearanceSection(viewModel)
+
     BackupSection(viewModel)
 
     AboutSection()
 
     val crashReports by viewModel.crashReports.collectAsStateWithLifecycle()
     CrashReportSection(reports = crashReports, onClear = viewModel::clearCrashReports)
+  }
+}
+
+/** 見た目。画面の明暗と、画面の色に壁紙の色（ダイナミックカラー）を使うか（→ adr/0040）。 */
+@Composable
+private fun AppearanceSection(viewModel: SettingsViewModel) {
+  val useDynamicColor by viewModel.useDynamicColor.collectAsStateWithLifecycle()
+  val themeMode by viewModel.themeMode.collectAsStateWithLifecycle()
+  Text(
+    text = "見た目",
+    style = MaterialTheme.typography.titleMedium,
+    modifier = Modifier.padding(top = 24.dp),
+  )
+  viewModel.themeModeOptions.forEach { mode ->
+    Row(
+      modifier = Modifier
+        .fillMaxWidth()
+        .selectable(
+          selected = themeMode == mode,
+          onClick = { viewModel.setThemeMode(mode) },
+        )
+        .padding(vertical = 8.dp),
+      verticalAlignment = Alignment.CenterVertically,
+    ) {
+      RadioButton(
+        selected = themeMode == mode,
+        onClick = { viewModel.setThemeMode(mode) },
+      )
+      Text(
+        text = themeModeLabel(mode),
+        style = MaterialTheme.typography.bodyLarge,
+      )
+    }
+  }
+  Row(
+    modifier = Modifier
+      .fillMaxWidth()
+      .toggleable(
+        value = useDynamicColor,
+        role = Role.Switch,
+        onValueChange = viewModel::setUseDynamicColor,
+      )
+      .padding(vertical = 8.dp),
+    verticalAlignment = Alignment.CenterVertically,
+  ) {
+    Column(modifier = Modifier.weight(1f)) {
+      Text(
+        text = "壁紙の色を使う",
+        style = MaterialTheme.typography.bodyLarge,
+      )
+      Text(
+        text = "画面の色を端末の壁紙に合わせます。地図の経路やマーカーの色は変わりません。",
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+      )
+    }
+    // 行全体で切り替えるので、スイッチ自体は押せなくする（二重に反応させない）。
+    Switch(checked = useDynamicColor, onCheckedChange = null)
   }
 }
 
@@ -307,6 +371,12 @@ private fun restartApp(context: Context) {
   intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
   context.startActivity(intent)
   Runtime.getRuntime().exit(0)
+}
+
+private fun themeModeLabel(mode: ThemeMode): String = when (mode) {
+  ThemeMode.SYSTEM -> "端末の設定に従う"
+  ThemeMode.LIGHT -> "明るい"
+  ThemeMode.DARK -> "暗い"
 }
 
 private fun locationAccuracyLabel(accuracy: LocationAccuracy): String = when (accuracy) {

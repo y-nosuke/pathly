@@ -88,7 +88,6 @@ import com.pathly.presentation.common.MapInfoWindowState
 import com.pathly.presentation.common.MapMarker
 import com.pathly.presentation.common.MapPinMarker
 import com.pathly.presentation.common.MapPlaceFilterButton
-import com.pathly.presentation.common.MarkerPickBlue
 import com.pathly.presentation.common.NearbyConfirmPurpose
 import com.pathly.presentation.common.NearbyPlaceConfirmDialog
 import com.pathly.presentation.common.RegisteredPlaceMarkers
@@ -107,15 +106,15 @@ import com.pathly.presentation.stops.ManualStopOrigin
 import com.pathly.presentation.stops.ManualStopSheet
 import com.pathly.presentation.stops.ManualStopTarget
 import com.pathly.presentation.stops.StopReassignDialog
+import com.pathly.ui.theme.PathlyElevation
+import com.pathly.ui.theme.PathlyMapColors
+import com.pathly.ui.theme.PathlyShapes
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.util.Date
 import kotlin.math.roundToInt
 
 // 記録画面の地図（記録中の経路・立ち寄り・重ねた過去の経路・登録済みの場所・地域の目印）と現在地ボタン。
-
-/** 手動追加のハイライト（選択した滞在区間）。軌跡・立ち寄りと見分ける青。経路詳細と揃える。 */
-private val manualHighlightColor = Color(0xFF1E88E5)
 
 // 「この経路の全体を見る」で寄せたとき、線の端が画面の縁やボタンに掛からないようにする余白（px）。
 private const val FIT_PADDING_PX = 160
@@ -296,7 +295,7 @@ internal fun TrackingMapView(
       if (manualHighlight.size >= 2) {
         Polyline(
           points = manualHighlight.map { LatLng(it.latitude, it.longitude) },
-          color = manualHighlightColor,
+          color = PathlyMapColors.ManualHighlight,
           width = 14f,
         )
       }
@@ -311,7 +310,7 @@ internal fun TrackingMapView(
           state = pickMarkerState,
           title = "追加する地点",
         ) {
-          MapPinMarker(bg = MarkerPickBlue, glyph = R.drawable.ic_add)
+          MapPinMarker(bg = PathlyMapColors.Picked, glyph = R.drawable.ic_add)
         }
       }
       // 登録済みの場所（トグルON）。トラック未確定でも出せるよう、経路描画とは独立して描く。
@@ -366,9 +365,9 @@ internal fun TrackingMapView(
         modifier = Modifier
           .align(Alignment.TopCenter)
           .padding(top = 12.dp),
-        shape = RoundedCornerShape(20.dp),
+        shape = PathlyShapes.pill,
         color = MaterialTheme.colorScheme.surface,
-        shadowElevation = 4.dp,
+        shadowElevation = PathlyElevation.floating,
       ) {
         Row(
           modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
@@ -401,7 +400,7 @@ private fun FollowLocationButton(
     modifier = modifier.size(44.dp),
     shape = CircleShape,
     color = if (following) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surface,
-    shadowElevation = 4.dp,
+    shadowElevation = PathlyElevation.floating,
   ) {
     Box(contentAlignment = Alignment.Center) {
       Icon(
@@ -418,26 +417,23 @@ private fun FollowLocationButton(
   }
 }
 
-// 地域の目印の色。経路（青）・立ち寄り（紫）・登録済みの場所（緑・灰）・手動の地点（青）と見分ける。
-internal val MarkerRegionIndigo = Color(0xFF3949AB)
-
 /** 地域の目印: 藍色の札（地名）の下にピン。札は地図の地名の文字と見分けられるよう塗りつぶす。 */
 @Composable
 private fun RegionMarkerBadge(name: String) {
   Column(horizontalAlignment = Alignment.CenterHorizontally) {
     Text(
       text = name,
-      color = Color.White,
+      color = PathlyMapColors.OnMarker,
       style = MaterialTheme.typography.labelLarge,
       maxLines = 1,
       overflow = TextOverflow.Ellipsis,
       modifier = Modifier
         .widthIn(max = 200.dp)
-        .background(MarkerRegionIndigo, RoundedCornerShape(8.dp))
-        .border(1.dp, Color.White, RoundedCornerShape(8.dp))
+        .background(PathlyMapColors.Region, RoundedCornerShape(8.dp))
+        .border(1.dp, PathlyMapColors.OnMarker, RoundedCornerShape(8.dp))
         .padding(horizontal = 8.dp, vertical = 4.dp),
     )
     Spacer(modifier = Modifier.height(2.dp))
-    MapPinMarker(bg = MarkerRegionIndigo, glyph = R.drawable.ic_public)
+    MapPinMarker(bg = PathlyMapColors.Region, glyph = R.drawable.ic_public)
   }
 }

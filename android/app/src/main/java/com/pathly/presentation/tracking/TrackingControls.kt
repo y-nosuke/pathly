@@ -88,7 +88,6 @@ import com.pathly.presentation.common.MapInfoWindowState
 import com.pathly.presentation.common.MapMarker
 import com.pathly.presentation.common.MapPinMarker
 import com.pathly.presentation.common.MapPlaceFilterButton
-import com.pathly.presentation.common.MarkerPickBlue
 import com.pathly.presentation.common.NearbyConfirmPurpose
 import com.pathly.presentation.common.NearbyPlaceConfirmDialog
 import com.pathly.presentation.common.RegisteredPlaceMarkers
@@ -107,6 +106,9 @@ import com.pathly.presentation.stops.ManualStopOrigin
 import com.pathly.presentation.stops.ManualStopSheet
 import com.pathly.presentation.stops.ManualStopTarget
 import com.pathly.presentation.stops.StopReassignDialog
+import com.pathly.ui.theme.PathlyElevation
+import com.pathly.ui.theme.PathlyMapColors
+import com.pathly.ui.theme.PathlyShapes
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.util.Date
@@ -130,9 +132,9 @@ internal fun RecordingStatusPill(
 
   Surface(
     modifier = modifier,
-    shape = RoundedCornerShape(20.dp),
+    shape = PathlyShapes.pill,
     color = MaterialTheme.colorScheme.errorContainer,
-    shadowElevation = 4.dp,
+    shadowElevation = PathlyElevation.floating,
   ) {
     Row(
       modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
@@ -165,9 +167,9 @@ internal fun TrackingStatsCard(
 
   Surface(
     modifier = modifier,
-    shape = RoundedCornerShape(16.dp),
+    shape = MaterialTheme.shapes.medium,
     color = MaterialTheme.colorScheme.surface,
-    shadowElevation = 4.dp,
+    shadowElevation = PathlyElevation.floating,
   ) {
     Row(
       modifier = Modifier.padding(horizontal = 24.dp, vertical = 12.dp),
@@ -301,9 +303,9 @@ internal fun BatteryOptimizationCard(
 ) {
   Surface(
     modifier = modifier,
-    shape = RoundedCornerShape(12.dp),
+    shape = MaterialTheme.shapes.medium,
     color = MaterialTheme.colorScheme.secondaryContainer,
-    shadowElevation = 4.dp,
+    shadowElevation = PathlyElevation.floating,
   ) {
     Column(
       modifier = Modifier.padding(16.dp),
@@ -373,9 +375,9 @@ internal fun RegionMarkerChip(
 ) {
   Surface(
     modifier = modifier.testTag("regionMarkerChip"),
-    shape = RoundedCornerShape(20.dp),
+    shape = PathlyShapes.pill,
     color = MaterialTheme.colorScheme.surface,
-    shadowElevation = 4.dp,
+    shadowElevation = PathlyElevation.floating,
   ) {
     Row(verticalAlignment = Alignment.CenterVertically) {
       Row(
@@ -388,7 +390,7 @@ internal fun RegionMarkerChip(
         Icon(
           painter = painterResource(R.drawable.ic_public),
           contentDescription = null,
-          tint = MarkerRegionIndigo,
+          tint = PathlyMapColors.Region,
           modifier = Modifier.size(18.dp),
         )
         Spacer(modifier = Modifier.width(6.dp))

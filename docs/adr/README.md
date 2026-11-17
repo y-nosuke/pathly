@@ -55,3 +55,4 @@
 | [0037](0037-ask-merge-or-keep-separate-on-same-facility.md) | 同じ施設と分かった場所は、まとめるか別のまま残すかをユーザーに選んでもらう（v21）                     | Accepted |
 | [0038](0038-screen-layouts-four-corners-and-tool-row.md)    | 地図の画面は四隅で役割を固定し、一覧の画面は見出しとツール行にそろえる                                | Accepted |
 | [0039](0039-one-search-box-for-places-and-regions.md)       | 地図の検索窓は 1 つにし、施設（登録）と地域（移動）の候補を一緒に出す                                 | Accepted |
+| [0040](0040-design-tokens-indigo-fixed-colors.md)           | 画面の色・文字・余白・角丸・影を Pathly のトークンに決め、壁紙の色は設定で選べるようにする            | Accepted |

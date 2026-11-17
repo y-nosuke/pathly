@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- 開発版のアイコンの地（黄）。スプラッシュ画面の丸にも使う。 -->
+    <color name="launcher_icon_background">#FFE0B23A</color>
+</resources>

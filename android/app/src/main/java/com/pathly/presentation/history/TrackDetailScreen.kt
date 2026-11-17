@@ -54,6 +54,8 @@ import com.pathly.presentation.stops.ManualStopTarget
 import com.pathly.presentation.stops.ManualStopUi
 import com.pathly.presentation.stops.StopDurationSheet
 import com.pathly.presentation.stops.StopReassignHost
+import com.pathly.ui.theme.PathlyElevation
+import com.pathly.ui.theme.PathlyShapes
 import kotlinx.coroutines.launch
 
 private val tuningSheetPeekHeight = 360.dp
@@ -415,9 +417,9 @@ private fun BoxScope.TuningPanel(track: GpsTrack, state: TrackDetailScreenState)
       .align(Alignment.BottomCenter)
       .fillMaxWidth()
       .height(tuningSheetPeekHeight),
-    shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
+    shape = PathlyShapes.sheetTop,
     color = MaterialTheme.colorScheme.surface,
-    shadowElevation = 12.dp,
+    shadowElevation = PathlyElevation.sheet,
   ) {
     Column(
       modifier = Modifier

@@ -17,6 +17,7 @@ import androidx.compose.ui.unit.dp
 import com.pathly.BuildConfig
 import com.pathly.R
 import com.pathly.presentation.common.MapPlaceFilterButton
+import com.pathly.ui.theme.PathlyElevation
 
 /**
  * 経路詳細の上部の丸ボタン（戻る・経路の全体を見る・登録済みの場所・その絞り込み・補正の調整・GPS 詳細）。
@@ -94,7 +95,7 @@ private fun MapRoundButton(
     onClick = onClick,
     shape = CircleShape,
     color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surface,
-    shadowElevation = 4.dp,
+    shadowElevation = PathlyElevation.floating,
   ) {
     Icon(
       painter = painterResource(icon),
