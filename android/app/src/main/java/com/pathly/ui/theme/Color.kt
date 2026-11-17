@@ -115,6 +115,12 @@ data class PathlyStatusColors(val visited: Color)
 internal val PathlyLightStatusColors = PathlyStatusColors(visited = Color(0xFF2E7D32))
 internal val PathlyDarkStatusColors = PathlyStatusColors(visited = Color(0xFF8FD49A))
 
+/** ビルドの種類の印の色。テーマに従わない。 */
+object PathlyBuildColors {
+  /** 開発版（com.pathly.debug）の印。アイコンの地（src/debug/res）と同じ黄。上端の帯に使う。 */
+  val DevBuild = Color(0xFFE0B23A)
+}
+
 /**
  * 地図に描くものの色。**テーマ（明暗・ダイナミックカラー）で変えない。** 地図の地は明暗で変わらず、
  * 色が「状態」を表すので、どの端末・どの設定でも同じに見える必要がある。

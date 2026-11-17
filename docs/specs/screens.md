@@ -396,6 +396,10 @@ Jetpack Compose による Android アプリの画面仕様。**マップを主�
 
 ### アイコン
 
+アプリのアイコンは、藍（`primary`）の地に、地図の経路と同じ橙の経路と出発の点、白い目的地のピン（`res/drawable/ic_launcher_*`）。
+端末の「テーマ アイコン」が ON のときは形だけが使われ、色は壁紙から決まる。
+開発版（`com.pathly.debug`）は並べて見分けられるよう、黄の地に藍の経路にする（→ [designs/release.md](../designs/release.md)）。
+
 画面で使うアイコン（`ic_location_on` / `ic_list` / `ic_place` / `ic_flag` / `ic_flag_filled` / `ic_flag_check` / `ic_favorite` / `ic_favorite_filled` / `ic_more_vert` / `ic_settings` / `ic_play_arrow` / `ic_stop` / `ic_arrow_back` / `ic_my_location` / `ic_tune` / `ic_delete` / `ic_filter` / `ic_map` / `ic_expand_less` / `ic_expand_more` / `ic_fit` / `ic_search`）。`ic_map` と `ic_list` は場所タブの地図表示・一覧表示の切り替え、`ic_expand_less` / `ic_expand_more` は地図表示で重ねたものをたたむ・ひろげる。`ic_place` は場所タブ、行きたいフラグは **OFF=`ic_flag`（輪郭）/ ON=`ic_flag_filled`（塗り・primary色）/ 行きたいで行ったことがある=`ic_flag_check`（輪郭の旗に丸いチェック・緑）** で区別する。
 
 ## 今後の拡張（ロードマップ連動）
