@@ -30,6 +30,7 @@ import com.pathly.presentation.stops.ManualStopTarget
  *
  * @param candidates 再解析の候補（候補選択モードのときだけ渡す）。
  * @param bottomPadding シート・オーバーレイの裏に隠れないよう地図の下端を空ける高さ。
+ * @param showMyLocation 端末の現在地を地図に出すか（位置情報の許可があるとき）。
  */
 @Composable
 internal fun TrackDetailMapLayer(
@@ -42,6 +43,7 @@ internal fun TrackDetailMapLayer(
   infoWindow: MapInfoWindowState,
   bottomPadding: Dp,
   onStopSelected: (Stop) -> Unit,
+  showMyLocation: Boolean = false,
   modifier: Modifier = Modifier,
 ) {
   val manualPoints = track.smoothedPoints
@@ -118,6 +120,7 @@ internal fun TrackDetailMapLayer(
     fitNonce = state.fitNonce,
     // フォーカスがピンをシート/オーバーレイの裏に隠さないよう、下端を空ける。
     contentPadding = PaddingValues(bottom = bottomPadding),
+    showMyLocation = showMyLocation,
     onPoiClick = { poi ->
       if (manualMode) {
         state.pickManual(ManualStopTarget(poi.latLng.latitude, poi.latLng.longitude, ManualStopOrigin.Poi(poi.name, poi.placeId)))

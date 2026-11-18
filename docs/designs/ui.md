@@ -134,6 +134,7 @@ DB に持たないのは、`R.drawable` の ID を DB に入れられず結局�
 | 区画         | 部品（`presentation/common/`）                                                          | 中身                                                                                         |
 | ------------ | --------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
 | 上・上の下   | `MapTopBar`（`MapTopBar.kt`）                                                           | 左（戻る＋見出し、または検索の入口）・右端（レイヤー・⋮）・その下に今の状態を縦に積む        |
+| 上（詳細）   | `MapBackTitle`・`MapOverflowMenuButton`（同）                                           | 戻る＋見出し（副題・見出しを押す操作つき）の窓と、⋮ のメニュー（中身は画面ごと）             |
 | 上の下       | `MapNoticeBanner`（同）                                                                 | 1 行の帯。押すと詳しい画面へ（›）。うまくいかなかった知らせは `isError`                      |
 | レイヤー     | `MapLayersButton`・`RegisteredPlacesLayerItems`・`MapLayerActionItem`（`MapLayers.kt`） | ［≋］と開くパネル。登録済みの場所の表示・絞り込みは共通、ほかは画面ごとの行                  |
 | 右下         | `MapControls`・`MapRoundButton`（`MapControls.kt`・`MapTopBar.kt`）                     | 地図の操作を縦に積む。`bottomInset` にいま出ているシートの高さ（段の確定値）を渡して沿わせる |

@@ -2,21 +2,17 @@ package com.pathly.presentation.history
 
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
-import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -24,13 +20,13 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -44,8 +40,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -55,79 +49,14 @@ import com.pathly.R
 import com.pathly.domain.model.GpsTrack
 import com.pathly.domain.model.Stop
 import com.pathly.domain.model.WishlistFlag
+import com.pathly.presentation.common.MapSideActions
 import com.pathly.presentation.common.WishlistFlagButton
-import com.pathly.ui.theme.PathlyElevation
 import com.pathly.ui.theme.PathlyMapColors
-import com.pathly.ui.theme.PathlyShapes
+import com.pathly.ui.theme.PathlySpacing
 import com.pathly.util.DateFormatters
 import kotlin.math.roundToInt
 
-// 地図の上に重ねるフローティングシートと、その中身（サマリ・立ち寄り一覧・選択バー）。
-
-/**
- * 地図の上に重ねるフローティングシート。角丸＋影で"浮いている"見た目にし、上部のつまみを
- * 上下ドラッグして高さ（段）を変える。中身（[content]）の一覧は独立してスクロールする。
- * 高さは [heightPx]（px を返すラムダ）で受け取り、**このコンポーザブル内で読む**ことで、
- * ドラッグ/アニメの再コンポーズを地図側に波及させない（地図のカクつき防止）。
- */
-@Composable
-internal fun FloatingStopSheet(
-  heightPx: () -> Float,
-  onDrag: (Float) -> Unit,
-  onDragEnd: () -> Unit,
-  modifier: Modifier = Modifier,
-  content: @Composable ColumnScope.() -> Unit,
-) {
-  val density = LocalDensity.current
-  Surface(
-    modifier = modifier
-      .fillMaxWidth()
-      .height(with(density) { heightPx().toDp() }),
-    shape = PathlyShapes.sheetTop,
-    color = MaterialTheme.colorScheme.surface,
-    shadowElevation = PathlyElevation.sheet,
-  ) {
-    Column(
-      modifier = Modifier
-        .fillMaxSize()
-        .navigationBarsPadding(),
-    ) {
-      SheetDragHandle(onDrag = onDrag, onDragEnd = onDragEnd)
-      content()
-    }
-  }
-}
-
-/** シート上部のつまみ。縦ドラッグでシート高さを変える（一覧のスクロールとは独立）。 */
-@Composable
-internal fun SheetDragHandle(
-  onDrag: (Float) -> Unit,
-  onDragEnd: () -> Unit,
-) {
-  Box(
-    modifier = Modifier
-      .fillMaxWidth()
-      .pointerInput(Unit) {
-        detectVerticalDragGestures(
-          onVerticalDrag = { _, dragAmount -> onDrag(dragAmount) },
-          onDragEnd = onDragEnd,
-          onDragCancel = onDragEnd,
-        )
-      }
-      .padding(vertical = 10.dp),
-    contentAlignment = Alignment.Center,
-  ) {
-    Box(
-      modifier = Modifier
-        .width(40.dp)
-        .height(4.dp)
-        .background(
-          MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f),
-          PathlyShapes.pill,
-        ),
-    )
-  }
-}
+// 地図の上に重ねるシート（common の FloatingSheet）の中身（サマリ・立ち寄り一覧・選択バー）。
 
 @Composable
 internal fun TrackDetailSheet(
@@ -147,9 +76,7 @@ internal fun TrackDetailSheet(
   // 同じ施設の確認待ち（→ adr/0037）の件数と、それを聞くダイアログを開く。
   sameFacilityPendingCount: Int,
   onOpenSameFacility: () -> Unit,
-  onReanalyze: () -> Unit,
   onManualAdd: () -> Unit,
-  onRenameTrack: () -> Unit,
   onEnterSelection: (Stop) -> Unit,
   onToggleSelect: (Stop) -> Unit,
   onSelectAll: () -> Unit,
@@ -194,9 +121,7 @@ internal fun TrackDetailSheet(
         onResolveNames = onResolveNames,
         sameFacilityPendingCount = sameFacilityPendingCount,
         onOpenSameFacility = onOpenSameFacility,
-        onReanalyze = onReanalyze,
         onManualAdd = onManualAdd,
-        onRenameTrack = onRenameTrack,
       )
     }
     // 立ち寄り一覧（ここだけスクロール）。シートの残り領域を埋め、独立してスクロールする。
@@ -233,160 +158,117 @@ internal fun TrackDetailSheet(
 }
 
 /**
- * 経路の固定ヘッダー。スクロールしても消えないよう一覧の外に置く。
- * 大きなタイルはやめ、日付＋1行スタッツ（距離・地点数・時間・立ち寄り件数）＋操作ボタンにまとめる。
+ * 経路の固定ヘッダー（シートの先頭）。スクロールしても消えないよう一覧の外に置く。
+ * 見出し（名前・日付）と記録中の印は上のバー、経路への操作は ⋮ に置くので、ここは
+ * 時刻・1 行の数字・出ているときだけの「やること」の帯・脇役の「立ち寄りを追加」だけにする（→ docs/designs/ui-direction.md）。
  */
-@OptIn(ExperimentalLayoutApi::class)
 @Composable
 internal fun TrackSummaryHeader(
   track: GpsTrack,
   stops: List<Stop>,
   unresolvedCount: Int,
   onResolveNames: () -> Unit,
-  onReanalyze: () -> Unit,
   onManualAdd: () -> Unit,
-  onRenameTrack: () -> Unit,
   sameFacilityPendingCount: Int = 0,
   onOpenSameFacility: () -> Unit = {},
 ) {
   Column(
     modifier = Modifier
       .fillMaxWidth()
-      .padding(horizontal = 20.dp)
-      .padding(top = 8.dp, bottom = 8.dp),
-    verticalArrangement = Arrangement.spacedBy(6.dp),
+      .padding(bottom = PathlySpacing.sm),
+    verticalArrangement = Arrangement.spacedBy(PathlySpacing.sm),
   ) {
-    Row(
-      modifier = Modifier.fillMaxWidth(),
-      horizontalArrangement = Arrangement.SpaceBetween,
-      verticalAlignment = Alignment.CenterVertically,
-    ) {
-      // 見出しは名前があれば名前、無ければ日付（一覧のカードと同じ見せ方）。
-      // 見出しそのものをタップして命名できる（下のチップからも開ける）。
-      Column(
-        modifier = Modifier
-          .weight(1f)
-          .clip(MaterialTheme.shapes.small)
-          .clickable(onClick = onRenameTrack)
-          .padding(vertical = 2.dp),
-      ) {
-        Text(
-          text = if (track.hasName) track.name.orEmpty() else DateFormatters.date(track.startTime),
-          style = MaterialTheme.typography.titleLarge,
-          fontWeight = FontWeight.Bold,
-        )
-        if (track.hasName) {
-          Text(
-            text = DateFormatters.date(track.startTime),
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-          )
-        }
+    Column(modifier = Modifier.padding(horizontal = PathlySpacing.screenEdge)) {
+      // 1 行目: 時刻の範囲と所要時間（記録中は「記録中」）。
+      val endTime = track.endTime
+      val timePart = if (endTime != null) {
+        val durationMinutes = ((endTime.time - track.startTime.time) / 1000 / 60).toInt()
+        val hours = durationMinutes / 60
+        val minutes = durationMinutes % 60
+        val duration = if (hours > 0) "${hours}時間${minutes}分" else "${minutes}分"
+        "${DateFormatters.shortTime(track.startTime)} – ${DateFormatters.shortTime(endTime)}　$duration"
+      } else {
+        "${DateFormatters.shortTime(track.startTime)} – 記録中"
       }
-      if (track.isActive) {
-        Surface(
-          shape = PathlyShapes.pill,
-          color = MaterialTheme.colorScheme.primaryContainer,
-        ) {
-          Text(
-            text = "● 記録中",
-            style = MaterialTheme.typography.labelMedium,
-            color = MaterialTheme.colorScheme.onPrimaryContainer,
-            fontWeight = FontWeight.Medium,
-            modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
-          )
-        }
-      }
-    }
+      Text(text = timePart, style = MaterialTheme.typography.titleMedium)
 
-    // 1行スタッツ: 距離 ・ 地点数 ・ 時間（記録中は「記録中」）・ 立ち寄り件数。
-    val distanceKm = (track.totalDistanceMeters / 1000.0 * 100).roundToInt() / 100.0
-    val endTime = track.endTime
-    val timePart = if (endTime != null) {
-      val durationMinutes = ((endTime.time - track.startTime.time) / 1000 / 60).toInt()
-      val hours = durationMinutes / 60
-      val minutes = durationMinutes % 60
-      if (hours > 0) "${hours}時間${minutes}分" else "${minutes}分"
-    } else {
-      "記録中"
-    }
-    val stats = buildList {
-      add("${distanceKm}km")
-      add("${track.points.size}点")
-      add(timePart)
-      if (stops.isNotEmpty()) add("立ち寄り${stops.size}件")
-    }.joinToString("　・　")
-    Text(
-      text = stats,
-      style = MaterialTheme.typography.bodyMedium,
-      color = MaterialTheme.colorScheme.onSurfaceVariant,
-    )
-
-    // 欠落を含む経路は、距離のうちどれだけが「取れなかった区間の直線」かを出す。
-    // 総距離には含めるが（補完ぶんは過大にならないので足す方が実際に近い）、実測ではないことは見せる。
-    // 同じ場所で再開したときは補完ぶんが 0.0km になるので、箇所数を主語にして「0.0km」を見せない。
-    if (track.hasGap) {
-      val bridgedKm = (track.bridgedDistanceMeters / 1000.0 * 100).roundToInt() / 100.0
+      // 2 行目: 距離 ・ 地点数 ・ 立ち寄り件数。
+      val distanceKm = (track.totalDistanceMeters / 1000.0 * 100).roundToInt() / 100.0
+      val stats = buildList {
+        add("${distanceKm}km")
+        add("${track.points.size}点")
+        if (stops.isNotEmpty()) add("立ち寄り${stops.size}件")
+      }.joinToString("　・　")
       Text(
-        text = if (bridgedKm > 0.0) {
-          "記録が途切れた区間が${track.gapCount}箇所（距離のうち ${bridgedKm}km は直線で補完・地図では点線）"
-        } else {
-          "記録が途切れた区間が${track.gapCount}箇所（ほぼ同じ場所で再開・地図では点線）"
-        },
-        style = MaterialTheme.typography.bodySmall,
+        text = stats,
+        style = MaterialTheme.typography.bodyMedium,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
       )
+
+      // 欠落を含む経路は、距離のうちどれだけが「取れなかった区間の直線」かを出す。
+      // 総距離には含めるが（補完ぶんは過大にならないので足す方が実際に近い）、実測ではないことは見せる。
+      // 同じ場所で再開したときは補完ぶんが 0.0km になるので、箇所数を主語にして「0.0km」を見せない。
+      if (track.hasGap) {
+        val bridgedKm = (track.bridgedDistanceMeters / 1000.0 * 100).roundToInt() / 100.0
+        Text(
+          text = if (bridgedKm > 0.0) {
+            "記録が途切れた区間が${track.gapCount}箇所（距離のうち ${bridgedKm}km は直線で補完・地図では点線）"
+          } else {
+            "記録が途切れた区間が${track.gapCount}箇所（ほぼ同じ場所で再開・地図では点線）"
+          },
+          style = MaterialTheme.typography.bodySmall,
+          color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+      }
     }
 
-    FlowRow(
-      modifier = Modifier.fillMaxWidth(),
-      horizontalArrangement = Arrangement.spacedBy(8.dp),
-      verticalArrangement = Arrangement.spacedBy(8.dp),
+    // 出ているときだけの「やること」。条件付きで出るものは目立たせる（→ docs/designs/ui-direction.md の段分け）。
+    // 場所を取得: googlePlaceId が無い場所を Google で命名する（オフラインで解決できなかった分の手動再実行）。
+    if (unresolvedCount > 0) {
+      SheetTodoBanner(text = "場所を取得（未取得 ${unresolvedCount}件）", onClick = onResolveNames)
+    }
+    // 同じ施設の場所があって、まとめるか別のまま残すかを決めていない（→ adr/0037）。
+    if (sameFacilityPendingCount > 0) {
+      SheetTodoBanner(text = "同じ施設の確認待ち ${sameFacilityPendingCount}件", onClick = onOpenSameFacility)
+    }
+
+    // 立ち寄りを追加: 検出に頼らず、地図で指した地点を立ち寄りとして足す（完全手動）。到着/出発は
+    // その時点の軌跡から仮置きする。記録中も使える（末尾が伸びる分は確定時の軌跡で推定）。
+    if (track.points.size >= 2) {
+      MapSideActions {
+        OutlinedButton(onClick = onManualAdd) {
+          Icon(painter = painterResource(R.drawable.ic_add), contentDescription = null, modifier = Modifier.size(18.dp))
+          Spacer(modifier = Modifier.width(PathlySpacing.xs))
+          Text("立ち寄りを追加")
+        }
+      }
+    }
+  }
+}
+
+/** シートの中の「やること」の帯。出ているときだけ出し、押すとその操作を始める（右端に ›）。 */
+@Composable
+private fun SheetTodoBanner(text: String, onClick: () -> Unit) {
+  Surface(
+    onClick = onClick,
+    modifier = Modifier
+      .fillMaxWidth()
+      .padding(horizontal = PathlySpacing.screenEdge)
+      .heightIn(min = 44.dp),
+    shape = MaterialTheme.shapes.small,
+    color = MaterialTheme.colorScheme.tertiaryContainer,
+    contentColor = MaterialTheme.colorScheme.onTertiaryContainer,
+  ) {
+    Row(
+      modifier = Modifier.padding(horizontal = PathlySpacing.md, vertical = PathlySpacing.sm),
+      verticalAlignment = Alignment.CenterVertically,
     ) {
-      // 再解析: 一覧に無い立ち寄りを検出して、選択式で追加する（非破壊）。記録中も表示する
-      // （誤って消した立ち寄りの復旧用）。候補は境界以前＝「確定済みの過去」だけに絞られ、
-      // 滞在中・末尾はライブ検出に任せる（重複防止は PlaceRepositoryImpl.detectMissingStops 側）。
-      if (track.points.size >= 2) {
-        ActionChip(
-          text = "再解析",
-          container = MaterialTheme.colorScheme.tertiaryContainer,
-          content = MaterialTheme.colorScheme.onTertiaryContainer,
-          onClick = onReanalyze,
-        )
-      }
-      // 立ち寄りを追加: 検出に頼らず、地図で指した地点を立ち寄りとして足す（完全手動）。到着/出発は
-      // その時点の軌跡から仮置きする。記録中も使える（末尾が伸びる分は確定時の軌跡で推定）。
-      if (track.points.size >= 2) {
-        ActionChip(
-          text = "立ち寄りを追加",
-          container = MaterialTheme.colorScheme.tertiaryContainer,
-          content = MaterialTheme.colorScheme.onTertiaryContainer,
-          onClick = onManualAdd,
-        )
-      }
-      ActionChip(
-        text = if (track.hasName) "名前を編集" else "名前を付ける",
-        container = MaterialTheme.colorScheme.secondaryContainer,
-        content = MaterialTheme.colorScheme.onSecondaryContainer,
-        onClick = onRenameTrack,
+      Text(
+        text = text,
+        style = MaterialTheme.typography.labelLarge,
+        modifier = Modifier.weight(1f),
       )
-      if (unresolvedCount > 0) {
-        ActionChip(
-          text = "場所を取得（未取得 ${unresolvedCount}件）",
-          container = MaterialTheme.colorScheme.secondaryContainer,
-          content = MaterialTheme.colorScheme.onSecondaryContainer,
-          onClick = onResolveNames,
-        )
-      }
-      // 同じ施設の場所があって、まとめるか別のまま残すかを決めていない（→ adr/0037）。
-      if (sameFacilityPendingCount > 0) {
-        ActionChip(
-          text = "同じ施設の確認待ち ${sameFacilityPendingCount}件",
-          container = MaterialTheme.colorScheme.tertiaryContainer,
-          content = MaterialTheme.colorScheme.onTertiaryContainer,
-          onClick = onOpenSameFacility,
-        )
-      }
+      Icon(painter = painterResource(R.drawable.ic_chevron_right), contentDescription = null, modifier = Modifier.size(20.dp))
     }
   }
 }
@@ -572,27 +454,5 @@ internal fun StopRow(
         }
       }
     }
-  }
-}
-
-@Composable
-internal fun ActionChip(
-  text: String,
-  container: Color,
-  content: Color,
-  onClick: () -> Unit,
-) {
-  Surface(
-    onClick = onClick,
-    shape = PathlyShapes.pill,
-    color = container,
-  ) {
-    Text(
-      text = text,
-      style = MaterialTheme.typography.labelLarge,
-      color = content,
-      fontWeight = FontWeight.Medium,
-      modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-    )
   }
 }

@@ -1,5 +1,8 @@
 package com.pathly.presentation.history
 
+import android.Manifest
+import android.content.Context
+import android.content.pm.PackageManager
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
@@ -9,7 +12,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -23,28 +25,40 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.core.content.ContextCompat
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LifecycleEventEffect
 import com.google.android.gms.maps.model.LatLng
+import com.pathly.R
 import com.pathly.domain.model.GpsTrack
 import com.pathly.domain.model.Stop
 import com.pathly.domain.model.WishlistFlag
 import com.pathly.presentation.common.CloseInfoWindowWithSheet
 import com.pathly.presentation.common.FloatingSheet
 import com.pathly.presentation.common.FloatingSheetState
+import com.pathly.presentation.common.MapControls
 import com.pathly.presentation.common.MapInfoWindowState
+import com.pathly.presentation.common.MapRoundButton
 import com.pathly.presentation.common.SameFacilityDialog
 import com.pathly.presentation.common.SheetDetent
+import com.pathly.presentation.common.SheetRestoreButtonInset
 import com.pathly.presentation.common.heightOf
 import com.pathly.presentation.common.rememberFloatingSheetState
 import com.pathly.presentation.common.rememberMapInfoWindowState
+import com.pathly.presentation.common.requestCurrentLatLng
 import com.pathly.presentation.places.PlaceEditHost
 import com.pathly.presentation.places.PlaceEditUi
 import com.pathly.presentation.places.PlaceSheetTarget
@@ -68,6 +82,7 @@ private val tuningSheetPeekHeight = 360.dp
  *
  * @param currentStop 記録中に開いたときの「立ち寄り中（ライブ）」。地図にだけ出す（一覧・保存には出さない）。
  * @param onRenameTrack 経路そのものの名前（空なら未命名に戻す）。一覧のカードのメニューと同じダイアログを使う。
+ * @param onToggleFavorite 経路のお気に入りの付け外し（上のバーの ⋮）。
  * @param onOpenTrack 場所シートの訪問履歴から、その訪問のお出掛け（別の経路詳細）を開く。
  * @param mapContent 地図スロット。null（既定）は実マップ（GoogleMap）を描画する。テストは空スロット（{}）を渡し、
  *   GMS 依存の地図描画を避けてシート・オーバーレイだけを検証する。
@@ -84,6 +99,7 @@ fun TrackDetailScreen(
   message: String? = null,
   onMessageShown: () -> Unit = {},
   onRenameTrack: (name: String) -> Unit = {},
+  onToggleFavorite: () -> Unit = {},
   stopActions: TrackStopActions = TrackStopActions(),
   reanalysis: StopReanalysis = StopReanalysis(),
   sameFacility: SameFacilityReview = SameFacilityReview(),
@@ -107,6 +123,11 @@ fun TrackDetailScreen(
   // 画面高は LocalWindowInfo から取る（Configuration.screenHeightDp は非推奨で、
   // 分割画面などコンテナ実サイズと食い違う）。containerSize は px なので dp に直す。
   val screenHeightDp = with(LocalDensity.current) { LocalWindowInfo.current.containerSize.height.toDp() }
+  // 位置情報の許可があるときだけ、地図に現在地を出し、右下に現在地ボタンを置く（この画面からは許可を求めない）。
+  val context = LocalContext.current
+  // 許可は記録画面などで後から出せるので、画面に戻るたびに見直す。おおよその位置だけの許可でも現在地は取れる。
+  var hasLocationPermission by remember { mutableStateOf(isLocationPermitted(context)) }
+  LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { hasLocationPermission = isLocationPermitted(context) }
 
   // 削除などで stops が変わったら、消えた ID を選択から外す。空になったら選択モードを抜ける。
   LaunchedEffect(stops) {
@@ -131,6 +152,8 @@ fun TrackDetailScreen(
 
   // 期間の編集中のシステムバックは、画面を抜けるのではなく編集をやめる。
   BackHandler(enabled = state.durationEditMode) { state.durationEditStop = null }
+  // 補正の調整（開発版）のシステムバックは、画面を抜けるのではなく調整をやめる（入口は ⋮ の中で遠いため）。
+  BackHandler(enabled = state.tuningMode) { state.tuningMode = false }
   // バックは2段階で戻す: 地点確定後は地点選択（マップ）に戻すだけ、地点選択中は追加モードを抜ける。
   BackHandler(enabled = state.manualMode) {
     if (state.manualPick != null) state.manualPick = null else state.exitManual()
@@ -174,6 +197,7 @@ fun TrackDetailScreen(
         mapPlaces = mapPlaces,
         state = state,
         infoWindow = infoWindow,
+        showMyLocation = hasLocationPermission,
         bottomPadding = mapBottomPadding(state, candidateMode, candidateOverlayHeight, sheetState, placeSheetState, durationSheetState),
         // 通常モードの立ち寄りピン: 一覧の該当行を強調＆スクロール＋「選び直し」を出す（記録画面と統一）。
         onStopSelected = { stop ->
@@ -184,18 +208,39 @@ fun TrackDetailScreen(
       )
     }
 
-    TrackDetailTopButtons(
-      hasPoints = track.points.isNotEmpty(),
+    // 通常モード（補正の調整・再解析の候補・手動追加・期間の編集・場所シートのどれでもない）。
+    val normalMode = !state.tuningMode && !candidateMode && !state.manualMode && !state.durationEditMode && state.placeSheetTarget == null
+
+    // ---- 上: 戻る＋見出し・レイヤー・⋮（地図の画面の型 → docs/designs/ui-direction.md）----
+    TrackDetailTopBar(
+      track = track,
       mapPlaces = mapPlaces,
       tuningMode = state.tuningMode,
+      canReanalyze = normalMode && !state.selectionMode,
+      canTune = normalMode || state.tuningMode,
       onBack = onBackClick,
-      onFitTrack = state::fitTrack,
+      onRename = { state.renamingTrack = true },
+      onToggleFavorite = onToggleFavorite,
+      onReanalyze = reanalysis.onStart,
       onToggleTuning = { state.tuningMode = !state.tuningMode },
       onOpenDebugInfo = { state.debugInfoOpen = true },
+      modifier = Modifier.align(Alignment.TopCenter),
     )
 
+    // ---- 右下: 地図の操作（経路の全体を見る・現在地）。シートの上端に沿わせる。各モードの間と、
+    // シートをフルに広げている間（地図がほぼ隠れ、操作が上のバーに重なる）は出さない ----
+    if (normalMode && track.points.isNotEmpty() && sheetState.detent != SheetDetent.FULL) {
+      TrackDetailMapControls(
+        hasLocationPermission = hasLocationPermission,
+        onFitTrack = state::fitTrack,
+        onMyLocation = { latLng -> state.focusOn(latLng) },
+        bottomInset = if (sheetState.detent == SheetDetent.HIDDEN) SheetRestoreButtonInset else sheetState.heightOf(sheetState.detent),
+        modifier = Modifier.align(Alignment.BottomEnd),
+      )
+    }
+
     // ---- 通常モードのフローティングシート（つまみで開閉・一覧は独立スクロール）----
-    if (!state.tuningMode && !candidateMode && !state.manualMode && !state.durationEditMode && state.placeSheetTarget == null) {
+    if (normalMode) {
       StopListSheet(
         track = track,
         stops = stops,
@@ -381,9 +426,7 @@ private fun BoxScope.StopListSheet(
       onResolveNames = stopActions.onResolveNames,
       sameFacilityPendingCount = sameFacility.pending.size,
       onOpenSameFacility = sameFacility.onOpen,
-      onReanalyze = reanalysis.onStart,
       onManualAdd = state::startManual,
-      onRenameTrack = { state.renamingTrack = true },
       onEnterSelection = { stop ->
         state.selectionMode = true
         if (stop.id !in state.selectedStopIds) state.selectedStopIds.add(stop.id)
@@ -506,7 +549,7 @@ private fun TrackDetailDialogs(
       placeName = firstPending.placeName,
       otherName = firstPending.other.name,
       remaining = sameFacility.pending.size - 1,
-      // まとめたら閉じる。開いたままだとスナックバーの「取り消す」が押せない。残りはチップから続けて聞く。
+      // まとめたら閉じる。開いたままだとスナックバーの「取り消す」が押せない。残りはシートの帯から続けて聞く。
       onMerge = {
         sameFacility.onMerge(firstPending)
         sameFacility.onDismiss()
@@ -576,3 +619,33 @@ private fun TrackDetailDialogs(
     GpsDebugDialog(points = track.points, onDismiss = { state.debugInfoOpen = false })
   }
 }
+
+/**
+ * 右下の地図の操作: 経路の全体を見る（開いたときの見え方に戻す）と、現在地（許可があるときだけ）。
+ * 現在地は一度だけ取って寄せる（記録画面のように追従はしない）。
+ */
+@Composable
+private fun TrackDetailMapControls(
+  hasLocationPermission: Boolean,
+  onFitTrack: () -> Unit,
+  onMyLocation: (LatLng) -> Unit,
+  bottomInset: Dp,
+  modifier: Modifier = Modifier,
+) {
+  val context = LocalContext.current
+  MapControls(bottomInset = bottomInset, modifier = modifier) {
+    MapRoundButton(icon = R.drawable.ic_fit, contentDescription = "経路の全体を見る", onClick = onFitTrack)
+    if (hasLocationPermission) {
+      MapRoundButton(
+        icon = R.drawable.ic_my_location,
+        contentDescription = "現在地へ移動",
+        onClick = { requestCurrentLatLng(context, onMyLocation) },
+      )
+    }
+  }
+}
+
+private fun isLocationPermitted(context: Context): Boolean = listOf(
+  Manifest.permission.ACCESS_FINE_LOCATION,
+  Manifest.permission.ACCESS_COARSE_LOCATION,
+).any { ContextCompat.checkSelfPermission(context, it) == PackageManager.PERMISSION_GRANTED }

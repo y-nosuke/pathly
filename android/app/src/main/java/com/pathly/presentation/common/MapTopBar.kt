@@ -3,6 +3,7 @@ package com.pathly.presentation.common
 import androidx.annotation.DrawableRes
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
@@ -14,11 +15,18 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
@@ -143,6 +151,93 @@ fun MapNoticeBanner(
       if (onClick != null) {
         Icon(painter = painterResource(R.drawable.ic_chevron_right), contentDescription = null, modifier = Modifier.size(20.dp))
       }
+    }
+  }
+}
+
+/**
+ * 詳細の画面の上の左: 戻る＋見出し（[title]。その下に小さく [subtitle]）を 1 つの浮かぶ窓にまとめる。
+ * [MapTopBar] の leading に `Modifier.weight(1f)` を付けて置く。[onTitleClick] を渡すと見出しを押せる
+ * （経路詳細の名前の編集など。押せることは [titleClickLabel] で読み上げる）。
+ */
+@Composable
+fun MapBackTitle(
+  title: String,
+  onBack: () -> Unit,
+  modifier: Modifier = Modifier,
+  subtitle: String? = null,
+  onTitleClick: (() -> Unit)? = null,
+  titleClickLabel: String? = null,
+) {
+  Surface(
+    modifier = modifier.heightIn(min = 48.dp),
+    shape = PathlyShapes.pill,
+    color = MaterialTheme.colorScheme.surfaceContainerLowest,
+    shadowElevation = PathlyElevation.floating,
+  ) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+      IconButton(onClick = onBack) {
+        Icon(painter = painterResource(R.drawable.ic_arrow_back), contentDescription = "戻る")
+      }
+      Column(
+        modifier = Modifier
+          .weight(1f)
+          .heightIn(min = 48.dp)
+          .then(
+            if (onTitleClick != null) {
+              Modifier.clickable(onClickLabel = titleClickLabel, role = Role.Button, onClick = onTitleClick)
+            } else {
+              Modifier
+            },
+          )
+          .padding(end = PathlySpacing.lg, top = PathlySpacing.xs, bottom = PathlySpacing.xs),
+        verticalArrangement = Arrangement.Center,
+      ) {
+        Text(
+          text = title,
+          style = MaterialTheme.typography.titleMedium,
+          maxLines = 1,
+          overflow = TextOverflow.Ellipsis,
+        )
+        subtitle?.let {
+          Text(
+            text = it,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+          )
+        }
+      }
+    }
+  }
+}
+
+/**
+ * 上のバーの右端の ⋮。その画面の対象への操作（名前を編集・お気に入り・再解析、開発版の補正の調整など）を
+ * この中にしまう（→ docs/designs/ui-direction.md）。中身は画面ごとに [content] で渡す（`close` でメニューを閉じる）。
+ */
+@Composable
+fun MapOverflowMenuButton(
+  modifier: Modifier = Modifier,
+  content: @Composable ColumnScope.(close: () -> Unit) -> Unit,
+) {
+  var open by rememberSaveable { mutableStateOf(false) }
+  Box(modifier = modifier) {
+    MapRoundButton(
+      icon = R.drawable.ic_more_vert,
+      contentDescription = "その他の操作",
+      onClick = { open = !open },
+      active = open,
+    )
+    DropdownMenu(
+      expanded = open,
+      onDismissRequest = { open = false },
+      modifier = Modifier
+        .widthIn(min = 220.dp)
+        .testTag("mapOverflowMenu"),
+    ) {
+      content { open = false }
     }
   }
 }

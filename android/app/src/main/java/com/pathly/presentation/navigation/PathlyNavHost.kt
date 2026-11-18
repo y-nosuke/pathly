@@ -290,6 +290,7 @@ private fun TrackDetailRoute(
     message = message,
     onMessageShown = viewModel::clearMessage,
     onRenameTrack = viewModel::renameTrack,
+    onToggleFavorite = viewModel::toggleFavorite,
     stopActions = stopActions,
     reanalysis = StopReanalysis(
       candidates = reanalyzeCandidates,
