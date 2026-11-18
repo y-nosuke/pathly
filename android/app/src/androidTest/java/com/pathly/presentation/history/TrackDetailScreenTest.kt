@@ -12,6 +12,7 @@ import androidx.compose.ui.test.longClick
 import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextInput
@@ -24,6 +25,8 @@ import com.pathly.domain.model.Place
 import com.pathly.domain.model.PlacePrediction
 import com.pathly.domain.model.PlaceSearchResult
 import com.pathly.domain.model.RegisteredPlace
+import com.pathly.domain.model.SameFacilityPending
+import com.pathly.domain.model.SameFacilityPlace
 import com.pathly.domain.model.Stop
 import com.pathly.presentation.places.PlaceEditUi
 import com.pathly.ui.theme.PathlyAndroidTheme
@@ -50,20 +53,28 @@ class TrackDetailScreenTest {
   }
 
   @Test
-  fun trackDetailScreen_mapPlaceFilter_buttonOnlyWhenShowingRegisteredPlaces() {
+  fun trackDetailScreen_layers_registeredPlacesToggleAndFilterOnlyWhenShown() {
     val track = createSampleTrack()
     var show by mutableStateOf(false)
 
     composeTestRule.setContent {
       PathlyAndroidTheme {
-        TrackDetailScreen(track = track, onBackClick = mockOnBackClick, mapPlaces = MapRegisteredPlaces(shown = show), mapContent = {})
+        TrackDetailScreen(
+          track = track,
+          onBackClick = mockOnBackClick,
+          mapPlaces = MapRegisteredPlaces(shown = show, onToggle = { show = !show }),
+          mapContent = {},
+        )
       }
     }
 
-    // 表示 OFF のときは絞り込みボタンを出さない。
-    composeTestRule.onNodeWithContentDescription("登録済みの場所を絞り込む").assertDoesNotExist()
-    show = true
-    composeTestRule.onNodeWithContentDescription("登録済みの場所を絞り込む").assertIsDisplayed()
+    // 登録済みの場所の表示・絞り込みは、上のバーのレイヤー［≋］の中にある。
+    composeTestRule.onNodeWithContentDescription("地図に重ねるもの").performClick()
+    composeTestRule.onNodeWithTag("mapLayersPanel").assertIsDisplayed()
+    // 表示 OFF のときは絞り込みを出さない。
+    composeTestRule.onNodeWithText("行きたい").assertDoesNotExist()
+    composeTestRule.onNodeWithText("登録済みの場所").performClick()
+    composeTestRule.onNodeWithText("行きたい").assertIsDisplayed()
   }
 
   @Test
@@ -82,15 +93,13 @@ class TrackDetailScreenTest {
       }
     }
 
-    composeTestRule.onNodeWithContentDescription("登録済みの場所を絞り込む").performClick()
+    composeTestRule.onNodeWithContentDescription("地図に重ねるもの").performClick()
     // 行きたいのチップ: 指定なし → 行きたい → 行きたい以外。
     composeTestRule.onNodeWithText("行きたい").performClick()
     assertEquals(MapPlaceFilter(wishlisted = true), filter)
     composeTestRule.onNodeWithText("行きたい").performClick()
     assertEquals(MapPlaceFilter(wishlisted = false), filter)
     composeTestRule.onNodeWithText("行きたい以外").assertIsDisplayed()
-    // 絞り込み中はボタンの説明が変わる（塗りつぶしの状態）。
-    composeTestRule.onNodeWithContentDescription("登録済みの場所を絞り込み中").assertExists()
 
     composeTestRule.onNodeWithText("すべて外す").performClick()
     assertEquals(MapPlaceFilter(), filter)
@@ -267,10 +276,13 @@ class TrackDetailScreenTest {
       }
     }
 
-    // 記録中は「● 記録中」バッジと、1行スタッツの所要時間欄（"記録中"）の2箇所に出る。
-    // 部分一致だと両方に当たってしまうので、バッジそのものを指す。
+    // 記録中は上のバーの下に記録中のピル（経過時間つき）と、シートの時刻の欄（「– 記録中」）の2箇所に出る。
+    // 部分一致だと両方に当たってしまうので、ピルの文字そのものを指す。
     composeTestRule
-      .onNodeWithText("● 記録中")
+      .onNodeWithText("記録中")
+      .assertIsDisplayed()
+    composeTestRule
+      .onNodeWithText("– 記録中", substring = true)
       .assertIsDisplayed()
   }
 
@@ -698,7 +710,7 @@ class TrackDetailScreenTest {
   }
 
   @Test
-  fun trackDetailScreen_unnamedTrack_renameChipSavesName() {
+  fun trackDetailScreen_unnamedTrack_renameFromMenuSavesName() {
     val onRenameTrack = mockk<(String) -> Unit>(relaxed = true)
     val track = createSampleTrack()
 
@@ -713,6 +725,8 @@ class TrackDetailScreenTest {
       }
     }
 
+    // 名前の編集は ⋮ の中（見出しを押しても開ける）。
+    composeTestRule.onNodeWithContentDescription("その他の操作").performClick()
     composeTestRule.onNodeWithText("名前を付ける").performClick()
     composeTestRule.onNodeWithText("経路の名前").assertIsDisplayed()
     composeTestRule.onNodeWithText("例: 鎌倉さんぽ").performTextInput("鎌倉さんぽ")
@@ -735,10 +749,96 @@ class TrackDetailScreenTest {
       }
     }
 
-    // 一覧のカードと同じ見せ方: 名前が見出し、日付は副題。チップは「名前を編集」に変わる。
+    // 一覧のカードと同じ見せ方: 上のバーの見出しが名前、日付は副題。⋮ の中は「名前を編集」に変わる。
     composeTestRule.onNodeWithText("鎌倉さんぽ").assertIsDisplayed()
     composeTestRule.onNodeWithText("2022年01月01日(土)").assertIsDisplayed()
+    composeTestRule.onNodeWithContentDescription("その他の操作").performClick()
     composeTestRule.onNodeWithText("名前を編集").assertIsDisplayed()
+  }
+
+  @Test
+  fun trackDetailScreen_titleClick_opensRenameDialog() {
+    val track = createSampleTrack().copy(name = "鎌倉さんぽ")
+
+    composeTestRule.setContent {
+      PathlyAndroidTheme {
+        TrackDetailScreen(track = track, onBackClick = mockOnBackClick, mapContent = {})
+      }
+    }
+
+    composeTestRule.onNodeWithText("鎌倉さんぽ").performClick()
+    composeTestRule.onNodeWithText("経路の名前").assertIsDisplayed()
+  }
+
+  @Test
+  fun trackDetailScreen_menu_favoriteTogglesAndLabelFollowsState() {
+    val onToggleFavorite = mockk<() -> Unit>(relaxed = true)
+    var track by mutableStateOf(createSampleTrack())
+
+    composeTestRule.setContent {
+      PathlyAndroidTheme {
+        TrackDetailScreen(
+          track = track,
+          onBackClick = mockOnBackClick,
+          mapContent = {},
+          onToggleFavorite = onToggleFavorite,
+        )
+      }
+    }
+
+    composeTestRule.onNodeWithContentDescription("その他の操作").performClick()
+    composeTestRule.onNodeWithTag("mapOverflowMenu").assertIsDisplayed()
+    composeTestRule.onNodeWithText("お気に入りに入れる").performClick()
+    verify { onToggleFavorite() }
+
+    // お気に入りの経路では「外す」になる。
+    track = track.copy(isFavorite = true)
+    composeTestRule.onNodeWithContentDescription("その他の操作").performClick()
+    composeTestRule.onNodeWithText("お気に入りから外す").assertIsDisplayed()
+  }
+
+  @Test
+  fun trackDetailScreen_menu_reanalyzeStartsReanalysis() {
+    val onStart = mockk<() -> Unit>(relaxed = true)
+    val track = createSampleTrack()
+
+    composeTestRule.setContent {
+      PathlyAndroidTheme {
+        TrackDetailScreen(
+          track = track,
+          onBackClick = mockOnBackClick,
+          mapContent = {},
+          reanalysis = StopReanalysis(onStart = onStart),
+        )
+      }
+    }
+
+    // 再解析はたまにしか使わないので ⋮ の中（シートには出さない）。
+    composeTestRule.onNodeWithText("再解析").assertDoesNotExist()
+    composeTestRule.onNodeWithContentDescription("その他の操作").performClick()
+    composeTestRule.onNodeWithText("再解析").performClick()
+    verify { onStart() }
+  }
+
+  @Test
+  fun trackDetailScreen_sameFacilityPending_showsTodoBannerAndOpensReview() {
+    val onOpen = mockk<() -> Unit>(relaxed = true)
+    val track = createSampleTrack()
+
+    composeTestRule.setContent {
+      PathlyAndroidTheme {
+        TrackDetailScreen(
+          track = track,
+          onBackClick = mockOnBackClick,
+          mapContent = {},
+          sameFacility = SameFacilityReview(pending = listOf(SameFacilityPending(placeId = 9L, placeName = "動物園", other = SameFacilityPlace(placeId = 10L, name = "動物園"))), onOpen = onOpen),
+        )
+      }
+    }
+
+    // 出ているときだけの「やること」は、シートの先頭の帯で目立たせる。
+    composeTestRule.onNodeWithText("同じ施設の確認待ち 1件").performClick()
+    verify { onOpen() }
   }
 
   private fun sampleStop(

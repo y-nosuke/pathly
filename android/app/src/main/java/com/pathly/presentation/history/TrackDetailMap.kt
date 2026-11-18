@@ -74,6 +74,8 @@ internal fun TrackMapView(
   // 「経路の全体を見る」の合図。変わるたびに、経路の線と立ち寄りが全部入るまで地図を合わせ直す。
   fitNonce: Int = 0,
   contentPadding: PaddingValues = PaddingValues(0.dp),
+  // 端末の現在地の点を出すか（位置情報の許可があるときだけ true にする）。
+  showMyLocation: Boolean = false,
   onPoiClick: (PointOfInterest) -> Unit = {},
   onMapClick: (LatLng) -> Unit = {},
   onStopClick: (Stop) -> Unit = {},
@@ -112,7 +114,7 @@ internal fun TrackMapView(
     contentPadding = contentPadding,
     properties = MapProperties(
       mapType = MapType.NORMAL,
-      isMyLocationEnabled = false,
+      isMyLocationEnabled = showMyLocation,
     ),
     uiSettings = MapUiSettings(
       zoomControlsEnabled = false,

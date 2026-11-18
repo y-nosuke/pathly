@@ -196,6 +196,20 @@ class TrackDetailViewModel @Inject constructor(
     }
   }
 
+  /** 経路のお気に入りを付け外しする（履歴の一覧のハートと同じ）。手元の値も合わせて、⋮ の文言をすぐ変える。 */
+  fun toggleFavorite() {
+    val track = _displayTrack.value ?: return
+    val favorite = !track.isFavorite
+    viewModelScope.launch {
+      try {
+        gpsTrackRepository.setFavorite(track.id, favorite)
+        _displayTrack.value = _displayTrack.value?.copy(isFavorite = favorite)
+      } catch (e: Exception) {
+        _message.value = "お気に入りの更新に失敗しました: ${e.message}"
+      }
+    }
+  }
+
   fun updatePlaceName(placeId: Long, name: String) {
     viewModelScope.launch { placeRepository.updatePlaceName(placeId, name) }
   }

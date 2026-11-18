@@ -64,7 +64,7 @@ claude.ai の Design（[Pathly 画面の型の案](https://claude.ai/artifact/XJ
 | ⋮ の中       | その画面の対象への操作: 名前を編集・お気に入り・再解析、開発版の補正の調整・GPS 詳細                                                                                            |
 
 - **主役はシートと一緒に動く。** シートを下へ払うと主役も隠れ、戻すボタンが残る。シートはつまみの行のタップ（ハーフ⇔フル）と▼（畳む）でも開け閉めする。
-- 区画ごとの部品は `presentation/common/` にある（上のバー `MapTopBar`・レイヤー `MapLayersButton`・右下 `MapControls`・1 行の帯 `MapNoticeBanner`・シートの脇役の操作 `MapSideActions` → [ui.md](ui.md)）。
+- 区画ごとの部品は `presentation/common/` にある（上のバー `MapTopBar`・戻る＋見出し `MapBackTitle`・⋮ `MapOverflowMenuButton`・レイヤー `MapLayersButton`・右下 `MapControls`・1 行の帯 `MapNoticeBanner`・シートの脇役の操作 `MapSideActions` → [ui.md](ui.md)）。
 - **地図の操作は全部の地図の画面にそろえる**（今は現在地が記録にしか無い、登録済みの場所が履歴の地図に無い）。
 - 一覧のタブの地図表示（履歴・場所）は、上の区画に一覧の型の見出しとツール行を重ねる（今のたためる見出しのまま）。
 - 検索窓は施設と地域を 1 つにまとめる（→ [ADR-0039](../adr/0039-one-search-box-for-places-and-regions.md)）。
