@@ -109,12 +109,13 @@ import com.pathly.presentation.stops.StopReassignDialog
 import com.pathly.ui.theme.PathlyElevation
 import com.pathly.ui.theme.PathlyMapColors
 import com.pathly.ui.theme.PathlyShapes
+import com.pathly.ui.theme.PathlyTheme
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.util.Date
 import kotlin.math.roundToInt
 
-// 記録画面の地図の上に重ねる操作・表示（記録ボタン・統計・案内のカード・保存中の覆い・地域の目印のチップ）。
+// 記録画面の地図の上に重ねる操作・表示（記録中のピル・記録ボタン・権限の案内・保存中の覆い・地域の目印のチップ）。
 
 @Composable
 internal fun RecordingStatusPill(
@@ -130,73 +131,35 @@ internal fun RecordingStatusPill(
   }
   val elapsedText = startTime?.let { formatElapsed(nowMs - it.time) } ?: "00:00"
 
+  // 記録中は主役の淡い地に、「動いている」の緑の点（→ Design System）。
   Surface(
     modifier = modifier,
     shape = PathlyShapes.pill,
-    color = MaterialTheme.colorScheme.errorContainer,
+    color = MaterialTheme.colorScheme.primaryContainer,
+    contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
     shadowElevation = PathlyElevation.floating,
   ) {
     Row(
-      modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+      modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
       verticalAlignment = Alignment.CenterVertically,
     ) {
+      Box(
+        modifier = Modifier
+          .size(10.dp)
+          .background(PathlyTheme.statusColors.visited, CircleShape),
+      )
+      Spacer(modifier = Modifier.width(8.dp))
       Text(
-        text = "● 記録中",
+        text = "記録中",
         style = MaterialTheme.typography.labelLarge,
-        color = MaterialTheme.colorScheme.onErrorContainer,
         fontWeight = FontWeight.Bold,
       )
       Spacer(modifier = Modifier.width(8.dp))
       Text(
         text = elapsedText,
         style = MaterialTheme.typography.labelLarge,
-        color = MaterialTheme.colorScheme.onErrorContainer,
       )
     }
-  }
-}
-
-@Composable
-internal fun TrackingStatsCard(
-  track: GpsTrack?,
-  locationCount: Int,
-  modifier: Modifier = Modifier,
-) {
-  val distanceKm = ((track?.totalDistanceMeters ?: 0.0) / 1000.0 * 100).roundToInt() / 100.0
-  val pointCount = track?.points?.size ?: locationCount
-
-  Surface(
-    modifier = modifier,
-    shape = MaterialTheme.shapes.medium,
-    color = MaterialTheme.colorScheme.surface,
-    shadowElevation = PathlyElevation.floating,
-  ) {
-    Row(
-      modifier = Modifier.padding(horizontal = 24.dp, vertical = 12.dp),
-      horizontalArrangement = Arrangement.spacedBy(32.dp),
-    ) {
-      StatColumn(value = "${distanceKm}km", label = "移動距離")
-      StatColumn(value = "$pointCount", label = "地点数")
-    }
-  }
-}
-
-@Composable
-private fun StatColumn(
-  value: String,
-  label: String,
-) {
-  Column(horizontalAlignment = Alignment.CenterHorizontally) {
-    Text(
-      text = value,
-      style = MaterialTheme.typography.titleLarge,
-      fontWeight = FontWeight.Bold,
-    )
-    Text(
-      text = label,
-      style = MaterialTheme.typography.bodySmall,
-      color = MaterialTheme.colorScheme.onSurfaceVariant,
-    )
   }
 }
 
@@ -292,63 +255,6 @@ internal fun LocationPermissionOverlay(
       Button(onClick = onRequestPermission) {
         Text("位置情報を許可")
       }
-    }
-  }
-}
-
-@Composable
-internal fun BatteryOptimizationCard(
-  onDisable: () -> Unit,
-  modifier: Modifier = Modifier,
-) {
-  Surface(
-    modifier = modifier,
-    shape = MaterialTheme.shapes.medium,
-    color = MaterialTheme.colorScheme.secondaryContainer,
-    shadowElevation = PathlyElevation.floating,
-  ) {
-    Column(
-      modifier = Modifier.padding(16.dp),
-      verticalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-      Text(
-        text = "バックグラウンド記録を安定させる",
-        style = MaterialTheme.typography.titleSmall,
-        fontWeight = FontWeight.Bold,
-        color = MaterialTheme.colorScheme.onSecondaryContainer,
-      )
-      Text(
-        text = "電池の最適化を無効にすると、アプリを閉じても記録が止まりにくくなります。",
-        style = MaterialTheme.typography.bodySmall,
-        color = MaterialTheme.colorScheme.onSecondaryContainer,
-      )
-      Button(onClick = onDisable) {
-        Text("電池の最適化を無効にする")
-      }
-    }
-  }
-}
-
-/** 端末の位置情報が OFF で記録を開始できなかったときの案内。設定画面への導線を添える。 */
-@Composable
-internal fun LocationDisabledCard(
-  onOpenSettings: () -> Unit,
-  modifier: Modifier = Modifier,
-) {
-  Card(
-    modifier = modifier,
-    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer),
-  ) {
-    Text(
-      text = "端末の位置情報がオフです。オンにしてから記録を開始してください",
-      modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 8.dp),
-      color = MaterialTheme.colorScheme.onErrorContainer,
-    )
-    TextButton(
-      onClick = onOpenSettings,
-      modifier = Modifier.align(Alignment.End).padding(end = 8.dp),
-    ) {
-      Text("位置情報の設定を開く")
     }
   }
 }

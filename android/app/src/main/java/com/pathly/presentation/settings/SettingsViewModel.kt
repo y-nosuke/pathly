@@ -30,7 +30,7 @@ class SettingsViewModel @Inject constructor(
   private val settingsRepository: SettingsRepository,
   private val backupManager: DataBackupManager,
   private val crashReportStore: CrashReportStore,
-  trackingController: TrackingController,
+  private val trackingController: TrackingController,
 ) : ViewModel() {
 
   private val logger = Logger("SettingsViewModel")
@@ -63,6 +63,23 @@ class SettingsViewModel @Inject constructor(
 
   fun setUseDynamicColor(use: Boolean) {
     settingsRepository.setUseDynamicColor(use)
+  }
+
+  // ---- 電池の最適化（記録画面の帯から来る。→ docs/specs/screens.md） ----
+
+  private val _isIgnoringBatteryOptimizations = MutableStateFlow(trackingController.isIgnoringBatteryOptimizations())
+
+  /** 電池の最適化が無効になっているか（true なら、裏で記録が止められにくい）。 */
+  val isIgnoringBatteryOptimizations: StateFlow<Boolean> = _isIgnoringBatteryOptimizations.asStateFlow()
+
+  /** 状態を読み直す（システムの画面から戻ったときに反映するため、画面の再開ごとに呼ぶ）。 */
+  fun refreshBatteryOptimization() {
+    _isIgnoringBatteryOptimizations.value = trackingController.isIgnoringBatteryOptimizations()
+  }
+
+  /** 電池の最適化を無効にするシステムの画面を開く。 */
+  fun requestDisableBatteryOptimization() {
+    trackingController.requestDisableBatteryOptimization()
   }
 
   // ---- 異常終了の記録（→ docs/specs/crash-reports.md） ----

@@ -1,8 +1,11 @@
 package com.pathly.presentation.tracking
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
@@ -34,7 +37,9 @@ import com.pathly.domain.model.PlaceSearchResult
 import com.pathly.domain.model.Stop
 import com.pathly.presentation.common.DefaultMapLocation
 import com.pathly.presentation.common.SheetDetent
+import com.pathly.presentation.common.SheetRestoreButtonInset
 import com.pathly.presentation.common.heightOf
+import com.pathly.presentation.common.rememberFixedFloatingSheetState
 import com.pathly.presentation.common.rememberFloatingSheetState
 import com.pathly.presentation.common.rememberMapInfoWindowState
 import com.pathly.presentation.common.toGeoBounds
@@ -45,6 +50,7 @@ import com.pathly.presentation.stops.ManualStopHost
 import com.pathly.presentation.stops.ManualStopOrigin
 import com.pathly.presentation.stops.ManualStopTarget
 import com.pathly.presentation.stops.StopReassignHost
+import com.pathly.ui.theme.PathlySpacing
 
 /**
  * 記録画面。地図を全面に出し、記録の操作・場所の登録・立ち寄りの手での追加・この範囲の経路を地図の上に重ねる。
@@ -60,6 +66,8 @@ fun TrackingScreen(
   modifier: Modifier = Modifier,
   onRequestPermission: () -> Unit,
   onOpenTrack: (trackId: Long) -> Unit = {},
+  // 電池の最適化の帯を押したとき（設定タブの「電池の最適化」へ）。
+  onOpenSettings: () -> Unit = {},
   viewModel: TrackingViewModel = hiltViewModel(),
   trackOverlayViewModel: TrackOverlayViewModel = hiltViewModel(),
   mapContent: (@Composable () -> Unit)? = null,
@@ -135,6 +143,20 @@ fun TrackingScreen(
   }
   // 場所シート・手動追加のシートが出ている間は、経路の一覧は下がる（閉じれば戻る）。
   val showOverlaySheet = overlayState.isSheetOpen && placeSheetTarget == null && manualTarget == null
+  // 下の記録のシート（記録中は情報と脇役の操作、停止中は小さなシート）。ほかのシートが出ている間は下がる。
+  // 高さが記録中と停止中で違うので、切り替わると開いた状態で作り直す（記録を始めたらシートが開く）。
+  val showRecordSheet = uiState.hasLocationPermission && placeSheetTarget == null && manualTarget == null && !showOverlaySheet
+  val recordSheetState = rememberFixedFloatingSheetState(height = if (uiState.isTracking) RECORDING_SHEET_HEIGHT else STOPPED_SHEET_HEIGHT)
+  // いま地図の下に出ているシート（地図の下の余白・右下の操作・主役の丸の位置を合わせる）。
+  val activeSheet = when {
+    manualTarget != null -> manualSheetState
+    placeSheetTarget != null -> placeSheetState
+    showOverlaySheet -> overlaySheetState
+    showRecordSheet -> recordSheetState
+    else -> null
+  }
+  // 停止中に現在地を取りに行っている間（上の下に出す）。
+  var isLocating by remember { mutableStateOf(false) }
   // マーカーの吹き出し。シートと同時に出るので、シート側から一緒に閉じられるよう画面で持つ。
   val infoWindow = rememberMapInfoWindowState()
   // 地図で選んだ地点。可視領域へ寄せる合図（同じ地点を選び直しても効くよう nonce で送る）。
@@ -210,14 +232,12 @@ fun TrackingScreen(
         manualPickTarget = manualTarget?.let { LatLng(it.latitude, it.longitude) }
           ?: (placeSheetTarget as? PlaceSheetTarget.NewSearchResult)?.result?.let { LatLng(it.latitude, it.longitude) },
         // シートが出ている分だけ可視領域を狭める（ドラッグ中の逐次値ではなく段の確定値）。
-        contentPadding = PaddingValues(
-          bottom = when {
-            manualTarget != null -> manualSheetState.heightOf(manualSheetState.detent)
-            placeSheetTarget != null -> placeSheetState.heightOf(placeSheetState.detent)
-            showOverlaySheet -> overlaySheetState.heightOf(overlaySheetState.detent)
-            else -> 0.dp
-          },
-        ),
+        contentPadding = PaddingValues(bottom = activeSheet?.let { it.heightOf(it.detent) } ?: 0.dp),
+        // 右下の現在地ボタンはシートの上端に沿わせる。畳んだシートは戻すボタンの上。
+        controlsBottomInset = activeSheet?.let {
+          if (it.detent == SheetDetent.HIDDEN) SheetRestoreButtonInset else it.heightOf(it.detent)
+        } ?: 0.dp,
+        onLocatingChange = { isLocating = it },
         focusTarget = focusTarget,
         focusNonce = focusNonce,
         fitBounds = fitBounds,
@@ -233,9 +253,9 @@ fun TrackingScreen(
       )
     }
 
-    // 検索窓を開いている間は、上端の操作（右のボタン列・左上の記録中の操作・記録中のピル）を隠す（窓と重なるため）。
+    // 上の区画（検索の入口・レイヤー）と上の下（今の状態・1 行の帯）。検索窓を開いている間は窓と重なるので隠す。
     if (mapSearch == null) {
-      TrackingMapButtons(
+      TrackingTopBar(
         showRegisteredPlaces = uiState.showRegisteredPlaces,
         registeredPlaces = uiState.registeredPlaces,
         mapPlaceFilter = mapPlaceFilter,
@@ -243,7 +263,7 @@ fun TrackingScreen(
         onMapPlaceFilterChange = viewModel::setMapPlaceFilter,
         overlayActive = overlayState.isSheetOpen,
         // 立ち寄りの追加中は一覧・検索を出せない（追加のシートが優先）ので押せなくする。
-        actionsEnabled = manualTarget == null,
+        searchEnabled = manualTarget == null,
         onToggleOverlay = {
           // もう一度押すと閉じる（登録済みの場所のトグルと同じ）。閉じると重ねた線も消える。
           if (overlayState.isSheetOpen) {
@@ -267,43 +287,35 @@ fun TrackingScreen(
           viewModel.startPlaceSearch()
           mapSearch = MapSearchMode.Region
         },
-        modifier = Modifier.align(Alignment.TopEnd),
-      )
-    }
-
-    if ((uiState.isTracking || regionMarker != null) && mapSearch == null) {
-      TrackingTopStartControls(
-        isTracking = uiState.isTracking,
-        manualMode = manualMode,
-        onToggleManualMode = { manualMode = !manualMode },
-        hasLocationPermission = uiState.hasLocationPermission,
-        currentLocation = uiState.currentLocation,
-        onAddStopHere = { loc -> manualTarget = ManualStopTarget(loc.latitude, loc.longitude, ManualStopOrigin.CurrentLocation) },
-        regionMarker = regionMarker,
-        onRefitRegion = { region -> fitTo(region.bounds) },
-        onClearRegion = { regionMarker = null },
-        modifier = Modifier.align(Alignment.TopStart),
-      )
-    }
-
-    // 記録中の状態ピル（上部中央）
-    if (uiState.isTracking && mapSearch == null) {
-      RecordingStatusPill(
-        startTime = uiState.currentTrack?.startTime,
-        modifier = Modifier
-          .align(Alignment.TopCenter)
-          .padding(top = 12.dp),
-      )
-    }
-
-    // 場所を登録した直後の一時メッセージ
-    uiState.placeRegisteredMessage?.let { msg ->
-      PlaceRegisteredToast(
-        message = msg,
-        isTracking = uiState.isTracking,
-        onShown = viewModel::clearPlaceRegisteredMessage,
         modifier = Modifier.align(Alignment.TopCenter),
-      )
+      ) {
+        // 今の状態のピル・チップ（記録中・現在地を取得中・登録の確認・地域の目印）を左寄せで 1 行に。
+        Row(
+          horizontalArrangement = Arrangement.spacedBy(PathlySpacing.sm),
+          verticalAlignment = Alignment.CenterVertically,
+        ) {
+          if (uiState.isTracking) RecordingStatusPill(startTime = uiState.currentTrack?.startTime)
+          if (isLocating) LocatingPill()
+          // 「地域へ移動」で出した目印の地名のチップ。× で目印ごと消し（地図は動かさない）、地名で地域の範囲へ寄せ直す。
+          regionMarker?.let { region ->
+            RegionMarkerChip(
+              name = region.name,
+              onRefit = { fitTo(region.bounds) },
+              onClear = { regionMarker = null },
+              modifier = Modifier.weight(1f, fill = false),
+            )
+          }
+        }
+        // 場所を登録した直後の一時メッセージ
+        uiState.placeRegisteredMessage?.let { msg ->
+          PlaceRegisteredToast(message = msg, onShown = viewModel::clearPlaceRegisteredMessage)
+        }
+        TrackingNotices(
+          uiState = uiState,
+          onOpenBatterySettings = onOpenSettings,
+          onOpenLocationSettings = viewModel::openLocationSettings,
+        )
+      }
     }
 
     // 権限がない場合のオーバーレイ（中央）
@@ -316,14 +328,28 @@ fun TrackingScreen(
       )
     }
 
-    TrackingBottomControls(
-      uiState = uiState,
-      onDisableBatteryOptimization = viewModel::requestDisableBatteryOptimization,
-      onOpenLocationSettings = viewModel::openLocationSettings,
-      onStartTracking = viewModel::startTracking,
-      onStopTracking = { showStopConfirm = true },
-      modifier = Modifier.align(Alignment.BottomCenter),
-    )
+    // 下の記録のシートと、その上の主役（開始・停止の丸）。シートを畳むと丸も一緒に隠れる（戻すボタンで戻る）。
+    if (showRecordSheet) {
+      TrackingRecordSheet(
+        uiState = uiState,
+        sheetState = recordSheetState,
+        manualMode = manualMode,
+        onToggleManualMode = { manualMode = !manualMode },
+        onAddStopHere = { loc -> manualTarget = ManualStopTarget(loc.latitude, loc.longitude, ManualStopOrigin.CurrentLocation) },
+        modifier = Modifier.align(Alignment.BottomCenter),
+      )
+      if (recordSheetState.detent != SheetDetent.HIDDEN) {
+        val fabInset by animateDpAsState(recordSheetState.heightOf(recordSheetState.detent), label = "recordFabInset")
+        RecordFab(
+          isTracking = uiState.isTracking,
+          onStartTracking = viewModel::startTracking,
+          onStopTracking = { showStopConfirm = true },
+          modifier = Modifier
+            .align(Alignment.BottomCenter)
+            .padding(bottom = fabInset + PathlySpacing.mapEdge),
+        )
+      }
+    }
 
     // 地図の1点タップで開く統一の「場所シート」。未登録の空き地点/POI＝登録、登録済み＝その場で編集。
     // 場所を削除したら「取り消す」を出す（場所一覧・経路詳細と同じ出し方）。
@@ -490,6 +516,12 @@ private enum class MapSearchMode {
   /** 地域へ移動（地名を探して地図を移す）。 */
   Region,
 }
+
+/** 記録中の記録のシートの高さ（つまみ・情報の段・脇役の操作の段）。 */
+private val RECORDING_SHEET_HEIGHT = 176.dp
+
+/** 停止中の記録のシートの高さ（つまみと「記録していません」）。 */
+private val STOPPED_SHEET_HEIGHT = 80.dp
 
 /** いま地図に映っている範囲（地図の準備前は null）。 */
 private fun CameraPositionState.visibleGeoBounds(): GeoBounds? = projection?.visibleRegion?.latLngBounds?.toGeoBounds()

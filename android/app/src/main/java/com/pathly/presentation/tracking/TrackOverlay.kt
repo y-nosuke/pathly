@@ -128,31 +128,6 @@ internal fun TrackOverlayContent(tracks: List<OverlayTrack>, infoWindow: MapInfo
 /** 重ねた経路の立ち寄りのバッジ（色と番号ごとに 1 回だけ描く）。 */
 private data class OverlayStopIconKey(val colorIndex: Int, val number: Int)
 
-/** 記録画面の右上の「この範囲の経路」ボタン。一覧を出している間は塗りつぶす。 */
-@Composable
-internal fun TrackOverlayButton(
-  active: Boolean,
-  onClick: () -> Unit,
-  modifier: Modifier = Modifier,
-  enabled: Boolean = true,
-) {
-  Surface(
-    onClick = onClick,
-    enabled = enabled,
-    shape = CircleShape,
-    color = if (active) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surface,
-    shadowElevation = PathlyElevation.floating,
-    modifier = modifier,
-  ) {
-    Icon(
-      painter = painterResource(R.drawable.ic_route),
-      contentDescription = "この範囲の経路",
-      tint = if (active) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface,
-      modifier = Modifier.padding(8.dp),
-    )
-  }
-}
-
 /**
  * 地図に映っていた範囲の経路の一覧。チェックで複数選んで地図に重ねる（同時に [TRACK_OVERLAY_MAX] 本まで）。
  * 選んでいるが範囲の外にある経路は、外せるように下にまとめて出す。
