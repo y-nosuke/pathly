@@ -36,6 +36,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -55,6 +56,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.Lifecycle
@@ -84,10 +86,12 @@ import com.pathly.domain.model.GpsTrack
 import com.pathly.domain.model.RegisteredPlace
 import com.pathly.domain.model.Stop
 import com.pathly.presentation.common.CloseInfoWindowWithSheet
+import com.pathly.presentation.common.MapControls
 import com.pathly.presentation.common.MapInfoWindowState
 import com.pathly.presentation.common.MapMarker
 import com.pathly.presentation.common.MapPinMarker
 import com.pathly.presentation.common.MapPlaceFilterButton
+import com.pathly.presentation.common.MapRoundButton
 import com.pathly.presentation.common.NearbyConfirmPurpose
 import com.pathly.presentation.common.NearbyPlaceConfirmDialog
 import com.pathly.presentation.common.RegisteredPlaceMarkers
@@ -114,7 +118,7 @@ import kotlinx.coroutines.launch
 import java.util.Date
 import kotlin.math.roundToInt
 
-// 記録画面の地図（記録中の経路・立ち寄り・重ねた過去の経路・登録済みの場所・地域の目印）と現在地ボタン。
+// 記録画面の地図（記録中の経路・立ち寄り・重ねた過去の経路・登録済みの場所・地域の目印）と右下の現在地ボタン。
 
 // 「この経路の全体を見る」で寄せたとき、線の端が画面の縁やボタンに掛からないようにする余白（px）。
 private const val FIT_PADDING_PX = 160
@@ -153,9 +157,16 @@ internal fun TrackingMapView(
   regionMarker: RegionMarker? = null,
   onRegionMarkerClick: () -> Unit = {},
   onRecenter: () -> Unit = {},
+  // 右下の地図の操作をシートの上端に沿わせる高さ（いま出ているシートの高さ）。
+  controlsBottomInset: Dp = 0.dp,
+  // 停止中に現在地を 1 回取りに行っている間 true（画面が上の下に「取得中」を出す）。
+  onLocatingChange: (Boolean) -> Unit = {},
 ) {
   var followUser by remember { mutableStateOf(true) }
   var isLocating by remember { mutableStateOf(false) }
+  LaunchedEffect(isLocating) { onLocatingChange(isLocating) }
+  // 取得中に地図が外れたら（権限を外したなど）、画面の「取得中」が残らないよう戻す。
+  DisposableEffect(Unit) { onDispose { onLocatingChange(false) } }
 
   val context = LocalContext.current
   val scope = rememberCoroutineScope()
@@ -345,74 +356,22 @@ internal fun TrackingMapView(
       }
     }
 
-    // 現在地ボタン：追従中は活性（色付き）、固定中は非活性（グレー）。タップで追従再開＆リセンター。
+    // 右下の地図の操作。現在地ボタン：追従中は塗り、手で動かした後は白。タップで追従再開＆リセンター。
     if (hasPermission) {
-      FollowLocationButton(
-        following = followUser,
-        onClick = {
-          onRecenter()
-          centerOnCurrentLocation(animate = true)
-        },
-        modifier = Modifier
-          .align(Alignment.TopEnd)
-          .padding(12.dp),
-      )
-    }
-
-    // 現在地を取得中のローディング表示（上部中央）
-    if (isLocating) {
-      Surface(
-        modifier = Modifier
-          .align(Alignment.TopCenter)
-          .padding(top = 12.dp),
-        shape = PathlyShapes.pill,
-        color = MaterialTheme.colorScheme.surface,
-        shadowElevation = PathlyElevation.floating,
+      MapControls(
+        bottomInset = controlsBottomInset,
+        modifier = Modifier.align(Alignment.BottomEnd),
       ) {
-        Row(
-          modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-          verticalAlignment = Alignment.CenterVertically,
-        ) {
-          CircularProgressIndicator(
-            modifier = Modifier.size(16.dp),
-            strokeWidth = 2.dp,
-          )
-          Spacer(modifier = Modifier.width(8.dp))
-          Text(
-            text = "現在地を取得中…",
-            style = MaterialTheme.typography.labelMedium,
-            color = MaterialTheme.colorScheme.onSurface,
-          )
-        }
+        MapRoundButton(
+          icon = R.drawable.ic_my_location,
+          contentDescription = if (followUser) "現在地に追従中" else "現在地へ移動",
+          active = followUser,
+          onClick = {
+            onRecenter()
+            centerOnCurrentLocation(animate = true)
+          },
+        )
       }
-    }
-  }
-}
-
-@Composable
-private fun FollowLocationButton(
-  following: Boolean,
-  onClick: () -> Unit,
-  modifier: Modifier = Modifier,
-) {
-  Surface(
-    onClick = onClick,
-    modifier = modifier.size(44.dp),
-    shape = CircleShape,
-    color = if (following) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surface,
-    shadowElevation = PathlyElevation.floating,
-  ) {
-    Box(contentAlignment = Alignment.Center) {
-      Icon(
-        painter = painterResource(R.drawable.ic_my_location),
-        contentDescription = if (following) "現在地に追従中" else "現在地へ移動",
-        tint = if (following) {
-          MaterialTheme.colorScheme.onPrimary
-        } else {
-          MaterialTheme.colorScheme.onSurfaceVariant
-        },
-        modifier = Modifier.size(24.dp),
-      )
     }
   }
 }

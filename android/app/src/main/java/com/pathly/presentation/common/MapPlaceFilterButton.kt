@@ -66,7 +66,7 @@ fun MapPlaceFilterButton(
 
 /** 絞り込みのパネルの中身。チップを押しても閉じない（続けて条件を変えられるように）。 */
 @Composable
-private fun MapPlaceFilterPanel(
+internal fun MapPlaceFilterPanel(
   filter: MapPlaceFilter,
   places: List<RegisteredPlace>,
   onFilterChange: (MapPlaceFilter) -> Unit,

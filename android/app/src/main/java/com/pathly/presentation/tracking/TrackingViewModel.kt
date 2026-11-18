@@ -368,11 +368,6 @@ class TrackingViewModel @Inject constructor(
     _uiState.update { it.copy(isIgnoringBatteryOptimizations = trackingController.isIgnoringBatteryOptimizations()) }
   }
 
-  /** 電池の最適化の無効化を要求するシステムダイアログを開く */
-  fun requestDisableBatteryOptimization() {
-    trackingController.requestDisableBatteryOptimization()
-  }
-
   /** 地図の上の「検索して登録」を開いたとき: 検索のセッションを始める（候補〜確定を 1 セッションにまとめて課金を抑える）。 */
   fun startPlaceSearch() {
     placesTextSearcher.startSession()

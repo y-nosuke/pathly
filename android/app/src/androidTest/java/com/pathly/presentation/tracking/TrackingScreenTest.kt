@@ -449,13 +449,80 @@ class TrackingScreenTest {
     composeTestRule.onNodeWithContentDescription("検索を閉じる").performClick()
     composeTestRule.onNodeWithTag("regionMarkerChip").assertIsDisplayed()
 
-    // 記録中も、左上の記録中の操作と並んで出る。
+    // 記録中も、上の下で記録中のピルと並んで出る（記録中の操作は下のシート）。
     uiStateFlow.value = TrackingState(hasLocationPermission = true, isTracking = true)
-    composeTestRule.onNodeWithText("立ち寄りを追加").assertIsDisplayed()
+    composeTestRule.onNodeWithText("地図で指して追加").assertIsDisplayed()
     composeTestRule.onNodeWithTag("regionMarkerChip").assertIsDisplayed()
 
     // × で目印ごとチップが消える。
     composeTestRule.onNodeWithContentDescription("地域の目印を消す").performClick()
     composeTestRule.onNodeWithTag("regionMarkerChip").assertDoesNotExist()
+  }
+
+  @Test
+  fun trackingScreen_recordSheet_hideAlsoHidesFabAndRestoreBringsItBack() {
+    uiStateFlow.value = TrackingState(hasLocationPermission = true, isTracking = true)
+    composeTestRule.setContent {
+      PathlyAndroidTheme {
+        TrackingScreen(
+          onRequestPermission = mockOnRequestPermission,
+          viewModel = mockViewModel,
+          trackOverlayViewModel = overlayViewModel,
+          mapContent = {},
+        )
+      }
+    }
+
+    // 記録中のシートに情報と脇役の操作が並ぶ。
+    composeTestRule.onNodeWithText("今ここを立ち寄り").assertIsDisplayed()
+    composeTestRule.onNodeWithText("地図で指して追加").assertIsDisplayed()
+
+    // 畳むと、主役の停止の丸も一緒に隠れ、戻すボタンだけが残る。
+    composeTestRule.onNodeWithContentDescription("シートを畳む").performClick()
+    composeTestRule.onNodeWithContentDescription("記録停止").assertDoesNotExist()
+    composeTestRule.onNodeWithText("▲ 記録中", substring = true).performClick()
+    composeTestRule.onNodeWithContentDescription("記録停止").assertIsDisplayed()
+  }
+
+  @Test
+  fun trackingScreen_layers_containRegisteredPlacesAndRoutesInRange() {
+    composeTestRule.setContent {
+      PathlyAndroidTheme {
+        TrackingScreen(
+          onRequestPermission = mockOnRequestPermission,
+          viewModel = mockViewModel,
+          trackOverlayViewModel = overlayViewModel,
+          mapContent = {},
+        )
+      }
+    }
+
+    composeTestRule.onNodeWithContentDescription("地図に重ねるもの").performClick()
+    composeTestRule.onNodeWithTag("mapLayersPanel").assertIsDisplayed()
+    composeTestRule.onNodeWithText("登録済みの場所").assertIsDisplayed()
+    composeTestRule.onNodeWithText("この範囲の経路").assertIsDisplayed()
+
+    composeTestRule.onNodeWithText("登録済みの場所").performClick()
+    verify { mockViewModel.toggleShowRegisteredPlaces() }
+  }
+
+  @Test
+  fun trackingScreen_batteryBanner_opensSettings() {
+    uiStateFlow.value = TrackingState(hasLocationPermission = true, isIgnoringBatteryOptimizations = false)
+    val onOpenSettings = mockk<() -> Unit>(relaxed = true)
+    composeTestRule.setContent {
+      PathlyAndroidTheme {
+        TrackingScreen(
+          onRequestPermission = mockOnRequestPermission,
+          onOpenSettings = onOpenSettings,
+          viewModel = mockViewModel,
+          trackOverlayViewModel = overlayViewModel,
+          mapContent = {},
+        )
+      }
+    }
+
+    composeTestRule.onNodeWithText("電池の最適化で記録が止まることがあります").performClick()
+    verify { onOpenSettings() }
   }
 }

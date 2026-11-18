@@ -31,6 +31,8 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.pathly.BuildConfig
 import com.pathly.data.backup.BackupCounts
@@ -134,6 +136,8 @@ fun SettingsScreen(
       modifier = Modifier.padding(top = 8.dp),
     )
 
+    BatteryOptimizationSection(viewModel)
+
     AppearanceSection(viewModel)
 
     BackupSection(viewModel)
@@ -142,6 +146,35 @@ fun SettingsScreen(
 
     val crashReports by viewModel.crashReports.collectAsStateWithLifecycle()
     CrashReportSection(reports = crashReports, onClear = viewModel::clearCrashReports)
+  }
+}
+
+/**
+ * 電池の最適化。有効なままだと、アプリを閉じている間に OS が記録を止めやすい。記録画面の 1 行の帯から来る。
+ * 状態はシステムの画面で変わるので、画面に戻るたびに読み直す。
+ */
+@Composable
+private fun BatteryOptimizationSection(viewModel: SettingsViewModel) {
+  val ignoring by viewModel.isIgnoringBatteryOptimizations.collectAsStateWithLifecycle()
+  LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { viewModel.refreshBatteryOptimization() }
+  Text(
+    text = "電池の最適化",
+    style = MaterialTheme.typography.titleMedium,
+    modifier = Modifier.padding(top = 16.dp),
+  )
+  Text(
+    text = if (ignoring) {
+      "無効にしてあります。アプリを閉じても記録が止まりにくくなっています。"
+    } else {
+      "有効になっています。アプリを閉じている間に記録が止まることがあります。無効にすると止まりにくくなります。"
+    },
+    style = MaterialTheme.typography.bodySmall,
+    color = MaterialTheme.colorScheme.onSurfaceVariant,
+  )
+  if (!ignoring) {
+    OutlinedButton(onClick = viewModel::requestDisableBatteryOptimization) {
+      Text("電池の最適化を無効にする")
+    }
   }
 }
 

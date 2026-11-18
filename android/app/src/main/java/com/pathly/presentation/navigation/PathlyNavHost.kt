@@ -5,6 +5,7 @@ import androidx.annotation.DrawableRes
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.CircularProgressIndicator
@@ -115,7 +116,11 @@ fun PathlyNavHost(
     NavHost(
       navController = navController,
       startDestination = Routes.TRACKING,
-      modifier = Modifier.padding(innerPadding),
+      // 上のステータスバー・下のタブ（またはナビゲーションバー）の分はここで空けたので、中の画面の
+      // statusBarsPadding・navigationBarsPadding が同じ分をもう一度空けないよう、使ったことにする。
+      modifier = Modifier
+        .padding(innerPadding)
+        .consumeWindowInsets(innerPadding),
       // 以前の手書き when ナビと同じく、遷移アニメーションは付けない（瞬時に切り替える）。
       enterTransition = { EnterTransition.None },
       exitTransition = { ExitTransition.None },
@@ -126,6 +131,7 @@ fun PathlyNavHost(
         TrackingScreen(
           onRequestPermission = onRequestPermission,
           onOpenTrack = { trackId -> navController.navigate(Routes.trackDetail(trackId)) },
+          onOpenSettings = { navController.navigateToTab(Routes.SETTINGS) },
           viewModel = trackingViewModel,
         )
       }

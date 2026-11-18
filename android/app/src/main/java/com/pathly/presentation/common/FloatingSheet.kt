@@ -2,6 +2,7 @@ package com.pathly.presentation.common
 
 import androidx.compose.animation.core.Animatable
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -9,10 +10,13 @@ import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -28,11 +32,14 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalWindowInfo
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import com.pathly.R
 import com.pathly.ui.theme.PathlyElevation
 import com.pathly.ui.theme.PathlyShapes
+import com.pathly.ui.theme.PathlySpacing
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 
@@ -45,6 +52,7 @@ import kotlinx.coroutines.launch
  *
  * 高さは3段（隠す／ハーフ／フル）。つまみを上下にドラッグして段を変え、中身は独立して
  * スクロールする。地図はシートの外側なので、パン・ズーム・タップがそのまま効く。
+ * ドラッグは手間なので、つまみの行のタップ（ハーフ⇔フル）と右端の畳むボタンでも段を変えられる。
  */
 enum class SheetDetent { HIDDEN, PEEK, FULL }
 
@@ -84,6 +92,14 @@ class FloatingSheetState internal constructor(
         },
       )
     }
+  }
+
+  /** フルの段がハーフより高いか。同じ高さのシート（中身が少ない）では、つまみのタップで広げない。 */
+  internal val hasFull: Boolean get() = fullPx > peekPx + 1f
+
+  /** つまみのタップ。フルならハーフへ、それ以外はフルへ。 */
+  internal fun toggleFull() {
+    settleTo(if (detent == SheetDetent.FULL) SheetDetent.PEEK else SheetDetent.FULL)
   }
 
   internal fun dragBy(delta: Float) {
@@ -133,6 +149,30 @@ fun rememberFloatingSheetState(
   }
 }
 
+/**
+ * 高さを dp で決める [FloatingSheetState]（中身の量が決まっている小さなシート向け）。ハーフとフルは同じ高さで、
+ * つまみのタップでは広げない。[allowHidden] なら畳める（戻すボタンは [FloatingSheet] の restoreLabel）。
+ * 文字の大きさの設定が大きいと中身が伸びるので、高さも同じ割合で伸ばす（小さくはしない）。
+ */
+@Composable
+fun rememberFixedFloatingSheetState(
+  height: Dp,
+  allowHidden: Boolean = true,
+): FloatingSheetState {
+  val density = LocalDensity.current
+  val heightPx = with(density) { height.toPx() } * density.fontScale.coerceAtLeast(1f)
+  val scope = rememberCoroutineScope()
+  return remember(heightPx, allowHidden) {
+    FloatingSheetState(
+      peekPx = heightPx,
+      fullPx = heightPx,
+      allowHidden = allowHidden,
+      scope = scope,
+      initialDetent = SheetDetent.PEEK,
+    )
+  }
+}
+
 /** [FloatingSheetState] の段に対応する高さ（dp）。地図の下パディングを合わせるのに使う。 */
 @Composable
 fun FloatingSheetState.heightOf(detent: SheetDetent): Dp {
@@ -152,7 +192,7 @@ fun FloatingSheetState.heightOf(detent: SheetDetent): Dp {
  *
  * [restoreLabel] を渡すと、畳みきった（[SheetDetent.HIDDEN]）ときに戻すためのボタンを出す。
  * 畳めるシートは戻す手段が無いと操作を見失うので、[FloatingSheetState.allowHidden] が
- * true のシートでは基本的に指定する。
+ * true のシートでは基本的に指定する。つまみの行の右端の「畳む」ボタンも、戻すボタンがあるときだけ出す。
  */
 @Composable
 fun FloatingSheet(
@@ -201,6 +241,13 @@ fun FloatingSheet(
         SheetDragHandle(
           onDrag = { state.dragBy(it) },
           onDragEnd = { state.settleToNearest() },
+          expanded = state.detent == SheetDetent.FULL,
+          onToggle = if (state.hasFull) state::toggleFull else null,
+          onHide = if (state.allowHidden && restoreLabel != null) {
+            { state.settleTo(SheetDetent.HIDDEN) }
+          } else {
+            null
+          },
         )
         content()
       }
@@ -208,11 +255,17 @@ fun FloatingSheet(
   }
 }
 
-/** シート上部のつまみ。縦ドラッグでシート高さを変える（中身のスクロールとは独立）。 */
+/**
+ * シート上部のつまみの行。縦ドラッグでシート高さを変える（中身のスクロールとは独立）。
+ * 行のタップで [onToggle]（ハーフ⇔フル）、右端のボタンで [onHide]（畳む）。どちらも null なら出さない。
+ */
 @Composable
 private fun SheetDragHandle(
   onDrag: (Float) -> Unit,
   onDragEnd: () -> Unit,
+  expanded: Boolean,
+  onToggle: (() -> Unit)?,
+  onHide: (() -> Unit)?,
 ) {
   Box(
     modifier = Modifier
@@ -224,7 +277,14 @@ private fun SheetDragHandle(
           onDragCancel = onDragEnd,
         )
       }
-      .padding(vertical = 10.dp),
+      .then(
+        if (onToggle != null) {
+          Modifier.clickable(onClickLabel = if (expanded) "シートを縮める" else "シートを広げる", onClick = onToggle)
+        } else {
+          Modifier
+        },
+      )
+      .heightIn(min = if (onHide != null) 40.dp else 24.dp),
     contentAlignment = Alignment.Center,
   ) {
     Box(
@@ -236,5 +296,19 @@ private fun SheetDragHandle(
           PathlyShapes.pill,
         ),
     )
+    if (onHide != null) {
+      IconButton(
+        onClick = onHide,
+        modifier = Modifier
+          .align(Alignment.CenterEnd)
+          .padding(end = PathlySpacing.xs),
+      ) {
+        Icon(
+          painter = painterResource(R.drawable.ic_expand_more),
+          contentDescription = "シートを畳む",
+          tint = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+      }
+    }
   }
 }

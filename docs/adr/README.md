@@ -57,3 +57,4 @@
 | [0039](0039-one-search-box-for-places-and-regions.md)       | 地図の検索窓は 1 つにし、施設（登録）と地域（移動）の候補を一緒に出す                                 | Accepted |
 | [0040](0040-design-tokens-indigo-fixed-colors.md)           | 画面の色・文字・余白・角丸・影を Pathly のトークンに決め、壁紙の色は設定で選べるようにする            | Accepted |
 | [0041](0041-adopt-material3-expressive-after-stable.md)     | Material 3 Expressive を使い、Compose Material 3 の 1.5.0 安定版が来てから入れる                      | Accepted |
+| [0042](0042-primary-action-moves-with-sheet.md)             | 地図の画面の主役はシートと一緒に動き、シートを畳めば隠れる。シートはタップでも開け閉めする            | Accepted |

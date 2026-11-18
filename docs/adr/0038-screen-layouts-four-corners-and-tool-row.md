@@ -1,6 +1,6 @@
 # 0038. 地図の画面は四隅で役割を固定し、一覧の画面は見出しとツール行にそろえる
 
-- Status: Accepted
+- Status: Accepted（主役を「いつも見える」とした点は [0042](0042-primary-action-moves-with-sheet.md) で読み替え）
 - Date: 2026-11-16
 
 関連: 型の中身は [designs/ui-direction.md](../designs/ui-direction.md)。一覧の絞り込みの欄は [0031](0031-list-filters-in-a-panel.md)、
