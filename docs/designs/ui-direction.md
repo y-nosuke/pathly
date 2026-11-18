@@ -61,7 +61,7 @@ claude.ai の Design（[Pathly 画面の型の案](https://claude.ai/artifact/XJ
 | 下中央       | 主役（記録画面の開始・停止）。シートのすぐ上に置き、シートと一緒に動く（畳めば隠れる → [ADR-0042](../adr/0042-primary-action-moves-with-sheet.md)）。主役の無い画面では置かない |
 | 下           | シート: 情報（距離・立ち寄り中など）・一覧（立ち寄り・経路・この範囲の経路）・脇役の操作                                                                                        |
 | レイヤーの中 | 地図に重ねるもの: 登録済みの場所の表示・絞り込み、この範囲の経路（記録画面）                                                                                                    |
-| ⋮ の中       | その画面の対象への操作: 名前を編集・お気に入り・再解析、開発版の補正の調整・GPS 詳細                                                                                            |
+| ⋮ の中       | その画面の対象への操作: 名前を編集・お気に入り・再解析、開発版の補正の調整・GPS 詳細、場所の Google 施設を選び直す・まとめる・削除                                              |
 
 - **主役はシートと一緒に動く。** シートを下へ払うと主役も隠れ、戻すボタンが残る。シートはつまみの行のタップ（ハーフ⇔フル）と▼（畳む）でも開け閉めする。
 - 区画ごとの部品は `presentation/common/` にある（上のバー `MapTopBar`・戻る＋見出し `MapBackTitle`・⋮ `MapOverflowMenuButton`・レイヤー `MapLayersButton`・右下 `MapControls`・1 行の帯 `MapNoticeBanner`・シートの脇役の操作 `MapSideActions` → [ui.md](ui.md)）。

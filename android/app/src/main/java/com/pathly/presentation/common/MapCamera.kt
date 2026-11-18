@@ -1,6 +1,8 @@
 package com.pathly.presentation.common
 
+import android.Manifest
 import android.content.Context
+import android.content.pm.PackageManager
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.Stable
@@ -9,6 +11,10 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.platform.LocalContext
+import androidx.core.content.ContextCompat
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LifecycleEventEffect
 import com.google.android.gms.location.LocationServices
 import com.google.android.gms.location.Priority
 import com.google.android.gms.maps.model.CameraPosition
@@ -51,6 +57,24 @@ internal fun requestCurrentLatLng(context: Context, onLocated: (LatLng) -> Unit)
   } catch (e: SecurityException) {
     // 権限が無ければ今の位置のまま。
   }
+}
+
+/** 位置情報の許可（正確・おおよそのどちらか）があるか。おおよその位置だけの許可でも現在地は取れる。 */
+internal fun isLocationPermitted(context: Context): Boolean = listOf(
+  Manifest.permission.ACCESS_FINE_LOCATION,
+  Manifest.permission.ACCESS_COARSE_LOCATION,
+).any { ContextCompat.checkSelfPermission(context, it) == PackageManager.PERMISSION_GRANTED }
+
+/**
+ * 位置情報の許可があるか。許可は記録画面などで後から出せるので、画面に戻るたびに見直す。
+ * 地図の画面は、これが true のときだけ地図に現在地を出し、右下に現在地ボタンを置く（地図の画面からは許可を求めない）。
+ */
+@Composable
+internal fun rememberLocationPermitted(): Boolean {
+  val context = LocalContext.current
+  var permitted by remember { mutableStateOf(isLocationPermitted(context)) }
+  LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { permitted = isLocationPermitted(context) }
+  return permitted
 }
 
 /**

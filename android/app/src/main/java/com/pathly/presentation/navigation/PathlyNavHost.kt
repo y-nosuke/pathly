@@ -36,8 +36,8 @@ import androidx.navigation.compose.navigation
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.pathly.R
+import com.pathly.presentation.common.MapRegisteredPlaces
 import com.pathly.presentation.history.HistoryScreen
-import com.pathly.presentation.history.MapRegisteredPlaces
 import com.pathly.presentation.history.SameFacilityReview
 import com.pathly.presentation.history.StopReanalysis
 import com.pathly.presentation.history.TrackDetailScreen

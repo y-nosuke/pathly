@@ -1,8 +1,5 @@
 package com.pathly.presentation.history
 
-import android.Manifest
-import android.content.Context
-import android.content.pm.PackageManager
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
@@ -25,12 +22,9 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -38,9 +32,6 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import androidx.core.content.ContextCompat
-import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.compose.LifecycleEventEffect
 import com.google.android.gms.maps.model.LatLng
 import com.pathly.R
 import com.pathly.domain.model.GpsTrack
@@ -51,12 +42,14 @@ import com.pathly.presentation.common.FloatingSheet
 import com.pathly.presentation.common.FloatingSheetState
 import com.pathly.presentation.common.MapControls
 import com.pathly.presentation.common.MapInfoWindowState
+import com.pathly.presentation.common.MapRegisteredPlaces
 import com.pathly.presentation.common.MapRoundButton
 import com.pathly.presentation.common.SameFacilityDialog
 import com.pathly.presentation.common.SheetDetent
 import com.pathly.presentation.common.SheetRestoreButtonInset
 import com.pathly.presentation.common.heightOf
 import com.pathly.presentation.common.rememberFloatingSheetState
+import com.pathly.presentation.common.rememberLocationPermitted
 import com.pathly.presentation.common.rememberMapInfoWindowState
 import com.pathly.presentation.common.requestCurrentLatLng
 import com.pathly.presentation.places.PlaceEditHost
@@ -124,10 +117,7 @@ fun TrackDetailScreen(
   // 分割画面などコンテナ実サイズと食い違う）。containerSize は px なので dp に直す。
   val screenHeightDp = with(LocalDensity.current) { LocalWindowInfo.current.containerSize.height.toDp() }
   // 位置情報の許可があるときだけ、地図に現在地を出し、右下に現在地ボタンを置く（この画面からは許可を求めない）。
-  val context = LocalContext.current
-  // 許可は記録画面などで後から出せるので、画面に戻るたびに見直す。おおよその位置だけの許可でも現在地は取れる。
-  var hasLocationPermission by remember { mutableStateOf(isLocationPermitted(context)) }
-  LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { hasLocationPermission = isLocationPermitted(context) }
+  val hasLocationPermission = rememberLocationPermitted()
 
   // 削除などで stops が変わったら、消えた ID を選択から外す。空になったら選択モードを抜ける。
   LaunchedEffect(stops) {
@@ -644,8 +634,3 @@ private fun TrackDetailMapControls(
     }
   }
 }
-
-private fun isLocationPermitted(context: Context): Boolean = listOf(
-  Manifest.permission.ACCESS_FINE_LOCATION,
-  Manifest.permission.ACCESS_COARSE_LOCATION,
-).any { ContextCompat.checkSelfPermission(context, it) == PackageManager.PERMISSION_GRANTED }

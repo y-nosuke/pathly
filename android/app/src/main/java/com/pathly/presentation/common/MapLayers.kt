@@ -151,3 +151,32 @@ fun MapLayerActionItem(
     }
   }
 }
+
+/**
+ * 地図に出す登録済みの場所（画面別のトグルと、この地図だけの絞り込み。場所一覧とも別）。
+ * [places] は絞り込む前のもの（絞り込みのチップの件数に使う）。
+ */
+data class MapRegisteredPlaces(
+  val places: List<RegisteredPlace> = emptyList(),
+  val shown: Boolean = false,
+  val onToggle: () -> Unit = {},
+  val filter: MapPlaceFilter = MapPlaceFilter(),
+  val onFilterChange: (MapPlaceFilter) -> Unit = {},
+) {
+  /** 地図に描く場所（表示 OFF なら無し。絞り込みに合うものだけ）。 */
+  val visible: List<RegisteredPlace> by lazy { if (shown) places.filter(filter::matches) else emptyList() }
+}
+
+/** 上のバーのレイヤー［≋］のうち、登録済みの場所の表示・絞り込みだけを持つもの（経路詳細・場所詳細・地図で選ぶ）。 */
+@Composable
+fun RegisteredPlacesLayerButton(mapPlaces: MapRegisteredPlaces, modifier: Modifier = Modifier) {
+  MapLayersButton(active = mapPlaces.shown, modifier = modifier) {
+    RegisteredPlacesLayerItems(
+      show = mapPlaces.shown,
+      onToggle = mapPlaces.onToggle,
+      filter = mapPlaces.filter,
+      places = mapPlaces.places,
+      onFilterChange = mapPlaces.onFilterChange,
+    )
+  }
+}

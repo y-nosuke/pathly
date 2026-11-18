@@ -87,8 +87,6 @@ data class PlacesState(
   val registerToken: Int = 0,
   // 下のスナックバーに出す一言（「「名前」を登録しました」/「保存しました」など）。出したら消化して null に戻す。
   val registerMessage: String? = null,
-  // 場所詳細の地図に「登録済みの場所」を出すか（画面別トグル）。
-  val showRegisteredPlaces: Boolean = false,
 ) {
   /** 絞り込み（名前の検索を含む）を一切かけていないか。 */
   val noFilter: Boolean
