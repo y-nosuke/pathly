@@ -6,6 +6,10 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.ui.test.SemanticsNodeInteraction
+import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
@@ -111,10 +115,39 @@ class PlaceMapScreensTest {
       }
     }
 
-    composeTestRule.onNodeWithContentDescription("地図に重ねるもの").performClick()
+    composeTestRule.onNodeWithContentDescription("地図に重ねるもの").assertStateDescription("なし").performClick()
     composeTestRule.onNodeWithText("登録済みの場所").performClick()
     assertTrue(shown)
+    // パネルを開いたままでも、ボタンの表示はすぐ今の状態になる。
+    composeTestRule.onNodeWithTag("mapLayersPanel").assertIsDisplayed()
+    composeTestRule.onNodeWithContentDescription("地図に重ねるもの").assertStateDescription("表示中")
+    composeTestRule.onNodeWithTag("mapLayersFilteredBadge").assertDoesNotExist()
   }
+
+  @Test
+  fun `登録済みの場所を絞り込んでいるとレイヤーのボタンに点が付く`() {
+    var filter by mutableStateOf(MapPlaceFilter())
+    composeTestRule.setContent {
+      PathlyAndroidTheme {
+        PlaceDetailContent(
+          item = item(visitCount = 0),
+          visits = emptyList(),
+          onBack = {},
+          onOpenTrack = {},
+          onDeleteRequest = {},
+          placeEdit = PlaceEditUi.None,
+          registeredPlaces = MapRegisteredPlaces(shown = true, filter = filter, onFilterChange = { filter = it }),
+        )
+      }
+    }
+
+    composeTestRule.onNodeWithTag("mapLayersFilteredBadge").assertDoesNotExist()
+    filter = MapPlaceFilter(wishlisted = true)
+    composeTestRule.onNodeWithTag("mapLayersFilteredBadge").assertIsDisplayed()
+    composeTestRule.onNodeWithContentDescription("地図に重ねるもの").assertStateDescription("絞り込み中")
+  }
+
+  private fun SemanticsNodeInteraction.assertStateDescription(value: String) = assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, value))
 
   @Test
   fun `地図で選ぶは選ぶまで案内の帯を出し戻るでやめる`() {

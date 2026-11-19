@@ -1,6 +1,8 @@
 package com.pathly.presentation.common
 
 import androidx.annotation.DrawableRes
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -14,6 +16,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.selection.toggleable
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -30,6 +33,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.unit.dp
 import com.pathly.R
 import com.pathly.domain.model.MapPlaceFilter
@@ -41,12 +46,15 @@ import com.pathly.ui.theme.PathlySpacing
 
 /**
  * レイヤーのボタンと、押すと開くパネル。パネルの中身は画面ごとに [content] で渡す（`close` でパネルを閉じる）。
- * [active] は、何かを重ねているとき（登録済みの場所を表示中など）に塗りつぶして示すため。
+ * [active] は、何かを重ねているとき（登録済みの場所を表示中など）に塗りつぶして示すため。パネルを開いている間も
+ * 今の状態のまま塗り分ける（パネルの中で切り替えたら、すぐボタンにも出る）。
+ * [filtered] は、重ねているものを絞り込んでいるとき（登録済みの場所の絞り込みなど）に右上の点で示すため。
  */
 @Composable
 fun MapLayersButton(
   active: Boolean,
   modifier: Modifier = Modifier,
+  filtered: Boolean = false,
   content: @Composable ColumnScope.(close: () -> Unit) -> Unit,
 ) {
   var open by rememberSaveable { mutableStateOf(false) }
@@ -55,8 +63,27 @@ fun MapLayersButton(
       icon = R.drawable.ic_layers,
       contentDescription = "地図に重ねるもの",
       onClick = { open = !open },
-      active = active || open,
+      active = active,
+      modifier = Modifier.semantics {
+        stateDescription = when {
+          filtered -> "絞り込み中"
+          active -> "表示中"
+          else -> "なし"
+        }
+      },
     )
+    if (filtered) {
+      // 塗りつぶし（表示中）の上でも見分けられるよう、縁取りした点にする。
+      Box(
+        modifier = Modifier
+          .align(Alignment.TopEnd)
+          .size(14.dp)
+          .border(2.dp, MaterialTheme.colorScheme.surfaceContainerLowest, CircleShape)
+          .padding(2.dp)
+          .background(MaterialTheme.colorScheme.tertiary, CircleShape)
+          .testTag("mapLayersFilteredBadge"),
+      )
+    }
     DropdownMenu(
       expanded = open,
       onDismissRequest = { open = false },
@@ -165,12 +192,15 @@ data class MapRegisteredPlaces(
 ) {
   /** 地図に描く場所（表示 OFF なら無し。絞り込みに合うものだけ）。 */
   val visible: List<RegisteredPlace> by lazy { if (shown) places.filter(filter::matches) else emptyList() }
+
+  /** 表示中で、絞り込みがかかっているか（レイヤーのボタンの点）。 */
+  val filtered: Boolean get() = shown && !filter.isEmpty
 }
 
 /** 上のバーのレイヤー［≋］のうち、登録済みの場所の表示・絞り込みだけを持つもの（経路詳細・場所詳細・地図で選ぶ）。 */
 @Composable
 fun RegisteredPlacesLayerButton(mapPlaces: MapRegisteredPlaces, modifier: Modifier = Modifier) {
-  MapLayersButton(active = mapPlaces.shown, modifier = modifier) {
+  MapLayersButton(active = mapPlaces.shown, filtered = mapPlaces.filtered, modifier = modifier) {
     RegisteredPlacesLayerItems(
       show = mapPlaces.shown,
       onToggle = mapPlaces.onToggle,
