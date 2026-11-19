@@ -39,7 +39,7 @@ import java.util.Date
 
 /**
  * 場所詳細と地図で選んで追加の置き方（地図の画面の型 → docs/designs/ui-direction.md）。
- * 地図の中（マーカー・カメラ）は画面のテストでは見にくいので、上のバー・シート・メニューだけを確かめる。
+ * 地図の中（マーカー・カメラ）は画面のテストでは見にくいので、地図は空スロットにして、上のバー・シート・メニューだけを確かめる。
  */
 @RunWith(AndroidJUnit4::class)
 class PlaceMapScreensTest {
@@ -111,6 +111,7 @@ class PlaceMapScreensTest {
           onDeleteRequest = {},
           placeEdit = PlaceEditUi.None,
           registeredPlaces = registeredPlaces(shown = shown, onToggle = { shown = !shown }),
+          mapContent = {},
         )
       }
     }
@@ -137,6 +138,7 @@ class PlaceMapScreensTest {
           onDeleteRequest = {},
           placeEdit = PlaceEditUi.None,
           registeredPlaces = MapRegisteredPlaces(shown = true, filter = filter, onFilterChange = { filter = it }),
+          mapContent = {},
         )
       }
     }
@@ -158,6 +160,7 @@ class PlaceMapScreensTest {
           onCancel = { cancelled = true },
           placeEdit = PlaceEditUi.None,
           registeredPlaces = registeredPlaces(shown = false, onToggle = {}),
+          mapContent = {},
         )
       }
     }
@@ -235,6 +238,7 @@ class PlaceMapScreensTest {
           onDeleteRequest = onDelete,
           placeEdit = placeEdit,
           registeredPlaces = registeredPlaces(shown = false, onToggle = {}),
+          mapContent = {},
         )
       }
     }

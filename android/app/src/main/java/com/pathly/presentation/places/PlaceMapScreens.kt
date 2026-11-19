@@ -158,6 +158,9 @@ internal fun AddPlaceContent(
   placeEdit: PlaceEditUi,
   registeredPlaces: MapRegisteredPlaces,
   modifier: Modifier = Modifier,
+  // 地図スロット。null（既定）は実マップ（GoogleMap）を描く。テストは空スロット（{}）を渡し、
+  // GMS 依存の地図の描画を避けて上のバー・シートだけを確かめる（TrackDetailScreen と同じ）。
+  mapContent: (@Composable () -> Unit)? = null,
 ) {
   // 選んだ対象。フォームの中身（名前・メモ・行きたい・優先度）と Google 情報の取得は
   // 場所シート側が持つので、この画面は「どこを選んだか」だけを持つ。
@@ -195,31 +198,35 @@ internal fun AddPlaceContent(
   val infoWindow = rememberMapInfoWindowState()
 
   Box(modifier = modifier.fillMaxSize()) {
-    GoogleMap(
-      modifier = Modifier.fillMaxSize(),
-      cameraPositionState = cameraPositionState,
-      contentPadding = PaddingValues(top = MapTopBarInset, bottom = sheetHeight),
-      properties = MapProperties(isMyLocationEnabled = hasLocationPermission),
-      uiSettings = MapUiSettings(
-        zoomControlsEnabled = false,
-        mapToolbarEnabled = false,
-        myLocationButtonEnabled = false,
-      ),
-      // アイコン（POI）をタップしたら施設として、何もない場所なら任意の地点として扱う。
-      // 名前の初期値やカテゴリ・住所の取得は場所シートに任せる。
-      onPOIClick = { poi -> target = PlaceSheetTarget.NewPoi(poi) },
-      onMapClick = { latLng -> target = PlaceSheetTarget.NewPoint(latLng) },
-    ) {
-      // 登録前に選んだ地点（青いピン）。まだ決めている最中なので丸バッジにはしない。
-      picked?.let { p ->
-        val markerState = remember(p) { MarkerState(position = p) }
-        MapMarker("picked", p.latitude, p.longitude, infoWindow = infoWindow, state = markerState, title = "選んだ地点") {
-          MapPinMarker(bg = PathlyMapColors.Picked, glyph = R.drawable.ic_add)
+    if (mapContent != null) {
+      mapContent()
+    } else {
+      GoogleMap(
+        modifier = Modifier.fillMaxSize(),
+        cameraPositionState = cameraPositionState,
+        contentPadding = PaddingValues(top = MapTopBarInset, bottom = sheetHeight),
+        properties = MapProperties(isMyLocationEnabled = hasLocationPermission),
+        uiSettings = MapUiSettings(
+          zoomControlsEnabled = false,
+          mapToolbarEnabled = false,
+          myLocationButtonEnabled = false,
+        ),
+        // アイコン（POI）をタップしたら施設として、何もない場所なら任意の地点として扱う。
+        // 名前の初期値やカテゴリ・住所の取得は場所シートに任せる。
+        onPOIClick = { poi -> target = PlaceSheetTarget.NewPoi(poi) },
+        onMapClick = { latLng -> target = PlaceSheetTarget.NewPoint(latLng) },
+      ) {
+        // 登録前に選んだ地点（青いピン）。まだ決めている最中なので丸バッジにはしない。
+        picked?.let { p ->
+          val markerState = remember(p) { MarkerState(position = p) }
+          MapMarker("picked", p.latitude, p.longitude, infoWindow = infoWindow, state = markerState, title = "選んだ地点") {
+            MapPinMarker(bg = PathlyMapColors.Picked, glyph = R.drawable.ic_add)
+          }
         }
+        // 登録済みの場所（レイヤーで表示中）。もう登録してある場所を見ながら選べる。タップは名前の吹き出しだけで、
+        // 編集のシートは出さない（保存の一言を合図に一覧へ戻る画面なので、編集すると追加の途中で戻ってしまう）。
+        RegisteredPlaceMarkers(registeredPlaces.visible, infoWindow) {}
       }
-      // 登録済みの場所（レイヤーで表示中）。もう登録してある場所を見ながら選べる。タップは名前の吹き出しだけで、
-      // 編集のシートは出さない（保存の一言を合図に一覧へ戻る画面なので、編集すると追加の途中で戻ってしまう）。
-      RegisteredPlaceMarkers(registeredPlaces.visible, infoWindow) {}
     }
 
     MapTopBar(
@@ -279,6 +286,9 @@ internal fun PlaceDetailContent(
   // 登録済みの場所の地図表示（画面別）。この場所自身は主マーカーと重なるので呼び出し側で除外して渡す。
   registeredPlaces: MapRegisteredPlaces,
   modifier: Modifier = Modifier,
+  // 地図スロット。null（既定）は実マップ（GoogleMap）を描く。テストは空スロット（{}）を渡し、
+  // GMS 依存の地図の描画を避けて上のバー・シートだけを確かめる（TrackDetailScreen と同じ）。
+  mapContent: (@Composable () -> Unit)? = null,
 ) {
   // 地図の1点タップで開く統一の「場所シート」（未登録の空き地点/POI＝登録、登録済み＝その場で編集）。
   var placeSheetTarget by remember { mutableStateOf<PlaceSheetTarget?>(null) }
@@ -306,54 +316,58 @@ internal fun PlaceDetailContent(
   val infoWindow = rememberMapInfoWindowState()
 
   Box(modifier = modifier.fillMaxSize()) {
-    GoogleMap(
-      modifier = Modifier.fillMaxSize(),
-      cameraPositionState = cameraPositionState,
-      contentPadding = PaddingValues(top = MapTopBarInset, bottom = mapBottomPadding),
-      properties = MapProperties(isMyLocationEnabled = hasLocationPermission),
-      uiSettings = MapUiSettings(
-        zoomControlsEnabled = false,
-        mapToolbarEnabled = false,
-        myLocationButtonEnabled = false,
-      ),
-      // 詳細のマップで別の施設(POI)を見かけたらタップで統一シート（登録）。
-      onPOIClick = { placeSheetTarget = PlaceSheetTarget.NewPoi(it) },
-      // 何もない地点をタップ → 統一シート（その地点を場所として登録）。
-      onMapClick = { placeSheetTarget = PlaceSheetTarget.NewPoint(it) },
-    ) {
-      // この画面が主題にしている場所。登録済み＝確定しているので、地図の他の画面と同じ丸バッジ
-      // （色＝訪問状態／グリフ＝業種／右上＝行きたい）で描く。
-      val markerState = remember(position) { MarkerState(position = position) }
-      val group = PlaceCategoryGroup.of(item.place.category)
-      MapMarker(
-        "place-detail",
-        item.place.id,
-        item.wishlistFlag,
-        item.isVisited,
-        group,
-        infoWindow = infoWindow,
-        state = markerState,
-        title = item.displayName,
-        snippet = item.statusLabel,
-        // この吹き出しは画面の一部（下のシートと同じ場所を指している）。自分でタップして開き直しても
-        // 同じ扱いにして、バックは常に画面を戻す。
-        dismissWithBack = false,
+    if (mapContent != null) {
+      mapContent()
+    } else {
+      GoogleMap(
+        modifier = Modifier.fillMaxSize(),
+        cameraPositionState = cameraPositionState,
+        contentPadding = PaddingValues(top = MapTopBarInset, bottom = mapBottomPadding),
+        properties = MapProperties(isMyLocationEnabled = hasLocationPermission),
+        uiSettings = MapUiSettings(
+          zoomControlsEnabled = false,
+          mapToolbarEnabled = false,
+          myLocationButtonEnabled = false,
+        ),
+        // 詳細のマップで別の施設(POI)を見かけたらタップで統一シート（登録）。
+        onPOIClick = { placeSheetTarget = PlaceSheetTarget.NewPoi(it) },
+        // 何もない地点をタップ → 統一シート（その地点を場所として登録）。
+        onMapClick = { placeSheetTarget = PlaceSheetTarget.NewPoint(it) },
       ) {
-        RegisteredPlaceMarker(
-          bg = if (item.isVisited) PathlyMapColors.PlaceVisited else PathlyMapColors.PlaceUnvisited,
-          glyph = categoryGlyph(group),
-          wishlistFlag = item.wishlistFlag,
-        )
-      }
-      // この画面はこの場所が主題なので、他の画面でマーカーをタップしたときと同じく吹き出しも出す。
-      // 別の場所のシートを開くと地図が勝手に閉じてしまうので、閉じてこの場所に戻ったら出し直す。
-      LaunchedEffect(markerState, placeSheetTarget) {
-        if (placeSheetTarget == null) markerState.showInfoWindow()
-      }
-      // 登録済みの場所（レイヤーで表示中・地図の絞り込みに合うものだけ）。この場所自身は除外済み。
-      // タップで統一シート（この画面の詳細と同じ編集ができる）。
-      RegisteredPlaceMarkers(registeredPlaces.visible, infoWindow) {
-        placeSheetTarget = PlaceSheetTarget.Existing(it.placeId)
+        // この画面が主題にしている場所。登録済み＝確定しているので、地図の他の画面と同じ丸バッジ
+        // （色＝訪問状態／グリフ＝業種／右上＝行きたい）で描く。
+        val markerState = remember(position) { MarkerState(position = position) }
+        val group = PlaceCategoryGroup.of(item.place.category)
+        MapMarker(
+          "place-detail",
+          item.place.id,
+          item.wishlistFlag,
+          item.isVisited,
+          group,
+          infoWindow = infoWindow,
+          state = markerState,
+          title = item.displayName,
+          snippet = item.statusLabel,
+          // この吹き出しは画面の一部（下のシートと同じ場所を指している）。自分でタップして開き直しても
+          // 同じ扱いにして、バックは常に画面を戻す。
+          dismissWithBack = false,
+        ) {
+          RegisteredPlaceMarker(
+            bg = if (item.isVisited) PathlyMapColors.PlaceVisited else PathlyMapColors.PlaceUnvisited,
+            glyph = categoryGlyph(group),
+            wishlistFlag = item.wishlistFlag,
+          )
+        }
+        // この画面はこの場所が主題なので、他の画面でマーカーをタップしたときと同じく吹き出しも出す。
+        // 別の場所のシートを開くと地図が勝手に閉じてしまうので、閉じてこの場所に戻ったら出し直す。
+        LaunchedEffect(markerState, placeSheetTarget) {
+          if (placeSheetTarget == null) markerState.showInfoWindow()
+        }
+        // 登録済みの場所（レイヤーで表示中・地図の絞り込みに合うものだけ）。この場所自身は除外済み。
+        // タップで統一シート（この画面の詳細と同じ編集ができる）。
+        RegisteredPlaceMarkers(registeredPlaces.visible, infoWindow) {
+          placeSheetTarget = PlaceSheetTarget.Existing(it.placeId)
+        }
       }
     }
 
