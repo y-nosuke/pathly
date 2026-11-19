@@ -4,6 +4,7 @@ import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
@@ -20,7 +21,7 @@ import com.pathly.util.DateFormatters
 /**
  * 経路詳細の上の区画（地図の画面の型 → docs/designs/ui-direction.md）。
  * 左は戻る＋見出し（名前。無ければ日付。押すと名前を編集）、右端はレイヤー［≋］（登録済みの場所の表示・絞り込み）と
- * ⋮（名前を編集・お気に入り・再解析、開発版の補正の調整・GPS 詳細）。記録中の経路は、その下に記録中のピルを出す。
+ * ⋮（名前を編集・お気に入り・再解析・この記録を削除、開発版の補正の調整・GPS 詳細）。記録中の経路は、その下に記録中のピルを出す。
  *
  * @param canReanalyze 再解析を始められるか（各モードや選択の途中は、そちらを終えてから）。
  * @param canTune 補正の調整を始め・やめられるか（ほかのモードの途中は、パネルが重なるので押せない）。
@@ -35,6 +36,7 @@ internal fun TrackDetailTopBar(
   onBack: () -> Unit,
   onRename: () -> Unit,
   onToggleFavorite: () -> Unit,
+  onDelete: () -> Unit,
   onReanalyze: () -> Unit,
   onToggleTuning: () -> Unit,
   onOpenDebugInfo: () -> Unit,
@@ -63,6 +65,7 @@ internal fun TrackDetailTopBar(
           canTune = canTune,
           onRename = onRename,
           onToggleFavorite = onToggleFavorite,
+          onDelete = onDelete,
           onReanalyze = onReanalyze,
           onToggleTuning = onToggleTuning,
           onOpenDebugInfo = onOpenDebugInfo,
@@ -78,7 +81,10 @@ internal fun TrackDetailTopBar(
   )
 }
 
-/** ⋮ の中身。経路への操作を上に、開発版だけのものは区切り線の下に置く（文字だけ。お気に入りの状態は文言で示す）。 */
+/**
+ * ⋮ の中身。経路への操作を上に（削除は最後。確かめずに消し、スナックバーで取り消せる）、開発版だけのものは区切り線の下に置く
+ * （文字だけ。お気に入りの状態は文言で示す）。
+ */
 @Composable
 private fun ColumnScope.TrackDetailMenuItems(
   track: GpsTrack,
@@ -87,6 +93,7 @@ private fun ColumnScope.TrackDetailMenuItems(
   canTune: Boolean,
   onRename: () -> Unit,
   onToggleFavorite: () -> Unit,
+  onDelete: () -> Unit,
   onReanalyze: () -> Unit,
   onToggleTuning: () -> Unit,
   onOpenDebugInfo: () -> Unit,
@@ -116,6 +123,16 @@ private fun ColumnScope.TrackDetailMenuItems(
       onClick = {
         close()
         onReanalyze()
+      },
+    )
+  }
+  // 記録中の経路は消さない（記録サービスが書き続けている）。止めてから消す。
+  if (!track.isActive) {
+    DropdownMenuItem(
+      text = { Text("この記録を削除", color = MaterialTheme.colorScheme.error) },
+      onClick = {
+        close()
+        onDelete()
       },
     )
   }

@@ -3,9 +3,13 @@ package com.pathly.presentation.history
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.pathly.data.settings.MapSurface
+import com.pathly.data.settings.SettingsRepository
 import com.pathly.domain.model.GpsTrack
+import com.pathly.domain.model.MapPlaceFilter
 import com.pathly.domain.model.PlaceCategoryFacet
 import com.pathly.domain.model.RegionKey
+import com.pathly.domain.model.RegisteredPlace
 import com.pathly.domain.repository.GpsTrackRepository
 import com.pathly.domain.repository.PlaceRepository
 import com.pathly.presentation.common.ListMapMode
@@ -15,8 +19,11 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -25,6 +32,8 @@ import javax.inject.Inject
 class HistoryViewModel @Inject constructor(
   private val gpsTrackRepository: GpsTrackRepository,
   private val placeRepository: PlaceRepository,
+  private val settingsRepository: SettingsRepository,
+  private val trackDeletionQueue: TrackDeletionQueue,
   private val savedStateHandle: SavedStateHandle,
 ) : ViewModel() {
 
@@ -57,7 +66,10 @@ class HistoryViewModel @Inject constructor(
     viewModelScope.launch {
       _uiState.update { it.copy(isLoading = true) }
       try {
-        gpsTrackRepository.getAllTracks().collect { tracks ->
+        // 消す予定の経路（スナックバーで取り消しを待っている間）は、もう消したものとして隠す。
+        combine(gpsTrackRepository.getAllTracks(), trackDeletionQueue.hiddenIds) { tracks, hidden ->
+          tracks.filter { it.id !in hidden }
+        }.collect { tracks ->
           // 完了済み（記録中でなく終了時刻あり）だけを一覧に載せる。並べ替えは state 側で行う。
           val completedTracks = tracks.filter { !it.isActive && it.endTime != null }
           _uiState.update {
@@ -185,6 +197,29 @@ class HistoryViewModel @Inject constructor(
   /** 地図に重ねている経路をすべて外す。 */
   fun clearOverlays() = selection.clearAll()
 
+  /** 地図表示に「登録済みの場所」を出すか（履歴の地図の画面別トグル。経路詳細とは別）。 */
+  val showRegisteredPlaces: StateFlow<Boolean> = settingsRepository.showRegisteredPlaces(MapSurface.HISTORY_MAP)
+
+  /** 地図に出す登録済みの場所（全 place）。表示が ON のときに描く。 */
+  val registeredPlaces: StateFlow<List<RegisteredPlace>> = placeRepository.observeRegisteredPlaces()
+    .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+  fun toggleShowRegisteredPlaces() {
+    settingsRepository.setShowRegisteredPlaces(MapSurface.HISTORY_MAP, !showRegisteredPlaces.value)
+  }
+
+  /** 地図の「登録済みの場所」の絞り込み（地図ごとに独立。場所一覧とも別）。 */
+  val mapPlaceFilter: StateFlow<MapPlaceFilter> = settingsRepository.mapPlaceFilter(MapSurface.HISTORY_MAP)
+
+  fun setMapPlaceFilter(filter: MapPlaceFilter) {
+    settingsRepository.setMapPlaceFilter(MapSurface.HISTORY_MAP, filter)
+  }
+
+  /** 並べ替えの向きを選ぶ（表示のメニュー）。 */
+  fun setSortDescending(descending: Boolean) {
+    updateListOptions { it.copy(sortDescending = descending) }
+  }
+
   /** お気に入り登録を切り替える。 */
   fun toggleFavorite(track: GpsTrack) {
     viewModelScope.launch {
@@ -209,20 +244,6 @@ class HistoryViewModel @Inject constructor(
         _uiState.update {
           it.copy(
             errorMessage = "名前の変更に失敗しました: ${e.message}",
-          )
-        }
-      }
-    }
-  }
-
-  fun deleteTrack(track: GpsTrack) {
-    viewModelScope.launch {
-      try {
-        gpsTrackRepository.deleteTrack(track)
-      } catch (e: Exception) {
-        _uiState.update {
-          it.copy(
-            errorMessage = "削除に失敗しました: ${e.message}",
           )
         }
       }

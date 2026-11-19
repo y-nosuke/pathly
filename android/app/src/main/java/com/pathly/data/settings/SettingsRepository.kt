@@ -72,7 +72,7 @@ class SettingsRepository @Inject constructor(
     _useDynamicColor.value = use
   }
 
-  // 「登録済みの場所」を地図に出すトグル。画面（記録／履歴詳細／場所詳細／地図で選ぶ）ごとに独立して保持する。
+  // 「登録済みの場所」を地図に出すトグル。画面（記録／履歴詳細／場所詳細／地図で選ぶ／履歴の地図）ごとに独立して保持する。
   private val showRegisteredPlacesFlows: Map<MapSurface, MutableStateFlow<Boolean>> =
     MapSurface.entries.associateWith { surface ->
       MutableStateFlow(prefs.getBoolean(keyShowPlaces(surface), false))
@@ -229,4 +229,5 @@ enum class MapSurface(val key: String) {
   HISTORY("history"),
   PLACE_DETAIL("place_detail"),
   PLACE_ADD("place_add"),
+  HISTORY_MAP("history_map"),
 }

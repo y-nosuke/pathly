@@ -14,6 +14,7 @@ import androidx.compose.ui.test.performTextInput
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.pathly.domain.model.GpsPoint
 import com.pathly.domain.model.GpsTrack
+import com.pathly.domain.model.MapPlaceFilter
 import com.pathly.presentation.common.ListMapMode
 import com.pathly.presentation.tracking.OverlayTrack
 import com.pathly.ui.theme.PathlyAndroidTheme
@@ -52,7 +53,9 @@ class HistoryScreenTest {
 
     // ViewModelのuiStateをモック
     io.mockk.every { mockViewModel.uiState } returns uiStateFlow
-    io.mockk.every { mockViewModel.deleteTrack(any()) } returns Unit
+    io.mockk.every { mockViewModel.registeredPlaces } returns MutableStateFlow(emptyList())
+    io.mockk.every { mockViewModel.showRegisteredPlaces } returns MutableStateFlow(false)
+    io.mockk.every { mockViewModel.mapPlaceFilter } returns MutableStateFlow(MapPlaceFilter())
     io.mockk.every { mockViewModel.clearError() } returns Unit
   }
 
@@ -185,23 +188,10 @@ class HistoryScreenTest {
       }
     }
 
-    // Then
-    // 日付フォーマット確認（正確な日付は環境依存なので部分一致）
-    composeTestRule
-      .onNodeWithText("開始:", substring = true)
-      .assertIsDisplayed()
-
-    composeTestRule
-      .onNodeWithText("終了:", substring = true)
-      .assertIsDisplayed()
-
-    composeTestRule
-      .onNodeWithText("移動距離:", substring = true)
-      .assertIsDisplayed()
-
-    composeTestRule
-      .onNodeWithText("立ち寄り:", substring = true)
-      .assertIsDisplayed()
+    // Then: 行の 2 行目に時刻・距離・立ち寄りの数。上に統計の帯（1 行）。
+    assertRowSummaryDisplayed(tracks[0])
+    composeTestRule.onNodeWithTag("listStatsBar").assertIsDisplayed()
+    composeTestRule.onNodeWithText("1 回 ・", substring = true).assertIsDisplayed()
   }
 
   @Test
@@ -223,15 +213,16 @@ class HistoryScreenTest {
       }
     }
 
-    // When & Then - 名前編集・削除をまとめたオーバーフローメニュー（その他）がクリック可能。
+    // When & Then - 名前を付けるメニュー（その他）がクリック可能。
     composeTestRule
       .onNodeWithContentDescription("その他")
       .assertIsDisplayed()
       .assertHasClickAction()
   }
 
+  // 削除は行のメニューから外し、経路詳細の ⋮ へ移した（一覧の型: 削除はしまう）。
   @Test
-  fun historyScreen_deleteButton_triggersViewModel() {
+  fun historyScreen_rowMenu_hasRenameOnly() {
     // Given
     val track = createSampleTrack()
     uiStateFlow.value = HistoryState(
@@ -249,19 +240,9 @@ class HistoryScreenTest {
       }
     }
 
-    // When - オーバーフローメニューを開いて「削除」を選び、確認ダイアログで「削除する」を押す。
-    composeTestRule
-      .onNodeWithContentDescription("その他")
-      .performClick()
-    composeTestRule
-      .onNodeWithText("削除")
-      .performClick()
-    composeTestRule
-      .onNodeWithText("削除する")
-      .performClick()
-
-    // Then
-    verify { mockViewModel.deleteTrack(track) }
+    composeTestRule.onNodeWithContentDescription("その他").performClick()
+    composeTestRule.onNodeWithText("名前を付ける").assertIsDisplayed()
+    composeTestRule.onNodeWithText("削除", substring = true).assertDoesNotExist()
   }
 
   @Test
@@ -291,15 +272,15 @@ class HistoryScreenTest {
 
     // Then
     composeTestRule
-      .onNodeWithText("立ち寄り: 5件", substring = true)
+      .onNodeWithText("立ち寄り 5", substring = true)
       .assertIsDisplayed()
 
     composeTestRule
-      .onNodeWithText("立ち寄り: 3件", substring = true)
+      .onNodeWithText("立ち寄り 3", substring = true)
       .assertIsDisplayed()
 
     composeTestRule
-      .onNodeWithText("立ち寄り: 0件", substring = true)
+      .onNodeWithText("立ち寄り 0", substring = true)
       .assertIsDisplayed()
 
     // 各トラックにオーバーフローメニュー（その他）が1つずつ存在することを確認。
@@ -337,15 +318,9 @@ class HistoryScreenTest {
       }
     }
 
-    // Then
-    composeTestRule
-      .onNodeWithText("開始:", substring = true)
-      .assertIsDisplayed()
-
-    // 終了時刻は表示されない（endTimeがnullなので）
-    composeTestRule
-      .onNodeWithText("終了:", substring = true)
-      .assertDoesNotExist()
+    // Then: 終了時刻が無いので、開始の時刻だけ（「10:00–」のように続けない）。
+    assertRowSummaryDisplayed(track)
+    composeTestRule.onNodeWithText("–", substring = true).assertDoesNotExist()
   }
 
   @Test
@@ -392,7 +367,7 @@ class HistoryScreenTest {
 
     // Then
     composeTestRule
-      .onNodeWithText("移動距離: 0.0km", substring = true)
+      .onNodeWithText("0.0 km ・")
       .assertIsDisplayed()
   }
 
@@ -425,7 +400,7 @@ class HistoryScreenTest {
 
     // Then - トラックアイテムが表示される
     composeTestRule
-      .onNodeWithText("移動距離:", substring = true)
+      .onNodeWithText("立ち寄り 0", substring = true)
       .assertIsDisplayed()
 
     // 空メッセージは表示されない
@@ -464,6 +439,9 @@ class HistoryScreenTest {
       }
     }
 
+    // 検索は見出しのアイコンから開く（見出しの位置が窓になる）。
+    composeTestRule.onNodeWithText("名前・日付で検索").assertDoesNotExist()
+    composeTestRule.onNodeWithContentDescription("検索").performClick()
     composeTestRule.onNodeWithText("名前・日付で検索").performTextInput("鎌")
     verify { mockViewModel.setNameQuery("鎌") }
 
@@ -472,6 +450,46 @@ class HistoryScreenTest {
     uiStateFlow.value = uiStateFlow.value.copy(nameQuery = "鎌")
     composeTestRule.onNodeWithContentDescription("検索語を消す").performClick()
     verify { mockViewModel.setNameQuery("") }
+  }
+
+  // 検索語が入っている間は、見出しの位置が窓のまま。← で閉じると語も消して見出しに戻る。
+  @Test
+  fun historyScreen_search_staysOpenWhileQueryAndClosesWithBack() {
+    uiStateFlow.value = HistoryState(tracks = listOf(createSampleTrack(id = 1L)), nameQuery = "鎌")
+
+    composeTestRule.setContent {
+      PathlyAndroidTheme {
+        HistoryScreen(viewModel = mockViewModel, onTrackClick = mockOnTrackClick)
+      }
+    }
+
+    composeTestRule.onNodeWithTag("listSearchBox").assertIsDisplayed()
+    composeTestRule.onNodeWithText("外出履歴").assertDoesNotExist()
+    composeTestRule.onNodeWithContentDescription("検索を閉じる").performClick()
+    verify { mockViewModel.setNameQuery("") }
+    uiStateFlow.value = uiStateFlow.value.copy(nameQuery = "")
+    composeTestRule.onNodeWithText("外出履歴").assertIsDisplayed()
+  }
+
+  // 表示のメニュー: 並べ替えの軸と向きを 1 つのメニューで選ぶ。向きは軸に合わせた文言。
+  @Test
+  fun historyScreen_displayMenu_selectsAxisAndDirection() {
+    uiStateFlow.value = HistoryState(tracks = listOf(createSampleTrack(id = 1L)))
+
+    composeTestRule.setContent {
+      PathlyAndroidTheme {
+        HistoryScreen(viewModel = mockViewModel, onTrackClick = mockOnTrackClick)
+      }
+    }
+
+    composeTestRule.onNodeWithText("日付 ・ 新しい順").assertIsDisplayed()
+    composeTestRule.onNodeWithTag("listDisplayMenuButton").performClick()
+    composeTestRule.onNodeWithText("距離").performClick()
+    verify { mockViewModel.setSort(TrackSort.DISTANCE) }
+
+    composeTestRule.onNodeWithTag("listDisplayMenuButton").performClick()
+    composeTestRule.onNodeWithText("古い順").performClick()
+    verify { mockViewModel.setSortDescending(false) }
   }
 
   @Test
@@ -628,11 +646,13 @@ class HistoryScreenTest {
       }
     }
 
-    // 地図表示: 下のシートに絞り込んだ経路の一覧。統計・並べ替えは出さない。
+    // 地図表示: 下のシートに絞り込んだ経路の一覧。統計・表示のメニューは出さず、ツール行の右はレイヤー［≋］。
     composeTestRule.onNodeWithTag("historyMapSheet").assertIsDisplayed()
     composeTestRule.onNodeWithText("経路 2 件").assertIsDisplayed()
     composeTestRule.onNodeWithText("地図に重ねる経路を選ぶ（1 / 8 本）").assertIsDisplayed()
-    composeTestRule.onNodeWithText("並べ替え: 日付順 ▾").assertDoesNotExist()
+    composeTestRule.onNodeWithTag("listDisplayMenuButton").assertDoesNotExist()
+    composeTestRule.onNodeWithTag("listStatsBar").assertDoesNotExist()
+    composeTestRule.onNodeWithContentDescription("地図に重ねるもの").assertIsDisplayed()
 
     // チェックで選ぶ（重ねる）。行のタップは経路詳細へ。
     composeTestRule.onNodeWithTag("historyMapCheck-2").performClick()
@@ -640,7 +660,7 @@ class HistoryScreenTest {
     composeTestRule.onNodeWithText("横浜みなと").performClick()
     verify { mockOnTrackClick(second) }
 
-    // 選んだ経路をすべて外す・すべて見る。
+    // 選んだ経路をすべて外す（シートの見出し）・すべて見る（右下の地図の操作）。
     composeTestRule.onNodeWithText("すべて外す").performClick()
     verify { mockViewModel.clearOverlays() }
     composeTestRule.onNodeWithContentDescription("選んだ経路をすべて見る").assertIsDisplayed()
@@ -687,8 +707,18 @@ class HistoryScreenTest {
     }
 
     composeTestRule.onNodeWithText("絞り込み 1・1 / 2 件").assertIsDisplayed()
+    // たたんでも、地図に重ねるもの（レイヤー）は切り替えられる。
+    composeTestRule.onNodeWithContentDescription("地図に重ねるもの").assertIsDisplayed()
     composeTestRule.onNodeWithContentDescription("ひろげる").performClick()
     verify { mockViewModel.setControlsCollapsed(false) }
+  }
+
+  // 行の 2 行目はまとまりごとの文字（最後以外は区切りの「・」を後ろに付ける）。統計の帯と同じ数字もあるので完全一致で探す。
+  private fun assertRowSummaryDisplayed(track: GpsTrack) {
+    val parts = trackRowSummaryParts(track)
+    parts.forEachIndexed { index, part ->
+      composeTestRule.onNodeWithText(if (index == parts.lastIndex) part else "$part ・").assertIsDisplayed()
+    }
   }
 
   private fun createSampleTrack(

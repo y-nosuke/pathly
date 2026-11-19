@@ -166,6 +166,11 @@ DB に持たないのは、`R.drawable` の ID を DB に入れられず結局�
   絞り込みの欄を閉じる戻る・吹き出しを閉じる戻るをそれより後に登録するため。
 - **`ListMapOverlay`** が、地図に重ねる見出し・検索・絞り込みの外枠と、たたんだ帯（文言は `listMapSummary`）。
   高さを返すので、地図の `contentPadding` の上に渡す。
+  一覧の画面の型に移した画面（履歴）は、一覧表示と同じ見出し・ツール行をそのまま渡し、`padded = false`（部品が自分で余白を持つ）。
+  たたんだ帯の右端には `collapsedActions`（地図表示のレイヤー［≋］）を残せる。
+- **一覧の画面の型の部品は `ListScreenParts.kt`**: 見出し `ListHeader`（検索のアイコンを押すと見出しの位置が検索の窓になる。
+  語がある間は窓のまま）、ツール行 `ListToolRow`（左に絞り込み・右に表示のメニュー／地図表示ではレイヤー）、表示のメニュー
+  `ListDisplayMenuButton`（中身は `ListMenuSectionTitle`・`ListMenuChoice`）、統計の帯 `ListStatsBar`。履歴と場所の一覧で使う。
 - **カメラは `ListMapCamera`**（`MapCamera.kt`。地図表示の外で持ち、一覧に切り替えても・詳細から戻っても範囲を保つ）。
   同じファイルに、既定の位置 `DefaultMapLocation`、`GeoBounds` と `LatLngBounds` の変換、現在地を一度だけ取る
   `requestCurrentLatLng` がある。
@@ -190,7 +195,7 @@ DB に持たないのは、`R.drawable` の ID を DB に入れられず結局�
 （`SettingsRepository` / prefs 名 `pathly_settings`）。トグルは **UI の表示設定**であって
 場所データではないため、DB には持たせない。GPS 記録間隔と同じ扱い。
 
-- **画面ごとに独立**して保持する。画面は `MapSurface`（`RECORDING` / `HISTORY` / `PLACE_DETAIL` / `PLACE_ADD`）で表す。
+- **画面ごとに独立**して保持する。画面は `MapSurface`（`RECORDING` / `HISTORY`（経路詳細）/ `PLACE_DETAIL` / `PLACE_ADD` / `HISTORY_MAP`（履歴タブの地図表示））で表す。
 - 各画面の ViewModel が購読し、地図上のトグルで書く。プロセスをまたいで保持される。
 
 ## アイコンとテーマ

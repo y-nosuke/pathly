@@ -798,6 +798,34 @@ class TrackDetailScreenTest {
     composeTestRule.onNodeWithText("お気に入りから外す").assertIsDisplayed()
   }
 
+  // 経路の削除は ⋮ の中。確かめずに消す予定にし（取り消しはアプリ全体のスナックバー）、記録中の経路には出さない。
+  @Test
+  fun trackDetailScreen_menu_deleteTrack_onlyWhenNotRecording() {
+    val onDeleteTrack = mockk<() -> Unit>(relaxed = true)
+    var track by mutableStateOf(createSampleTrack())
+
+    composeTestRule.setContent {
+      PathlyAndroidTheme {
+        TrackDetailScreen(
+          track = track,
+          onBackClick = mockOnBackClick,
+          mapContent = {},
+          onDeleteTrack = onDeleteTrack,
+        )
+      }
+    }
+
+    composeTestRule.onNodeWithContentDescription("その他の操作").performClick()
+    composeTestRule.onNodeWithText("この記録を削除").performClick()
+    verify { onDeleteTrack() }
+    // 確認のダイアログは出さない。
+    composeTestRule.onNodeWithText("削除しますか", substring = true).assertDoesNotExist()
+
+    track = track.copy(isActive = true, endTime = null)
+    composeTestRule.onNodeWithContentDescription("その他の操作").performClick()
+    composeTestRule.onNodeWithText("この記録を削除").assertDoesNotExist()
+  }
+
   @Test
   fun trackDetailScreen_menu_reanalyzeStartsReanalysis() {
     val onStart = mockk<() -> Unit>(relaxed = true)
