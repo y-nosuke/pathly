@@ -87,6 +87,9 @@ PR の中のコミットは、それぞれの中身に合った種類で分け�
 - **マージコミットでマージする。squash / rebase マージはリポジトリの設定で無効にしている。**
   versionCode は main のコミット数から決まるため、squash するとブランチ上でビルドした版より
   マージ後の main の版が小さくなりうる（[release.md](../designs/release.md)）。
+- **Issue の完了の条件が全部満たせた PR は、出したときに自動マージ（マージコミット）にする**。必須チェック（`build` と
+  `instrumented-test`）が通ると GitHub がマージする。1 つでも満たせない項目が残る PR は自動マージにせず、
+  扱いを決めてから手でマージする（[issues-and-adr.md](issues-and-adr.md)）。Dependabot の PR は自動マージにしない（下の節）。
 - マージしたブランチは GitHub 上で自動で消える。手元は `git branch -d <ブランチ>` と `git fetch --prune` で消す。
 
 ---

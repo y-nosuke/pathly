@@ -6,7 +6,8 @@ description: GitHub Issue を読んで着手し、実装・コード確認・コ
 # Issue に着手して PR で閉じる
 
 運用ルールの正は `docs/development/issues-and-adr.md` と `docs/development/branch-and-pr.md`。ここはその手順書。
-ユーザーへの返答は日本語。**commit・push・マージ・タグ・GitHub の設定変更は、ユーザーの確認を取ってから**。
+ユーザーへの返答は日本語。**commit・push・マージ・タグ・GitHub の設定変更は、ユーザーの確認を取ってから**
+（自動マージは 8 の push の確認で一緒に取る）。
 
 ## 1. どの Issue をやるか決める
 
@@ -78,16 +79,16 @@ PR を出す前に、ユーザーにコードと実機の動きを見てもら�
    - アプリの動きが変わらない変更（ドキュメント・ビルド・CI・スキルだけ）は 3 を省く。
    - 問題があれば直してコミットし、3 をやり直す。
 
-## 8. push して PR（ユーザーの確認を取ってから）
+## 8. push して PR・完了の条件のチェック・自動マージ（ユーザーの確認を取ってから）
+
+確認は「push して PR を出し、完了の条件が全部満たせていれば自動マージにしてよいか」を 1 回で聞く。
+この確認の OK が、自動マージを有効にする OK を兼ねる。
 
 - PR: タイトルはコミットと同じ形（**リリースノートの 1 行になる**）。本文は `.github/pull_request_template.md` に沿って、
   概要・`Closes #<番号>`・変更内容・検証。確かめていないことは「未確認」と書く。スマホで確かめたなら「スマホ（開発版）で確かめた（ユーザー）」。
 - `git push -u origin <ブランチ>` → `gh pr create --base main --head <ブランチ> --title ... --body-file ...`
 - Claude Desktop では、出したら Auto-fix を有効にする（CI を自分でポーリングしない。CLAUDE.md の「確かめ方」）。
-
-## 9. マージ（ユーザーの確認を取ってから）
-
-- **マージの前に、Issue の完了の条件にチェックを付ける**（GitHub は自動では付けない）。確かめられた項目だけ `- [x]` にし、
+- **PR を出したら、Issue の完了の条件にチェックを付ける**（GitHub は自動では付けない）。確かめられた項目だけ `- [x]` にし、
   満たせなかった・マージ後にしか確かめられない項目は `- [ ]` のまま、理由と次の手をコメントに書く。
 
   ```bash
@@ -95,6 +96,17 @@ PR を出す前に、ユーザーにコードと実機の動きを見てもら�
   gh issue edit <番号> --body-file <scratchpad>/body.md
   ```
 
-- 必須チェック（`build` と `instrumented-test`）が通ってから。`gh pr merge <PR> --merge`（マージコミットのみ）。
+- **チェックが全部付いたら、自動マージ（マージコミット）を有効にする**。必須チェック（`build` と `instrumented-test`）が
+  通ると GitHub がマージする。Claude Desktop では `ccd_pr` の `set_auto_merge`（`merge_method: "merge"`）、
+  それ以外では `gh pr merge <PR> --auto --merge`。
+  - **1 つでも `- [ ]` が残るなら自動マージにしない**。残った項目と理由をユーザーに伝え、9 の手でのマージに回す。
+  - CI がもう通っていてマージできる状態（clean）だと、GitHub は自動マージを受け付けない。そのときはユーザーに確かめてから
+    `gh pr merge <PR> --merge` でマージする。
+  - CI が落ちて直す push をしても、自動マージの予約は残る。
+
+## 9. マージの後（自動マージにしなかったときは、マージもユーザーの確認を取ってから）
+
+- 自動マージにしなかった PR: 必須チェック（`build` と `instrumented-test`）が通り、残った項目の扱いをユーザーと決めてから
+  `gh pr merge <PR> --merge`（マージコミットのみ）。
 - マージ後: `git checkout main && git pull --ff-only && git branch -d <ブランチ> && git fetch --prune`。
 - Issue が閉じて Project で Done になったことを確かめる。マージ後にしか確かめられない項目があれば、確かめてからチェックを付ける。
