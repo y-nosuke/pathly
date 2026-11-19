@@ -180,6 +180,9 @@ class TrackingViewModel @Inject constructor(
     onError = ::showError,
   )
 
+  /** 「地域へ移動」で出した地域の目印（複数・上限あり）。タブを行き来しても残る。 */
+  val regionMarkers = RegionMarkerActions()
+
   private fun observeCurrentStop() {
     viewModelScope.launch {
       placeRepository.currentStop.collect { stop ->
