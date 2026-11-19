@@ -5,6 +5,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.pathly.data.settings.MapSurface
 import com.pathly.data.settings.SettingsRepository
+import com.pathly.data.settings.StatsList
 import com.pathly.domain.model.GpsTrack
 import com.pathly.domain.model.MapPlaceFilter
 import com.pathly.domain.model.PlaceCategoryFacet
@@ -210,6 +211,13 @@ class HistoryViewModel @Inject constructor(
 
   /** 地図の「登録済みの場所」の絞り込み（地図ごとに独立。場所一覧とも別）。 */
   val mapPlaceFilter: StateFlow<MapPlaceFilter> = settingsRepository.mapPlaceFilter(MapSurface.HISTORY_MAP)
+
+  /** 統計の帯を統計のカードに広げているか（アプリを閉じても残す）。 */
+  val statsExpanded: StateFlow<Boolean> = settingsRepository.statsExpanded(StatsList.HISTORY)
+
+  fun setStatsExpanded(expanded: Boolean) {
+    settingsRepository.setStatsExpanded(StatsList.HISTORY, expanded)
+  }
 
   fun setMapPlaceFilter(filter: MapPlaceFilter) {
     settingsRepository.setMapPlaceFilter(MapSurface.HISTORY_MAP, filter)

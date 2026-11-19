@@ -36,6 +36,7 @@ class HistoryScreenTest {
   private lateinit var mockOnTrackClick: (GpsTrack) -> Unit
   private lateinit var mockViewModel: HistoryViewModel
   private lateinit var uiStateFlow: MutableStateFlow<HistoryState>
+  private val statsExpandedFlow = MutableStateFlow(false)
 
   @Before
   fun setup() {
@@ -57,6 +58,8 @@ class HistoryScreenTest {
     io.mockk.every { mockViewModel.showRegisteredPlaces } returns MutableStateFlow(false)
     io.mockk.every { mockViewModel.mapPlaceFilter } returns MutableStateFlow(MapPlaceFilter())
     io.mockk.every { mockViewModel.clearError() } returns Unit
+    io.mockk.every { mockViewModel.statsExpanded } returns statsExpandedFlow
+    io.mockk.every { mockViewModel.setStatsExpanded(any()) } answers { statsExpandedFlow.value = firstArg() }
   }
 
   @Test
@@ -192,6 +195,32 @@ class HistoryScreenTest {
     assertRowSummaryDisplayed(tracks[0])
     composeTestRule.onNodeWithTag("listStatsBar").assertIsDisplayed()
     composeTestRule.onNodeWithText("1 回 ・", substring = true).assertIsDisplayed()
+  }
+
+  // 統計の帯を押すとその場で統計のカードに広がり、見出しの行で帯に戻る。いちばん長いお出掛けを押すと経路詳細へ。
+  @Test
+  fun historyScreen_statsBar_expandsToCardAndBack() {
+    val short = createSampleTrack(id = 1L)
+    val long = createSampleTrack(id = 2L, pointsCount = 5).copy(name = "長いお出掛け")
+    uiStateFlow.value = HistoryState(tracks = listOf(short, long), isLoading = false)
+    composeTestRule.setContent {
+      PathlyAndroidTheme {
+        HistoryScreen(viewModel = mockViewModel, onTrackClick = mockOnTrackClick)
+      }
+    }
+
+    composeTestRule.onNodeWithTag("listStatsBar").performClick()
+    composeTestRule.onNodeWithTag("listStatsCard").assertIsDisplayed()
+    composeTestRule.onNodeWithTag("listStatsBar").assertDoesNotExist()
+    composeTestRule.onNodeWithText("回数").assertIsDisplayed()
+    composeTestRule.onNodeWithText("2 回").assertIsDisplayed()
+    composeTestRule.onNodeWithText("月ごとの距離").assertIsDisplayed()
+    composeTestRule.onNodeWithTag("statsLongestTrack").assertIsDisplayed().performClick()
+    verify { mockOnTrackClick(long) }
+
+    composeTestRule.onNodeWithContentDescription("統計を畳む").performClick()
+    composeTestRule.onNodeWithTag("listStatsBar").assertIsDisplayed()
+    composeTestRule.onNodeWithTag("listStatsCard").assertDoesNotExist()
   }
 
   @Test

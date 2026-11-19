@@ -244,7 +244,7 @@ fun ListMenuChoice(text: String, selected: Boolean, onClick: () -> Unit) {
 
 /**
  * 一覧の統計の帯（1 行）。絞り込み中は「12 / 38 回」のように全体の数を添えた文を渡す。
- * [onClick] を渡すと右端に › を出し、押すと詳しい統計を開く（帯に出しきれない数字があるときだけ）。
+ * [onClick] を渡すと右端に ▾ を出し、押すとその場で統計のカードに広がる（→ [ExpandableListStats]）。
  */
 @Composable
 fun ListStatsBar(text: String, modifier: Modifier = Modifier, onClick: (() -> Unit)? = null) {
@@ -277,7 +277,7 @@ fun ListStatsBar(text: String, modifier: Modifier = Modifier, onClick: (() -> Un
         modifier = Modifier.weight(1f),
       )
       if (onClick != null) {
-        Icon(painter = painterResource(R.drawable.ic_chevron_right), contentDescription = null, modifier = Modifier.size(18.dp))
+        Icon(painter = painterResource(R.drawable.ic_expand_more), contentDescription = "統計を広げる", modifier = Modifier.size(20.dp))
       }
     }
   }

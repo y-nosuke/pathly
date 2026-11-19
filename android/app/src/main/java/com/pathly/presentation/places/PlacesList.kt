@@ -70,6 +70,7 @@ import com.pathly.domain.model.RegisteredPlace
 import com.pathly.presentation.common.ActiveFilter
 import com.pathly.presentation.common.ActiveFilterChips
 import com.pathly.presentation.common.CategoryFilterSection
+import com.pathly.presentation.common.ExpandableListStats
 import com.pathly.presentation.common.FilterChoiceSection
 import com.pathly.presentation.common.FilterPanelButton
 import com.pathly.presentation.common.FilterPanelCloseButton
@@ -83,7 +84,6 @@ import com.pathly.presentation.common.ListMapOverlay
 import com.pathly.presentation.common.ListMapToggle
 import com.pathly.presentation.common.ListMenuChoice
 import com.pathly.presentation.common.ListMenuSectionTitle
-import com.pathly.presentation.common.ListStatsBar
 import com.pathly.presentation.common.ListToolRow
 import com.pathly.presentation.common.MapControls
 import com.pathly.presentation.common.MapRoundButton
@@ -137,6 +137,9 @@ internal fun PlacesListContent(
   // 地図表示のマーカーのタップ（場所の id）。一覧の行と同じく場所詳細へ進む。
   onMapPlaceClick: (Long) -> Unit,
   onToggleWishlist: (PlaceListItem) -> Unit,
+  // 統計の帯を統計のカードに広げているか・広げる／畳む。
+  statsExpanded: Boolean,
+  onStatsExpandedChange: (Boolean) -> Unit,
   modifier: Modifier = Modifier,
   // 地図表示の地図スロット。null（既定）は実マップ（GoogleMap）を描画する。
   // テストは空スロット（{}）を渡し、GMS 依存の地図描画を避けて切り替え・文言だけを検証する。
@@ -241,6 +244,26 @@ internal fun PlacesListContent(
           }
         },
         filterPanel = filterPanel,
+        stats = { statsModifier ->
+          val isFiltered = !state.noFilter
+          ExpandableListStats(
+            barText = placesStatsText(state.statistics, totalCount = state.items.size, isFiltered = isFiltered),
+            expanded = statsExpanded,
+            onExpandedChange = onStatsExpandedChange,
+            isFiltered = isFiltered,
+            modifier = statsModifier,
+          ) {
+            // 絞り込みを数え直すので、状態が変わったときだけ計算する。
+            val statistics = remember(state) { state.statistics }
+            val details = remember(state) { state.statsDetails }
+            PlacesStatsCardContent(
+              statistics = statistics,
+              details = details,
+              totalCount = state.items.size,
+              isFiltered = isFiltered,
+            )
+          }
+        },
         onToggleGroup = onToggleGroup,
         onItemClick = onItemClick,
         onToggleWishlist = onToggleWishlist,
@@ -275,6 +298,7 @@ private fun PlacesListBody(
   header: @Composable () -> Unit,
   controls: @Composable () -> Unit,
   filterPanel: @Composable (Modifier) -> Unit,
+  stats: @Composable (Modifier) -> Unit,
   onToggleGroup: (String) -> Unit,
   onItemClick: (PlaceListItem) -> Unit,
   onToggleWishlist: (PlaceListItem) -> Unit,
@@ -294,6 +318,7 @@ private fun PlacesListBody(
         state = state,
         panelVisible = panelVisible,
         filterPanel = filterPanel,
+        stats = stats,
         onToggleGroup = onToggleGroup,
         onItemClick = onItemClick,
         onToggleWishlist = onToggleWishlist,
@@ -308,6 +333,7 @@ private fun PlacesLazyList(
   state: PlacesState,
   panelVisible: Boolean,
   filterPanel: @Composable (Modifier) -> Unit,
+  stats: @Composable (Modifier) -> Unit,
   onToggleGroup: (String) -> Unit,
   onItemClick: (PlaceListItem) -> Unit,
   onToggleWishlist: (PlaceListItem) -> Unit,
@@ -347,12 +373,9 @@ private fun PlacesLazyList(
       } else if (state.items.isNotEmpty()) {
         // 統計は一覧と同じく絞り込み後の場所で数える。絞り込みの欄を開いている間は、欄と結果の間に挟まって
         // 邪魔になるので出さない。場所が 1 件も無いときは案内の文言だけにする。
-        // 3 つの数字で全部なので、押して開く詳しい統計は無い（履歴と同じ）。
+        // 帯を押すと、その場で統計のカードに広がる（履歴と同じ）。
         item(key = "statistics") {
-          ListStatsBar(
-            text = placesStatsText(state.statistics, totalCount = state.items.size, isFiltered = !state.noFilter),
-            modifier = Modifier.padding(bottom = PathlySpacing.sm),
-          )
+          stats(Modifier.padding(bottom = PathlySpacing.sm))
         }
       }
       if (state.visibleItems.isEmpty()) {
