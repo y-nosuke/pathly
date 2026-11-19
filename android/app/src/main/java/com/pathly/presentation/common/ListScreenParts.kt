@@ -41,6 +41,10 @@ import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -259,9 +263,15 @@ fun ListStatsBar(text: String, modifier: Modifier = Modifier, onClick: (() -> Un
         .padding(horizontal = PathlySpacing.md, vertical = PathlySpacing.sm),
       verticalAlignment = Alignment.CenterVertically,
     ) {
+      // 数字を大きく太く、単位・区切りは小さく控えめにして、1 行のまま数字が目に入るようにする。
+      val numberStyle = SpanStyle(
+        fontSize = MaterialTheme.typography.titleMedium.fontSize,
+        fontWeight = FontWeight.Bold,
+        color = MaterialTheme.colorScheme.onSurface,
+      )
       Text(
-        text = text,
-        style = MaterialTheme.typography.bodySmall,
+        text = remember(text, numberStyle) { emphasizeNumbers(text, numberStyle) },
+        style = MaterialTheme.typography.bodySmall.copy(lineHeight = MaterialTheme.typography.titleMedium.lineHeight),
         maxLines = 1,
         overflow = TextOverflow.Ellipsis,
         modifier = Modifier.weight(1f),
@@ -272,6 +282,14 @@ fun ListStatsBar(text: String, modifier: Modifier = Modifier, onClick: (() -> Un
     }
   }
 }
+
+/** [text] の中の数字（「3,815」「4.3」など）だけに [numberStyle] をかける。 */
+internal fun emphasizeNumbers(text: String, numberStyle: SpanStyle): AnnotatedString = buildAnnotatedString {
+  append(text)
+  NumberPattern.findAll(text).forEach { addStyle(numberStyle, it.range.first, it.range.last + 1) }
+}
+
+private val NumberPattern = Regex("""\d[\d,.]*""")
 
 /** 見出しの行の高さ（タイトルと 48dp のアイコンが収まる高さ）。 */
 private val ListHeaderHeight = 56.dp

@@ -36,6 +36,14 @@ class HistoryListTextTest {
     assertEquals("1 / 1 回 ・ 0.5 km ・ 30 分", historyStatsText(tracks, totalCount = 1, isFiltered = true))
   }
 
+  // 合計の距離は 100 km 以上で小数を落として 3 桁区切りにする（帯の数字を短く読みやすく）。
+  @Test
+  fun formatTotalKm_groupsLongDistances() {
+    assertEquals("4.3 km", formatTotalKm(4_250.0))
+    assertEquals("99.9 km", formatTotalKm(99_940.0))
+    assertEquals("3,815 km", formatTotalKm(3_815_040.0))
+  }
+
   @Test
   fun formatDuration_dropsZeroParts() {
     assertEquals("0 分", formatDuration(0))

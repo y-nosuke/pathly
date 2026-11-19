@@ -80,6 +80,7 @@ import com.pathly.ui.theme.PathlySpacing
 import com.pathly.ui.theme.PathlyTheme
 import com.pathly.util.DateFormatters
 import java.util.Locale
+import kotlin.math.roundToLong
 
 /**
  * 履歴タブ。一覧の画面の型（見出し＋ツール行 → docs/designs/ui-direction.md）に載せ、地図表示ではその見出しとツール行を
@@ -628,7 +629,13 @@ internal fun historyStatsText(tracks: List<GpsTrack>, totalCount: Int, isFiltere
   val count = if (isFiltered) "${tracks.size} / $totalCount 回" else "${tracks.size} 回"
   val distanceMeters = tracks.sumOf { it.totalDistanceMeters }
   val minutes = tracks.sumOf { track -> track.endTime?.let { (it.time - track.startTime.time) / 60_000 } ?: 0L }
-  return "$count ・ ${formatKm(distanceMeters)} ・ ${formatDuration(minutes)}"
+  return "$count ・ ${formatTotalKm(distanceMeters)} ・ ${formatDuration(minutes)}"
+}
+
+/** 合計の距離。100 km 以上は小数を落として 3 桁区切り（「3,815 km」）、それより短ければ小数 1 桁（「4.3 km」）。 */
+internal fun formatTotalKm(meters: Double): String {
+  val km = meters / 1000.0
+  return if (km >= 100) String.format(Locale.ROOT, "%,d km", km.roundToLong()) else String.format(Locale.ROOT, "%.1f km", km)
 }
 
 /** 距離を小数 1 桁の km で（「1.8 km」）。 */
