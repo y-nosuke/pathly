@@ -294,24 +294,23 @@ fun TrackingScreen(
         },
         modifier = Modifier.align(Alignment.TopCenter),
       ) {
-        // 今の状態のピル・チップ（記録中・現在地を取得中・登録の確認・地域の目印）を左寄せで 1 行に。
+        // 今の状態のピル（記録中・現在地を取得中）を左寄せで 1 行に。
         Row(
           horizontalArrangement = Arrangement.spacedBy(PathlySpacing.sm),
           verticalAlignment = Alignment.CenterVertically,
         ) {
           if (uiState.isTracking) RecordingStatusPill(startTime = uiState.currentTrack?.startTime)
           if (isLocating) LocatingPill()
-          // 「地域へ移動」で出した目印の地名のチップ（複数・横にスクロール）。地名でその地域の範囲へ寄せ直し、
-          // × でその目印を外す（地図は動かさない）。
-          RegionMarkerChips(
-            markers = regionMarkers.markers,
-            focusedPlaceId = regionMarkers.focusedPlaceId,
-            onRefit = { region -> refitRegion(region) },
-            onClear = { region -> viewModel.regionMarkers.remove(region.placeId) },
-            onClearAll = viewModel.regionMarkers::clear,
-            modifier = Modifier.weight(1f, fill = false),
-          )
         }
+        // 「地域へ移動」で出した目印の地名のチップ（左上に縦に並べ、6 つ目からは 1 つにまとめる）。
+        // 地名でその地域の範囲へ寄せ直し、× でその目印を外す（地図は動かさない）。
+        RegionMarkerChips(
+          markers = regionMarkers.markers,
+          focusedPlaceId = regionMarkers.focusedPlaceId,
+          onRefit = { region -> refitRegion(region) },
+          onClear = { region -> viewModel.regionMarkers.remove(region.placeId) },
+          onClearAll = viewModel.regionMarkers::clear,
+        )
         // 場所を登録した直後の一時メッセージ
         uiState.placeRegisteredMessage?.let { msg ->
           PlaceRegisteredToast(message = msg, onShown = viewModel::clearPlaceRegisteredMessage)
@@ -438,10 +437,10 @@ fun TrackingScreen(
           focusOn(LatLng(result.latitude, result.longitude))
         },
         // 地域へ移動: 地名を選んだら閉じて、目印を足し、その地域の範囲が収まるように地図を移す（現在地の追従は止まる）。
-        // 上限で出せない地域はふつう窓の中で止まる。それでも出せなかったときは地図も動かさない。
         onRegionSelected = { region ->
           mapSearch = null
-          if (viewModel.regionMarkers.show(region)) fitTo(region.bounds.toLatLngBounds())
+          viewModel.regionMarkers.show(region)
+          fitTo(region.bounds.toLatLngBounds())
         },
         onClose = { mapSearch = null },
         modifier = Modifier.align(Alignment.TopCenter),
@@ -499,10 +498,6 @@ private fun TrackingMapSearch(
       placeholder = "地名で探して移動",
       fetchFailedText = "地域の取得に失敗しました（オフライン等）",
       onSearchPredictions = { query -> onPredictRegions(query, bias) },
-      // 上限まで出していて新しい地域なら、範囲を引く前に止める（出せない地域で料金をかけない）。
-      selectionError = { prediction ->
-        RegionMarkerActions.LIMIT_MESSAGE.takeUnless { regionMarkers.canShow(prediction.placeId) }
-      },
       // もう出している地域は、引き直さずに覚えている範囲へ移す。
       // 目印の名前は候補の文字を使う（Places から名前を引くと料金の区分が上がるため）。
       onFetchPrediction = { prediction ->

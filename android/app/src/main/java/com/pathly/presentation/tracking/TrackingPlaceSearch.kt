@@ -49,7 +49,6 @@ import kotlinx.coroutines.launch
  * 記録画面の地図に重ねる検索窓: 地図はそのままに、上端に検索窓を重ね、候補は窓の下のカードに出す。
  * 「検索して登録」（施設を探して場所シートで登録）と「地域へ移動」（地名を探して地図を移す）で共有する。
  * 選んだ候補を [onFetchPrediction] で確定し、取れたら [onSelected] で返す（取れなければ [fetchFailedText] を出す）。
- * [selectionError] が文言を返す候補は確定せず（取得もしない）、その文言を窓に出す（地域の目印の上限など）。
  * 候補の一覧は場所タブの「検索して追加」と共有する（[PlaceSearchPredictions]）。
  * 地図をタップしたとき・戻る・× で閉じる（閉じる処理は呼び出し側の [onClose]）。
  */
@@ -59,7 +58,6 @@ internal fun <T : Any> TrackingPlaceSearchBar(
   fetchFailedText: String,
   onSearchPredictions: suspend (query: String) -> List<PlacePrediction>,
   onFetchPrediction: suspend (prediction: PlacePrediction) -> T?,
-  selectionError: (prediction: PlacePrediction) -> String? = { null },
   onSelected: (T) -> Unit,
   onClose: () -> Unit,
   modifier: Modifier = Modifier,
@@ -68,8 +66,7 @@ internal fun <T : Any> TrackingPlaceSearchBar(
   var predictions by remember { mutableStateOf<List<PlacePrediction>>(emptyList()) }
   var isSearching by remember { mutableStateOf(false) }
   var isFetching by remember { mutableStateOf(false) }
-  // 窓に出す失敗の文言（取得の失敗・選べない候補）。打ち直すと消す。
-  var errorText by remember { mutableStateOf<String?>(null) }
+  var fetchFailed by remember { mutableStateOf(false) }
   val scope = rememberCoroutineScope()
   val focusRequester = remember { FocusRequester() }
   val keyboard = LocalSoftwareKeyboardController.current
@@ -85,7 +82,7 @@ internal fun <T : Any> TrackingPlaceSearchBar(
 
   // 打鍵ごとには叩かない（場所タブの「検索して追加」と同じ 300ms のデバウンス）。
   LaunchedEffect(query) {
-    errorText = null
+    fetchFailed = false
     if (query.isBlank()) {
       predictions = emptyList()
       isSearching = false
@@ -144,7 +141,7 @@ internal fun <T : Any> TrackingPlaceSearchBar(
     }
 
     // 何か打ってから候補のカードを出す（空のうちは地図を隠さない）。
-    if (query.isNotBlank() || errorText != null) {
+    if (query.isNotBlank() || fetchFailed) {
       Surface(
         shape = MaterialTheme.shapes.medium,
         color = MaterialTheme.colorScheme.surface,
@@ -155,9 +152,9 @@ internal fun <T : Any> TrackingPlaceSearchBar(
           .heightIn(max = maxCardHeight),
       ) {
         Column(modifier = Modifier.padding(horizontal = 16.dp)) {
-          errorText?.let { text ->
+          if (fetchFailed) {
             Text(
-              text = text,
+              text = fetchFailedText,
               style = MaterialTheme.typography.bodySmall,
               color = MaterialTheme.colorScheme.error,
               modifier = Modifier.padding(top = 8.dp),
@@ -170,10 +167,6 @@ internal fun <T : Any> TrackingPlaceSearchBar(
             onSelectPrediction = { placeId ->
               if (isFetching) return@PlaceSearchPredictions
               val prediction = predictions.firstOrNull { it.placeId == placeId } ?: return@PlaceSearchPredictions
-              selectionError(prediction)?.let { message ->
-                errorText = message
-                return@PlaceSearchPredictions
-              }
               scope.launch {
                 isFetching = true
                 val result = onFetchPrediction(prediction)
@@ -182,7 +175,7 @@ internal fun <T : Any> TrackingPlaceSearchBar(
                   keyboard?.hide()
                   onSelected(result)
                 } else {
-                  errorText = fetchFailedText
+                  fetchFailed = true
                 }
               }
             },

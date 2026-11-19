@@ -25,9 +25,6 @@ data class RegionMarkersState(
 ) {
   /** その地域の目印をもう出しているなら、それを返す（選び直しは数を増やさず、取得もしない）。 */
   fun find(placeId: String): RegionMarker? = markers.firstOrNull { it.placeId == placeId }
-
-  /** その地域を選べるか（もう出している地域か、上限に達していない）。 */
-  fun canShow(placeId: String): Boolean = find(placeId) != null || markers.size < RegionMarkerActions.MAX_MARKERS
 }
 
 /**
@@ -38,28 +35,15 @@ class RegionMarkerActions {
   private val _state = MutableStateFlow(RegionMarkersState())
   val state: StateFlow<RegionMarkersState> = _state.asStateFlow()
 
-  /**
-   * 目印を出し、その地域を最後に移した地域にする。もう出している地域なら数は増やさない。
-   * 上限に達していて新しい地域なら何もせず false（窓に出せない旨を出すのは呼び出し側）。
-   */
-  fun show(marker: RegionMarker): Boolean {
-    var shown = false
+  /** 目印を出し（数は限らない）、その地域を最後に移した地域にする。もう出している地域なら数は増やさない。 */
+  fun show(marker: RegionMarker) {
     _state.update { state ->
-      when {
-        state.find(marker.placeId) != null -> {
-          shown = true
-          state.copy(focusedPlaceId = marker.placeId)
-        }
-
-        state.markers.size < MAX_MARKERS -> {
-          shown = true
-          state.copy(markers = state.markers + marker, focusedPlaceId = marker.placeId)
-        }
-
-        else -> state
+      if (state.find(marker.placeId) != null) {
+        state.copy(focusedPlaceId = marker.placeId)
+      } else {
+        state.copy(markers = state.markers + marker, focusedPlaceId = marker.placeId)
       }
     }
-    return shown
   }
 
   /** チップ・目印のタップでその地域へ寄せ直した。 */
@@ -80,13 +64,5 @@ class RegionMarkerActions {
   /** すべて外す。 */
   fun clear() {
     _state.value = RegionMarkersState()
-  }
-
-  companion object {
-    /** 同時に出せる地域の目印の数。 */
-    const val MAX_MARKERS = 5
-
-    /** 上限で新しい地域を選んだときに窓に出す文言。 */
-    const val LIMIT_MESSAGE = "地域の目印は ${MAX_MARKERS} つまでです。チップの × で外してから選んでください"
   }
 }

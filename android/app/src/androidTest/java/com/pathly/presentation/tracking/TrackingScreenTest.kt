@@ -483,29 +483,40 @@ class TrackingScreenTest {
   }
 
   @Test
-  fun trackingScreen_jumpToRegion_limitShowsMessageAndClearAllRemovesEverything() {
+  fun trackingScreen_jumpToRegion_sixthAndLaterFoldIntoOneChip() {
     stubRegions()
-    // 上限まで出しておく。
-    repeat(RegionMarkerActions.MAX_MARKERS) { i ->
+    // 縦に出す数まで出しておく。
+    repeat(VISIBLE_REGION_CHIPS) { i ->
       regionMarkers.show(RegionMarker("p$i", "地域$i", 35.0, 139.0, GeoBounds(34.9, 138.9, 35.1, 139.1)))
     }
     setTrackingContent()
+    composeTestRule.onAllNodesWithTag("regionMarkerChip").assertCountEquals(VISIBLE_REGION_CHIPS)
+    composeTestRule.onNodeWithTag("regionMarkerFoldedChip").assertDoesNotExist()
 
-    // 新しい地域は出せない旨を窓に出し、範囲は引かない。窓は開いたまま、チップも増えない。
-    composeTestRule.onNodeWithContentDescription("地域へ移動").performClick()
-    composeTestRule.onNodeWithTag("trackingPlaceSearchField").performTextInput("札幌")
-    composeTestRule.waitUntil(timeoutMillis = 5_000) {
-      composeTestRule.onAllNodesWithText("北海道").fetchSemanticsNodes().isNotEmpty()
-    }
-    composeTestRule.onNodeWithText("北海道").performClick()
-    composeTestRule.onNodeWithText(RegionMarkerActions.LIMIT_MESSAGE).assertIsDisplayed()
-    composeTestRule.onNodeWithTag("trackingPlaceSearch").assertIsDisplayed()
-    coVerify(exactly = 0) { mockViewModel.fetchRegion(any()) }
-    composeTestRule.onNodeWithContentDescription("検索を閉じる").performClick()
-    assertEquals(RegionMarkerActions.MAX_MARKERS, regionMarkers.state.value.markers.size)
-    composeTestRule.onNodeWithText("札幌市").assertDoesNotExist()
+    // 6 つ目を選ぶと、縦のチップは増えず「他 1 件」にまとまる。今見ている地域がその中なので、まとめを塗りつぶす。
+    selectRegion(query = "札幌", secondaryText = "北海道")
+    assertEquals(VISIBLE_REGION_CHIPS + 1, regionMarkers.state.value.markers.size)
+    composeTestRule.onAllNodesWithTag("regionMarkerChip").assertCountEquals(VISIBLE_REGION_CHIPS)
+    composeTestRule.onNodeWithTag("regionMarkerFoldedChip").assertIsDisplayed().assertIsSelected()
+    composeTestRule.onNodeWithText("他 1 件").assertIsDisplayed()
 
-    // 「すべて外す」でまとめて外す。
+    // 縦のチップへ移ると、まとめの塗りつぶしは外れる。
+    composeTestRule.onNodeWithText("地域0").performClick()
+    composeTestRule.onNodeWithTag("regionMarkerFoldedChip").assertIsNotSelected()
+
+    // まとめのメニューから選ぶと、その地域へ移り、まとめを塗りつぶす。
+    composeTestRule.onNodeWithTag("regionMarkerFoldedChip").performClick()
+    composeTestRule.onNodeWithText("札幌市").performClick()
+    composeTestRule.onNodeWithTag("regionMarkerFoldedChip").assertIsSelected()
+    assertEquals("r1", regionMarkers.state.value.focusedPlaceId)
+
+    // メニューの × でその地域を外すと、まとめごと消える。
+    composeTestRule.onNodeWithTag("regionMarkerFoldedChip").performClick()
+    composeTestRule.onNodeWithContentDescription("札幌市の目印を外す").performClick()
+    composeTestRule.onNodeWithTag("regionMarkerFoldedChip").assertDoesNotExist()
+    assertEquals(VISIBLE_REGION_CHIPS, regionMarkers.state.value.markers.size)
+
+    // 「すべて外す」（縦の並びのいちばん上）でまとめて外す。
     composeTestRule.onNodeWithText("すべて外す").performClick()
     composeTestRule.onNodeWithTag("regionMarkerChip").assertDoesNotExist()
     composeTestRule.onNodeWithText("すべて外す").assertDoesNotExist()
