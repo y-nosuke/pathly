@@ -43,6 +43,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.lerp
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.Role
@@ -274,15 +276,19 @@ data class StatsShare(val label: String, val count: Int)
 
 /**
  * 内訳を 1 本の帯（割合で区切る）と、その下の凡例（色の点・名前・数）で出す。色は前から順に
- * primary・tertiary・secondary・outline。[lastIsRest] なら最後の 1 つ（「ほか」）は控えめな色にする。
+ * primary・tertiary・secondary・outline。[lastIsRest] なら最後の 1 つ（「ほかの業種」）は控えめな色にする。
+ * 暗い表示の primary などは文字用の淡い色で、塗ると色が薄く見えるので、container の色との中間にして濃くする。
  */
 @Composable
 fun StatsShareBar(shares: List<StatsShare>, lastIsRest: Boolean, modifier: Modifier = Modifier) {
+  val scheme = MaterialTheme.colorScheme
+  val dark = scheme.surface.luminance() < 0.5f
+  fun fill(color: Color, container: Color): Color = if (dark) lerp(color, container, 0.45f) else color
   val palette = listOf(
-    MaterialTheme.colorScheme.primary,
-    MaterialTheme.colorScheme.tertiary,
-    MaterialTheme.colorScheme.secondary,
-    MaterialTheme.colorScheme.outline,
+    fill(scheme.primary, scheme.primaryContainer),
+    fill(scheme.tertiary, scheme.tertiaryContainer),
+    fill(scheme.secondary, scheme.secondaryContainer),
+    scheme.outline,
   )
   val rest = MaterialTheme.colorScheme.outlineVariant
   val colors = shares.indices.map { i -> if (lastIsRest && i == shares.lastIndex) rest else palette[i % palette.size] }
