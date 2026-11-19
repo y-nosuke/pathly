@@ -10,10 +10,10 @@ import androidx.compose.ui.Modifier
 import com.pathly.BuildConfig
 import com.pathly.domain.model.GpsTrack
 import com.pathly.presentation.common.MapBackTitle
-import com.pathly.presentation.common.MapLayersButton
 import com.pathly.presentation.common.MapOverflowMenuButton
+import com.pathly.presentation.common.MapRegisteredPlaces
 import com.pathly.presentation.common.MapTopBar
-import com.pathly.presentation.common.RegisteredPlacesLayerItems
+import com.pathly.presentation.common.RegisteredPlacesLayerButton
 import com.pathly.presentation.tracking.RecordingStatusPill
 import com.pathly.util.DateFormatters
 
@@ -54,15 +54,7 @@ internal fun TrackDetailTopBar(
       )
     },
     actions = {
-      MapLayersButton(active = mapPlaces.shown) {
-        RegisteredPlacesLayerItems(
-          show = mapPlaces.shown,
-          onToggle = mapPlaces.onToggle,
-          filter = mapPlaces.filter,
-          places = mapPlaces.places,
-          onFilterChange = mapPlaces.onFilterChange,
-        )
-      }
+      RegisteredPlacesLayerButton(mapPlaces)
       MapOverflowMenuButton { close ->
         TrackDetailMenuItems(
           track = track,

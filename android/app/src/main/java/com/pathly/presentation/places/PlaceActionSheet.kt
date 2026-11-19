@@ -1,13 +1,10 @@
 package com.pathly.presentation.places
 
 import androidx.activity.compose.BackHandler
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -35,6 +32,7 @@ import com.pathly.domain.model.Priority
 import com.pathly.presentation.common.FloatingSheet
 import com.pathly.presentation.common.FloatingSheetState
 import com.pathly.presentation.common.SheetDetent
+import com.pathly.presentation.common.SheetFormLayout
 import com.pathly.presentation.common.rememberFloatingSheetState
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.emptyFlow
@@ -99,61 +97,54 @@ internal fun PlaceActionSheet(
   LaunchedEffect(target) { sheetState.settleTo(SheetDetent.PEEK) }
 
   // 畳んでいる間は地図が全面に見える。入力内容は保持したままなので、ここから戻せる。
+  // 本文はシートの中でスクロールし、登録・保存は下端に固定する（各編集部の SheetFormLayout）。
   FloatingSheet(state = sheetState, modifier = modifier, restoreLabel = "▲ 入力に戻る") {
-    Column(
-      modifier = Modifier
-        .fillMaxWidth()
-        .verticalScroll(rememberScrollState())
-        .padding(horizontal = 20.dp)
-        .padding(bottom = 24.dp),
-    ) {
-      when (target) {
-        is PlaceSheetTarget.NewPoint -> NewPlaceEditor(
-          latLng = target.latLng,
-          googlePlaceId = null,
-          initialName = null,
-          knownDetails = null,
-          onFetchPoiDetails = onFetchPoiDetails,
-          onRegisterNew = onRegisterNew,
-          onDismiss = onDismiss,
-        )
+    when (target) {
+      is PlaceSheetTarget.NewPoint -> NewPlaceEditor(
+        latLng = target.latLng,
+        googlePlaceId = null,
+        initialName = null,
+        knownDetails = null,
+        onFetchPoiDetails = onFetchPoiDetails,
+        onRegisterNew = onRegisterNew,
+        onDismiss = onDismiss,
+      )
 
-        is PlaceSheetTarget.NewPoi -> NewPlaceEditor(
-          latLng = target.poi.latLng,
-          googlePlaceId = target.poi.placeId,
-          initialName = target.poi.name,
-          knownDetails = null,
-          onFetchPoiDetails = onFetchPoiDetails,
-          onRegisterNew = onRegisterNew,
-          onDismiss = onDismiss,
-        )
+      is PlaceSheetTarget.NewPoi -> NewPlaceEditor(
+        latLng = target.poi.latLng,
+        googlePlaceId = target.poi.placeId,
+        initialName = target.poi.name,
+        knownDetails = null,
+        onFetchPoiDetails = onFetchPoiDetails,
+        onRegisterNew = onRegisterNew,
+        onDismiss = onDismiss,
+      )
 
-        is PlaceSheetTarget.NewSearchResult -> NewPlaceEditor(
-          latLng = LatLng(target.result.latitude, target.result.longitude),
-          googlePlaceId = target.result.googlePlaceId,
-          initialName = target.result.name,
-          knownDetails = target.result,
-          onFetchPoiDetails = onFetchPoiDetails,
-          onRegisterNew = onRegisterNew,
-          onDismiss = onDismiss,
-        )
+      is PlaceSheetTarget.NewSearchResult -> NewPlaceEditor(
+        latLng = LatLng(target.result.latitude, target.result.longitude),
+        googlePlaceId = target.result.googlePlaceId,
+        initialName = target.result.name,
+        knownDetails = target.result,
+        onFetchPoiDetails = onFetchPoiDetails,
+        onRegisterNew = onRegisterNew,
+        onDismiss = onDismiss,
+      )
 
-        is PlaceSheetTarget.Existing -> ExistingPlaceEditor(
-          placeId = target.placeId,
-          onObservePlace = onObservePlace,
-          onObserveVisits = onObserveVisits,
-          onSaveExisting = onSaveExisting,
-          onDeletePlace = onDeletePlace,
-          onOpenTrack = onOpenTrack,
-          onFetchNearbyPois = onFetchNearbyPois,
-          onSearchPredictions = onSearchPredictions,
-          onFetchPrediction = onFetchPrediction,
-          onAddStop = onAddStop,
-          mergeActions = mergeActions,
-          openLinkPicker = target.openLinkPicker,
-          onDismiss = onDismiss,
-        )
-      }
+      is PlaceSheetTarget.Existing -> ExistingPlaceEditor(
+        placeId = target.placeId,
+        onObservePlace = onObservePlace,
+        onObserveVisits = onObserveVisits,
+        onSaveExisting = onSaveExisting,
+        onDeletePlace = onDeletePlace,
+        onOpenTrack = onOpenTrack,
+        onFetchNearbyPois = onFetchNearbyPois,
+        onSearchPredictions = onSearchPredictions,
+        onFetchPrediction = onFetchPrediction,
+        onAddStop = onAddStop,
+        mergeActions = mergeActions,
+        openLinkPicker = target.openLinkPicker,
+        onDismiss = onDismiss,
+      )
     }
   }
 }
@@ -164,7 +155,7 @@ internal fun PlaceActionSheet(
  * 無ければ [googlePlaceId] から引く。
  */
 @Composable
-private fun NewPlaceEditor(
+private fun ColumnScope.NewPlaceEditor(
   latLng: LatLng,
   googlePlaceId: String?,
   initialName: String?,
@@ -188,38 +179,41 @@ private fun NewPlaceEditor(
     value = knownDetails ?: googlePlaceId?.let { onFetchPoiDetails(it) }
   }
 
-  PlaceFormBody(
-    name = name,
-    onNameChange = { name = it },
-    nameLabel = "自分で付ける名前（任意）",
-    // 施設なら名前を見出しに。名前を持たない地点は、何をしようとしているかを出す。
-    heading = initialName ?: "この地点を場所として登録",
-    namePrefill = initialName,
-    category = details?.category,
-    address = details?.address,
-    // 施設のときだけ。空き地点は Google に開く先（施設ページ）が無く、座標にピンが立つだけなので出さない。
-    onOpenInMaps = googlePlaceId?.let { id ->
-      { openPlaceInGoogleMaps(context, id, latLng.latitude, latLng.longitude, name.ifBlank { initialName ?: "選択した場所" }) }
+  SheetFormLayout(
+    actions = {
+      TextButton(onClick = onDismiss) { Text("キャンセル") }
+      Button(onClick = {
+        // 名前欄は空で始まるので、入力があれば自分で付けた名前。ただし候補を書き換えずに
+        // そのまま確定したときは Google の名前と同じなので、ユーザー名としては残さない。
+        val typed = name.trim().ifBlank { null }
+        val googleName = initialName?.trim()?.ifBlank { null }
+        val userName = typed?.takeIf { it != googleName }
+        onRegisterNew(latLng.latitude, latLng.longitude, userName, wishlist, priority, visited, memo.ifBlank { null }, googlePlaceId, googleName)
+        onDismiss()
+      }) { Text("登録") }
     },
-    memo = memo,
-    onMemoChange = { memo = it },
-    wishlist = wishlist,
-    onWishlistChange = { wishlist = it },
-    priority = priority,
-    onPriorityChange = { priority = it },
-    visitedContent = { VisitedToggle(visited) { visited = it } },
-  )
-  SheetActions {
-    TextButton(onClick = onDismiss) { Text("キャンセル") }
-    Button(onClick = {
-      // 名前欄は空で始まるので、入力があれば自分で付けた名前。ただし候補を書き換えずに
-      // そのまま確定したときは Google の名前と同じなので、ユーザー名としては残さない。
-      val typed = name.trim().ifBlank { null }
-      val googleName = initialName?.trim()?.ifBlank { null }
-      val userName = typed?.takeIf { it != googleName }
-      onRegisterNew(latLng.latitude, latLng.longitude, userName, wishlist, priority, visited, memo.ifBlank { null }, googlePlaceId, googleName)
-      onDismiss()
-    }) { Text("登録") }
+  ) {
+    PlaceFormBody(
+      name = name,
+      onNameChange = { name = it },
+      nameLabel = "自分で付ける名前（任意）",
+      // 施設なら名前を見出しに。名前を持たない地点は、何をしようとしているかを出す。
+      heading = initialName ?: "この地点を場所として登録",
+      namePrefill = initialName,
+      category = details?.category,
+      address = details?.address,
+      // 施設のときだけ。空き地点は Google に開く先（施設ページ）が無く、座標にピンが立つだけなので出さない。
+      onOpenInMaps = googlePlaceId?.let { id ->
+        { openPlaceInGoogleMaps(context, id, latLng.latitude, latLng.longitude, name.ifBlank { initialName ?: "選択した場所" }) }
+      },
+      memo = memo,
+      onMemoChange = { memo = it },
+      wishlist = wishlist,
+      onWishlistChange = { wishlist = it },
+      priority = priority,
+      onPriorityChange = { priority = it },
+      visitedContent = { VisitedToggle(visited) { visited = it } },
+    )
   }
 }
 
@@ -228,7 +222,7 @@ private fun NewPlaceEditor(
  * 同じ [PlaceEditorBody]（入口が違うだけで、できることは同じ）。
  */
 @Composable
-private fun ExistingPlaceEditor(
+private fun ColumnScope.ExistingPlaceEditor(
   placeId: Long,
   onObservePlace: (placeId: Long) -> Flow<PlaceListItem?>,
   onObserveVisits: (placeId: Long) -> Flow<List<PlaceVisit>>,
@@ -281,33 +275,13 @@ private fun ExistingPlaceEditor(
     onSearchPredictions = onSearchPredictions,
     onFetchPrediction = onFetchPrediction,
     mergeActions = mergeActions,
-    initiallyOpenLinkPicker = openLinkPicker,
+    state = rememberPlaceEditorState(placeId, initiallyOpenLinkPicker = openLinkPicker),
     onAddStop = onAddStop?.let { add ->
       {
         add(loaded)
         onDismiss()
       }
     },
-    trailingActions = {
-      TextButton(
-        onClick = onDismiss,
-        modifier = Modifier.align(Alignment.End),
-      ) {
-        Text("閉じる")
-      }
-    },
-  )
-}
-
-/** シート下部のボタン行（右寄せ）。 */
-@Composable
-private fun SheetActions(content: @Composable androidx.compose.foundation.layout.RowScope.() -> Unit) {
-  androidx.compose.foundation.layout.Row(
-    modifier = Modifier
-      .fillMaxWidth()
-      .padding(top = 16.dp),
-    horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End),
-    verticalAlignment = Alignment.CenterVertically,
-    content = content,
+    onClose = onDismiss,
   )
 }

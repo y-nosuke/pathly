@@ -151,7 +151,10 @@ internal fun TrackingTopBar(
       )
     },
     actions = {
-      MapLayersButton(active = showRegisteredPlaces || overlayActive) { close ->
+      MapLayersButton(
+        active = showRegisteredPlaces || overlayActive,
+        filtered = showRegisteredPlaces && !mapPlaceFilter.isEmpty,
+      ) { close ->
         RegisteredPlacesLayerItems(
           show = showRegisteredPlaces,
           onToggle = onToggleRegisteredPlaces,

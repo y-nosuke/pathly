@@ -6,7 +6,6 @@ import android.content.Intent
 import android.net.Uri
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -26,7 +25,6 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -36,7 +34,7 @@ import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalIconButton
-import androidx.compose.material3.FilterChip
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -77,21 +75,16 @@ import com.google.android.gms.maps.CameraUpdateFactory
 import com.google.android.gms.maps.model.CameraPosition
 import com.google.android.gms.maps.model.LatLng
 import com.google.android.gms.maps.model.LatLngBounds
-import com.google.maps.android.compose.CameraPositionState
 import com.google.maps.android.compose.GoogleMap
 import com.google.maps.android.compose.MapUiSettings
 import com.google.maps.android.compose.MarkerState
 import com.google.maps.android.compose.rememberCameraPositionState
 import com.pathly.R
-import com.pathly.domain.model.MapPlaceFilter
-import com.pathly.domain.model.NearbyRegisterPrompt
 import com.pathly.domain.model.Place
 import com.pathly.domain.model.PlaceCategory
 import com.pathly.domain.model.PlaceCategoryFacet
-import com.pathly.domain.model.PlaceCategoryGroup
 import com.pathly.domain.model.PlaceGrouping
 import com.pathly.domain.model.PlaceListItem
-import com.pathly.domain.model.PlacePrediction
 import com.pathly.domain.model.PlaceSearchResult
 import com.pathly.domain.model.PlaceVisit
 import com.pathly.domain.model.Priority
@@ -100,12 +93,9 @@ import com.pathly.domain.model.RegisteredPlace
 import com.pathly.presentation.common.ActiveFilter
 import com.pathly.presentation.common.ActiveFilterChips
 import com.pathly.presentation.common.CategoryFilterSection
-import com.pathly.presentation.common.CloseInfoWindowWithSheet
-import com.pathly.presentation.common.DefaultMapLocation
 import com.pathly.presentation.common.FilterChoiceSection
 import com.pathly.presentation.common.FilterPanelButton
 import com.pathly.presentation.common.FilterPanelCloseButton
-import com.pathly.presentation.common.FloatingSheet
 import com.pathly.presentation.common.ListFilterPanel
 import com.pathly.presentation.common.ListMapCamera
 import com.pathly.presentation.common.ListMapLayout
@@ -115,11 +105,7 @@ import com.pathly.presentation.common.ListMapToggle
 import com.pathly.presentation.common.ListNameSearchField
 import com.pathly.presentation.common.MapMarker
 import com.pathly.presentation.common.MapPinMarker
-import com.pathly.presentation.common.MapPlaceFilterButton
-import com.pathly.presentation.common.NearbyConfirmPurpose
-import com.pathly.presentation.common.NearbyPlaceConfirmDialog
 import com.pathly.presentation.common.RegionFilterSection
-import com.pathly.presentation.common.RegisteredPlaceMarker
 import com.pathly.presentation.common.RegisteredPlaceMarkers
 import com.pathly.presentation.common.ScrollToTopButton
 import com.pathly.presentation.common.ScrollToTopButtonClearance
@@ -127,7 +113,6 @@ import com.pathly.presentation.common.StatisticItem
 import com.pathly.presentation.common.StatisticsCard
 import com.pathly.presentation.common.WishlistFlagButton
 import com.pathly.presentation.common.categoryChipLabel
-import com.pathly.presentation.common.categoryGlyph
 import com.pathly.presentation.common.choiceLabel
 import com.pathly.presentation.common.flippedChoice
 import com.pathly.presentation.common.heightOf
@@ -137,12 +122,9 @@ import com.pathly.presentation.common.rememberFloatingSheetState
 import com.pathly.presentation.common.rememberListMapCamera
 import com.pathly.presentation.common.rememberMapInfoWindowState
 import com.pathly.presentation.common.requestCurrentLatLng
-import com.pathly.ui.theme.PathlyElevation
 import com.pathly.ui.theme.PathlyMapColors
 import com.pathly.ui.theme.PathlyTheme
 import com.pathly.util.DateFormatters
-import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.launch
 
 // 「場所」タブは Navigation-Compose の目的地に分割されている（一覧／地図で追加／検索で追加／詳細）。
@@ -200,30 +182,6 @@ fun PlacesListRoute(
   }
 }
 
-/** 地図で追加（place_add）。保存したら [onDone] で一覧へ戻す。 */
-@Composable
-fun AddPlaceRoute(
-  viewModel: PlacesViewModel,
-  onDone: () -> Unit,
-  modifier: Modifier = Modifier,
-) {
-  val uiState by viewModel.uiState.collectAsStateWithLifecycle()
-
-  // 登録（新規／既存への紐付け）が実際に成立したら一覧へ戻す。近接確認を挟むときは
-  // ユーザーが選んだあとになる。判断が ViewModel に移り、この画面からは登録が同期的に
-  // 完了しなくなったため、登録通知のトークンを合図に使う。
-  val tokenAtEntry = remember { viewModel.uiState.value.registerToken }
-  LaunchedEffect(uiState.registerToken) {
-    if (uiState.registerToken != tokenAtEntry) onDone()
-  }
-
-  AddPlaceContent(
-    modifier = modifier,
-    onCancel = onDone,
-    placeEdit = viewModel.placeEdit,
-  )
-}
-
 /** 検索して追加（place_search）。入る時に検索セッションを開始し、登録したら一覧へ戻す。 */
 @Composable
 fun SearchAddRoute(
@@ -263,64 +221,12 @@ fun SearchAddRoute(
   )
 }
 
-/** 詳細（place_detail/{placeId}）。削除・不存在になったら [onBack] で一覧へ戻す。 */
-@Composable
-fun PlaceDetailRoute(
-  viewModel: PlacesViewModel,
-  placeId: Long,
-  onBack: () -> Unit,
-  onOpenTrack: (trackId: Long) -> Unit,
-  modifier: Modifier = Modifier,
-) {
-  val uiState by viewModel.uiState.collectAsStateWithLifecycle()
-
-  val item = uiState.items.firstOrNull { it.place.id == placeId }
-  if (item == null) {
-    // 読み込み済みで見つからない（削除された）なら一覧へ戻す（取り消しは一覧のスナックバーで）。
-    if (!uiState.isLoading) {
-      LaunchedEffect(placeId) { onBack() }
-    }
-    return
-  }
-
-  val visitsFlow = remember(placeId) { viewModel.placeEdit.visitsFor(placeId) }
-  val visits by visitsFlow.collectAsStateWithLifecycle(emptyList())
-  val mapPlaceFilter by viewModel.mapPlaceFilter.collectAsStateWithLifecycle()
-  val snackbarHostState = remember { SnackbarHostState() }
-  // 保存・紐付けなどの一言は詳細の下に出す（一覧に戻ってから出ると何のことか分からないため、出したら消化する）。
-  PlaceMessageEffect(uiState.registerMessage, snackbarHostState, viewModel::consumeRegisterMessage)
-
-  Box(modifier = modifier.fillMaxSize()) {
-    PlaceDetailContent(
-      item = item,
-      visits = visits,
-      onOpenTrack = onOpenTrack,
-      onBack = onBack,
-      // 保存・Google 施設の紐付け・まとめる・地図タップでの登録は場所の編集（他の画面と同じ）。
-      // まとめるとこの場所は消え、一覧へ戻ってスナックバーで取り消せる（削除と同じ）。
-      placeEdit = viewModel.placeEdit,
-      // 登録済みの場所の地図表示（この場所自身は主マーカーと重なるので除外）。
-      registeredPlaces = uiState.items
-        .filter { it.place.id != placeId }
-        .map { it.toRegisteredPlace() },
-      showRegisteredPlaces = uiState.showRegisteredPlaces,
-      onToggleRegisteredPlaces = { viewModel.toggleShowRegisteredPlaces() },
-      mapPlaceFilter = mapPlaceFilter,
-      onMapPlaceFilterChange = viewModel::setMapPlaceFilter,
-      // 確認ダイアログは出さず即時削除。items から消えると item == null になり一覧へ戻り、
-      // 取り消しスナックバーは一覧側で出る。
-      onDeleteRequest = { viewModel.placeEdit.deletePlace(item.place.id) },
-    )
-    SnackbarHost(snackbarHostState, modifier = Modifier.align(Alignment.BottomCenter))
-  }
-}
-
 /**
  * 場所タブの一言（登録・紐付け・保存など）を下のスナックバーに出す。出したら（出している途中で画面を離れても）
  * [onShown] で消化する。消化しないと、一覧と詳細を行き来するたびに同じ一言が出てしまう。
  */
 @Composable
-private fun PlaceMessageEffect(message: String?, snackbarHostState: SnackbarHostState, onShown: () -> Unit) {
+internal fun PlaceMessageEffect(message: String?, snackbarHostState: SnackbarHostState, onShown: () -> Unit) {
   LaunchedEffect(message) {
     val text = message ?: return@LaunchedEffect
     try {
@@ -800,311 +706,7 @@ private fun PlaceItemRow(
 }
 
 // ---------------------------------------------------------------------------
-// 追加（地図タップ → タップ後にフォーム表示）
-// ---------------------------------------------------------------------------
-
-@Composable
-private fun AddPlaceContent(
-  onCancel: () -> Unit,
-  // 登録と、近くに既存があるときの確認（判断は ViewModel の PlaceEditUseCase 側）。
-  placeEdit: PlaceEditUi,
-  modifier: Modifier = Modifier,
-) {
-  // 選んだ対象。フォームの中身（名前・メモ・行きたい・優先度）と Google 情報の取得は
-  // 場所シート側が持つので、この画面は「どこを選んだか」だけを持つ。
-  var target by remember { mutableStateOf<PlaceSheetTarget?>(null) }
-  val picked = when (val t = target) {
-    is PlaceSheetTarget.NewPoint -> t.latLng
-    is PlaceSheetTarget.NewPoi -> t.poi.latLng
-    else -> null
-  }
-  val context = LocalContext.current
-
-  val cameraPositionState = rememberCameraPositionState {
-    position = CameraPosition.fromLatLngZoom(DefaultMapLocation, 12f)
-  }
-  val sheetState = rememberFloatingSheetState()
-
-  // タップした地点がシートの下に隠れることがあるので、選んだら見える範囲へ寄せる
-  // （地図の下パディングを段に合わせてあるので、パディングを除いた中央に来る）。
-  LaunchedEffect(picked) {
-    picked?.let { cameraPositionState.animate(CameraUpdateFactory.newLatLng(it)) }
-  }
-
-  // 現在地へ地図を寄せる（記録画面の現在地ボタンと同じ挙動）。権限が無ければ何もしない。
-  val scope = rememberCoroutineScope()
-  val moveToCurrentLocation: () -> Unit = {
-    requestCurrentLatLng(context) { latLng ->
-      scope.launch { cameraPositionState.animate(CameraUpdateFactory.newLatLngZoom(latLng, 16f)) }
-    }
-  }
-
-  // マーカーの吹き出しをシステムバックで閉じられるようにする。
-  val infoWindow = rememberMapInfoWindowState()
-
-  Box(modifier = modifier.fillMaxSize()) {
-    GoogleMap(
-      modifier = Modifier.fillMaxSize(),
-      cameraPositionState = cameraPositionState,
-      // シートが出ている間は、その分を除いた範囲を地図の可視領域として扱う。
-      contentPadding = PaddingValues(bottom = if (picked == null) 0.dp else sheetState.heightOf(sheetState.detent)),
-      uiSettings = MapUiSettings(
-        zoomControlsEnabled = false,
-        mapToolbarEnabled = false,
-        myLocationButtonEnabled = false,
-      ),
-      // アイコン（POI）をタップしたら施設として、何もない場所なら任意の地点として扱う。
-      // 名前の初期値やカテゴリ・住所の取得は場所シートに任せる。
-      onPOIClick = { poi -> target = PlaceSheetTarget.NewPoi(poi) },
-      onMapClick = { latLng -> target = PlaceSheetTarget.NewPoint(latLng) },
-    ) {
-      // 登録前に選んだ地点（青いピン）。まだ決めている最中なので丸バッジにはしない。
-      picked?.let { p ->
-        val markerState = remember(p) { MarkerState(position = p) }
-        MapMarker("picked", p.latitude, p.longitude, infoWindow = infoWindow, state = markerState, title = "選んだ地点") {
-          MapPinMarker(bg = PathlyMapColors.Picked, glyph = R.drawable.ic_add)
-        }
-      }
-    }
-
-    // 現在地へ移動（右上）。記録画面と同じ現在地ボタン。
-    Surface(
-      onClick = moveToCurrentLocation,
-      shape = CircleShape,
-      color = MaterialTheme.colorScheme.surface,
-      shadowElevation = PathlyElevation.floating,
-      modifier = Modifier
-        .align(Alignment.TopEnd)
-        .padding(12.dp)
-        .size(44.dp),
-    ) {
-      Box(contentAlignment = Alignment.Center) {
-        Icon(
-          painter = painterResource(R.drawable.ic_my_location),
-          contentDescription = "現在地へ移動",
-          tint = MaterialTheme.colorScheme.onSurfaceVariant,
-          modifier = Modifier.size(24.dp),
-        )
-      }
-    }
-
-    // 未タップのときは大きなヒントだけ。フォームはタップ後に出す（地図を広く使う）。
-    if (picked == null) {
-      Card(
-        modifier = Modifier
-          .align(Alignment.TopCenter)
-          .padding(12.dp),
-      ) {
-        Text(
-          text = "地図をタップして場所を選ぶ",
-          modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
-          style = MaterialTheme.typography.bodyMedium,
-        )
-      }
-      OutlinedButton(
-        onClick = onCancel,
-        modifier = Modifier
-          .align(Alignment.BottomStart)
-          .padding(12.dp),
-      ) {
-        Text("キャンセル")
-      }
-    }
-
-    // 地図タップと同じ「場所シート」（選んだあとだけ出る）。畳めば地図を全画面で確認でき、キャンセル（＝旧「選び直す」）
-    // で選択を解除して地図に戻る。システムバックもシート側が受ける。近接確認もここから出る。
-    PlaceEditHost(
-      placeEdit = placeEdit,
-      target = target,
-      onDismiss = { target = null },
-      modifier = Modifier.align(Alignment.BottomCenter),
-      infoWindow = infoWindow,
-      sheetState = sheetState,
-    )
-  }
-}
-
-// ---------------------------------------------------------------------------
-// 詳細
-// ---------------------------------------------------------------------------
-
-@Composable
-private fun PlaceDetailContent(
-  item: PlaceListItem,
-  visits: List<PlaceVisit>,
-  onBack: () -> Unit,
-  onOpenTrack: (trackId: Long) -> Unit,
-  onDeleteRequest: () -> Unit,
-  // この場所の保存・Google 施設の紐付け・まとめると、地図タップで開く場所シートの登録・編集。
-  placeEdit: PlaceEditUi,
-  modifier: Modifier = Modifier,
-  // 登録済みの場所の地図表示（画面別トグル）。この場所自身は主マーカーと重なるので呼び出し側で除外して渡す。
-  registeredPlaces: List<RegisteredPlace> = emptyList(),
-  showRegisteredPlaces: Boolean = false,
-  onToggleRegisteredPlaces: () -> Unit = {},
-  // この画面の地図の「登録済みの場所」の絞り込み（地図ごとに独立。場所一覧とも別）。
-  mapPlaceFilter: MapPlaceFilter = MapPlaceFilter(),
-  onMapPlaceFilterChange: (MapPlaceFilter) -> Unit = {},
-) {
-  // 地図の1点タップで開く統一の「場所シート」（未登録の空き地点/POI＝登録、登録済み＝その場で編集）。
-  var placeSheetTarget by remember { mutableStateOf<PlaceSheetTarget?>(null) }
-
-  // 地図タップ・地図で選ぶ・検索して追加と同じ非モーダルのシートで出す（ADR-0010）。
-  // 畳めば地図を全画面で確認できる。
-  val sheetState = rememberFloatingSheetState(peekFraction = 0.55f)
-  // マップ下部の余白はシートの段に合わせる（高さそのものを読むと、ドラッグのたびに地図が再描画される）。
-  val mapBottomPadding = sheetState.heightOf(sheetState.detent)
-
-  val position = LatLng(item.place.latitude, item.place.longitude)
-  val cameraPositionState = rememberCameraPositionState {
-    this.position = CameraPosition.fromLatLngZoom(position, 16f)
-  }
-  // マーカーの吹き出しをシステムバックで閉じられるようにする。
-  val infoWindow = rememberMapInfoWindowState()
-
-  Box(modifier = modifier.fillMaxSize()) {
-    GoogleMap(
-      modifier = Modifier.fillMaxSize(),
-      cameraPositionState = cameraPositionState,
-      contentPadding = PaddingValues(bottom = mapBottomPadding),
-      uiSettings = MapUiSettings(
-        zoomControlsEnabled = false,
-        mapToolbarEnabled = false,
-        myLocationButtonEnabled = false,
-      ),
-      // 詳細のマップで別の施設(POI)を見かけたらタップで統一シート（登録）。
-      onPOIClick = { placeSheetTarget = PlaceSheetTarget.NewPoi(it) },
-      // 何もない地点をタップ → 統一シート（その地点を場所として登録）。
-      onMapClick = { placeSheetTarget = PlaceSheetTarget.NewPoint(it) },
-    ) {
-      // この画面が主題にしている場所。登録済み＝確定しているので、地図の他の画面と同じ丸バッジ
-      // （色＝訪問状態／グリフ＝業種／右上＝行きたい）で描く。
-      val markerState = remember(position) { MarkerState(position = position) }
-      val group = PlaceCategoryGroup.of(item.place.category)
-      MapMarker(
-        "place-detail",
-        item.place.id,
-        item.wishlistFlag,
-        item.isVisited,
-        group,
-        infoWindow = infoWindow,
-        state = markerState,
-        title = item.displayName,
-        snippet = item.statusLabel,
-        // この吹き出しは画面の一部（下のシートと同じ場所を指している）。自分でタップして開き直しても
-        // 同じ扱いにして、バックは常に画面を戻す。
-        dismissWithBack = false,
-      ) {
-        RegisteredPlaceMarker(
-          bg = if (item.isVisited) PathlyMapColors.PlaceVisited else PathlyMapColors.PlaceUnvisited,
-          glyph = categoryGlyph(group),
-          wishlistFlag = item.wishlistFlag,
-        )
-      }
-      // この画面はこの場所が主題なので、他の画面でマーカーをタップしたときと同じく吹き出しも出す。
-      // 別の場所のシートを開くと地図が勝手に閉じてしまうので、閉じてこの場所に戻ったら出し直す。
-      LaunchedEffect(markerState, placeSheetTarget) {
-        if (placeSheetTarget == null) markerState.showInfoWindow()
-      }
-      // 登録済みの場所（トグルON）。この場所自身は主マーカーと重なるので除外済みのリストを描く。
-      // タップで統一シート（この画面の詳細と同じ編集ができる）。
-      if (showRegisteredPlaces) {
-        // 地図の絞り込みに合う場所だけを出す（まとまり・ラベルも絞った後で作られる）。
-        RegisteredPlaceMarkers(registeredPlaces.filter(mapPlaceFilter::matches), infoWindow) {
-          placeSheetTarget = PlaceSheetTarget.Existing(it.placeId)
-        }
-      }
-    }
-
-    // 登録済みの場所を出すトグル（場所詳細・画面別）。右上に置き、ON のときは下に絞り込みボタンを出す。
-    Column(
-      modifier = Modifier
-        .align(Alignment.TopEnd)
-        .padding(12.dp),
-      verticalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-      Surface(
-        onClick = onToggleRegisteredPlaces,
-        shape = CircleShape,
-        color = if (showRegisteredPlaces) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surface,
-        shadowElevation = PathlyElevation.floating,
-      ) {
-        Icon(
-          painter = painterResource(R.drawable.ic_place),
-          contentDescription = if (showRegisteredPlaces) "登録済みの場所を隠す" else "登録済みの場所を表示",
-          tint = if (showRegisteredPlaces) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface,
-          modifier = Modifier.padding(8.dp),
-        )
-      }
-      if (showRegisteredPlaces) {
-        MapPlaceFilterButton(
-          filter = mapPlaceFilter,
-          places = registeredPlaces,
-          onFilterChange = onMapPlaceFilterChange,
-        )
-      }
-    }
-
-    FilledTonalIconButton(
-      onClick = onBack,
-      modifier = Modifier
-        .align(Alignment.TopStart)
-        .padding(12.dp),
-    ) {
-      Icon(painter = painterResource(R.drawable.ic_arrow_back), contentDescription = "一覧に戻る")
-    }
-
-    // 地図タップの場所シートを開いている間は重なるので引っ込める（どちらも下端に出る）。
-    if (placeSheetTarget == null) {
-      FloatingSheet(
-        state = sheetState,
-        modifier = Modifier.align(Alignment.BottomCenter),
-        restoreLabel = "▲ 詳細に戻る",
-      ) {
-        Column(
-          modifier = Modifier
-            .verticalScroll(rememberScrollState())
-            .padding(horizontal = 20.dp)
-            .padding(bottom = 24.dp),
-        ) {
-          // 地図のマーカーをタップして開くシートと同じ本体（入口が違うだけで中身は同じ）。
-          PlaceEditorBody(
-            item = item,
-            visits = visits,
-            onSave = { name, note, wishlist, priority, visited, link ->
-              placeEdit.savePlaceEdits(item, name, note, wishlist, priority, visited, link)
-            },
-            onDelete = onDeleteRequest,
-            onOpenTrack = onOpenTrack,
-            // 「Googleで情報を取得」: 登録座標の近くの候補から選ぶ（保存で確定・選び直しと同じ仕組み）。
-            onFetchNearbyPois = placeEdit::nearbyPois,
-            // 座標がずれて周辺に出ないときの名前検索フォールバック。
-            onSearchPredictions = placeEdit::predictPlaces,
-            onFetchPrediction = placeEdit::fetchPlaceResult,
-            mergeActions = placeEdit.mergeActions(),
-          )
-        }
-      }
-    }
-
-    // 地図の1点タップで開く統一の「場所シート」。記録画面と同じ挙動（この画面は記録中でないので立ち寄り追加は出さない）。
-    // 削除の取り消しは一覧に戻ってから出すので、ここではスナックバーを渡さない。
-    PlaceEditHost(
-      placeEdit = placeEdit,
-      target = placeSheetTarget,
-      onDismiss = { placeSheetTarget = null },
-      modifier = Modifier.align(Alignment.BottomCenter),
-      infoWindow = infoWindow,
-      onOpenTrack = onOpenTrack,
-      // この場所は主マーカーで見えているので、近接確認の対象にしない。
-      mainPlaceId = item.place.id,
-    )
-  }
-}
-
-/** 場所詳細の空きタップ登録で、近接確認のときに保留する登録内容。 */
-// ---------------------------------------------------------------------------
-// 追加（キーワード検索）
+// 追加（キーワード検索）。地図で選ぶ・詳細は PlaceMapScreens.kt
 // ---------------------------------------------------------------------------
 
 @Composable
@@ -1305,6 +907,57 @@ internal fun PlaceFormBody(
       )
     }
 
+    // 主役: 行きたい・優先度・訪問済み・メモ（いちばんよく直すもの。シートを開いてすぐ見える位置に置く）。
+    Row(
+      modifier = Modifier.fillMaxWidth(),
+      horizontalArrangement = Arrangement.SpaceBetween,
+      verticalAlignment = Alignment.CenterVertically,
+    ) {
+      Text("行きたいに登録")
+      Switch(checked = wishlist, onCheckedChange = onWishlistChange)
+    }
+
+    // 行きたいは行けば終わるので、かつて行きたいだったことをここで見せる（→ adr/0036）。
+    wishlistHistory?.let {
+      Text(
+        text = it,
+        style = MaterialTheme.typography.bodySmall,
+        color = PathlyTheme.statusColors.visited,
+      )
+    }
+
+    // 優先度は「行きたい」に属する情報なので、こちらは入れ子のままにする。
+    if (wishlist) {
+      Spacer(modifier = Modifier.height(4.dp))
+      PrioritySelector(selected = priority, onSelect = onPriorityChange)
+    } else if (wishlistOffHint != null) {
+      Spacer(modifier = Modifier.height(4.dp))
+      Text(
+        text = wishlistOffHint,
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+      )
+    }
+
+    // 訪問済みは行きたいと独立。行きたいOFFのままでも付け外しできる。
+    visitedContent?.let { content ->
+      Spacer(modifier = Modifier.height(12.dp))
+      content()
+    }
+
+    // メモは「行きたい」に関係なく常に入力できる。
+    Spacer(modifier = Modifier.height(12.dp))
+    OutlinedTextField(
+      value = memo,
+      onValueChange = onMemoChange,
+      label = { Text("メモ（任意）") },
+      modifier = Modifier.fillMaxWidth(),
+    )
+
+    // 脇役: 自分で付ける名前・業種・住所・Google マップで開く。
+    Spacer(modifier = Modifier.height(16.dp))
+    HorizontalDivider()
+    Spacer(modifier = Modifier.height(16.dp))
     OutlinedTextField(
       value = name,
       onValueChange = onNameChange,
@@ -1341,57 +994,10 @@ internal fun PlaceFormBody(
     // Google マップアプリで開く（写真・口コミ・営業時間・経路は Google に委ねる）。
     onOpenInMaps?.let { open ->
       Spacer(modifier = Modifier.height(8.dp))
-      OutlinedButton(onClick = open, modifier = Modifier.fillMaxWidth()) {
+      OutlinedButton(onClick = open) {
         Icon(painter = painterResource(R.drawable.ic_place), contentDescription = null)
         Text(text = " Google マップで開く")
       }
-    }
-
-    // メモは「行きたい」に関係なく常に入力できる。
-    Spacer(modifier = Modifier.height(12.dp))
-    OutlinedTextField(
-      value = memo,
-      onValueChange = onMemoChange,
-      label = { Text("メモ（任意）") },
-      modifier = Modifier.fillMaxWidth(),
-    )
-
-    Spacer(modifier = Modifier.height(12.dp))
-    Row(
-      modifier = Modifier.fillMaxWidth(),
-      horizontalArrangement = Arrangement.SpaceBetween,
-      verticalAlignment = Alignment.CenterVertically,
-    ) {
-      Text("行きたいに登録")
-      Switch(checked = wishlist, onCheckedChange = onWishlistChange)
-    }
-
-    // 行きたいは行けば終わるので、かつて行きたいだったことをここで見せる（→ adr/0036）。
-    wishlistHistory?.let {
-      Text(
-        text = it,
-        style = MaterialTheme.typography.bodySmall,
-        color = PathlyTheme.statusColors.visited,
-      )
-    }
-
-    // 優先度は「行きたい」に属する情報なので、こちらは入れ子のままにする。
-    if (wishlist) {
-      Spacer(modifier = Modifier.height(12.dp))
-      PrioritySelector(selected = priority, onSelect = onPriorityChange)
-    } else if (wishlistOffHint != null) {
-      Spacer(modifier = Modifier.height(8.dp))
-      Text(
-        text = wishlistOffHint,
-        style = MaterialTheme.typography.bodySmall,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-      )
-    }
-
-    // 訪問済みは行きたいと独立。行きたいOFFのままでも付け外しできる。
-    visitedContent?.let { content ->
-      Spacer(modifier = Modifier.height(12.dp))
-      content()
     }
   }
 }
@@ -1446,7 +1052,7 @@ internal fun PrioritySelector(
 private fun PlacesState.emptyMessage(): String = if (items.isEmpty()) "場所がありません\n「追加」から登録できます" else "条件に合う場所がありません"
 
 /** 地図に「登録済みの場所」として出すための形。 */
-private fun PlaceListItem.toRegisteredPlace(): RegisteredPlace = RegisteredPlace(
+internal fun PlaceListItem.toRegisteredPlace(): RegisteredPlace = RegisteredPlace(
   placeId = place.id,
   name = displayName,
   latitude = place.latitude,

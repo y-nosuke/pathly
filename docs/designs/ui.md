@@ -125,6 +125,13 @@ DB に持たないのは、`R.drawable` の ID を DB に入れられず結局�
 - **登録済みの場所を編集する部分は `PlaceEditorBody` 1 つに集約する。**場所タブの詳細画面と、
   地図のマーカーをタップして出るシートは、これを呼ぶ器が違うだけ（→ [ADR-0019](../adr/0019-single-place-editor.md)）。
   片方にだけ機能を足さないこと。
+  - 並びは段に沿う: 本文は 確認待ち → 主役（行きたい・優先度・訪問済み・メモ）→ 脇役（自分で付ける名前・業種・住所・
+    Google マップで開く）→ 訪問履歴。しまうもの（Google 施設を選び直す・まとめる・削除）は ⋮（`PlaceEditorMenuItems`）。
+  - マーカーのシートは見出しの行（名前と ⋮）を自分で出す。場所詳細は上のバーに見出しと ⋮ があるので `showHeader = false`。
+    ⋮ から開くダイアログと紐付け予定は `PlaceEditorState` に持たせ、場所詳細は画面側で作って上のバーと本文に渡す
+    （ダイアログも画面側の `PlaceEditorDialogs`。地図タップの場所シートで本文が引っ込んでいても出せるように）。
+- **保存・登録はシートの下端に固定する**（`SheetFormLayout`、`presentation/common/SheetForm.kt`）。本文だけがスクロールし、
+  操作の行（閉じる・立ち寄りに追加・保存／キャンセル・登録）はスクロールしても隠れない。場所シート・場所詳細で使う。
 
 ## 地図の画面の型の部品
 
@@ -139,7 +146,10 @@ DB に持たないのは、`R.drawable` の ID を DB に入れられず結局�
 | レイヤー     | `MapLayersButton`・`RegisteredPlacesLayerItems`・`MapLayerActionItem`（`MapLayers.kt`） | ［≋］と開くパネル。登録済みの場所の表示・絞り込みは共通、ほかは画面ごとの行                  |
 | 右下         | `MapControls`・`MapRoundButton`（`MapControls.kt`・`MapTopBar.kt`）                     | 地図の操作を縦に積む。`bottomInset` にいま出ているシートの高さ（段の確定値）を渡して沿わせる |
 | シートの脇役 | `MapSideActions`（`MapControls.kt`）                                                    | シートの中の脇役の操作を横に並べる器。#201 で浮かぶツールバーに差し替える                    |
+| シートの下端 | `SheetFormLayout`（`SheetForm.kt`）                                                     | 本文をスクロールさせ、保存・登録などの操作の行を下端に固定する                               |
 
+- 現在地のボタンと地図の現在地の点は、位置情報の許可があるときだけ出す（`rememberLocationPermitted`、`MapCamera.kt`。
+  画面に戻るたびに見直す。地図の画面からは許可を求めない）。
 - 右下の操作と主役の丸は、シートの**段の確定値**に合わせて動く（ドラッグ中の高さを外で読むと地図ごと再コンポーズされて
   カクつくため → 「非モーダルのシート」）。畳んだシートは戻すボタンの分（`SheetRestoreButtonInset`）だけ上げる。
 - 記録画面の検索の入口（「検索して登録」の窓と「地域へ移動」の地球）は `TrackingSearchEntry` 1 つにまとめてある。
@@ -180,7 +190,7 @@ DB に持たないのは、`R.drawable` の ID を DB に入れられず結局�
 （`SettingsRepository` / prefs 名 `pathly_settings`）。トグルは **UI の表示設定**であって
 場所データではないため、DB には持たせない。GPS 記録間隔と同じ扱い。
 
-- **画面ごとに独立**して保持する。画面は `MapSurface`（`RECORDING` / `HISTORY` / `PLACE_DETAIL`）で表す。
+- **画面ごとに独立**して保持する。画面は `MapSurface`（`RECORDING` / `HISTORY` / `PLACE_DETAIL` / `PLACE_ADD`）で表す。
 - 各画面の ViewModel が購読し、地図上のトグルで書く。プロセスをまたいで保持される。
 
 ## アイコンとテーマ

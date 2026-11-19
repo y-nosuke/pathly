@@ -33,6 +33,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.pathly.R
 import com.pathly.ui.theme.PathlyElevation
@@ -41,6 +42,12 @@ import com.pathly.ui.theme.PathlySpacing
 
 // 地図の画面の型（docs/designs/ui-direction.md）の「上」と「上の下」の区画。
 // 記録・経路詳細・場所詳細・履歴と場所の地図で同じ並びにする。
+
+/**
+ * 上の区画の 1 行目（戻る＋見出し・レイヤー・⋮）が地図の上を占める高さ（上下の余白込み）。地図の `contentPadding` の
+ * top に渡すと、カメラを寄せた対象やその吹き出しが上のバーの下に隠れない。上の下（帯・ピル）が出ている間の分は含まない。
+ */
+val MapTopBarInset: Dp = 76.dp
 
 /**
  * 地図の画面の上の区画。1 行目は [leading]（戻る＋見出し、またはタブの画面の検索の入口。残りの幅を使う）と

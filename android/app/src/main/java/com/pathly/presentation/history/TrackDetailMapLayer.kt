@@ -16,6 +16,7 @@ import com.pathly.domain.model.Stop
 import com.pathly.domain.model.StopCandidate
 import com.pathly.domain.model.TrackSmoother
 import com.pathly.presentation.common.MapInfoWindowState
+import com.pathly.presentation.common.MapRegisteredPlaces
 import com.pathly.presentation.common.stopSegmentPoints
 import com.pathly.presentation.places.PlaceSheetTarget
 import com.pathly.presentation.stops.ManualStopOrigin

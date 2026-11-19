@@ -57,7 +57,6 @@ class PlacesViewModel @Inject constructor(
 
   init {
     observePlaces()
-    observeShowRegisteredPlaces()
     observeGrouping()
   }
 
@@ -83,24 +82,18 @@ class PlacesViewModel @Inject constructor(
     settingsRepository.setOpenPlaceGroups(grouping, settingsRepository.openPlaceGroups(grouping).value.toggled(key))
   }
 
-  /** 場所詳細の地図に「登録済みの場所」を出すトグル（画面別・永続化）。 */
-  private fun observeShowRegisteredPlaces() {
-    viewModelScope.launch {
-      settingsRepository.showRegisteredPlaces(MapSurface.PLACE_DETAIL).collect { show ->
-        _uiState.update { it.copy(showRegisteredPlaces = show) }
-      }
-    }
+  /** その画面の地図に「登録済みの場所」を出すか（画面別・永続化）。 */
+  fun showRegisteredPlaces(surface: MapSurface): StateFlow<Boolean> = settingsRepository.showRegisteredPlaces(surface)
+
+  fun toggleShowRegisteredPlaces(surface: MapSurface) {
+    settingsRepository.setShowRegisteredPlaces(surface, !settingsRepository.showRegisteredPlaces(surface).value)
   }
 
-  fun toggleShowRegisteredPlaces() {
-    settingsRepository.setShowRegisteredPlaces(MapSurface.PLACE_DETAIL, !_uiState.value.showRegisteredPlaces)
-  }
+  /** その画面の地図の「登録済みの場所」の絞り込み（地図ごとに独立。場所一覧とも別）。 */
+  fun mapPlaceFilter(surface: MapSurface): StateFlow<MapPlaceFilter> = settingsRepository.mapPlaceFilter(surface)
 
-  /** この画面の地図の「登録済みの場所」の絞り込み（地図ごとに独立。場所一覧とも別）。 */
-  val mapPlaceFilter: StateFlow<MapPlaceFilter> = settingsRepository.mapPlaceFilter(MapSurface.PLACE_DETAIL)
-
-  fun setMapPlaceFilter(filter: MapPlaceFilter) {
-    settingsRepository.setMapPlaceFilter(MapSurface.PLACE_DETAIL, filter)
+  fun setMapPlaceFilter(surface: MapSurface, filter: MapPlaceFilter) {
+    settingsRepository.setMapPlaceFilter(surface, filter)
   }
 
   /** 場所の登録・編集・削除・まとめる（記録画面・経路詳細と共有）。結果の一言は今いる画面（一覧・詳細）の下に出す。 */
@@ -109,12 +102,17 @@ class PlacesViewModel @Inject constructor(
     placeEditUseCase = placeEditUseCase,
     wishlistRepository = wishlistRepository,
     placesTextSearcher = placesTextSearcher,
-    // 近接確認で「見えている」とみなす場所（表示 ON で、地図の絞り込みに合うか、[mainPlaceId]＝場所詳細の
-    // 主マーカーとして出ている）。
+    // 近接確認で「見えている」とみなす場所。場所詳細の地図から登録するとき（[mainPlaceId] がある）だけ、
+    // 表示 ON で地図の絞り込みに合うか、主マーカーとして出ている場所。地図で選んで追加・検索して追加は、
+    // 登録済みのマーカーから紐付けられないので、いつも近接確認を出す（何も見えていない扱い）。
     shownOnMap = { mainPlaceId ->
-      val show = _uiState.value.showRegisteredPlaces
-      val filter = mapPlaceFilter.value
-      ({ place -> show && (place.placeId == mainPlaceId || filter.matches(place)) })
+      if (mainPlaceId == null) {
+        { false }
+      } else {
+        val show = settingsRepository.showRegisteredPlaces(MapSurface.PLACE_DETAIL).value
+        val filter = settingsRepository.mapPlaceFilter(MapSurface.PLACE_DETAIL).value
+        ({ place -> show && (place.placeId == mainPlaceId || filter.matches(place)) })
+      }
     },
     placeNameOf = { placeId -> _uiState.value.items.firstOrNull { it.place.id == placeId }?.displayName },
     onMessage = ::notify,

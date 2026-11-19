@@ -1,6 +1,7 @@
 package com.pathly.presentation.places
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
@@ -8,27 +9,34 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.pathly.R
 import com.pathly.domain.model.PlaceListItem
@@ -40,6 +48,9 @@ import com.pathly.domain.model.Priority
 import com.pathly.domain.model.SameFacilityPlace
 import com.pathly.presentation.common.NearbyCandidatePickerDialog
 import com.pathly.presentation.common.SameFacilityDialog
+import com.pathly.presentation.common.SheetContentHorizontalPadding
+import com.pathly.presentation.common.SheetFormLayout
+import com.pathly.ui.theme.PathlySpacing
 import com.pathly.ui.theme.PathlyTheme
 import com.pathly.util.DateFormatters
 
@@ -58,18 +69,53 @@ class PlaceMergeActions(
 )
 
 /**
+ * 場所の編集部のうち、本文の外（⋮ のメニュー・ダイアログ）からも触る状態。
+ * 場所詳細は ⋮ を上のバーに置くので、本文と上のバーの両方から同じものを触れるよう、画面側で作って渡す。
+ */
+@Stable
+class PlaceEditorState internal constructor(initiallyOpenLinkPicker: Boolean) {
+  /** 「Googleで情報を取得」（施設を選ぶ）ダイアログの開閉。 */
+  var linkPickerOpen by mutableStateOf(initiallyOpenLinkPicker)
+
+  /** 「ほかの場所とまとめる」ダイアログの開閉。 */
+  var mergePickerOpen by mutableStateOf(false)
+
+  /** 同じ施設の確認ダイアログの開閉。 */
+  var sameFacilityDialogOpen by mutableStateOf(false)
+
+  /** 「Googleで情報を取得」で選んだ施設。即保存せず、ここに溜めて「保存」で確定する。 */
+  var pendingLink by mutableStateOf<PlaceSearchResult?>(null)
+
+  /**
+   * 施設を選んで保存した直後か。保存で同じ施設の相手が見つかったら、その場でダイアログを出すため
+   * （保存は ViewModel で非同期に走るので、結果は購読している場所の変化で知る）。
+   */
+  var awaitingLinkResult by mutableStateOf(false)
+}
+
+/** [PlaceEditorState] を場所ごとに作る（別の場所に切り替わったら作り直す）。 */
+@Composable
+internal fun rememberPlaceEditorState(placeId: Long, initiallyOpenLinkPicker: Boolean = false): PlaceEditorState = remember(placeId) { PlaceEditorState(initiallyOpenLinkPicker) }
+
+/**
  * **登録済みの場所を編集する唯一の本体。**
  *
  * 入口は2つある（場所一覧から選ぶ／地図上のマーカーをタップする）が、出てくる中身と
  * できることはこれ1つに統一する。入口ごとに機能が違うと、どちらから開いたかを覚えていないと
  * 何ができるか分からなくなるため（以前は地図側に Google 紐付け・訪問履歴・削除が無かった）。
  *
- * 並びは 名前などの共通フォーム（[PlaceFormBody]）→ Google 施設の紐付け → 保存 →
- * 立ち寄りに追加（記録中のみ）→ 訪問履歴 → 削除。
+ * [FloatingSheet][com.pathly.presentation.common.FloatingSheet] の content に置く。並びは段（→ docs/designs/ui-direction.md）に沿う:
+ * 見出しの行（[showHeader]。名前と ⋮）→ 本文（確認待ち → 主役: 行きたい・優先度・訪問済み・メモ →
+ * 脇役: 自分で付ける名前・業種・住所・Google マップで開く → 訪問履歴）→ 下端に固定する操作の行（閉じる・立ち寄りに追加・保存）。
+ * しまうもの（Google 施設を選び直す・ほかの場所とまとめる・削除）は ⋮（[PlaceEditorMenuItems]）の中。
  * 地図・カメラ・戻る操作は画面側が持つ。
+ *
+ * @param showHeader 見出しの行（名前と ⋮）を出すか。場所詳細は上のバーに見出しと ⋮ があるので出さない。
+ * @param hostDialogs ダイアログをここで出すか。上のバーの ⋮ から開く場所詳細は、本文が畳まれていても
+ *   出せるよう画面側で [PlaceEditorDialogs] を置く。
  */
 @Composable
-internal fun PlaceEditorBody(
+internal fun ColumnScope.PlaceEditorBody(
   item: PlaceListItem,
   visits: List<PlaceVisit>,
   onSave: (name: String, note: String, wishlist: Boolean, priority: Priority, visited: Boolean, link: PlaceSearchResult?) -> Unit,
@@ -80,19 +126,17 @@ internal fun PlaceEditorBody(
   // 座標がずれて周辺に出ない施設用: 名前で検索するフォールバック。
   onSearchPredictions: suspend (query: String) -> List<PlacePrediction>,
   onFetchPrediction: suspend (placeId: String) -> PlaceSearchResult?,
-  // 同じ施設の確認待ちへの答え。null なら確認待ちを出さない。
+  // 同じ施設の確認待ちへの答え・手でまとめる。null なら確認待ちとまとめるを出さない。
   mergeActions: PlaceMergeActions?,
-  modifier: Modifier = Modifier,
-  // 開いてすぐ「Google施設を選び直す」を出す（経路詳細の確認待ちで「別の施設を選び直す」を選んだとき）。
-  initiallyOpenLinkPicker: Boolean = false,
+  state: PlaceEditorState = rememberPlaceEditorState(item.place.id),
+  showHeader: Boolean = true,
+  hostDialogs: Boolean = true,
   // 記録中に地図から開いたときだけ出る「立ち寄りに追加」。null なら出さない。
   onAddStop: (() -> Unit)? = null,
-  // シートから開いたときの「閉じる」など、保存ボタンの並びに足したいもの。
-  trailingActions: (@Composable ColumnScope.() -> Unit)? = null,
+  // シートから開いたときの「閉じる」。null なら出さない。
+  onClose: (() -> Unit)? = null,
 ) {
   val context = LocalContext.current
-  // 「Googleで情報を取得」ダイアログの開閉。
-  var linkDialogOpen by remember(item.place.id) { mutableStateOf(initiallyOpenLinkPicker) }
 
   val savedName = item.place.name ?: ""
   val savedNote = item.note ?: ""
@@ -104,38 +148,68 @@ internal fun PlaceEditorBody(
   var priority by remember(item.wishlistId) { mutableStateOf(savedPriority) }
   // 訪問済みは行きたいとは別の軸なので、行きたい行の有無ではなく場所そのものに紐付けて覚える。
   var visited by remember(item.place.id) { mutableStateOf(item.isManuallyVisited) }
-  // 「Googleで情報を取得」で選んだ施設は即保存せず、ここに溜めて「保存」で確定する。
-  var pendingLink by remember(item.place.id) { mutableStateOf<PlaceSearchResult?>(null) }
-  // 同じ施設の確認ダイアログの開閉。
-  var sameFacilityDialogOpen by remember(item.place.id) { mutableStateOf(false) }
-  // 「ほかの場所とまとめる」ダイアログの開閉。
-  var mergePickerOpen by remember(item.place.id) { mutableStateOf(false) }
-  // 施設を選んで保存した直後か。保存で同じ施設の相手が見つかったら、その場でダイアログを出すため
-  // （保存は ViewModel で非同期に走るので、結果は購読している [item] の変化で知る）。
-  var awaitingLinkResult by remember(item.place.id) { mutableStateOf(false) }
-  LaunchedEffect(item.sameFacility, item.place.googlePlaceId) {
-    if (!awaitingLinkResult) return@LaunchedEffect
-    if (item.sameFacility != null) {
-      sameFacilityDialogOpen = true
-      awaitingLinkResult = false
-    } else if (item.place.googlePlaceId != null) {
-      awaitingLinkResult = false
-    }
-  }
 
   val hasChanges = name.trim() != savedName.trim() ||
     note.trim() != savedNote.trim() ||
     wishlist != item.isWishlisted ||
     (wishlist && priority != savedPriority) ||
     (item.visitCount == 0 && visited != item.isManuallyVisited) ||
-    pendingLink != null
+    state.pendingLink != null
 
-  Column(modifier = modifier) {
+  if (showHeader) {
+    PlaceEditorHeader(title = item.displayName) { close ->
+      PlaceEditorMenuItems(item = item, state = state, canMerge = mergeActions != null, onDelete = onDelete, close = close)
+    }
+  }
+
+  SheetFormLayout(
+    actions = {
+      onClose?.let { TextButton(onClick = it) { Text("閉じる") } }
+      // 記録中のみ「立ち寄りに追加」（この訪問を既存 place にひも付ける）。
+      onAddStop?.let { OutlinedButton(onClick = it) { Text("立ち寄りに追加") } }
+      Button(
+        onClick = {
+          if (state.pendingLink != null) state.awaitingLinkResult = true
+          onSave(name, note, wishlist, priority, visited, state.pendingLink)
+          // 保存したら紐付け予定は消化済み。残すとボタンが活性のまま・予定表示が残るため確実にクリアする。
+          state.pendingLink = null
+        },
+        enabled = hasChanges,
+      ) {
+        Text("保存")
+      }
+    },
+  ) {
+    // 同じ施設の確認待ち（場所を取得・自動の名前付けで分かったもの → adr/0037）。出ているときだけの「やること」なので先頭に。
+    val sameFacility = item.sameFacility
+    if (sameFacility != null && mergeActions != null) {
+      SameFacilityPendingCard(otherName = sameFacility.name, onOpen = { state.sameFacilityDialogOpen = true })
+      Spacer(modifier = Modifier.height(PathlySpacing.md))
+    }
+
+    // 選んだ施設は保存で確定する（即保存しない）。未保存の紐付け予定をここに見せる。
+    state.pendingLink?.let { link ->
+      Row(
+        modifier = Modifier
+          .fillMaxWidth()
+          .padding(bottom = PathlySpacing.sm),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween,
+      ) {
+        Text(
+          text = "紐付け予定: ${link.name ?: "（名称不明）"}（保存で確定）",
+          style = MaterialTheme.typography.bodySmall,
+          color = MaterialTheme.colorScheme.primary,
+          modifier = Modifier.weight(1f),
+        )
+        TextButton(onClick = { state.pendingLink = null }) { Text("取消") }
+      }
+    }
+
     PlaceFormBody(
       name = name,
       onNameChange = { name = it },
       nameLabel = "自分で付ける名前（任意）",
-      heading = item.displayName,
       // 書き換えの元にできるのは Google 名だけ（住所・座標のフォールバックは元にしない）。
       namePrefill = item.place.googleName,
       category = item.place.category,
@@ -165,164 +239,185 @@ internal fun PlaceEditorBody(
       },
     )
 
-    // 同じ施設の確認待ち（場所を取得・自動の名前付けで分かったもの → adr/0037）。
-    val sameFacility = item.sameFacility
-    if (sameFacility != null && mergeActions != null) {
-      Spacer(modifier = Modifier.height(8.dp))
-      SameFacilityPendingCard(otherName = sameFacility.name, onOpen = { sameFacilityDialogOpen = true })
-    }
-
-    // Google 施設情報の取得・紐付け。ID の無い場所（オフライン記録・手動登録）に住所・カテゴリ・正確な座標を補える。
-    Spacer(modifier = Modifier.height(8.dp))
-    TextButton(
-      onClick = { linkDialogOpen = true },
-      modifier = Modifier.align(Alignment.End),
-    ) {
-      Icon(
-        painter = painterResource(R.drawable.ic_place),
-        contentDescription = null,
-        modifier = Modifier.size(18.dp),
-      )
-      Text(
-        text = if (item.place.googlePlaceId == null) " Googleで情報を取得" else " Google施設を選び直す",
-      )
-    }
-
-    // 選んだ施設は保存で確定する（即保存しない）。未保存の紐付け予定をここに見せる。
-    pendingLink?.let { link ->
-      Row(
-        modifier = Modifier
-          .fillMaxWidth()
-          .padding(vertical = 4.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.SpaceBetween,
-      ) {
-        Text(
-          text = "紐付け予定: ${link.name ?: "（名称不明）"}（保存で確定）",
-          style = MaterialTheme.typography.bodySmall,
-          color = MaterialTheme.colorScheme.primary,
-          modifier = Modifier.weight(1f),
-        )
-        TextButton(onClick = { pendingLink = null }) { Text("取消") }
-      }
-    }
-
-    Spacer(modifier = Modifier.height(4.dp))
-    Button(
-      onClick = {
-        if (pendingLink != null) awaitingLinkResult = true
-        onSave(name, note, wishlist, priority, visited, pendingLink)
-        // 保存したら紐付け予定は消化済み。残すとボタンが活性のまま・予定表示が残るため確実にクリアする。
-        pendingLink = null
-      },
-      enabled = hasChanges,
-      modifier = Modifier.fillMaxWidth(),
-    ) {
-      Text("保存")
-    }
-
-    trailingActions?.invoke(this)
-
-    // 記録中のみ「立ち寄りに追加」（この訪問を既存 place にひも付ける）。
-    onAddStop?.let { add ->
-      OutlinedButton(
-        onClick = add,
-        modifier = Modifier
-          .fillMaxWidth()
-          .padding(top = 8.dp),
-      ) {
-        Text("立ち寄りに追加")
-      }
-    }
-
     if (visits.isNotEmpty()) {
-      Spacer(modifier = Modifier.height(16.dp))
+      Spacer(modifier = Modifier.height(PathlySpacing.lg))
+      HorizontalDivider()
+      Spacer(modifier = Modifier.height(PathlySpacing.md))
       Text(
         text = "この場所を含むお出掛け（${visits.size}件）",
         style = MaterialTheme.typography.titleSmall,
         fontWeight = FontWeight.Bold,
       )
-      Spacer(modifier = Modifier.height(4.dp))
+      Spacer(modifier = Modifier.height(PathlySpacing.xs))
       visits.forEach { visit ->
         VisitRow(visit = visit, onClick = { onOpenTrack(visit.trackId) })
         HorizontalDivider()
       }
     }
+  }
 
-    // 手でまとめる（Google の施設で見分けられない重複 → docs/specs/places.md）。
-    if (mergeActions != null) {
-      Spacer(modifier = Modifier.height(8.dp))
-      OutlinedButton(
-        onClick = { mergePickerOpen = true },
-        modifier = Modifier.fillMaxWidth(),
+  if (hostDialogs) {
+    PlaceEditorDialogs(
+      item = item,
+      state = state,
+      mergeActions = mergeActions,
+      onFetchNearbyPois = onFetchNearbyPois,
+      onSearchPredictions = onSearchPredictions,
+      onFetchPrediction = onFetchPrediction,
+    )
+  }
+}
+
+/** シートの見出しの行（場所の名前と ⋮）。地図のマーカーから開くシートで使う（場所詳細は上のバーにある）。 */
+@Composable
+private fun PlaceEditorHeader(
+  title: String,
+  menu: @Composable ColumnScope.(close: () -> Unit) -> Unit,
+) {
+  var menuOpen by rememberSaveable { mutableStateOf(false) }
+  Row(
+    modifier = Modifier
+      .fillMaxWidth()
+      .padding(start = SheetContentHorizontalPadding, end = PathlySpacing.xs, bottom = PathlySpacing.xs),
+    verticalAlignment = Alignment.CenterVertically,
+  ) {
+    Text(
+      text = title,
+      style = MaterialTheme.typography.titleMedium,
+      fontWeight = FontWeight.Bold,
+      maxLines = 2,
+      overflow = TextOverflow.Ellipsis,
+      modifier = Modifier.weight(1f),
+    )
+    Box {
+      IconButton(onClick = { menuOpen = true }) {
+        Icon(painter = painterResource(R.drawable.ic_more_vert), contentDescription = "その他の操作")
+      }
+      DropdownMenu(
+        expanded = menuOpen,
+        onDismissRequest = { menuOpen = false },
+        modifier = Modifier
+          .widthIn(min = 220.dp)
+          .testTag("placeEditorMenu"),
       ) {
-        Text("ほかの場所とまとめる")
+        menu { menuOpen = false }
       }
     }
+  }
+}
 
-    Spacer(modifier = Modifier.height(8.dp))
-    // 立ち寄り記録がある場所は削除不可（記録を残すため）。
-    val canDelete = item.visitCount == 0
-    val deleteColor = if (canDelete) {
-      MaterialTheme.colorScheme.error
-    } else {
-      MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
-    }
-    OutlinedButton(
-      onClick = onDelete,
-      enabled = canDelete,
-      modifier = Modifier.fillMaxWidth(),
-    ) {
-      Icon(
-        painter = painterResource(R.drawable.ic_delete),
-        contentDescription = null,
-        tint = deleteColor,
-      )
-      Text(text = " この場所を削除", color = deleteColor)
-    }
-    if (!canDelete) {
-      Text(
-        text = "立ち寄り記録があるため削除できません（記録を残します）",
-        style = MaterialTheme.typography.bodySmall,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-      )
+/**
+ * 場所の ⋮ の中身（しまうもの）: Google 施設を選び直す（無ければ取得）・ほかの場所とまとめる・この場所を削除。
+ * 場所詳細は上のバーの ⋮、地図のマーカーから開くシートは見出しの行の ⋮ に入れる。
+ */
+@Composable
+internal fun ColumnScope.PlaceEditorMenuItems(
+  item: PlaceListItem,
+  state: PlaceEditorState,
+  canMerge: Boolean,
+  onDelete: () -> Unit,
+  close: () -> Unit,
+) {
+  // Google 施設情報の取得・紐付け。ID の無い場所（オフライン記録・手動登録）に住所・カテゴリ・正確な座標を補える。
+  DropdownMenuItem(
+    text = { Text(if (item.place.googlePlaceId == null) "Googleで情報を取得" else "Google施設を選び直す") },
+    onClick = {
+      close()
+      state.linkPickerOpen = true
+    },
+  )
+  // 手でまとめる（Google の施設で見分けられない重複 → docs/specs/places.md）。
+  if (canMerge) {
+    DropdownMenuItem(
+      text = { Text("ほかの場所とまとめる") },
+      onClick = {
+        close()
+        state.mergePickerOpen = true
+      },
+    )
+  }
+  HorizontalDivider()
+  // 立ち寄り記録がある場所は削除不可（記録を残すため）。押せない理由をその下に添える。
+  val canDelete = item.visitCount == 0
+  DropdownMenuItem(
+    text = {
+      Column {
+        Text(
+          text = "この場所を削除",
+          color = if (canDelete) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f),
+        )
+        if (!canDelete) {
+          Text(
+            text = "立ち寄り記録があるため削除できません",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+          )
+        }
+      }
+    },
+    enabled = canDelete,
+    onClick = {
+      close()
+      onDelete()
+    },
+  )
+}
+
+/** 場所の編集部のダイアログ（施設を選ぶ・ほかの場所とまとめる・同じ施設の確認）。開閉は [state] が持つ。 */
+@Composable
+internal fun PlaceEditorDialogs(
+  item: PlaceListItem,
+  state: PlaceEditorState,
+  mergeActions: PlaceMergeActions?,
+  onFetchNearbyPois: suspend (lat: Double, lng: Double) -> List<PlaceSearchResult>,
+  onSearchPredictions: suspend (query: String) -> List<PlacePrediction>,
+  onFetchPrediction: suspend (placeId: String) -> PlaceSearchResult?,
+) {
+  // 施設を選んで保存したあと、同じ施設の相手が見つかったらその場で確認を出す。
+  LaunchedEffect(item.sameFacility, item.place.googlePlaceId) {
+    if (!state.awaitingLinkResult) return@LaunchedEffect
+    if (item.sameFacility != null) {
+      state.sameFacilityDialogOpen = true
+      state.awaitingLinkResult = false
+    } else if (item.place.googlePlaceId != null) {
+      state.awaitingLinkResult = false
     }
   }
 
   val pendingSameFacility = item.sameFacility
-  if (sameFacilityDialogOpen && pendingSameFacility != null && mergeActions != null) {
+  if (state.sameFacilityDialogOpen && pendingSameFacility != null && mergeActions != null) {
     SameFacilityDialog(
       placeName = item.displayName,
       otherName = pendingSameFacility.name,
       onMerge = {
-        sameFacilityDialogOpen = false
+        state.sameFacilityDialogOpen = false
         mergeActions.onMerge(item, pendingSameFacility)
       },
       onPickAnother = {
-        sameFacilityDialogOpen = false
-        linkDialogOpen = true
+        state.sameFacilityDialogOpen = false
+        state.linkPickerOpen = true
       },
       onKeepSeparate = {
-        sameFacilityDialogOpen = false
+        state.sameFacilityDialogOpen = false
         mergeActions.onKeepSeparate(item)
       },
-      onDismiss = { sameFacilityDialogOpen = false },
+      onDismiss = { state.sameFacilityDialogOpen = false },
     )
   }
 
-  if (mergePickerOpen && mergeActions != null) {
+  if (state.mergePickerOpen && mergeActions != null) {
     PlaceMergePickerDialog(
       item = item,
       onFindCandidates = mergeActions.onFindMergeCandidates,
       onMerge = { other ->
-        mergePickerOpen = false
+        state.mergePickerOpen = false
         mergeActions.onMerge(item, other)
       },
-      onDismiss = { mergePickerOpen = false },
+      onDismiss = { state.mergePickerOpen = false },
     )
   }
 
-  if (linkDialogOpen) {
+  if (state.linkPickerOpen) {
     NearbyCandidatePickerDialog(
       latitude = item.place.latitude,
       longitude = item.place.longitude,
@@ -335,10 +430,10 @@ internal fun PlaceEditorBody(
       onFetchCandidates = onFetchNearbyPois,
       onConfirm = { chosen, _ ->
         // 即保存せず、「保存」で確定するため溜めるだけ。
-        pendingLink = chosen
-        linkDialogOpen = false
+        state.pendingLink = chosen
+        state.linkPickerOpen = false
       },
-      onDismiss = { linkDialogOpen = false },
+      onDismiss = { state.linkPickerOpen = false },
       onSearchPredictions = onSearchPredictions,
       onFetchPrediction = onFetchPrediction,
     )
@@ -352,7 +447,7 @@ private fun SameFacilityPendingCard(otherName: String?, onOpen: () -> Unit) {
     modifier = Modifier.fillMaxWidth(),
     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer),
   ) {
-    Column(modifier = Modifier.padding(12.dp)) {
+    Column(modifier = Modifier.padding(PathlySpacing.md)) {
       Text(
         text = "確認待ち: 「${otherName ?: "名前の無い場所"}」と同じ施設のようです",
         style = MaterialTheme.typography.bodyMedium,

@@ -1,7 +1,5 @@
 package com.pathly.presentation.history
 
-import com.pathly.domain.model.MapPlaceFilter
-import com.pathly.domain.model.RegisteredPlace
 import com.pathly.domain.model.SameFacilityPending
 import com.pathly.domain.model.StopCandidate
 import java.util.Date
@@ -47,13 +45,4 @@ data class SameFacilityReview(
   val onOpen: () -> Unit = {},
   val onDismiss: () -> Unit = {},
   val onMerge: (SameFacilityPending) -> Unit = {},
-)
-
-/** 地図に出す登録済みの場所（画面別のトグルと、この地図だけの絞り込み。場所一覧とも別）。 */
-data class MapRegisteredPlaces(
-  val places: List<RegisteredPlace> = emptyList(),
-  val shown: Boolean = false,
-  val onToggle: () -> Unit = {},
-  val filter: MapPlaceFilter = MapPlaceFilter(),
-  val onFilterChange: (MapPlaceFilter) -> Unit = {},
 )

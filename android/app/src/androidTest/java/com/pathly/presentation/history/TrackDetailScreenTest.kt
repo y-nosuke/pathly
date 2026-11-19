@@ -28,6 +28,7 @@ import com.pathly.domain.model.RegisteredPlace
 import com.pathly.domain.model.SameFacilityPending
 import com.pathly.domain.model.SameFacilityPlace
 import com.pathly.domain.model.Stop
+import com.pathly.presentation.common.MapRegisteredPlaces
 import com.pathly.presentation.places.PlaceEditUi
 import com.pathly.ui.theme.PathlyAndroidTheme
 import io.mockk.mockk
