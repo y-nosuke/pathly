@@ -157,6 +157,8 @@ internal fun TrackingMapView(
   // 「地域へ移動」で出した地域の目印（複数）。タップ（[onRegionMarkerClick]）でその地域へ寄せ直すのは画面側。
   regionMarkers: List<RegionMarker> = emptyList(),
   onRegionMarkerClick: (RegionMarker) -> Unit = {},
+  // 選んだ地域をすべて見る（右下の地図の操作）。null なら出さない（地域が 2 つ以上のときだけ渡す）。
+  onFitAllRegions: (() -> Unit)? = null,
   // 右下の地図の操作をシートの上端に沿わせる高さ（いま出ているシートの高さ）。
   controlsBottomInset: Dp = 0.dp,
   // 停止中に現在地を 1 回取りに行っている間 true（画面が上の下に「取得中」を出す）。
@@ -364,6 +366,14 @@ internal fun TrackingMapView(
         bottomInset = controlsBottomInset,
         modifier = Modifier.align(Alignment.BottomEnd),
       ) {
+        // 選んだ地域が全部入る範囲へ寄せる（場所の地図の「すべての場所を見る」と同じ置き方）。
+        onFitAllRegions?.let { onFit ->
+          MapRoundButton(
+            icon = R.drawable.ic_fit,
+            contentDescription = "選んだ地域をすべて見る",
+            onClick = onFit,
+          )
+        }
         MapRoundButton(
           icon = R.drawable.ic_my_location,
           contentDescription = if (followUser) "現在地に追従中" else "現在地へ移動",

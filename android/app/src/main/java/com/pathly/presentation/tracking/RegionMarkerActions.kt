@@ -51,6 +51,11 @@ class RegionMarkerActions {
     _state.update { state -> if (state.find(placeId) != null) state.copy(focusedPlaceId = placeId) else state }
   }
 
+  /** 選んだ地域をすべて見る範囲へ寄せた（どれか 1 つを見ているのではないので、塗りつぶしを外す）。 */
+  fun unfocus() {
+    _state.update { it.copy(focusedPlaceId = null) }
+  }
+
   /** その地域の目印とチップを外す（地図は動かさない）。 */
   fun remove(placeId: String) {
     _state.update { state ->

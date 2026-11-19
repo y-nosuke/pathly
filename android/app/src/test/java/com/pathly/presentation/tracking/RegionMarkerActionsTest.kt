@@ -56,6 +56,18 @@ class RegionMarkerActionsTest {
   }
 
   @Test
+  fun unfocus_keepsMarkersAndClearsFocus() {
+    val actions = RegionMarkerActions()
+    actions.show(marker("a"))
+    actions.show(marker("b"))
+
+    actions.unfocus()
+
+    assertEquals(listOf("a", "b"), actions.state.value.markers.map { it.placeId })
+    assertNull(actions.state.value.focusedPlaceId)
+  }
+
+  @Test
   fun remove_dropsOnlyThatRegionAndClearsFocusIfItWasFocused() {
     val actions = RegionMarkerActions()
     actions.show(marker("a"))

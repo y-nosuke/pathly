@@ -250,6 +250,14 @@ fun TrackingScreen(
         // 地域の目印のタップは、チップの地名と同じくその地域へ寄せ直す（外すのはチップの ×）。
         regionMarkers = regionMarkers.markers,
         onRegionMarkerClick = { region -> refitRegion(region) },
+        onFitAllRegions = if (regionMarkers.markers.size >= 2) {
+          {
+            regionMarkers.markers.map { it.bounds }.toLatLngBounds()?.let(::fitTo)
+            viewModel.regionMarkers.unfocus()
+          }
+        } else {
+          null
+        },
         // 登録済みマーカーのタップ: 手動追加モード＝既存placeへ紐付け／通常＝場所シート（その場で編集）。
         onRegisteredPlaceClick = { place ->
           val target = ManualStopTarget(place.latitude, place.longitude, ManualStopOrigin.ExistingPlace(place.placeId, place.displayName))
