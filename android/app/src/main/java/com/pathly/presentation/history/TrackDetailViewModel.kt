@@ -61,6 +61,7 @@ class TrackDetailViewModel @Inject constructor(
   private val addManualStopUseCase: AddManualStopUseCase,
   // 「Googleで情報を取得」の名前検索フォールバック用（場所詳細と同じ編集機能を出すため）。
   private val placesTextSearcher: PlacesTextSearcher,
+  private val trackDeletionQueue: TrackDeletionQueue,
 ) : ViewModel() {
 
   private val _stops = MutableStateFlow<List<Stop>>(emptyList())
@@ -194,6 +195,15 @@ class TrackDetailViewModel @Inject constructor(
         _message.value = "名前の変更に失敗しました: ${e.message}"
       }
     }
+  }
+
+  /**
+   * この経路を消す予定にする（上のバーの ⋮）。消すのはスナックバーの「取り消す」を待ってから（[TrackDeletionQueue]）。
+   * 呼んだ側は画面を戻る。
+   */
+  fun requestDeleteTrack() {
+    val track = _displayTrack.value ?: return
+    trackDeletionQueue.request(track)
   }
 
   /** 経路のお気に入りを付け外しする（履歴の一覧のハートと同じ）。手元の値も合わせて、⋮ の文言をすぐ変える。 */

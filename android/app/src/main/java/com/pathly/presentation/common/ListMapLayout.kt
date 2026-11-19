@@ -4,7 +4,9 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -35,6 +37,7 @@ import androidx.compose.ui.unit.dp
 import com.pathly.R
 import com.pathly.ui.theme.PathlyElevation
 import com.pathly.ui.theme.PathlyShapes
+import com.pathly.ui.theme.PathlySpacing
 
 /**
  * 一覧のタブ（場所・履歴）の、一覧表示と地図表示の切り替えの器。
@@ -81,6 +84,9 @@ internal fun ListMapLayout(
  * @param onHeightChange 重ねたものの高さ。地図の上の余白にして、線・マーカー・寄せた範囲が隠れないようにする。
  * @param header 見出しの行。右端にたたむボタンを足して出す（押すとキーボードも閉じる）。
  * @param controls 見出しの下に出す検索欄・絞り込み。
+ * @param padded 見出しと controls の左右に余白を付けるか。一覧の型の部品（[ListHeader]・[ListToolRow]）は自分で
+ *   余白を持つので false にする（場所タブも型に移したら（#197）この引数ごと無くす）。
+ * @param collapsedActions たたんだ帯の右端（ひろげるの手前）に残すもの（地図表示のレイヤー［≋］など）。
  */
 @Composable
 internal fun ListMapOverlay(
@@ -93,6 +99,8 @@ internal fun ListMapOverlay(
   header: @Composable () -> Unit,
   controls: @Composable () -> Unit,
   modifier: Modifier = Modifier,
+  padded: Boolean = true,
+  collapsedActions: @Composable RowScope.() -> Unit = {},
 ) {
   val density = LocalDensity.current
   val focusManager = LocalFocusManager.current
@@ -107,6 +115,7 @@ internal fun ListMapOverlay(
         onModeChange = onModeChange,
         summary = collapsedSummary,
         onExpand = { onCollapsedChange(false) },
+        actions = collapsedActions,
         modifier = Modifier.padding(12.dp),
       )
     } else {
@@ -117,7 +126,12 @@ internal fun ListMapOverlay(
         shadowElevation = PathlyElevation.low,
       ) {
         // 余白は一覧表示と揃え、切り替えても見出しの位置が動かないようにする。
-        Column(modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 12.dp)) {
+        val padding = if (padded) {
+          PaddingValues(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 12.dp)
+        } else {
+          PaddingValues(bottom = PathlySpacing.md, end = PathlySpacing.xs)
+        }
+        Column(modifier = Modifier.fillMaxWidth().padding(padding)) {
           Row(verticalAlignment = Alignment.CenterVertically) {
             Box(modifier = Modifier.weight(1f)) { header() }
             IconButton(
@@ -130,7 +144,7 @@ internal fun ListMapOverlay(
               Icon(painter = painterResource(R.drawable.ic_expand_less), contentDescription = "たたむ")
             }
           }
-          Spacer(modifier = Modifier.height(12.dp))
+          Spacer(modifier = Modifier.height(if (padded) 12.dp else PathlySpacing.xs))
           controls()
         }
       }
@@ -149,6 +163,7 @@ private fun ListMapCollapsedBar(
   summary: String,
   onExpand: () -> Unit,
   modifier: Modifier = Modifier,
+  actions: @Composable RowScope.() -> Unit = {},
 ) {
   Surface(
     modifier = modifier.fillMaxWidth(),
@@ -171,6 +186,7 @@ private fun ListMapCollapsedBar(
           .clickable(onClick = onExpand)
           .padding(horizontal = 4.dp, vertical = 12.dp),
       )
+      actions()
       IconButton(onClick = onExpand) {
         Icon(painter = painterResource(R.drawable.ic_expand_more), contentDescription = "ひろげる")
       }

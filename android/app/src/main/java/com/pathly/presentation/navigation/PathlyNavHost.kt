@@ -13,6 +13,8 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -40,6 +42,8 @@ import com.pathly.presentation.common.MapRegisteredPlaces
 import com.pathly.presentation.history.HistoryScreen
 import com.pathly.presentation.history.SameFacilityReview
 import com.pathly.presentation.history.StopReanalysis
+import com.pathly.presentation.history.TrackDeletionSnackbarEffect
+import com.pathly.presentation.history.TrackDeletionViewModel
 import com.pathly.presentation.history.TrackDetailScreen
 import com.pathly.presentation.history.TrackDetailViewModel
 import com.pathly.presentation.history.TrackStopActions
@@ -94,9 +98,13 @@ fun PathlyNavHost(
   val currentDestination = backStackEntry?.destination
   // 経路詳細（全画面）ではボトムバーを隠す。それ以外（各タブ配下の追加・検索・場所詳細を含む）は表示。
   val hideBottomBar = currentDestination?.route == Routes.TRACK_DETAIL
+  // 経路の削除の「取り消す」。経路詳細で消すと画面を戻るので、画面ではなくアプリ全体の器で出す。
+  val snackbarHostState = remember { SnackbarHostState() }
+  TrackDeletionSnackbarEffect(viewModel = hiltViewModel<TrackDeletionViewModel>(), snackbarHostState = snackbarHostState)
 
   Scaffold(
     modifier = modifier.fillMaxSize(),
+    snackbarHost = { SnackbarHost(snackbarHostState) },
     bottomBar = {
       if (!hideBottomBar) {
         NavigationBar {
@@ -291,6 +299,11 @@ private fun TrackDetailRoute(
     onMessageShown = viewModel::clearMessage,
     onRenameTrack = viewModel::renameTrack,
     onToggleFavorite = viewModel::toggleFavorite,
+    onDeleteTrack = {
+      // 消すのは「取り消す」を待ってから（スナックバーはアプリ全体の器が出す）。消す経路の画面は戻る。
+      viewModel.requestDeleteTrack()
+      onBack()
+    },
     stopActions = stopActions,
     reanalysis = StopReanalysis(
       candidates = reanalyzeCandidates,

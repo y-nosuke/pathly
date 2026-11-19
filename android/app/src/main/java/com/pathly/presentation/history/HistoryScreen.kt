@@ -1,37 +1,37 @@
 package com.pathly.presentation.history
 
 import androidx.activity.compose.BackHandler
-import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilterChip
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -41,40 +41,51 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.pathly.R
 import com.pathly.domain.model.GpsTrack
-import com.pathly.domain.model.PlaceCategoryFacet
-import com.pathly.domain.model.RegionKey
 import com.pathly.presentation.common.ActiveFilter
 import com.pathly.presentation.common.ActiveFilterChips
 import com.pathly.presentation.common.CategoryFilterSection
 import com.pathly.presentation.common.FilterChoiceSection
 import com.pathly.presentation.common.FilterPanelButton
 import com.pathly.presentation.common.FilterPanelCloseButton
+import com.pathly.presentation.common.ListDisplayMenuButton
 import com.pathly.presentation.common.ListFilterPanel
+import com.pathly.presentation.common.ListHeader
 import com.pathly.presentation.common.ListMapLayout
 import com.pathly.presentation.common.ListMapMode
-import com.pathly.presentation.common.ListNameSearchField
+import com.pathly.presentation.common.ListMapToggle
+import com.pathly.presentation.common.ListMenuChoice
+import com.pathly.presentation.common.ListMenuSectionTitle
+import com.pathly.presentation.common.ListStatsBar
+import com.pathly.presentation.common.ListToolRow
+import com.pathly.presentation.common.MapRegisteredPlaces
 import com.pathly.presentation.common.RegionFilterSection
 import com.pathly.presentation.common.ScrollToTopButton
 import com.pathly.presentation.common.ScrollToTopButtonClearance
-import com.pathly.presentation.common.StatisticItem
-import com.pathly.presentation.common.StatisticsCard
 import com.pathly.presentation.common.categoryChipLabel
 import com.pathly.presentation.common.choiceLabel
 import com.pathly.presentation.common.flippedChoice
 import com.pathly.presentation.common.regionChipLabel
 import com.pathly.presentation.common.rememberListMapCamera
+import com.pathly.ui.theme.PathlySpacing
 import com.pathly.ui.theme.PathlyTheme
 import com.pathly.util.DateFormatters
-import kotlin.math.roundToInt
+import java.util.Locale
+import kotlin.math.roundToLong
 
+/**
+ * 履歴タブ。一覧の画面の型（見出し＋ツール行 → docs/designs/ui-direction.md）に載せ、地図表示ではその見出しとツール行を
+ * 地図に重ねる。
+ */
 @Composable
 fun HistoryScreen(
   modifier: Modifier = Modifier,
@@ -84,6 +95,9 @@ fun HistoryScreen(
   mapContent: (@Composable () -> Unit)? = null,
 ) {
   val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+  val registeredPlaces by viewModel.registeredPlaces.collectAsStateWithLifecycle()
+  val showRegisteredPlaces by viewModel.showRegisteredPlaces.collectAsStateWithLifecycle()
+  val mapPlaceFilter by viewModel.mapPlaceFilter.collectAsStateWithLifecycle()
   val isMap = uiState.viewMode == ListMapMode.MAP
   // 地図表示はタブの中の一段奥の見方として扱い、システムバックで一覧表示へ戻す（タブは離れない。場所タブと同じ）。
   // 吹き出しが出ているときは、後から登録される地図側の処理が先に吹き出しを閉じる。
@@ -93,8 +107,6 @@ fun HistoryScreen(
 
   // 名前を編集中の経路（null=ダイアログ非表示）。
   var renameTarget by remember { mutableStateOf<GpsTrack?>(null) }
-  // 削除確認中の経路（null=ダイアログ非表示）。削除は破壊的（点列・立ち寄りもCASCADEで消える）ため確認する。
-  var deleteTarget by remember { mutableStateOf<GpsTrack?>(null) }
   // 絞り込みの欄を開いているか（欄は一覧の先頭に入れる）。
   var filterPanelOpen by rememberSaveable { mutableStateOf(false) }
   // 欄が実際に出ているか。読み込み中や、完了した経路が無い（記録中だけの）ときは一覧に欄を入れないので、
@@ -106,6 +118,21 @@ fun HistoryScreen(
   // 欄が出ているときの戻るは、欄を閉じる（地図表示から一覧へ戻すより先）。
   BackHandler(enabled = panelVisible) { filterPanelOpen = false }
 
+  // 見出しの検索の窓を開いているか。一覧表示と地図表示で同じ見出しを出すので、ここで持って揃える。
+  var searchOpen by rememberSaveable { mutableStateOf(false) }
+  val header: @Composable () -> Unit = {
+    ListHeader(
+      title = "外出履歴",
+      query = uiState.nameQuery,
+      onQueryChange = viewModel::setNameQuery,
+      searchPlaceholder = "名前・日付で検索",
+      searchOpen = searchOpen,
+      onSearchOpenChange = { searchOpen = it },
+    ) {
+      ListMapToggle(mode = uiState.viewMode, onChange = viewModel::setViewMode)
+    }
+  }
+
   ListMapLayout(
     mode = uiState.viewMode,
     modifier = modifier,
@@ -114,6 +141,13 @@ fun HistoryScreen(
         state = uiState,
         visible = visible,
         camera = mapCamera,
+        mapPlaces = MapRegisteredPlaces(
+          places = registeredPlaces,
+          shown = showRegisteredPlaces,
+          onToggle = viewModel::toggleShowRegisteredPlaces,
+          filter = mapPlaceFilter,
+          onFilterChange = viewModel::setMapPlaceFilter,
+        ),
         onViewModeChange = viewModel::setViewMode,
         onControlsCollapsedChange = viewModel::setControlsCollapsed,
         onToggle = viewModel::toggleOverlay,
@@ -121,18 +155,18 @@ fun HistoryScreen(
         onClearAll = viewModel::clearOverlays,
         onConsumeFocus = viewModel::consumeFocus,
         onOpenTrack = onTrackClick,
-        filterControls = {
-          if (uiState.tracks.isNotEmpty()) {
-            HistoryFilterSortBar(
-              state = uiState,
-              viewModel = viewModel,
-              panelOpen = panelVisible,
-              onPanelOpenChange = { filterPanelOpen = it },
-              // 地図表示では並びに意味が無いので並べ替えは出さない。欄は重ねたものの中に出す（一覧が無いので）。
-              showSort = false,
-              inlinePanel = true,
-            )
-          }
+        header = header,
+        listControls = { trailing ->
+          // 地図表示では並びに意味が無いので、ツール行の右は表示のメニューの代わりにレイヤー［≋］。
+          // 欄は重ねたものの中に出す（一覧が無いので）。
+          HistoryListControls(
+            state = uiState,
+            viewModel = viewModel,
+            panelOpen = panelVisible,
+            onPanelOpenChange = { filterPanelOpen = it },
+            inlinePanel = true,
+            trailing = trailing,
+          )
         },
         mapContent = mapContent,
       )
@@ -145,7 +179,7 @@ fun HistoryScreen(
         onPanelOpenChange = { filterPanelOpen = it },
         onTrackClick = onTrackClick,
         onRenameClick = { renameTarget = it },
-        onDeleteClick = { deleteTarget = it },
+        header = header,
       )
     },
   )
@@ -160,30 +194,9 @@ fun HistoryScreen(
       },
     )
   }
-
-  deleteTarget?.let { target ->
-    val label = target.name?.takeIf { it.isNotBlank() }
-      ?: DateFormatters.shortDate(target.startTime)
-    AlertDialog(
-      onDismissRequest = { deleteTarget = null },
-      title = { Text("記録を削除しますか？") },
-      text = { Text("「$label」の経路・立ち寄りをすべて削除します。この操作は元に戻せません。") },
-      confirmButton = {
-        TextButton(onClick = {
-          viewModel.deleteTrack(target)
-          deleteTarget = null
-        }) {
-          Text("削除する", color = MaterialTheme.colorScheme.error)
-        }
-      },
-      dismissButton = {
-        TextButton(onClick = { deleteTarget = null }) { Text("キャンセル") }
-      },
-    )
-  }
 }
 
-/** 履歴の一覧表示（見出し・絞り込み・統計・経路の一覧）。 */
+/** 履歴の一覧表示（見出し・ツール行・統計の帯・経路の一覧）。 */
 @Composable
 private fun HistoryListContent(
   uiState: HistoryState,
@@ -192,29 +205,22 @@ private fun HistoryListContent(
   onPanelOpenChange: (Boolean) -> Unit,
   onTrackClick: (GpsTrack) -> Unit,
   onRenameClick: (GpsTrack) -> Unit,
-  onDeleteClick: (GpsTrack) -> Unit,
+  header: @Composable () -> Unit,
 ) {
-  Column(
-    modifier = Modifier
-      .fillMaxSize()
-      .padding(16.dp),
-  ) {
-    HistoryHeader(
-      viewMode = uiState.viewMode,
-      onViewModeChange = viewModel::setViewMode,
-      modifier = Modifier.padding(bottom = 12.dp),
-    )
+  Column(modifier = Modifier.fillMaxSize()) {
+    header()
 
-    // 記録が1件でもあれば絞り込み・並べ替えバーを出す（空・記録中のみのときは邪魔なので隠す）。
+    // 記録が1件でもあればツール行を出す（空・記録中のみのときは邪魔なので隠す）。
     if (uiState.tracks.isNotEmpty()) {
-      HistoryFilterSortBar(
+      HistoryListControls(
         state = uiState,
         viewModel = viewModel,
         panelOpen = panelVisible,
         onPanelOpenChange = onPanelOpenChange,
+        trailing = { HistoryDisplayMenu(state = uiState, viewModel = viewModel) },
       )
-      Spacer(modifier = Modifier.height(8.dp))
     }
+    Spacer(modifier = Modifier.height(PathlySpacing.sm))
 
     when {
       uiState.isLoading -> {
@@ -255,41 +261,38 @@ private fun HistoryListContent(
             state = listState,
             // 最後の行が先頭へ戻るボタンの上まで上がるよう、下に余白を足す（右端の操作が隠れないように）。
             contentPadding = PaddingValues(bottom = ScrollToTopButtonClearance),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
           ) {
             // 絞り込みの欄は一覧の先頭に入れ、一覧と一緒にスクロールする（選びながら下の結果を見られる）。
             if (panelVisible) {
               item(key = "filterPanel") {
                 HistoryFilterPanel(
                   state = uiState,
-                  onClearFilters = viewModel::clearFilters,
-                  onResetListOptions = viewModel::resetListOptions,
-                  onFavoriteFilterChange = viewModel::setFavoriteFilter,
-                  onNamedFilterChange = viewModel::setNamedFilter,
-                  onStopFilterChange = viewModel::setStopFilter,
-                  onToggleCategoryFilter = viewModel::toggleCategoryFilter,
-                  onToggleRegionFilter = viewModel::toggleRegionFilter,
+                  viewModel = viewModel,
+                  modifier = Modifier.padding(start = PathlySpacing.screenEdge, end = PathlySpacing.screenEdge, bottom = PathlySpacing.sm),
                 )
               }
             }
-            item {
+            item(key = "stats") {
               // 統計は一覧と同じく絞り込み後の経路で数える。絞っているときは全体の件数も添える。
-              StatisticsSummaryCard(
-                tracks = visibleTracks,
-                totalCount = uiState.tracks.size,
-                isFiltered = !uiState.noFilter,
+              // 履歴は 3 つの数字で全部なので、押して開く詳しい統計は無い。
+              ListStatsBar(
+                text = historyStatsText(
+                  tracks = visibleTracks,
+                  totalCount = uiState.tracks.size,
+                  isFiltered = !uiState.noFilter,
+                ),
+                modifier = Modifier.padding(bottom = PathlySpacing.sm),
               )
-              Spacer(modifier = Modifier.height(16.dp))
             }
 
-            // 記録中のアクティブトラックを表示
+            // 記録中のお出掛けは、一覧の先頭に別枠で出す。
             uiState.activeTrack?.let { activeTrack ->
-              item {
-                ActiveTrackItem(
+              item(key = "active") {
+                ActiveTrackBanner(
                   track = activeTrack,
-                  onTrackClick = { onTrackClick(activeTrack) },
+                  onClick = { onTrackClick(activeTrack) },
+                  modifier = Modifier.padding(start = PathlySpacing.screenEdge, end = PathlySpacing.screenEdge, bottom = PathlySpacing.sm),
                 )
-                Spacer(modifier = Modifier.height(8.dp))
               }
             }
 
@@ -301,25 +304,28 @@ private fun HistoryListContent(
                   color = MaterialTheme.colorScheme.onSurfaceVariant,
                   modifier = Modifier
                     .fillMaxWidth()
-                    .padding(vertical = 24.dp),
+                    .padding(vertical = PathlySpacing.xl),
                   textAlign = TextAlign.Center,
                 )
               }
+            } else {
+              item { HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant) }
             }
 
-            items(visibleTracks) { track ->
-              TrackItem(
+            items(visibleTracks, key = { it.id }) { track ->
+              TrackRow(
                 track = track,
-                onTrackClick = { onTrackClick(track) },
+                onClick = { onTrackClick(track) },
                 onToggleFavorite = { viewModel.toggleFavorite(track) },
                 onRenameClick = { onRenameClick(track) },
-                onDeleteClick = { onDeleteClick(track) },
               )
             }
           }
           ScrollToTopButton(
             listState = listState,
-            modifier = Modifier.align(Alignment.BottomEnd).padding(bottom = 8.dp),
+            modifier = Modifier
+              .align(Alignment.BottomEnd)
+              .padding(end = PathlySpacing.screenEdge, bottom = PathlySpacing.sm),
           )
           // 欄を開いている間は、親指の届く下にも閉じるボタンを浮かべる。
           if (panelVisible) {
@@ -327,7 +333,7 @@ private fun HistoryListContent(
               onClick = { onPanelOpenChange(false) },
               modifier = Modifier
                 .align(Alignment.BottomCenter)
-                .padding(bottom = 8.dp),
+                .padding(bottom = PathlySpacing.sm),
             )
           }
         }
@@ -342,158 +348,87 @@ private fun HistoryListContent(
   }
 }
 
-/** [FilterSortBar] を履歴の ViewModel につなぐ（一覧表示と地図表示で同じつなぎ方にする）。 */
+/**
+ * 見出しの下のツール行（左に絞り込みのボタン、右に [trailing]）と、効いている条件のチップ。一覧表示と地図表示で同じつなぎ方。
+ *
+ * @param inlinePanel 絞り込みの欄をここに出すか（地図表示。一覧表示では欄を一覧の先頭に入れる）。
+ */
 @Composable
-private fun HistoryFilterSortBar(
+private fun HistoryListControls(
   state: HistoryState,
   viewModel: HistoryViewModel,
   panelOpen: Boolean,
   onPanelOpenChange: (Boolean) -> Unit,
-  showSort: Boolean = true,
+  trailing: @Composable RowScope.() -> Unit,
   inlinePanel: Boolean = false,
 ) {
-  FilterSortBar(
-    state = state,
-    onClearFilters = viewModel::clearFilters,
-    onResetListOptions = viewModel::resetListOptions,
-    onNameQueryChange = viewModel::setNameQuery,
-    onFavoriteFilterChange = viewModel::setFavoriteFilter,
-    onNamedFilterChange = viewModel::setNamedFilter,
-    onStopFilterChange = viewModel::setStopFilter,
-    onToggleCategoryFilter = viewModel::toggleCategoryFilter,
-    onClearCategoryFilter = viewModel::clearCategoryFilter,
-    onToggleRegionFilter = viewModel::toggleRegionFilter,
-    onClearRegionFilter = viewModel::clearRegionFilter,
-    onSortChange = viewModel::setSort,
-    onToggleSortDirection = viewModel::toggleSortDirection,
-    panelOpen = panelOpen,
-    onPanelOpenChange = onPanelOpenChange,
-    showSort = showSort,
-    inlinePanel = inlinePanel,
-  )
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun FilterSortBar(
-  state: HistoryState,
-  onClearFilters: () -> Unit,
-  onResetListOptions: () -> Unit,
-  onNameQueryChange: (String) -> Unit,
-  onFavoriteFilterChange: (TrackFavoriteFilter) -> Unit,
-  onNamedFilterChange: (TrackNamedFilter) -> Unit,
-  onStopFilterChange: (TrackStopFilter) -> Unit,
-  onToggleCategoryFilter: (PlaceCategoryFacet) -> Unit,
-  onClearCategoryFilter: () -> Unit,
-  onToggleRegionFilter: (RegionKey) -> Unit,
-  onClearRegionFilter: () -> Unit,
-  onSortChange: (TrackSort) -> Unit,
-  onToggleSortDirection: () -> Unit,
-  panelOpen: Boolean,
-  onPanelOpenChange: (Boolean) -> Unit,
-  modifier: Modifier = Modifier,
-  // 並べ替えを出すか（地図表示では並びに意味が無いので出さない）。
-  showSort: Boolean = true,
-  // 絞り込みの欄をここに出すか（地図表示。一覧表示では欄を一覧の先頭に入れる）。
-  inlinePanel: Boolean = false,
-) {
-  Column(modifier = modifier) {
-    // 名前の検索（名前、未命名なら見出しの日付に含むものだけ残す）。ほかの絞り込みとは AND。消すのは欄の ×。
-    ListNameSearchField(
-      query = state.nameQuery,
-      onQueryChange = onNameQueryChange,
-      placeholder = "名前・日付で検索",
+  // 絞り込みの各軸はボタンで開く欄にまとめ、効いている条件だけをチップで出す（→ specs/screens.md）。
+  val activeFilters = historyActiveFilters(state = state, viewModel = viewModel)
+  Column {
+    ListToolRow(
+      leading = {
+        FilterPanelButton(activeCount = activeFilters.size, expanded = panelOpen, onClick = { onPanelOpenChange(!panelOpen) })
+      },
+      trailing = trailing,
     )
-    Spacer(modifier = Modifier.height(8.dp))
-
-    // 絞り込みの各軸はボタンで開く欄（一覧の先頭）にまとめ、効いている条件だけをチップで出す（→ specs/screens.md）。
-    val activeFilters = historyActiveFilters(
-      state = state,
-      onFavoriteFilterChange = onFavoriteFilterChange,
-      onNamedFilterChange = onNamedFilterChange,
-      onStopFilterChange = onStopFilterChange,
-      onClearCategoryFilter = onClearCategoryFilter,
-      onClearRegionFilter = onClearRegionFilter,
-    )
-    // 絞り込みのボタンと、並べ替え（軸メニュー ＋ 昇順/降順トグル）。
-    Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-      FilterPanelButton(activeCount = activeFilters.size, expanded = panelOpen, onClick = { onPanelOpenChange(!panelOpen) })
-      Spacer(modifier = Modifier.weight(1f))
-      if (showSort) {
-        SortControls(state = state, onSortChange = onSortChange, onToggleSortDirection = onToggleSortDirection)
-      }
-    }
     // 欄を開いている間はチップの行を出さない（欄に選んでいるものが見えている。選ぶたびに行が出たり消えたりして
     // 欄がずれないように）。「初期状態に戻す」は欄の見出しにある。
     if (!panelOpen) {
       ActiveFilterChips(
         activeFilters,
         onChipClick = { onPanelOpenChange(true) },
-        onReset = onResetListOptions.takeUnless { state.isInitialListOptions },
+        onReset = viewModel::resetListOptions.takeUnless { state.isInitialListOptions },
+        modifier = Modifier.padding(horizontal = PathlySpacing.screenEdge),
       )
     }
     if (inlinePanel && panelOpen) {
-      Spacer(modifier = Modifier.height(8.dp))
+      Spacer(modifier = Modifier.height(PathlySpacing.sm))
       // 地図を隠しきらないよう高さを抑え、中でスクロールする。
-      Box(modifier = Modifier.heightIn(max = 360.dp).verticalScroll(rememberScrollState())) {
-        HistoryFilterPanel(
-          state = state,
-          onClearFilters = onClearFilters,
-          onResetListOptions = onResetListOptions,
-          onFavoriteFilterChange = onFavoriteFilterChange,
-          onNamedFilterChange = onNamedFilterChange,
-          onStopFilterChange = onStopFilterChange,
-          onToggleCategoryFilter = onToggleCategoryFilter,
-          onToggleRegionFilter = onToggleRegionFilter,
-        )
+      Box(
+        modifier = Modifier
+          .padding(horizontal = PathlySpacing.screenEdge)
+          .heightIn(max = 360.dp)
+          .verticalScroll(rememberScrollState()),
+      ) {
+        HistoryFilterPanel(state = state, viewModel = viewModel)
       }
     }
   }
 }
 
-/** 並べ替え（軸メニュー ＋ 昇順/降順トグル）。 */
+/** ツール行の右の表示のメニュー: 並べ替えの軸と向き。ボタンには今の見せ方（「日付 ・ 新しい順」）を出す。 */
 @Composable
-private fun SortControls(
-  state: HistoryState,
-  onSortChange: (TrackSort) -> Unit,
-  onToggleSortDirection: () -> Unit,
-) {
-  Row(verticalAlignment = Alignment.CenterVertically) {
-    Box {
-      var sortOpen by remember { mutableStateOf(false) }
-      TextButton(onClick = { sortOpen = true }) {
-        Text(text = "並べ替え: ${state.sort.label} ▾")
-      }
-      DropdownMenu(expanded = sortOpen, onDismissRequest = { sortOpen = false }) {
-        TrackSort.entries.forEach { sort ->
-          DropdownMenuItem(
-            text = { Text(sort.label) },
-            onClick = {
-              sortOpen = false
-              onSortChange(sort)
-            },
-          )
-        }
-      }
+private fun HistoryDisplayMenu(state: HistoryState, viewModel: HistoryViewModel) {
+  ListDisplayMenuButton(label = "${state.sort.label} ・ ${state.sort.directionLabel(state.sortDescending)}") { close ->
+    ListMenuSectionTitle("並べ替え")
+    TrackSort.entries.forEach { sort ->
+      ListMenuChoice(
+        text = sort.label,
+        selected = sort == state.sort,
+        onClick = {
+          close()
+          viewModel.setSort(sort)
+        },
+      )
     }
-    TextButton(onClick = onToggleSortDirection) {
-      Text(text = if (state.sortDescending) "降順 ↓" else "昇順 ↑")
+    ListMenuSectionTitle("向き", divider = true)
+    // 向きは軸に合わせた文言で、既定の向き（日付なら新しい順）を先に置く。
+    listOf(state.sort.defaultDescending, !state.sort.defaultDescending).forEach { descending ->
+      ListMenuChoice(
+        text = state.sort.directionLabel(descending),
+        selected = descending == state.sortDescending,
+        onClick = {
+          close()
+          viewModel.setSortDescending(descending)
+        },
+      )
     }
   }
 }
 
 /** 経路一覧の絞り込みの欄（お気に入り・名前・立ち寄り・業種・地域）。 */
 @Composable
-private fun HistoryFilterPanel(
-  state: HistoryState,
-  onClearFilters: () -> Unit,
-  onResetListOptions: () -> Unit,
-  onFavoriteFilterChange: (TrackFavoriteFilter) -> Unit,
-  onNamedFilterChange: (TrackNamedFilter) -> Unit,
-  onStopFilterChange: (TrackStopFilter) -> Unit,
-  onToggleCategoryFilter: (PlaceCategoryFacet) -> Unit,
-  onToggleRegionFilter: (RegionKey) -> Unit,
-) {
+private fun HistoryFilterPanel(state: HistoryState, viewModel: HistoryViewModel, modifier: Modifier = Modifier) {
   ListFilterPanel(
     resultCount = state.visibleTracks.size,
     // 「すべて外す」は欄の軸だけを外す（名前の検索語は残す）ので、欄の軸が効いているときだけ押せる。
@@ -502,296 +437,159 @@ private fun HistoryFilterPanel(
       state.stopFilter != TrackStopFilter.ANY ||
       state.categoryFilter.isNotEmpty() ||
       state.regionFilter.isNotEmpty(),
-    onClearAll = onClearFilters,
+    onClearAll = viewModel::clearFilters,
     canReset = !state.isInitialListOptions,
-    onReset = onResetListOptions,
+    onReset = viewModel::resetListOptions,
+    modifier = modifier,
   ) {
     FilterChoiceSection(
       title = "お気に入り",
       options = TrackFavoriteFilter.entries,
       selected = state.favoriteFilter,
       labelOf = { choiceLabel(it, TrackFavoriteFilter.ANY) { f -> f.chipLabel } },
-      onSelect = onFavoriteFilterChange,
+      onSelect = viewModel::setFavoriteFilter,
     )
     FilterChoiceSection(
       title = "名前",
       options = TrackNamedFilter.entries,
       selected = state.namedFilter,
       labelOf = { choiceLabel(it, TrackNamedFilter.ANY) { f -> f.chipLabel } },
-      onSelect = onNamedFilterChange,
+      onSelect = viewModel::setNamedFilter,
     )
     FilterChoiceSection(
       title = "立ち寄り",
       options = TrackStopFilter.entries,
       selected = state.stopFilter,
       labelOf = { choiceLabel(it, TrackStopFilter.ANY) { f -> f.chipLabel } },
-      onSelect = onStopFilterChange,
+      onSelect = viewModel::setStopFilter,
     )
     // 業種は立ち寄った場所の業種。複数選べる（どれかに立ち寄った経路を残す）。
     CategoryFilterSection(
       selected = state.categoryFilter,
       counts = state.categoryCounts,
-      onToggle = onToggleCategoryFilter,
+      onToggle = viewModel::toggleCategoryFilter,
     )
     // 地域は立ち寄った場所の地域。都道府県（海外は国）→ 市区町村（都市）の 2 段。複数選べる。
     RegionFilterSection(
       selected = state.regionFilter,
       counts = state.regionCounts,
-      onToggle = onToggleRegionFilter,
+      onToggle = viewModel::toggleRegionFilter,
     )
   }
 }
 
-/** 経路一覧でいま効いている条件（絞り込みの欄の軸。名前の検索は検索欄に出ているので含めない）。並びは欄と同じ。 */
-private fun historyActiveFilters(
-  state: HistoryState,
-  onFavoriteFilterChange: (TrackFavoriteFilter) -> Unit,
-  onNamedFilterChange: (TrackNamedFilter) -> Unit,
-  onStopFilterChange: (TrackStopFilter) -> Unit,
-  onClearCategoryFilter: () -> Unit,
-  onClearRegionFilter: () -> Unit,
-): List<ActiveFilter> = listOfNotNull(
+/** 経路一覧でいま効いている条件（絞り込みの欄の軸。名前の検索は検索の窓に出ているので含めない）。並びは欄と同じ。 */
+private fun historyActiveFilters(state: HistoryState, viewModel: HistoryViewModel): List<ActiveFilter> = listOfNotNull(
   state.favoriteFilter.takeIf { it != TrackFavoriteFilter.ANY }?.let {
     ActiveFilter(
       label = it.chipLabel,
-      onRemove = { onFavoriteFilterChange(TrackFavoriteFilter.ANY) },
-      onToggle = { onFavoriteFilterChange(flippedChoice(it, TrackFavoriteFilter.FAVORITE, TrackFavoriteFilter.NOT_FAVORITE)) },
+      onRemove = { viewModel.setFavoriteFilter(TrackFavoriteFilter.ANY) },
+      onToggle = { viewModel.setFavoriteFilter(flippedChoice(it, TrackFavoriteFilter.FAVORITE, TrackFavoriteFilter.NOT_FAVORITE)) },
     )
   },
   state.namedFilter.takeIf { it != TrackNamedFilter.ANY }?.let {
     ActiveFilter(
       label = it.chipLabel,
-      onRemove = { onNamedFilterChange(TrackNamedFilter.ANY) },
-      onToggle = { onNamedFilterChange(flippedChoice(it, TrackNamedFilter.NAMED, TrackNamedFilter.UNNAMED)) },
+      onRemove = { viewModel.setNamedFilter(TrackNamedFilter.ANY) },
+      onToggle = { viewModel.setNamedFilter(flippedChoice(it, TrackNamedFilter.NAMED, TrackNamedFilter.UNNAMED)) },
     )
   },
   state.stopFilter.takeIf { it != TrackStopFilter.ANY }?.let {
     ActiveFilter(
       label = it.chipLabel,
-      onRemove = { onStopFilterChange(TrackStopFilter.ANY) },
-      onToggle = { onStopFilterChange(flippedChoice(it, TrackStopFilter.HAS_STOPS, TrackStopFilter.NO_STOPS)) },
+      onRemove = { viewModel.setStopFilter(TrackStopFilter.ANY) },
+      onToggle = { viewModel.setStopFilter(flippedChoice(it, TrackStopFilter.HAS_STOPS, TrackStopFilter.NO_STOPS)) },
     )
   },
-  categoryChipLabel(state.categoryFilter)?.let { ActiveFilter(it, onClearCategoryFilter) },
-  regionChipLabel(state.regionFilter)?.let { ActiveFilter(it, onClearRegionFilter) },
+  categoryChipLabel(state.categoryFilter)?.let { ActiveFilter(it, viewModel::clearCategoryFilter) },
+  regionChipLabel(state.regionFilter)?.let { ActiveFilter(it, viewModel::clearRegionFilter) },
 )
 
+/** 記録中のお出掛け（一覧の先頭の 1 行の帯）。押すと経路詳細へ。 */
 @Composable
-private fun StatisticsSummaryCard(
-  tracks: List<GpsTrack>,
-  totalCount: Int,
-  isFiltered: Boolean,
-  modifier: Modifier = Modifier,
-) {
-  val totalTracks = tracks.size
-  val totalDistance = tracks.sumOf { it.totalDistanceMeters } / 1000.0
-  val totalDuration = tracks.mapNotNull { track ->
-    track.endTime?.let { endTime ->
-      (endTime.time - track.startTime.time) / (1000 * 60) // minutes
-    }
-  }.sum()
-
-  StatisticsCard(
-    title = statisticsTitle(shownCount = tracks.size, totalCount = totalCount, isFiltered = isFiltered),
-    modifier = modifier,
-  ) {
-    StatisticItem(
-      icon = "🗓️",
-      label = "記録数",
-      value = "${totalTracks}回",
-    )
-    StatisticItem(
-      icon = "📏",
-      label = "総距離",
-      // Composable 内で Locale を直接読むと再コンポーズに追随しないため、
-      // 一覧の各行と同じ「丸めて文字列化」に揃える。
-      value = "${(totalDistance * 10).roundToInt() / 10.0}km",
-    )
-    StatisticItem(
-      icon = "⏱️",
-      label = "総時間",
-      value = "${totalDuration}分",
-    )
-  }
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun ActiveTrackItem(
-  track: GpsTrack,
-  onTrackClick: () -> Unit,
-  modifier: Modifier = Modifier,
-) {
-  Card(
-    onClick = onTrackClick,
+private fun ActiveTrackBanner(track: GpsTrack, onClick: () -> Unit, modifier: Modifier = Modifier) {
+  Surface(
+    onClick = onClick,
     modifier = modifier.fillMaxWidth(),
     shape = MaterialTheme.shapes.small,
-    colors = CardDefaults.cardColors(
-      containerColor = MaterialTheme.colorScheme.primaryContainer,
-    ),
+    color = MaterialTheme.colorScheme.primaryContainer,
+    contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
   ) {
     Row(
-      modifier = Modifier
-        .fillMaxWidth()
-        .padding(16.dp),
-      horizontalArrangement = Arrangement.SpaceBetween,
+      modifier = Modifier.padding(horizontal = PathlySpacing.md, vertical = PathlySpacing.sm + PathlySpacing.xxs),
       verticalAlignment = Alignment.CenterVertically,
+      horizontalArrangement = Arrangement.spacedBy(PathlySpacing.sm),
     ) {
-      Column(
-        modifier = Modifier.weight(1f),
-      ) {
-        Row(
-          verticalAlignment = Alignment.CenterVertically,
-          horizontalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-          Icon(
-            painter = painterResource(R.drawable.ic_play_arrow),
-            contentDescription = null,
-            tint = PathlyTheme.statusColors.visited,
-          )
-          Text(
-            text = "🟢 記録中",
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.Bold,
-            color = PathlyTheme.statusColors.visited,
-          )
-        }
-
-        Spacer(modifier = Modifier.height(4.dp))
-
-        Text(
-          text = "開始: ${DateFormatters.shortTime(track.startTime)}",
-          style = MaterialTheme.typography.bodyMedium,
-          color = MaterialTheme.colorScheme.onPrimaryContainer,
-        )
-
-        Spacer(modifier = Modifier.height(4.dp))
-
-        val distanceKm = (track.totalDistanceMeters / 1000.0 * 100).roundToInt() / 100.0
-        Text(
-          text = "移動距離: ${distanceKm}km (${track.pointCount}点)",
-          style = MaterialTheme.typography.bodyMedium,
-          color = PathlyTheme.statusColors.visited,
-          fontWeight = FontWeight.Medium,
-        )
-      }
-
-      Icon(
-        painter = painterResource(R.drawable.ic_location_on),
-        contentDescription = "地図で表示",
-        tint = PathlyTheme.statusColors.visited,
+      Box(
+        modifier = Modifier
+          .size(10.dp)
+          .background(PathlyTheme.statusColors.visited, CircleShape),
       )
+      Text(
+        text = "記録中 ・ ${DateFormatters.shortTime(track.startTime)} から ・ ${formatKm(track.totalDistanceMeters)}",
+        style = MaterialTheme.typography.titleSmall,
+        maxLines = 1,
+        overflow = TextOverflow.Ellipsis,
+        modifier = Modifier.weight(1f),
+      )
+      Icon(painter = painterResource(R.drawable.ic_chevron_right), contentDescription = null, modifier = Modifier.size(20.dp))
     }
   }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+/**
+ * 経路の 1 行（影の無い平らな行。下に区切り線）。見出しは名前があれば名前（無ければ日付）、その下に日付・時刻・距離・立ち寄りの数。
+ * 右はその場で切り替えるお気に入りと、⋮（名前を付ける）だけ。削除は経路詳細の ⋮ にある。
+ */
 @Composable
-private fun TrackItem(
+private fun TrackRow(
   track: GpsTrack,
-  onTrackClick: () -> Unit,
+  onClick: () -> Unit,
   onToggleFavorite: () -> Unit,
   onRenameClick: () -> Unit,
-  onDeleteClick: () -> Unit,
   modifier: Modifier = Modifier,
 ) {
-  Card(
-    onClick = onTrackClick,
-    modifier = modifier.fillMaxWidth(),
-    shape = MaterialTheme.shapes.small,
-    colors = CardDefaults.cardColors(
-      containerColor = MaterialTheme.colorScheme.surfaceVariant,
-    ),
-  ) {
+  Column(modifier = modifier.fillMaxWidth()) {
     Row(
       modifier = Modifier
         .fillMaxWidth()
-        .padding(start = 16.dp, top = 12.dp, bottom = 12.dp, end = 4.dp),
-      horizontalArrangement = Arrangement.SpaceBetween,
+        .clickable(role = Role.Button, onClick = onClick)
+        .padding(start = PathlySpacing.screenEdge, end = PathlySpacing.xs, top = PathlySpacing.sm, bottom = PathlySpacing.sm),
       verticalAlignment = Alignment.CenterVertically,
     ) {
-      Column(
-        modifier = Modifier.weight(1f),
-      ) {
-        // 見出しは名前があれば名前、無ければ日付。名前ありのときは日付を副題に添える。
-        if (track.hasName) {
-          Text(
-            text = track.name.orEmpty(),
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.Bold,
-          )
-          Text(
-            text = DateFormatters.shortDate(track.startTime),
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-          )
-        } else {
-          Text(
-            text = DateFormatters.shortDate(track.startTime),
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.Bold,
-          )
-        }
-
-        Spacer(modifier = Modifier.height(4.dp))
-
-        Row(
-          horizontalArrangement = Arrangement.spacedBy(16.dp),
-        ) {
-          Text(
-            text = "開始: ${DateFormatters.shortTime(track.startTime)}",
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-          )
-
-          track.endTime?.let { endTime ->
+      Column(modifier = Modifier.weight(1f)) {
+        Text(
+          text = if (track.hasName) track.name.orEmpty() else DateFormatters.shortDate(track.startTime),
+          style = MaterialTheme.typography.titleMedium,
+          maxLines = 1,
+          overflow = TextOverflow.Ellipsis,
+        )
+        // 幅が足りないときは、まとまりごと次の行へ送る（日本語は仮名の間でも折り返すので、1 つの文にすると
+        // 「立ち寄|り 3」のように切れる）。
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(PathlySpacing.xs)) {
+          val parts = trackRowSummaryParts(track)
+          parts.forEachIndexed { index, part ->
             Text(
-              text = "終了: ${DateFormatters.shortTime(endTime)}",
-              style = MaterialTheme.typography.bodyMedium,
+              // 区切りは前のまとまりの後ろに付ける（折り返した行が「・」から始まらないように）。
+              text = if (index == parts.lastIndex) part else "$part ・",
+              style = MaterialTheme.typography.bodySmall,
               color = MaterialTheme.colorScheme.onSurfaceVariant,
+              maxLines = 1,
+              softWrap = false,
             )
           }
         }
-
-        Spacer(modifier = Modifier.height(4.dp))
-
-        val distanceKm = (track.totalDistanceMeters / 1000.0 * 100).roundToInt() / 100.0
-        Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-          Text(
-            text = "移動距離: ${distanceKm}km",
-            style = MaterialTheme.typography.bodyMedium,
-            color = if (track.totalDistanceMeters > 0) {
-              MaterialTheme.colorScheme.primary
-            } else {
-              MaterialTheme.colorScheme.onSurfaceVariant
-            },
-            fontWeight = FontWeight.Medium,
-          )
-          Text(
-            text = "立ち寄り: ${track.stopCount}件",
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            fontWeight = FontWeight.Medium,
-          )
-        }
       }
 
-      // お気に入りトグル。
+      // お気に入りはその場で切り替える。
       IconButton(onClick = onToggleFavorite) {
         Icon(
-          painter = painterResource(
-            if (track.isFavorite) R.drawable.ic_favorite_filled else R.drawable.ic_favorite,
-          ),
+          painter = painterResource(if (track.isFavorite) R.drawable.ic_favorite_filled else R.drawable.ic_favorite),
           contentDescription = if (track.isFavorite) "お気に入り解除" else "お気に入り",
-          tint = if (track.isFavorite) {
-            MaterialTheme.colorScheme.primary
-          } else {
-            MaterialTheme.colorScheme.onSurfaceVariant
-          },
+          tint = if (track.isFavorite) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
         )
       }
 
-      // 名前編集・削除はまとめてメニューに（カードの横幅を圧迫しないため）。
       Box {
         var menuOpen by remember { mutableStateOf(false) }
         IconButton(onClick = { menuOpen = true }) {
@@ -809,22 +607,47 @@ private fun TrackItem(
               onRenameClick()
             },
           )
-          DropdownMenuItem(
-            text = { Text("削除") },
-            onClick = {
-              menuOpen = false
-              onDeleteClick()
-            },
-          )
         }
       }
     }
+    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant, modifier = Modifier.testTag("trackRowDivider"))
   }
 }
 
-/** 統計カードの見出し。絞り込み中は、絞った数字を全体と取り違えないよう「n / 全体 回」を添える。 */
-internal fun statisticsTitle(shownCount: Int, totalCount: Int, isFiltered: Boolean): String = if (isFiltered) {
-  "📊 お出掛け統計（絞り込み中 $shownCount / $totalCount 回）"
-} else {
-  "📊 お出掛け統計"
+/** 行の 2 行目のまとまり。「2026/11/08(日) 10:00–15:20」「1.8 km」「立ち寄り 3」。日付が見出しのとき（名前なし）は日付を省く。 */
+internal fun trackRowSummaryParts(track: GpsTrack): List<String> {
+  val time = DateFormatters.shortTime(track.startTime) + (track.endTime?.let { "–" + DateFormatters.shortTime(it) } ?: "")
+  val head = if (track.hasName) "${DateFormatters.shortDate(track.startTime)} $time" else time
+  return listOf(head, formatKm(track.totalDistanceMeters), "立ち寄り ${track.stopCount}")
+}
+
+/**
+ * 統計の帯の文。「12 回 ・ 148.3 km ・ 41 時間 20 分」。絞り込み中は、絞った数字を全体と取り違えないよう
+ * 「12 / 38 回」と全体の数を添える（一致していても絞り込み中であることは出す）。
+ */
+internal fun historyStatsText(tracks: List<GpsTrack>, totalCount: Int, isFiltered: Boolean): String {
+  val count = if (isFiltered) "${tracks.size} / $totalCount 回" else "${tracks.size} 回"
+  val distanceMeters = tracks.sumOf { it.totalDistanceMeters }
+  val minutes = tracks.sumOf { track -> track.endTime?.let { (it.time - track.startTime.time) / 60_000 } ?: 0L }
+  return "$count ・ ${formatTotalKm(distanceMeters)} ・ ${formatDuration(minutes)}"
+}
+
+/** 合計の距離。100 km 以上は小数を落として 3 桁区切り（「3,815 km」）、それより短ければ小数 1 桁（「4.3 km」）。 */
+internal fun formatTotalKm(meters: Double): String {
+  val km = meters / 1000.0
+  return if (km >= 100) String.format(Locale.ROOT, "%,d km", km.roundToLong()) else String.format(Locale.ROOT, "%.1f km", km)
+}
+
+/** 距離を小数 1 桁の km で（「1.8 km」）。 */
+internal fun formatKm(meters: Double): String = String.format(Locale.ROOT, "%.1f km", meters / 1000.0)
+
+/** 時間を「41 時間 20 分」「45 分」「3 時間」で。 */
+internal fun formatDuration(minutes: Long): String {
+  val h = minutes / 60
+  val m = minutes % 60
+  return when {
+    h == 0L -> "$m 分"
+    m == 0L -> "$h 時間"
+    else -> "$h 時間 $m 分"
+  }
 }

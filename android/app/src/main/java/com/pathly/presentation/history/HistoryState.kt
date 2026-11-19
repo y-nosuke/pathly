@@ -44,13 +44,25 @@ enum class TrackStopFilter(val chipLabel: String) {
   NO_STOPS("立ち寄りなし"),
 }
 
-/** 一覧の並べ替え軸。既定の向き（降順=大きい/新しいが先）も持つ。 */
-enum class TrackSort(val label: String, val defaultDescending: Boolean) {
-  DATE("日付順", true),
-  STOP_COUNT("立ち寄り数順", true),
-  DISTANCE("距離順", true),
-  DURATION("時間順", true),
-  NAME("名前順", false),
+/**
+ * 一覧の並べ替え軸。既定の向き（降順=大きい/新しいが先）と、表示のメニューに出す向きの文言（軸に合わせて
+ * 「新しい順」「長い順」など。昇順・降順という言葉は使わない）も持つ。
+ */
+enum class TrackSort(
+  val label: String,
+  val defaultDescending: Boolean,
+  val descendingLabel: String,
+  val ascendingLabel: String,
+) {
+  DATE("日付", true, "新しい順", "古い順"),
+  STOP_COUNT("立ち寄り数", true, "多い順", "少ない順"),
+  DISTANCE("距離", true, "長い順", "短い順"),
+  DURATION("時間", true, "長い順", "短い順"),
+  NAME("名前", false, "ん → あ", "あ → ん"),
+  ;
+
+  /** 向きの文言。 */
+  fun directionLabel(descending: Boolean): String = if (descending) descendingLabel else ascendingLabel
 }
 
 data class HistoryState(

@@ -76,6 +76,7 @@ private val tuningSheetPeekHeight = 360.dp
  * @param currentStop 記録中に開いたときの「立ち寄り中（ライブ）」。地図にだけ出す（一覧・保存には出さない）。
  * @param onRenameTrack 経路そのものの名前（空なら未命名に戻す）。一覧のカードのメニューと同じダイアログを使う。
  * @param onToggleFavorite 経路のお気に入りの付け外し（上のバーの ⋮）。
+ * @param onDeleteTrack この経路を消す（上のバーの ⋮）。確かめずに消す予定にし、取り消しはスナックバーで（呼ぶ側が画面を戻る）。
  * @param onOpenTrack 場所シートの訪問履歴から、その訪問のお出掛け（別の経路詳細）を開く。
  * @param mapContent 地図スロット。null（既定）は実マップ（GoogleMap）を描画する。テストは空スロット（{}）を渡し、
  *   GMS 依存の地図描画を避けてシート・オーバーレイだけを検証する。
@@ -93,6 +94,7 @@ fun TrackDetailScreen(
   onMessageShown: () -> Unit = {},
   onRenameTrack: (name: String) -> Unit = {},
   onToggleFavorite: () -> Unit = {},
+  onDeleteTrack: () -> Unit = {},
   stopActions: TrackStopActions = TrackStopActions(),
   reanalysis: StopReanalysis = StopReanalysis(),
   sameFacility: SameFacilityReview = SameFacilityReview(),
@@ -211,6 +213,7 @@ fun TrackDetailScreen(
       onBack = onBackClick,
       onRename = { state.renamingTrack = true },
       onToggleFavorite = onToggleFavorite,
+      onDelete = onDeleteTrack,
       onReanalyze = reanalysis.onStart,
       onToggleTuning = { state.tuningMode = !state.tuningMode },
       onOpenDebugInfo = { state.debugInfoOpen = true },
