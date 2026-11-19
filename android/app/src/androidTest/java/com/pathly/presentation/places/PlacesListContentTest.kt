@@ -265,6 +265,24 @@ class PlacesListContentTest {
     composeTestRule.onNodeWithText("1 / 2 か所 ・ 訪問 0 ・ 行きたいで行けた 0 / 1（0%）").assertIsDisplayed()
   }
 
+  // 統計の帯を押すとその場で統計のカードに広がり、見出しの行で帯に戻る。
+  @Test
+  fun `統計の帯を押すとカードに広がり_畳むと帯に戻る`() {
+    setContent(PlacesState(items = listOf(plain, wished)))
+
+    composeTestRule.onNodeWithTag("listStatsBar").performClick()
+    composeTestRule.onNodeWithTag("listStatsCard").assertIsDisplayed()
+    composeTestRule.onNodeWithText("いま行きたい").assertIsDisplayed()
+    composeTestRule.onNodeWithText("行きたいで行けた").assertIsDisplayed()
+    composeTestRule.onNodeWithText("0 / 1 か所").assertIsDisplayed()
+    composeTestRule.onNodeWithText("業種の内訳").assertIsDisplayed()
+    composeTestRule.onNodeWithText("未分類 2").assertIsDisplayed()
+
+    composeTestRule.onNodeWithContentDescription("統計を畳む").performClick()
+    composeTestRule.onNodeWithTag("listStatsBar").assertIsDisplayed()
+    composeTestRule.onNodeWithTag("listStatsCard").assertDoesNotExist()
+  }
+
   @Test
   fun `統計は地図表示と場所が無いときは出ない`() {
     setContent(PlacesState(items = listOf(plain, wished), viewMode = ListMapMode.MAP))
@@ -421,6 +439,7 @@ class PlacesListContentTest {
   @Composable
   private fun Host(initial: PlacesState) {
     var state by remember { mutableStateOf(initial) }
+    var statsExpanded by remember { mutableStateOf(false) }
     PlacesListContent(
       state = state,
       onAddByMap = { addedBy = "map" },
@@ -443,6 +462,8 @@ class PlacesListContentTest {
       onItemClick = {},
       onMapPlaceClick = {},
       onToggleWishlist = {},
+      statsExpanded = statsExpanded,
+      onStatsExpandedChange = { statsExpanded = it },
       // CI のエミュレータでは GMS の地図が落ちることがあるので、地図は描かない（ほかの画面のテストと同じ）。
       mapContent = {},
     )

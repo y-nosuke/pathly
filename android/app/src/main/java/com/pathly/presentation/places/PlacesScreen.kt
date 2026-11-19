@@ -77,6 +77,7 @@ fun PlacesListRoute(
   modifier: Modifier = Modifier,
 ) {
   val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+  val statsExpanded by viewModel.statsExpanded.collectAsStateWithLifecycle()
   val snackbarHostState = remember { SnackbarHostState() }
 
   uiState.errorMessage?.let { message ->
@@ -112,6 +113,8 @@ fun PlacesListRoute(
       onItemClick = { onItemClick(it.place.id) },
       onMapPlaceClick = onItemClick,
       onToggleWishlist = viewModel::toggleWishlist,
+      statsExpanded = statsExpanded,
+      onStatsExpandedChange = viewModel::setStatsExpanded,
     )
     // 右下の追加の丸を隠さないよう、その上に出す。
     SnackbarHost(

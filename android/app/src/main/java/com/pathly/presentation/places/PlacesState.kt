@@ -197,6 +197,10 @@ data class PlacesState(
   val statistics: PlacesStatistics
     get() = PlacesStatistics.of(visibleItems)
 
+  /** 統計のカードに出す、帯に無い数字。数える範囲は [statistics] と同じ。 */
+  val statsDetails: PlacesStatsDetails
+    get() = PlacesStatsDetails.of(visibleItems)
+
   private fun categoryOk(item: PlaceListItem): Boolean = categoryFilter.isEmpty() || PlaceCategoryFacet.of(item.place) in categoryFilter
 
   private fun regionOk(item: PlaceListItem): Boolean = regionFilter.matchesAnyOf(listOf(item.region))

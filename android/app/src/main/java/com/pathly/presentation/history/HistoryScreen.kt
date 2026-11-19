@@ -54,6 +54,7 @@ import com.pathly.domain.model.GpsTrack
 import com.pathly.presentation.common.ActiveFilter
 import com.pathly.presentation.common.ActiveFilterChips
 import com.pathly.presentation.common.CategoryFilterSection
+import com.pathly.presentation.common.ExpandableListStats
 import com.pathly.presentation.common.FilterChoiceSection
 import com.pathly.presentation.common.FilterPanelButton
 import com.pathly.presentation.common.FilterPanelCloseButton
@@ -65,7 +66,6 @@ import com.pathly.presentation.common.ListMapMode
 import com.pathly.presentation.common.ListMapToggle
 import com.pathly.presentation.common.ListMenuChoice
 import com.pathly.presentation.common.ListMenuSectionTitle
-import com.pathly.presentation.common.ListStatsBar
 import com.pathly.presentation.common.ListToolRow
 import com.pathly.presentation.common.MapRegisteredPlaces
 import com.pathly.presentation.common.RegionFilterSection
@@ -79,6 +79,7 @@ import com.pathly.presentation.common.rememberListMapCamera
 import com.pathly.ui.theme.PathlySpacing
 import com.pathly.ui.theme.PathlyTheme
 import com.pathly.util.DateFormatters
+import java.time.YearMonth
 import java.util.Locale
 import kotlin.math.roundToLong
 
@@ -207,6 +208,7 @@ private fun HistoryListContent(
   onRenameClick: (GpsTrack) -> Unit,
   header: @Composable () -> Unit,
 ) {
+  val statsExpanded by viewModel.statsExpanded.collectAsStateWithLifecycle()
   Column(modifier = Modifier.fillMaxSize()) {
     header()
 
@@ -274,15 +276,25 @@ private fun HistoryListContent(
             }
             item(key = "stats") {
               // 統計は一覧と同じく絞り込み後の経路で数える。絞っているときは全体の件数も添える。
-              // 履歴は 3 つの数字で全部なので、押して開く詳しい統計は無い。
-              ListStatsBar(
-                text = historyStatsText(
-                  tracks = visibleTracks,
-                  totalCount = uiState.tracks.size,
-                  isFiltered = !uiState.noFilter,
-                ),
+              // 帯を押すと、その場で統計のカードに広がる。
+              val isFiltered = !uiState.noFilter
+              ExpandableListStats(
+                barText = historyStatsText(tracks = visibleTracks, totalCount = uiState.tracks.size, isFiltered = isFiltered),
+                expanded = statsExpanded,
+                onExpandedChange = viewModel::setStatsExpanded,
+                isFiltered = isFiltered,
                 modifier = Modifier.padding(bottom = PathlySpacing.sm),
-              )
+              ) {
+                // 経路・絞り込みが変わったときと、月が替わったとき（棒グラフの 12 か月がずれる）だけ数え直す。
+                val month = YearMonth.now()
+                val stats = remember(uiState, month) { HistoryStatistics.of(visibleTracks, now = month) }
+                HistoryStatsCardContent(
+                  stats = stats,
+                  totalCount = uiState.tracks.size,
+                  isFiltered = isFiltered,
+                  onTrackClick = onTrackClick,
+                )
+              }
             }
 
             // 記録中のお出掛けは、一覧の先頭に別枠で出す。
@@ -628,7 +640,7 @@ internal fun trackRowSummaryParts(track: GpsTrack): List<String> {
 internal fun historyStatsText(tracks: List<GpsTrack>, totalCount: Int, isFiltered: Boolean): String {
   val count = if (isFiltered) "${tracks.size} / $totalCount 回" else "${tracks.size} 回"
   val distanceMeters = tracks.sumOf { it.totalDistanceMeters }
-  val minutes = tracks.sumOf { track -> track.endTime?.let { (it.time - track.startTime.time) / 60_000 } ?: 0L }
+  val minutes = tracks.sumOf { durationMinutesOf(it) }
   return "$count ・ ${formatTotalKm(distanceMeters)} ・ ${formatDuration(minutes)}"
 }
 

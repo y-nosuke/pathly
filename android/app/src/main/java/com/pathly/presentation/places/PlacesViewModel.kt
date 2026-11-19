@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import com.pathly.data.places.PlacesTextSearcher
 import com.pathly.data.settings.MapSurface
 import com.pathly.data.settings.SettingsRepository
+import com.pathly.data.settings.StatsList
 import com.pathly.domain.model.MapPlaceFilter
 import com.pathly.domain.model.NearbyRegisterPrompt
 import com.pathly.domain.model.PlaceCategoryFacet
@@ -68,6 +69,13 @@ class PlacesViewModel @Inject constructor(
         .flatMapLatest { grouping -> settingsRepository.openPlaceGroups(grouping).map { grouping to it } }
         .collect { (grouping, open) -> _uiState.update { it.copy(grouping = grouping, openGroups = open) } }
     }
+  }
+
+  /** 統計の帯を統計のカードに広げているか（アプリを閉じても残す）。 */
+  val statsExpanded: StateFlow<Boolean> = settingsRepository.statsExpanded(StatsList.PLACES)
+
+  fun setStatsExpanded(expanded: Boolean) {
+    settingsRepository.setStatsExpanded(StatsList.PLACES, expanded)
   }
 
   /** 一覧の分け方（分けない／地域／業種）を変える。開閉は分け方ごとに覚えているものに切り替わる。 */
