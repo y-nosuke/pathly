@@ -305,6 +305,18 @@ class PlacesListContentTest {
   }
 
   @Test
+  fun `地図表示の右下にすべての場所を見るボタンが出て_0件のときは出さない`() {
+    setContent(PlacesState(items = listOf(plain, wished), viewMode = ListMapMode.MAP))
+    composeTestRule.onNodeWithContentDescription("すべての場所を見る").assertIsDisplayed()
+
+    // 絞り込みで 0 件にすると、寄せる先が無いので消える。
+    composeTestRule.onNodeWithTag("filterPanelButton").performClick()
+    composeTestRule.onNodeWithTag("行きたい=行きたい").performClick()
+    composeTestRule.onNodeWithTag("訪問=訪問済み").performClick()
+    composeTestRule.onNodeWithContentDescription("すべての場所を見る").assertDoesNotExist()
+  }
+
+  @Test
   fun `行に削除のボタンを出さない`() {
     setContent(PlacesState(items = listOf(plain, wished)))
 

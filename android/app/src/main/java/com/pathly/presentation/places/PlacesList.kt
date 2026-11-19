@@ -53,6 +53,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import com.google.android.gms.maps.CameraUpdate
 import com.google.android.gms.maps.CameraUpdateFactory
 import com.google.android.gms.maps.model.LatLng
 import com.google.android.gms.maps.model.LatLngBounds
@@ -807,7 +808,7 @@ private fun priorityStars(priority: Priority): String = when (priority) {
 
 /**
  * 場所タブの地図表示。地図をタブいっぱいに広げ、一覧と同じ見出しとツール行を上に重ねる（たためる）。
- * 右下は地図の操作（現在地）で、その下の追加の丸（[PlacesListContent] が置く）の上に積む。
+ * 右下は地図の操作（絞り込んだ場所をすべて見る・現在地）で、その下の追加の丸（[PlacesListContent] が置く）の上に積む。
  *
  * @param visible false のときは一覧表示の裏に地図だけを残している（重ねるもの・右下の操作は出さない）。
  */
@@ -830,6 +831,7 @@ private fun PlacesMapLayout(
   var overlayHeight by remember { mutableStateOf(0.dp) }
   // 位置情報の許可があるときだけ、地図に現在地を出し、右下に現在地のボタンを置く（この画面からは許可を求めない）。
   val hasLocationPermission = rememberLocationPermitted()
+  val boundsPaddingPx = with(LocalDensity.current) { PlacesMapBoundsPadding.roundToPx() }
 
   Box(modifier = modifier.fillMaxSize()) {
     if (state.isLoading) {
@@ -866,15 +868,26 @@ private fun PlacesMapLayout(
         modifier = Modifier.align(Alignment.TopCenter),
       )
 
-      // 右下: 地図の操作（現在地）。下の追加の丸の上に積む。
-      if (hasLocationPermission) {
-        MapControls(
-          bottomInset = PlaceAddButtonClearance - PathlySpacing.mapEdge,
-          // 下の追加の丸（56dp・右の余白 16dp）と縦の中心を揃える（丸ボタンは 48dp・右の余白は mapEdge）。
-          modifier = Modifier
-            .align(Alignment.BottomEnd)
-            .padding(end = PathlySpacing.screenEdge + (PlaceAddButtonSize - MapRoundButtonSize) / 2 - PathlySpacing.mapEdge),
-        ) {
+      // 右下: 地図の操作（絞り込んだ場所をすべて見る・現在地）。下の追加の丸の上に積む。
+      MapControls(
+        bottomInset = PlaceAddButtonClearance - PathlySpacing.mapEdge,
+        // 下の追加の丸（56dp・右の余白 16dp）と縦の中心を揃える（丸ボタンは 48dp・右の余白は mapEdge）。
+        modifier = Modifier
+          .align(Alignment.BottomEnd)
+          .padding(end = PathlySpacing.screenEdge + (PlaceAddButtonSize - MapRoundButtonSize) / 2 - PathlySpacing.mapEdge),
+      ) {
+        // 地図を動かした後に、絞り込んだ場所が全部入る範囲へ戻す（開いたとき・絞り込みを変えたときと同じ寄せ方）。
+        if (state.visibleItems.isNotEmpty()) {
+          MapRoundButton(
+            icon = R.drawable.ic_fit,
+            contentDescription = "すべての場所を見る",
+            onClick = {
+              val update = placesFitUpdate(state.visibleItems.map { it.toRegisteredPlace() }, boundsPaddingPx) ?: return@MapRoundButton
+              scope.launch { camera.position.animate(update) }
+            },
+          )
+        }
+        if (hasLocationPermission) {
           MapRoundButton(
             icon = R.drawable.ic_my_location,
             contentDescription = "現在地へ移動",
@@ -939,17 +952,7 @@ private fun PlacesMapView(
         }
       }
 
-      // 1 件: 範囲では寄りすぎるので、その場所を中心に街区が見える程度に寄る。
-      1 -> places.first().let {
-        cameraPositionState.animate(CameraUpdateFactory.newLatLngZoom(LatLng(it.latitude, it.longitude), 16f))
-      }
-
-      else -> {
-        val bounds = LatLngBounds.builder().apply {
-          places.forEach { include(LatLng(it.latitude, it.longitude)) }
-        }.build()
-        cameraPositionState.animate(CameraUpdateFactory.newLatLngBounds(bounds, boundsPaddingPx))
-      }
+      else -> cameraPositionState.animate(placesFitUpdate(places, boundsPaddingPx) ?: return@LaunchedEffect)
     }
   }
 
@@ -992,6 +995,23 @@ private fun PlacesMapView(
         }
       }
     }
+  }
+}
+
+/**
+ * [places] が全部入るように寄せるカメラの動き。0 件なら null。1 件は範囲では寄りすぎるので、その場所を中心に
+ * 街区が見える程度に寄る。範囲（bounds）で寄せるので、地図の大きさが決まってから（読み込み後に）使う。
+ */
+private fun placesFitUpdate(places: List<RegisteredPlace>, boundsPaddingPx: Int): CameraUpdate? = when (places.size) {
+  0 -> null
+
+  1 -> places.first().let { CameraUpdateFactory.newLatLngZoom(LatLng(it.latitude, it.longitude), 16f) }
+
+  else -> {
+    val bounds = LatLngBounds.builder().apply {
+      places.forEach { include(LatLng(it.latitude, it.longitude)) }
+    }.build()
+    CameraUpdateFactory.newLatLngBounds(bounds, boundsPaddingPx)
   }
 }
 
