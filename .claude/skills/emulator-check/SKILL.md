@@ -49,17 +49,44 @@ Bash ツールで起動するときは、起動と待ちを 1 回の呼び出し
 - AVD（`D:\dev\avd\Pixel_10_API36.avd\config.ini`）は `hw.ramSize=4096M`・`hw.gpu.enabled=yes`・`hw.gpu.mode=host`。
   2G・GPU なしだった頃はスクリーンショットが真っ白になることがあった。
 - 効いていれば、起動（`boot_completed` まで）は 30 秒前後、落ち着いた後の負荷は 2 前後。
+- **起動したままのエミュレータは、PC のスリープ明けに固まっていることがある**（qemu の CPU 時間が 0 のまま、
+  `adb shell` も戻らない。2026-11-18）。`run-instrumented.sh` は始める前にこれを見て、起動し直す。
 
 ## instrumented test
 
+**見張り付きのスクリプトで回す**（リポジトリのルートで）。エミュレータが固まっても待ち続けないため。
+
 ```bash
-cd android
-ANDROID_SERIAL=emulator-5554 ./gradlew connectedDebugAndroidTest
-# 1 クラスだけ: -Pandroid.testInstrumentationRunnerArguments.class=com.pathly.xxx.YyyTest
-grep -hoE 'tests="[0-9]+" failures="[0-9]+" errors="[0-9]+"' app/build/outputs/androidTest-results/connected/debug/*.xml | head -1
+.claude/skills/emulator-check/run-instrumented.sh
+# 1 クラスだけ: .claude/skills/emulator-check/run-instrumented.sh -Pandroid.testInstrumentationRunnerArguments.class=com.pathly.xxx.YyyTest
 ```
 
-失敗したら `app/build/reports/androidTests/connected/debug/` の HTML を読む。
+- 始める前に、エミュレータが応答して起動し終えているかを見る。応答しなければ止めて起動し直す。起動していなければ起動する。
+- テスト中は 1 分ごとに、adb が応答するかと、終わったテストの数（logcat の `TestRunner` の `finished:`）が
+  増えているかを見る。どちらかが 3 回続けて駄目なら、gradle とエミュレータを止めて
+  「エミュレータが固まった（最後に確かめたときは N 件まで終わっていた）」と出し、終了コード 125 で終える。
+- テストが始まる前（コンパイル・インストール中）は、ログが 10 分増えなければ止まったとみなす（`WATCH_STALL_MIN` で変えられる）。
+- 終わったら `tests= failures= errors=` の 1 行と `exit=` を出す。前の結果は始める前に消すので、古い結果を読むことはない。
+- adb はすべて `timeout` 付き・`-s emulator-5554`（gradle にも `ANDROID_SERIAL=emulator-5554` を渡す）。
+- **Claude Desktop では `run_in_background` で回す**。終わったとき（固まって止めたときも）に知らせが来る。
+- 1 件で 3 分を超えるテストは、エミュレータが正常でも固まったとみなされる（今のテストは 1 件数秒）。そういうテストを足すなら見張りの回数を見直す。
+
+失敗したら `android/app/build/reports/androidTests/connected/debug/` の HTML を読む。
+
+## ビルドを見張り付きで回す
+
+エミュレータを使わないビルドでも止まることがある（ユニットテストの段でログが 2 時間進まなかった。2026-11-18）。
+
+```bash
+.claude/skills/emulator-check/run-build.sh                         # ./gradlew build
+.claude/skills/emulator-check/run-build.sh spotlessCheck --rerun-tasks
+```
+
+- ログ（`--console=plain` の出力）が 10 分（`WATCH_STALL_MIN`）増えなければ止まったとみなし、`./gradlew --stop` で
+  止めて「ビルドが止まった（最後のタスク: …）」と出し、終了コード 124 で終える。それ以外は gradle の終了コードのまま。
+- 見張りの仕組みは `watch-lib.sh` を 2 つのスクリプトで使い回している。
+- 止めるときの `./gradlew --stop` は、この PC の同じ版の gradle のデーモンを**すべて**止める。別のセッション（別のワークツリー）で
+  ビルドしている最中だと、そちらも落ちる。
 
 ## APK を入れて触る
 
