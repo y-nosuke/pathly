@@ -153,7 +153,9 @@ fun ListFilterPanel(
   content: @Composable ColumnScope.() -> Unit,
 ) {
   Surface(
-    color = MaterialTheme.colorScheme.surfaceContainerLow,
+    // 一覧の地（surface）と行の区切り線からはっきり離れる濃さにして、どこまでが欄かを見分けられるようにする
+    // （Low では明るい・暗いとも一覧とほぼ同じ色に見えた → specs/screens.md）。
+    color = MaterialTheme.colorScheme.surfaceContainerHigh,
     shape = MaterialTheme.shapes.medium,
     modifier = modifier
       .fillMaxWidth()
