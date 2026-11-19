@@ -28,6 +28,7 @@ import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -387,7 +388,15 @@ internal fun PlaceFormBody(
       verticalAlignment = Alignment.CenterVertically,
     ) {
       Text("行きたいに登録")
-      Switch(checked = wishlist, onCheckedChange = onWishlistChange)
+      // 下の優先度の星・一覧の旗と同じ「行きたい」の紅にする（藍だと別のものに見える）。
+      Switch(
+        checked = wishlist,
+        onCheckedChange = onWishlistChange,
+        colors = SwitchDefaults.colors(
+          checkedTrackColor = PathlyTheme.statusColors.wishlist,
+          checkedThumbColor = MaterialTheme.colorScheme.surface,
+        ),
+      )
     }
 
     // 行きたいは行けば終わるので、かつて行きたいだったことをここで見せる（→ adr/0036）。
@@ -511,7 +520,7 @@ internal fun PrioritySelector(
       Text(
         text = if (i <= level) "★" else "☆",
         style = MaterialTheme.typography.headlineSmall,
-        color = MaterialTheme.colorScheme.primary,
+        color = PathlyTheme.statusColors.wishlist,
         modifier = Modifier
           .clip(CircleShape)
           .clickable { onSelect(Priority.fromValue(i - 1)) }

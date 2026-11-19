@@ -647,7 +647,7 @@ private fun PlaceItemRow(
               Text(
                 text = "行きたい ${priorityStars(item.priority ?: Priority.MEDIUM)}",
                 style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.primary,
+                color = PathlyTheme.statusColors.wishlist,
               )
             }
             if (item.isVisited) {
