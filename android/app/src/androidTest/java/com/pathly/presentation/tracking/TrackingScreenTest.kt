@@ -1,8 +1,14 @@
 package com.pathly.presentation.tracking
 
 import android.Manifest
+import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertHasClickAction
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsNotSelected
+import androidx.compose.ui.test.assertIsSelected
+import androidx.compose.ui.test.hasAnyDescendant
+import androidx.compose.ui.test.hasTestTag
+import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onAllNodesWithText
@@ -27,6 +33,7 @@ import io.mockk.coVerify
 import io.mockk.mockk
 import io.mockk.verify
 import kotlinx.coroutines.flow.MutableStateFlow
+import org.junit.Assert.assertEquals
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
@@ -43,6 +50,7 @@ class TrackingScreenTest {
   private lateinit var overlayViewModel: TrackOverlayViewModel
   private lateinit var uiStateFlow: MutableStateFlow<TrackingState>
   private lateinit var placeEdit: PlaceEditActions
+  private lateinit var regionMarkers: RegionMarkerActions
 
   @Before
   fun setup() {
@@ -84,6 +92,9 @@ class TrackingScreenTest {
     val manualStop = mockk<ManualStopActions>(relaxed = true)
     io.mockk.every { manualStop.nearbyStopPrompt } returns MutableStateFlow(null)
     io.mockk.every { mockViewModel.manualStop } returns manualStop
+    // 地域の目印は本物（チップの増減・選び直し・上限を画面で確かめるため）。
+    regionMarkers = RegionMarkerActions()
+    io.mockk.every { mockViewModel.regionMarkers } returns regionMarkers
   }
 
   @Test
@@ -402,21 +413,8 @@ class TrackingScreenTest {
 
   @Test
   fun trackingScreen_jumpToRegion_selectingPredictionClosesSearch() {
-    coEvery { mockViewModel.predictRegions(any(), any()) } returns
-      listOf(PlacePrediction(placeId = "r1", primaryText = "札幌市", secondaryText = "北海道"))
-    coEvery { mockViewModel.fetchRegion("r1") } returns
-      MapRegion(bounds = GeoBounds(42.9, 141.2, 43.2, 141.5), latitude = 43.06, longitude = 141.35)
-
-    composeTestRule.setContent {
-      PathlyAndroidTheme {
-        TrackingScreen(
-          onRequestPermission = mockOnRequestPermission,
-          viewModel = mockViewModel,
-          trackOverlayViewModel = overlayViewModel,
-          mapContent = {},
-        )
-      }
-    }
+    stubRegions()
+    setTrackingContent()
 
     // 地図の上のボタンで地名の検索窓を開く。窓と重なる上端のボタンは隠れる。
     composeTestRule.onNodeWithContentDescription("地域へ移動").performClick()
@@ -426,14 +424,7 @@ class TrackingScreenTest {
     verify { mockViewModel.startPlaceSearch() }
 
     // 地名を選ぶと、その範囲を引いて窓を閉じる（場所シートは出さない＝登録はしない）。
-    composeTestRule.onNodeWithTag("trackingPlaceSearchField").performTextInput("札幌")
-    composeTestRule.waitUntil(timeoutMillis = 5_000) {
-      composeTestRule.onAllNodesWithText("北海道").fetchSemanticsNodes().isNotEmpty()
-    }
-    composeTestRule.onNodeWithText("北海道").performClick()
-    composeTestRule.waitUntil(timeoutMillis = 5_000) {
-      composeTestRule.onAllNodesWithTag("trackingPlaceSearch").fetchSemanticsNodes().isEmpty()
-    }
+    selectRegion(query = "札幌", secondaryText = "北海道", openSearch = false)
     coVerify { mockViewModel.fetchRegion("r1") }
     composeTestRule.onNodeWithText("登録").assertDoesNotExist()
     composeTestRule.onNodeWithContentDescription("地域へ移動").assertIsDisplayed()
@@ -455,9 +446,115 @@ class TrackingScreenTest {
     composeTestRule.onNodeWithTag("regionMarkerChip").assertIsDisplayed()
 
     // × で目印ごとチップが消える。
-    composeTestRule.onNodeWithContentDescription("地域の目印を消す").performClick()
+    composeTestRule.onNodeWithContentDescription("札幌市の目印を外す").performClick()
     composeTestRule.onNodeWithTag("regionMarkerChip").assertDoesNotExist()
   }
+
+  @Test
+  fun trackingScreen_jumpToRegion_multipleChipsSwitchAndRemoveOneByOne() {
+    stubRegions()
+    setTrackingContent()
+
+    // 2 つ目の地域を選ぶとチップが増え、最後に移した地域のチップが選ばれた見た目になる。2 つ以上で「すべて外す」が出る。
+    selectRegion(query = "札幌", secondaryText = "北海道")
+    composeTestRule.onNodeWithText("すべて外す").assertDoesNotExist()
+    selectRegion(query = "北九州", secondaryText = "福岡県")
+    composeTestRule.onAllNodesWithTag("regionMarkerChip").assertCountEquals(2)
+    composeTestRule.onNodeWithText("すべて外す").assertIsDisplayed()
+    chip("北九州市").assertIsSelected()
+    chip("札幌市").assertIsNotSelected()
+
+    // チップの地名のタップで、その地域へ行き来する。
+    composeTestRule.onNodeWithText("札幌市").performClick()
+    chip("札幌市").assertIsSelected()
+    chip("北九州市").assertIsNotSelected()
+
+    // 出している地域を選び直しても増えず、範囲も引き直さない（その地域へ移るだけ）。
+    selectRegion(query = "北九州", secondaryText = "福岡県")
+    composeTestRule.onAllNodesWithTag("regionMarkerChip").assertCountEquals(2)
+    chip("北九州市").assertIsSelected()
+    coVerify(exactly = 1) { mockViewModel.fetchRegion("r2") }
+
+    // × でその地域だけを外す。1 つになると「すべて外す」は消える。
+    composeTestRule.onNodeWithContentDescription("北九州市の目印を外す").performClick()
+    composeTestRule.onAllNodesWithTag("regionMarkerChip").assertCountEquals(1)
+    composeTestRule.onNodeWithText("札幌市").assertIsDisplayed()
+    composeTestRule.onNodeWithText("すべて外す").assertDoesNotExist()
+  }
+
+  @Test
+  fun trackingScreen_jumpToRegion_limitShowsMessageAndClearAllRemovesEverything() {
+    stubRegions()
+    // 上限まで出しておく。
+    repeat(RegionMarkerActions.MAX_MARKERS) { i ->
+      regionMarkers.show(RegionMarker("p$i", "地域$i", 35.0, 139.0, GeoBounds(34.9, 138.9, 35.1, 139.1)))
+    }
+    setTrackingContent()
+
+    // 新しい地域は出せない旨を窓に出し、範囲は引かない。窓は開いたまま、チップも増えない。
+    composeTestRule.onNodeWithContentDescription("地域へ移動").performClick()
+    composeTestRule.onNodeWithTag("trackingPlaceSearchField").performTextInput("札幌")
+    composeTestRule.waitUntil(timeoutMillis = 5_000) {
+      composeTestRule.onAllNodesWithText("北海道").fetchSemanticsNodes().isNotEmpty()
+    }
+    composeTestRule.onNodeWithText("北海道").performClick()
+    composeTestRule.onNodeWithText(RegionMarkerActions.LIMIT_MESSAGE).assertIsDisplayed()
+    composeTestRule.onNodeWithTag("trackingPlaceSearch").assertIsDisplayed()
+    coVerify(exactly = 0) { mockViewModel.fetchRegion(any()) }
+    composeTestRule.onNodeWithContentDescription("検索を閉じる").performClick()
+    assertEquals(RegionMarkerActions.MAX_MARKERS, regionMarkers.state.value.markers.size)
+    composeTestRule.onNodeWithText("札幌市").assertDoesNotExist()
+
+    // 「すべて外す」でまとめて外す。
+    composeTestRule.onNodeWithText("すべて外す").performClick()
+    composeTestRule.onNodeWithTag("regionMarkerChip").assertDoesNotExist()
+    composeTestRule.onNodeWithText("すべて外す").assertDoesNotExist()
+  }
+
+  /** 地名の候補（札幌・北九州）と、その範囲を返すようにする。 */
+  private fun stubRegions() {
+    coEvery { mockViewModel.predictRegions(any(), any()) } answers {
+      val query = firstArg<String>()
+      when {
+        query.startsWith("札幌") -> listOf(PlacePrediction(placeId = "r1", primaryText = "札幌市", secondaryText = "北海道"))
+        query.startsWith("北九州") -> listOf(PlacePrediction(placeId = "r2", primaryText = "北九州市", secondaryText = "福岡県"))
+        else -> emptyList()
+      }
+    }
+    coEvery { mockViewModel.fetchRegion("r1") } returns
+      MapRegion(bounds = GeoBounds(42.9, 141.2, 43.2, 141.5), latitude = 43.06, longitude = 141.35)
+    coEvery { mockViewModel.fetchRegion("r2") } returns
+      MapRegion(bounds = GeoBounds(33.7, 130.6, 34.0, 131.0), latitude = 33.88, longitude = 130.88)
+  }
+
+  private fun setTrackingContent() {
+    composeTestRule.setContent {
+      PathlyAndroidTheme {
+        TrackingScreen(
+          onRequestPermission = mockOnRequestPermission,
+          viewModel = mockViewModel,
+          trackOverlayViewModel = overlayViewModel,
+          mapContent = {},
+        )
+      }
+    }
+  }
+
+  /** 地名の検索窓で [query] を打ち、候補（[secondaryText] で見分ける）を選んで窓が閉じるまで待つ。 */
+  private fun selectRegion(query: String, secondaryText: String, openSearch: Boolean = true) {
+    if (openSearch) composeTestRule.onNodeWithContentDescription("地域へ移動").performClick()
+    composeTestRule.onNodeWithTag("trackingPlaceSearchField").performTextInput(query)
+    composeTestRule.waitUntil(timeoutMillis = 5_000) {
+      composeTestRule.onAllNodesWithText(secondaryText).fetchSemanticsNodes().isNotEmpty()
+    }
+    composeTestRule.onNodeWithText(secondaryText).performClick()
+    composeTestRule.waitUntil(timeoutMillis = 5_000) {
+      composeTestRule.onAllNodesWithTag("trackingPlaceSearch").fetchSemanticsNodes().isEmpty()
+    }
+  }
+
+  /** 地名 [name] の地域のチップ。 */
+  private fun chip(name: String) = composeTestRule.onNode(hasTestTag("regionMarkerChip") and hasAnyDescendant(hasText(name)))
 
   @Test
   fun trackingScreen_recordSheet_hideAlsoHidesFabAndRestoreBringsItBack() {

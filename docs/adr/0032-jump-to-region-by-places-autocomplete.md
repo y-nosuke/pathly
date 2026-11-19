@@ -1,6 +1,6 @@
 # 0032. 記録画面の「地域へ移動」は、Places の Autocomplete を地域に絞って使い、入口は「検索して登録」と分ける
 
-- Status: Accepted（「入口は分ける」は Superseded by [0039](0039-one-search-box-for-places-and-regions.md)）
+- Status: Accepted（「入口は分ける」は Superseded by [0039](0039-one-search-box-for-places-and-regions.md)。目印の数と残し方は [0043](0043-multiple-region-markers-kept-in-memory.md) で補う）
 - Date: 2026-11-12
 
 関連: 費用の考え方は [0014](0014-place-naming-cost-policy.md)、地域の名前を Geocoder で付けるのは [0029](0029-place-region-by-geocoder.md)。仕様は specs/map.md の「地域へ移動」。

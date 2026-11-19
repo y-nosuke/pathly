@@ -19,6 +19,9 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
@@ -52,6 +55,8 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -109,6 +114,7 @@ import com.pathly.presentation.stops.StopReassignDialog
 import com.pathly.ui.theme.PathlyElevation
 import com.pathly.ui.theme.PathlyMapColors
 import com.pathly.ui.theme.PathlyShapes
+import com.pathly.ui.theme.PathlySpacing
 import com.pathly.ui.theme.PathlyTheme
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -271,24 +277,93 @@ private fun formatElapsed(millis: Long): String {
   }
 }
 
-/** 地域の目印が出ている間の地名のチップ。地名の部分で [onRefit]（範囲へ寄せ直す）、× で [onClear]（目印を消す）。 */
+/**
+ * 地域の目印のチップの並び（選んだ順）。2 つ以上あるときは左端に「すべて外す」を固定し、チップは収まらなければ横にスクロールする
+ * （「すべて外す」をスクロールの中に入れると、チップが増えたときに画面の外へ押し出されるため）。
+ * 最後に地図を移した地域（[focusedPlaceId]）のチップは塗りつぶし、見える位置まで送る。
+ */
+@Composable
+internal fun RegionMarkerChips(
+  markers: List<RegionMarker>,
+  focusedPlaceId: String?,
+  onRefit: (RegionMarker) -> Unit,
+  onClear: (RegionMarker) -> Unit,
+  onClearAll: () -> Unit,
+  modifier: Modifier = Modifier,
+) {
+  if (markers.isEmpty()) return
+  val listState = rememberLazyListState()
+  // 足した地域・目印のタップで移った地域のチップが行の外にあれば、見える位置まで送る。
+  LaunchedEffect(focusedPlaceId, markers.size) {
+    val index = markers.indexOfFirst { it.placeId == focusedPlaceId }
+    if (index < 0) return@LaunchedEffect
+    val layout = listState.layoutInfo
+    val item = layout.visibleItemsInfo.firstOrNull { it.index == index }
+    val fullyVisible = item != null && item.offset >= layout.viewportStartOffset &&
+      item.offset + item.size <= layout.viewportEndOffset
+    if (!fullyVisible) listState.animateScrollToItem(index)
+  }
+  Row(
+    modifier = modifier.testTag("regionMarkerChips"),
+    horizontalArrangement = Arrangement.spacedBy(PathlySpacing.sm),
+    verticalAlignment = Alignment.CenterVertically,
+  ) {
+    if (markers.size >= 2) {
+      Surface(
+        onClick = onClearAll,
+        shape = PathlyShapes.pill,
+        color = MaterialTheme.colorScheme.surface,
+        shadowElevation = PathlyElevation.floating,
+      ) {
+        Text(
+          text = "すべて外す",
+          style = MaterialTheme.typography.labelLarge,
+          fontWeight = FontWeight.Medium,
+          modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
+        )
+      }
+    }
+    LazyRow(
+      state = listState,
+      modifier = Modifier.weight(1f, fill = false),
+      // 横に送る行は中身を切り取るので、チップの影が上下で欠けないよう余白を取る。
+      contentPadding = PaddingValues(vertical = PathlyElevation.floating),
+      horizontalArrangement = Arrangement.spacedBy(PathlySpacing.sm),
+      verticalAlignment = Alignment.CenterVertically,
+    ) {
+      items(markers, key = { it.placeId }) { marker ->
+        RegionMarkerChip(
+          name = marker.name,
+          focused = marker.placeId == focusedPlaceId,
+          onRefit = { onRefit(marker) },
+          onClear = { onClear(marker) },
+        )
+      }
+    }
+  }
+}
+
+/** 地域の目印の地名のチップ。地名の部分で [onRefit]（範囲へ寄せ直す）、× で [onClear]（その目印を外す）。 */
 @Composable
 internal fun RegionMarkerChip(
   name: String,
+  focused: Boolean,
   onRefit: () -> Unit,
   onClear: () -> Unit,
   modifier: Modifier = Modifier,
 ) {
   Surface(
-    modifier = modifier.testTag("regionMarkerChip"),
+    modifier = modifier
+      .testTag("regionMarkerChip")
+      .semantics { selected = focused },
     shape = PathlyShapes.pill,
-    color = MaterialTheme.colorScheme.surface,
+    color = if (focused) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface,
+    contentColor = if (focused) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface,
     shadowElevation = PathlyElevation.floating,
   ) {
     Row(verticalAlignment = Alignment.CenterVertically) {
       Row(
         modifier = Modifier
-          .weight(1f, fill = false)
           .clickable(onClickLabel = "この地域へ地図を寄せる", onClick = onRefit)
           .padding(start = 14.dp, top = 8.dp, bottom = 8.dp, end = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -300,12 +375,14 @@ internal fun RegionMarkerChip(
           modifier = Modifier.size(18.dp),
         )
         Spacer(modifier = Modifier.width(6.dp))
+        // 横にスクロールする行の中なので、長い地名は幅を決めて省略する。
         Text(
           text = name,
           style = MaterialTheme.typography.labelLarge,
           fontWeight = FontWeight.Medium,
           maxLines = 1,
           overflow = TextOverflow.Ellipsis,
+          modifier = Modifier.widthIn(max = 160.dp),
         )
       }
       // × は小さいので、押せる範囲は 48dp 四方を確保する（隣の地名＝寄せ直しを誤って押さないように）。
@@ -317,7 +394,7 @@ internal fun RegionMarkerChip(
       ) {
         Icon(
           painter = painterResource(R.drawable.ic_close),
-          contentDescription = "地域の目印を消す",
+          contentDescription = "${name}の目印を外す",
           tint = MaterialTheme.colorScheme.onSurfaceVariant,
           modifier = Modifier.size(18.dp),
         )

@@ -39,6 +39,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -153,10 +154,9 @@ internal fun TrackingMapView(
   // 範囲の経路の一覧で「この経路の全体を見る」を押したとき、その範囲が全部入るまで寄せる（[fitNonce] の変化が合図）。
   fitBounds: LatLngBounds? = null,
   fitNonce: Int = 0,
-  // 「地域へ移動」で移した地域の目印。タップ（[onRegionMarkerClick]）・現在地ボタン（[onRecenter]）で消すのは画面側。
-  regionMarker: RegionMarker? = null,
-  onRegionMarkerClick: () -> Unit = {},
-  onRecenter: () -> Unit = {},
+  // 「地域へ移動」で出した地域の目印（複数）。タップ（[onRegionMarkerClick]）でその地域へ寄せ直すのは画面側。
+  regionMarkers: List<RegionMarker> = emptyList(),
+  onRegionMarkerClick: (RegionMarker) -> Unit = {},
   // 右下の地図の操作をシートの上端に沿わせる高さ（いま出ているシートの高さ）。
   controlsBottomInset: Dp = 0.dp,
   // 停止中に現在地を 1 回取りに行っている間 true（画面が上の下に「取得中」を出す）。
@@ -339,20 +339,22 @@ internal fun TrackingMapView(
         onRegisteredPlaceClick = onRegisteredPlaceClick,
       )
       // 地域へ移動の目印: 地域の中心にピンと名前。見ている地図のどこがその地名かを示す（境界は描かない）。
-      regionMarker?.let { region ->
-        val icons = rememberMarkerIconCache()
-        val icon = remember(icons, region.name) {
-          // 名前はピンの上の札にする（ピンの下に書くと、地図の地名の文字と重なって読めない）。
-          icons.createLabeled(null) { RegionMarkerBadge(region.name) }
+      val regionIcons = rememberMarkerIconCache()
+      regionMarkers.forEach { region ->
+        key(region.placeId) {
+          val icon = remember(regionIcons, region.name) {
+            // 名前はピンの上の札にする（ピンの下に書くと、地図の地名の文字と重なって読めない）。
+            regionIcons.createLabeled(null) { RegionMarkerBadge(region.name) }
+          }
+          val state = remember(region) { MarkerState(position = LatLng(region.latitude, region.longitude)) }
+          MapMarker(
+            icon = icon.icon,
+            infoWindow = infoWindow,
+            state = state,
+            anchor = icon.anchor,
+            onClick = { onRegionMarkerClick(region) },
+          )
         }
-        val state = remember(region) { MarkerState(position = region.position) }
-        MapMarker(
-          icon = icon.icon,
-          infoWindow = infoWindow,
-          state = state,
-          anchor = icon.anchor,
-          onClick = onRegionMarkerClick,
-        )
       }
     }
 
@@ -367,7 +369,6 @@ internal fun TrackingMapView(
           contentDescription = if (followUser) "現在地に追従中" else "現在地へ移動",
           active = followUser,
           onClick = {
-            onRecenter()
             centerOnCurrentLocation(animate = true)
           },
         )

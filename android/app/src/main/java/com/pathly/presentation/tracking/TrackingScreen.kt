@@ -75,6 +75,7 @@ fun TrackingScreen(
   val uiState by viewModel.uiState.collectAsStateWithLifecycle()
   val mapPlaceFilter by viewModel.mapPlaceFilter.collectAsStateWithLifecycle()
   val overlayState by trackOverlayViewModel.uiState.collectAsStateWithLifecycle()
+  val regionMarkers by viewModel.regionMarkers.state.collectAsStateWithLifecycle()
   val snackbarHostState = remember { SnackbarHostState() }
 
   // 保存（確定）中はバックで抜けさせない。抜けられると「保存できていないのに終わった」ように
@@ -115,8 +116,6 @@ fun TrackingScreen(
   var mapSearch by remember { mutableStateOf<MapSearchMode?>(null) }
   // 検索窓を開いたときに地図に映っていた範囲。候補はこの中を優先する（範囲の外も出る）。
   var mapSearchBias by remember { mutableStateOf<GeoBounds?>(null) }
-  // 「地域へ移動」で移した地域の目印（中心のピンと名前）。別の地域を選ぶ・現在地ボタン・ピンのタップで消す。
-  var regionMarker by remember { mutableStateOf<RegionMarker?>(null) }
   // シートの開き具合。地図の下パディングを合わせて、選んだ地点がシートの裏に来ないようにする。
   val placeSheetState = rememberFloatingSheetState()
   val manualSheetState = rememberFloatingSheetState(peekFraction = 0.5f)
@@ -129,6 +128,12 @@ fun TrackingScreen(
   fun fitTo(bounds: LatLngBounds) {
     fitBounds = bounds
     fitNonce++
+  }
+
+  // 地域の目印（チップ・ピン）からその地域の範囲へ寄せ直す（選んだときと同じ合わせ方）。
+  fun refitRegion(region: RegionMarker) {
+    fitTo(region.bounds.toLatLngBounds())
+    viewModel.regionMarkers.focus(region.placeId)
   }
   // 一覧の「この経路の全体を見る」。
   TrackFocusEffect(
@@ -242,9 +247,9 @@ fun TrackingScreen(
         focusNonce = focusNonce,
         fitBounds = fitBounds,
         fitNonce = fitNonce,
-        regionMarker = regionMarker,
-        onRegionMarkerClick = { regionMarker = null },
-        onRecenter = { regionMarker = null },
+        // 地域の目印のタップは、チップの地名と同じくその地域へ寄せ直す（外すのはチップの ×）。
+        regionMarkers = regionMarkers.markers,
+        onRegionMarkerClick = { region -> refitRegion(region) },
         // 登録済みマーカーのタップ: 手動追加モード＝既存placeへ紐付け／通常＝場所シート（その場で編集）。
         onRegisteredPlaceClick = { place ->
           val target = ManualStopTarget(place.latitude, place.longitude, ManualStopOrigin.ExistingPlace(place.placeId, place.displayName))
@@ -296,15 +301,16 @@ fun TrackingScreen(
         ) {
           if (uiState.isTracking) RecordingStatusPill(startTime = uiState.currentTrack?.startTime)
           if (isLocating) LocatingPill()
-          // 「地域へ移動」で出した目印の地名のチップ。× で目印ごと消し（地図は動かさない）、地名で地域の範囲へ寄せ直す。
-          regionMarker?.let { region ->
-            RegionMarkerChip(
-              name = region.name,
-              onRefit = { fitTo(region.bounds) },
-              onClear = { regionMarker = null },
-              modifier = Modifier.weight(1f, fill = false),
-            )
-          }
+          // 「地域へ移動」で出した目印の地名のチップ（複数・横にスクロール）。地名でその地域の範囲へ寄せ直し、
+          // × でその目印を外す（地図は動かさない）。
+          RegionMarkerChips(
+            markers = regionMarkers.markers,
+            focusedPlaceId = regionMarkers.focusedPlaceId,
+            onRefit = { region -> refitRegion(region) },
+            onClear = { region -> viewModel.regionMarkers.remove(region.placeId) },
+            onClearAll = viewModel.regionMarkers::clear,
+            modifier = Modifier.weight(1f, fill = false),
+          )
         }
         // 場所を登録した直後の一時メッセージ
         uiState.placeRegisteredMessage?.let { msg ->
@@ -424,17 +430,18 @@ fun TrackingScreen(
         onFetchPlace = viewModel.placeEdit::fetchPlaceResult,
         onPredictRegions = viewModel::predictRegions,
         onFetchRegion = viewModel::fetchRegion,
+        regionMarkers = regionMarkers,
         // 検索して登録: 候補を選んだら閉じて、その場所へ地図を寄せ、場所シートで登録する。
         onPlaceSelected = { result ->
           mapSearch = null
           placeSheetTarget = PlaceSheetTarget.NewSearchResult(result)
           focusOn(LatLng(result.latitude, result.longitude))
         },
-        // 地域へ移動: 地名を選んだら閉じて、その地域の範囲が収まるように地図を移す（現在地の追従は止まる）。
+        // 地域へ移動: 地名を選んだら閉じて、目印を足し、その地域の範囲が収まるように地図を移す（現在地の追従は止まる）。
+        // 上限で出せない地域はふつう窓の中で止まる。それでも出せなかったときは地図も動かさない。
         onRegionSelected = { region ->
           mapSearch = null
-          fitTo(region.bounds)
-          regionMarker = region
+          if (viewModel.regionMarkers.show(region)) fitTo(region.bounds.toLatLngBounds())
         },
         onClose = { mapSearch = null },
         modifier = Modifier.align(Alignment.TopCenter),
@@ -471,6 +478,7 @@ private fun TrackingMapSearch(
   onFetchPlace: suspend (placeId: String) -> PlaceSearchResult?,
   onPredictRegions: suspend (query: String, bias: GeoBounds?) -> List<PlacePrediction>,
   onFetchRegion: suspend (placeId: String) -> MapRegion?,
+  regionMarkers: RegionMarkersState,
   onPlaceSelected: (PlaceSearchResult) -> Unit,
   onRegionSelected: (RegionMarker) -> Unit,
   onClose: () -> Unit,
@@ -491,13 +499,20 @@ private fun TrackingMapSearch(
       placeholder = "地名で探して移動",
       fetchFailedText = "地域の取得に失敗しました（オフライン等）",
       onSearchPredictions = { query -> onPredictRegions(query, bias) },
+      // 上限まで出していて新しい地域なら、範囲を引く前に止める（出せない地域で料金をかけない）。
+      selectionError = { prediction ->
+        RegionMarkerActions.LIMIT_MESSAGE.takeUnless { regionMarkers.canShow(prediction.placeId) }
+      },
+      // もう出している地域は、引き直さずに覚えている範囲へ移す。
       // 目印の名前は候補の文字を使う（Places から名前を引くと料金の区分が上がるため）。
       onFetchPrediction = { prediction ->
-        onFetchRegion(prediction.placeId)?.let { region ->
+        regionMarkers.find(prediction.placeId) ?: onFetchRegion(prediction.placeId)?.let { region ->
           RegionMarker(
+            placeId = prediction.placeId,
             name = prediction.primaryText,
-            position = LatLng(region.latitude, region.longitude),
-            bounds = region.bounds.toLatLngBounds(),
+            latitude = region.latitude,
+            longitude = region.longitude,
+            bounds = region.bounds,
           )
         }
       },
@@ -525,6 +540,3 @@ private val STOPPED_SHEET_HEIGHT = 80.dp
 
 /** いま地図に映っている範囲（地図の準備前は null）。 */
 private fun CameraPositionState.visibleGeoBounds(): GeoBounds? = projection?.visibleRegion?.latLngBounds?.toGeoBounds()
-
-/** 「地域へ移動」で移した地域の目印（中心と名前）。[bounds] はチップの地名から寄せ直すときの範囲（選んだときと同じ）。 */
-internal data class RegionMarker(val name: String, val position: LatLng, val bounds: LatLngBounds)
