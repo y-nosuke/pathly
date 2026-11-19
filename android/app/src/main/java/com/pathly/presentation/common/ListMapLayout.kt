@@ -78,14 +78,12 @@ internal fun ListMapLayout(
 }
 
 /**
- * 一覧のタブの地図表示で、地図の上に重ねる見出し・検索欄・絞り込み。たためて、たたむと一覧への切り替えと
+ * 一覧のタブの地図表示で、地図の上に重ねる見出し・ツール行・絞り込み。たためて、たたむと一覧への切り替えと
  * 絞り込みの様子（[collapsedSummary]）だけの小さな帯になる。
  *
  * @param onHeightChange 重ねたものの高さ。地図の上の余白にして、線・マーカー・寄せた範囲が隠れないようにする。
  * @param header 見出しの行。右端にたたむボタンを足して出す（押すとキーボードも閉じる）。
- * @param controls 見出しの下に出す検索欄・絞り込み。
- * @param padded 見出しと controls の左右に余白を付けるか。一覧の型の部品（[ListHeader]・[ListToolRow]）は自分で
- *   余白を持つので false にする（場所タブも型に移したら（#197）この引数ごと無くす）。
+ * @param controls 見出しの下に出すツール行・効いている条件・絞り込みの欄。
  * @param collapsedActions たたんだ帯の右端（ひろげるの手前）に残すもの（地図表示のレイヤー［≋］など）。
  */
 @Composable
@@ -99,7 +97,6 @@ internal fun ListMapOverlay(
   header: @Composable () -> Unit,
   controls: @Composable () -> Unit,
   modifier: Modifier = Modifier,
-  padded: Boolean = true,
   collapsedActions: @Composable RowScope.() -> Unit = {},
 ) {
   val density = LocalDensity.current
@@ -126,12 +123,8 @@ internal fun ListMapOverlay(
         shadowElevation = PathlyElevation.low,
       ) {
         // 余白は一覧表示と揃え、切り替えても見出しの位置が動かないようにする。
-        val padding = if (padded) {
-          PaddingValues(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 12.dp)
-        } else {
-          PaddingValues(bottom = PathlySpacing.md, end = PathlySpacing.xs)
-        }
-        Column(modifier = Modifier.fillMaxWidth().padding(padding)) {
+        // 見出し（[ListHeader]）とツール行（[ListToolRow]）は自分で左右の余白を持つので、ここでは右端（たたむ）と下だけ。
+        Column(modifier = Modifier.fillMaxWidth().padding(bottom = PathlySpacing.md, end = PathlySpacing.xs)) {
           Row(verticalAlignment = Alignment.CenterVertically) {
             Box(modifier = Modifier.weight(1f)) { header() }
             IconButton(
@@ -144,7 +137,7 @@ internal fun ListMapOverlay(
               Icon(painter = painterResource(R.drawable.ic_expand_less), contentDescription = "たたむ")
             }
           }
-          Spacer(modifier = Modifier.height(if (padded) 12.dp else PathlySpacing.xs))
+          Spacer(modifier = Modifier.height(PathlySpacing.xs))
           controls()
         }
       }

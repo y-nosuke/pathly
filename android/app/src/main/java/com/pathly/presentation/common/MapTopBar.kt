@@ -86,8 +86,11 @@ fun MapTopBar(
   }
 }
 
+/** 地図の丸ボタン（[MapRoundButton]）の大きさ。横に並べる丸と中心を揃えるのに使う。 */
+val MapRoundButtonSize = 48.dp
+
 /**
- * 地図に浮かぶ丸いボタン（上のバーのレイヤー・右下の地図の操作）。48dp。
+ * 地図に浮かぶ丸いボタン（上のバーのレイヤー・右下の地図の操作）。[MapRoundButtonSize]。
  * [active] のときは塗りつぶして、いま効いている（表示中・追従中・開いている）ことを示す。
  */
 @Composable
@@ -102,7 +105,7 @@ fun MapRoundButton(
   Surface(
     onClick = onClick,
     enabled = enabled,
-    modifier = modifier.size(48.dp),
+    modifier = modifier.size(MapRoundButtonSize),
     shape = PathlyShapes.pill,
     color = if (active) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceContainerLowest,
     contentColor = if (active) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface,

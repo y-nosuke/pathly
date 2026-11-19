@@ -224,9 +224,9 @@ class PlacesViewModel @Inject constructor(
     updateListOptions { it.copy(sort = sort, sortDescending = sort.defaultDescending) }
   }
 
-  /** 並べ替えの昇順/降順を反転する。 */
-  fun toggleSortDirection() {
-    updateListOptions { it.copy(sortDescending = !it.sortDescending) }
+  /** 並べ替えの向きを決める（表示のメニューで選ぶ）。 */
+  fun setSortDescending(descending: Boolean) {
+    updateListOptions { it.copy(sortDescending = descending) }
   }
 
   /** 一覧の行や詳細から「行きたい」を付け外しする。 */

@@ -10,8 +10,8 @@ import androidx.compose.runtime.LaunchedEffect
  * 場所を削除した直後の「まだ取り消せる」状態。[token] が増えるたびに一度だけ通知を出す。
  *
  * 場所の削除は確認ダイアログを出さず即時に行い、代わりにスナックバーの「取り消す」で戻す
- * （`docs/specs/screens.md`）。削除できる画面が場所一覧・場所詳細・記録画面・経路詳細に
- * 増えたので、どの画面でも同じ出し方になるようここに集約する。
+ * （`docs/specs/screens.md`）。削除できる画面が場所詳細・記録画面・経路詳細に
+ * 分かれている（場所詳細から消したときは場所一覧に戻って出す）ので、どの画面でも同じ出し方になるようここに集約する。
  */
 data class PlaceDeleteUndo(
   val token: Int = 0,
