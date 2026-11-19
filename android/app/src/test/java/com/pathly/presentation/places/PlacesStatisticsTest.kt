@@ -66,9 +66,10 @@ class PlacesStatisticsTest {
   }
 
   @Test
-  fun title_addsTotalOnlyWhenFiltered() {
-    assertEquals("📍 場所の統計", placesStatisticsTitle(shownCount = 12, totalCount = 12, isFiltered = false))
-    assertEquals("📍 場所の統計（絞り込み中 4 / 12 か所）", placesStatisticsTitle(shownCount = 4, totalCount = 12, isFiltered = true))
+  fun statsText_addsTotalOnlyWhenFiltered() {
+    val stats = PlacesStatistics(placeCount = 4, visitedCount = 3, wishedCount = 7, fulfilledCount = 2)
+    assertEquals("4 か所 ・ 訪問 3 ・ 行きたいで行けた 2 / 7（28%）", placesStatsText(stats, totalCount = 4, isFiltered = false))
+    assertEquals("4 / 12 か所 ・ 訪問 3 ・ 行きたいで行けた 2 / 7（28%）", placesStatsText(stats, totalCount = 12, isFiltered = true))
   }
 
   private fun item(

@@ -36,17 +36,29 @@ enum class VisitedFilter(val chipLabel: String) {
   UNVISITED("未訪問"),
 }
 
-/** 一覧の並べ替え軸。既定の向き（降順=大きい/新しいが先）も持つ。 */
-enum class PlaceSort(val label: String, val defaultDescending: Boolean) {
-  REGISTERED("登録順", true),
-  VISITED("訪問順", true),
-  VISIT_COUNT("訪問回数順", true),
+/**
+ * 一覧の並べ替え軸。既定の向き（降順=大きい/新しいが先）と、表示のメニューに出す向きの文言（軸に合わせて
+ * 「新しい順」「多い順」など。昇順・降順という言葉は使わない。履歴の TrackSort と同じ流儀）も持つ。
+ */
+enum class PlaceSort(
+  val label: String,
+  val defaultDescending: Boolean,
+  val descendingLabel: String,
+  val ascendingLabel: String,
+) {
+  REGISTERED("登録順", true, "新しい順", "古い順"),
+  VISITED("訪問順", true, "新しい順", "古い順"),
+  VISIT_COUNT("訪問回数順", true, "多い順", "少ない順"),
 
   /** 行きたいで行った回数（行きたいに入れて実際に行った回数 → adr/0036）。 */
-  FULFILLED_WISH_COUNT("行きたいで行った回数順", true),
-  PRIORITY("優先度順", true),
-  NAME("名前順", false),
-  UPDATED("更新順", true),
+  FULFILLED_WISH_COUNT("行きたいで行った回数順", true, "多い順", "少ない順"),
+  PRIORITY("優先度順", true, "高い順", "低い順"),
+  NAME("名前順", false, "ん → あ", "あ → ん"),
+  UPDATED("更新順", true, "新しい順", "古い順"),
+  ;
+
+  /** 向きの文言。 */
+  fun directionLabel(descending: Boolean): String = if (descending) descendingLabel else ascendingLabel
 }
 
 /** キーワード検索の状態（追加＞検索して追加）。 */
@@ -238,14 +250,16 @@ data class PlacesStatistics(
   }
 }
 
-/** 統計カードの見出し。絞り込み中は、絞った数字を全体と取り違えないよう「n / 全体 か所」を添える（履歴と同じ）。 */
-internal fun placesStatisticsTitle(shownCount: Int, totalCount: Int, isFiltered: Boolean): String = if (isFiltered) {
-  "📍 場所の統計（絞り込み中 $shownCount / $totalCount か所）"
-} else {
-  "📍 場所の統計"
+/**
+ * 統計の帯の文。「42 か所 ・ 訪問 30 ・ 行きたいで行けた 2 / 7（28%）」。絞り込み中は、絞った数字を全体と
+ * 取り違えないよう「42 / 176 か所」と全体の数を添える（履歴の帯と同じ）。
+ */
+internal fun placesStatsText(statistics: PlacesStatistics, totalCount: Int, isFiltered: Boolean): String {
+  val count = if (isFiltered) "${statistics.placeCount} / $totalCount か所" else "${statistics.placeCount} か所"
+  return "$count ・ 訪問 ${statistics.visitedCount} ・ 行きたいで行けた ${statistics.fulfilledLabel()}"
 }
 
-/** 統計カードの「行きたいで行けた」の値。例「2 / 7（29%）」。行きたいにした場所が無ければ割合を出さない。 */
+/** 「行きたいで行けた」の値。例「2 / 7（29%）」。行きたいにした場所が無ければ割合を出さない。 */
 internal fun PlacesStatistics.fulfilledLabel(): String = "$fulfilledCount / $wishedCount" + (fulfilledPercent?.let { "（$it%）" } ?: "")
 
 private const val KEY_WISHLIST = "places.wishlistFilter"

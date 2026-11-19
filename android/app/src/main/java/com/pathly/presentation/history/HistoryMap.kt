@@ -149,7 +149,6 @@ internal fun HistoryMapLayout(
         onHeightChange = { overlayHeight = it },
         header = header,
         controls = { listControls { RegisteredPlacesLayerButton(mapPlaces) } },
-        padded = false,
         // たたんでも、地図に重ねるものは切り替えられるようにする。
         collapsedActions = { RegisteredPlacesLayerButton(mapPlaces) },
         modifier = Modifier.align(Alignment.TopCenter),

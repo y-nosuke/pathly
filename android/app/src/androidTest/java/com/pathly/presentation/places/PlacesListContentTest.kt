@@ -22,6 +22,7 @@ import com.pathly.domain.model.PlaceListItem
 import com.pathly.domain.model.PlaceRegion
 import com.pathly.presentation.common.ListMapMode
 import com.pathly.ui.theme.PathlyAndroidTheme
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -41,19 +42,23 @@ class PlacesListContentTest {
   private val plain = item(id = 1, wishlisted = false)
   private val wished = item(id = 2, wishlisted = true)
 
+  // 追加のメニューで選んだ手段（"search" / "map"）。
+  private var addedBy: String? = null
+
   @Test
-  fun `切り替えで地図表示になり分け方・並べ替えが消えて戻すと一覧に戻る`() {
+  fun `切り替えで地図表示になり表示のメニューが消えて戻すと一覧に戻る`() {
     setContent(PlacesState(items = listOf(plain, wished)))
-    composeTestRule.onNodeWithText("登録順 ▾").assertIsDisplayed()
+    composeTestRule.onNodeWithText("登録順 ・ 新しい順").assertIsDisplayed()
 
     composeTestRule.onNodeWithContentDescription("地図で見る").performClick()
 
-    composeTestRule.onNodeWithText("登録順 ▾").assertDoesNotExist()
-    composeTestRule.onNodeWithTag("placeGroupingButton").assertDoesNotExist()
+    composeTestRule.onNodeWithTag("listDisplayMenuButton").assertDoesNotExist()
     composeTestRule.onNodeWithText("場所1").assertDoesNotExist()
+    // 追加の丸は地図表示でも同じ位置に残る。
+    composeTestRule.onNodeWithTag("placeAddButton").assertIsDisplayed()
     composeTestRule.onNodeWithContentDescription("一覧で見る").performClick()
 
-    composeTestRule.onNodeWithText("登録順 ▾").assertIsDisplayed()
+    composeTestRule.onNodeWithText("登録順 ・ 新しい順").assertIsDisplayed()
     composeTestRule.onNodeWithText("場所1").assertIsDisplayed()
   }
 
@@ -205,12 +210,14 @@ class PlacesListContentTest {
 
   @Test
   fun `初期状態に戻すで絞り込みと並べ替えをまとめて戻す`() {
-    setContent(PlacesState(items = listOf(plain, wished), wishlistFilter = WishlistFilter.WISHLISTED, sort = PlaceSort.NAME))
-    composeTestRule.onNodeWithText("名前順 ▾").assertIsDisplayed()
+    setContent(
+      PlacesState(items = listOf(plain, wished), wishlistFilter = WishlistFilter.WISHLISTED, sort = PlaceSort.NAME, sortDescending = false),
+    )
+    composeTestRule.onNodeWithText("名前順 ・ あ → ん").assertIsDisplayed()
 
     composeTestRule.onNodeWithText("初期状態に戻す").performClick()
 
-    composeTestRule.onNodeWithText("登録順 ▾").assertIsDisplayed()
+    composeTestRule.onNodeWithText("登録順 ・ 新しい順").assertIsDisplayed()
     composeTestRule.onNodeWithText("場所1").assertIsDisplayed()
     composeTestRule.onNodeWithText("初期状態に戻す").assertDoesNotExist()
   }
@@ -235,7 +242,7 @@ class PlacesListContentTest {
     // 欄で選ぶたびにチップの行が出たり消えたりして欄がずれないよう、開いている間は出さない。
     composeTestRule.onNodeWithContentDescription("行きたいの絞り込みを外す").assertDoesNotExist()
     composeTestRule.onNodeWithText("初期状態に戻す").assertIsEnabled().performClick()
-    composeTestRule.onNodeWithText("登録順 ▾").assertIsDisplayed()
+    composeTestRule.onNodeWithText("登録順 ・ 新しい順").assertIsDisplayed()
     composeTestRule.onNodeWithText("2 件").assertIsDisplayed()
     composeTestRule.onNodeWithText("初期状態に戻す").assertIsNotEnabled()
 
@@ -247,32 +254,75 @@ class PlacesListContentTest {
   @Test
   fun `一覧の先頭に統計が出て_絞り込むと数字が変わり全体の数が添えられる`() {
     setContent(PlacesState(items = listOf(plain, wished)))
-    composeTestRule.onNodeWithText("📍 場所の統計").assertIsDisplayed()
-    composeTestRule.onNodeWithText("2か所").assertIsDisplayed()
-    composeTestRule.onNodeWithText("0 / 1（0%）").assertIsDisplayed()
+    composeTestRule.onNodeWithText("2 か所 ・ 訪問 0 ・ 行きたいで行けた 0 / 1（0%）").assertIsDisplayed()
 
     composeTestRule.onNodeWithTag("filterPanelButton").performClick()
     // 絞り込みの欄を開いている間は出さない。
-    composeTestRule.onNodeWithTag("placesStatistics").assertDoesNotExist()
+    composeTestRule.onNodeWithTag("listStatsBar").assertDoesNotExist()
     composeTestRule.onNodeWithTag("行きたい=行きたい").performClick()
     composeTestRule.onNodeWithTag("filterPanelButton").performClick()
 
-    composeTestRule.onNodeWithText("📍 場所の統計（絞り込み中 1 / 2 か所）").assertIsDisplayed()
-    composeTestRule.onNodeWithText("1か所").assertIsDisplayed()
+    composeTestRule.onNodeWithText("1 / 2 か所 ・ 訪問 0 ・ 行きたいで行けた 0 / 1（0%）").assertIsDisplayed()
   }
 
   @Test
   fun `統計は地図表示と場所が無いときは出ない`() {
     setContent(PlacesState(items = listOf(plain, wished), viewMode = ListMapMode.MAP))
-    composeTestRule.onNodeWithTag("placesStatistics").assertDoesNotExist()
+    composeTestRule.onNodeWithTag("listStatsBar").assertDoesNotExist()
     composeTestRule.onNodeWithContentDescription("一覧で見る").performClick()
-    composeTestRule.onNodeWithTag("placesStatistics").assertIsDisplayed()
+    composeTestRule.onNodeWithTag("listStatsBar").assertIsDisplayed()
   }
 
   @Test
   fun `場所が1件も無いときは統計を出さない`() {
     setContent(PlacesState(items = emptyList()))
-    composeTestRule.onNodeWithTag("placesStatistics").assertDoesNotExist()
+    composeTestRule.onNodeWithTag("listStatsBar").assertDoesNotExist()
+  }
+
+  @Test
+  fun `表示のメニューで並べ替えの軸と向きを選ぶとボタンに出る`() {
+    setContent(PlacesState(items = listOf(plain, wished)))
+
+    composeTestRule.onNodeWithTag("listDisplayMenuButton").performClick()
+    composeTestRule.onNodeWithText("古い順").performClick()
+    composeTestRule.onNodeWithText("登録順 ・ 古い順").assertIsDisplayed()
+
+    // 軸を変えると、向きはその軸の既定に戻る。
+    composeTestRule.onNodeWithTag("listDisplayMenuButton").performClick()
+    composeTestRule.onNodeWithText("訪問回数順").performClick()
+    composeTestRule.onNodeWithText("訪問回数順 ・ 多い順").assertIsDisplayed()
+  }
+
+  @Test
+  fun `右下の追加の丸からメニューで追加の手段を選ぶ`() {
+    setContent(PlacesState(items = listOf(plain, wished)))
+
+    composeTestRule.onNodeWithContentDescription("場所を追加").performClick()
+    composeTestRule.onNodeWithText("検索して追加").assertIsDisplayed()
+    composeTestRule.onNodeWithText("地図で選ぶ").performClick()
+
+    assertEquals("map", addedBy)
+  }
+
+  @Test
+  fun `地図表示の右下にすべての場所を見るボタンが出て_0件のときは出さない`() {
+    setContent(PlacesState(items = listOf(plain, wished), viewMode = ListMapMode.MAP))
+    composeTestRule.onNodeWithContentDescription("すべての場所を見る").assertIsDisplayed()
+
+    // 絞り込みで 0 件にすると、寄せる先が無いので消える。
+    composeTestRule.onNodeWithTag("filterPanelButton").performClick()
+    composeTestRule.onNodeWithTag("行きたい=行きたい").performClick()
+    composeTestRule.onNodeWithTag("訪問=訪問済み").performClick()
+    composeTestRule.onNodeWithContentDescription("すべての場所を見る").assertDoesNotExist()
+  }
+
+  @Test
+  fun `行に削除のボタンを出さない`() {
+    setContent(PlacesState(items = listOf(plain, wished)))
+
+    composeTestRule.onNodeWithText("場所1").assertIsDisplayed()
+    // 押せないごみ箱（立ち寄りの記録がある場所）も含めて、削除に関わるボタンが無い。
+    composeTestRule.onNodeWithContentDescription("削除", substring = true).assertDoesNotExist()
   }
 
   private val fuchu = item(id = 11, wishlisted = false, region = PlaceRegion.of("JP", "東京都", "府中市"))
@@ -285,11 +335,11 @@ class PlacesListContentTest {
     setContent(PlacesState(items = regional))
     composeTestRule.onNodeWithText("場所11").assertIsDisplayed()
 
-    composeTestRule.onNodeWithTag("placeGroupingButton").performClick()
+    composeTestRule.onNodeWithTag("listDisplayMenuButton").performClick()
     composeTestRule.onNodeWithText("地域で分ける").performClick()
 
-    // はじめはすべて閉じて、見出し（名前と件数）だけ。並びは北から。
-    composeTestRule.onNodeWithText("地域で分ける ▾").assertIsDisplayed()
+    // はじめはすべて閉じて、見出し（名前と件数）だけ。並びは北から。表示のボタンに分け方が添わる。
+    composeTestRule.onNodeWithText("登録順 ・ 新しい順 ・ 地域").assertIsDisplayed()
     composeTestRule.onNodeWithTag("placeGroup:region:JP|東京都|").assertIsDisplayed()
     composeTestRule.onNodeWithText("2").assertIsDisplayed()
     composeTestRule.onNodeWithText("場所11").assertDoesNotExist()
@@ -319,10 +369,10 @@ class PlacesListContentTest {
     composeTestRule.onNodeWithText("未分類").assertIsDisplayed()
     composeTestRule.onNodeWithText("場所11").assertDoesNotExist()
 
-    composeTestRule.onNodeWithTag("placeGroupingButton").performClick()
+    composeTestRule.onNodeWithTag("listDisplayMenuButton").performClick()
     composeTestRule.onNodeWithText("分けない").performClick()
 
-    composeTestRule.onNodeWithText("分ける ▾").assertIsDisplayed()
+    composeTestRule.onNodeWithText("登録順 ・ 新しい順").assertIsDisplayed()
     composeTestRule.onNodeWithText("未分類").assertDoesNotExist()
     composeTestRule.onNodeWithText("場所11").assertIsDisplayed()
     composeTestRule.onNodeWithText("場所13").assertIsDisplayed()
@@ -333,6 +383,8 @@ class PlacesListContentTest {
     setContent(PlacesState(items = regional, grouping = PlaceGrouping.REGION))
     composeTestRule.onNodeWithText("場所12").assertDoesNotExist()
 
+    // 検索は見出しのアイコンから開く（見出しの位置が窓になる）。
+    composeTestRule.onNodeWithContentDescription("検索").performClick()
     composeTestRule.onNodeWithText("名前で検索").performTextInput("12")
 
     composeTestRule.onNodeWithText("東京都").assertIsDisplayed()
@@ -371,8 +423,8 @@ class PlacesListContentTest {
     var state by remember { mutableStateOf(initial) }
     PlacesListContent(
       state = state,
-      onAddByMap = {},
-      onAddBySearch = {},
+      onAddByMap = { addedBy = "map" },
+      onAddBySearch = { addedBy = "search" },
       onClearFilters = { state = state.copy(wishlistFilter = WishlistFilter.ANY, visitedFilter = VisitedFilter.ANY) },
       onResetListOptions = { state = PlacesState(items = state.items, viewMode = state.viewMode) },
       onNameQueryChange = { state = state.copy(nameQuery = it) },
@@ -382,8 +434,8 @@ class PlacesListContentTest {
       onClearCategoryFilter = {},
       onToggleRegionFilter = {},
       onClearRegionFilter = {},
-      onSortChange = {},
-      onToggleSortDirection = {},
+      onSortChange = { state = state.copy(sort = it, sortDescending = it.defaultDescending) },
+      onSortDescendingChange = { state = state.copy(sortDescending = it) },
       onGroupingChange = { state = state.copy(grouping = it, openGroups = emptySet()) },
       onToggleGroup = { key -> state = state.copy(openGroups = if (key in state.openGroups) state.openGroups - key else state.openGroups + key) },
       onViewModeChange = { state = state.copy(viewMode = it) },
@@ -391,7 +443,6 @@ class PlacesListContentTest {
       onItemClick = {},
       onMapPlaceClick = {},
       onToggleWishlist = {},
-      onDeleteRequest = {},
       // CI のエミュレータでは GMS の地図が落ちることがあるので、地図は描かない（ほかの画面のテストと同じ）。
       mapContent = {},
     )
