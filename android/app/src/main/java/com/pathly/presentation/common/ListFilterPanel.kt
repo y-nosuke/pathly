@@ -1,5 +1,6 @@
 package com.pathly.presentation.common
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -153,10 +154,11 @@ fun ListFilterPanel(
   content: @Composable ColumnScope.() -> Unit,
 ) {
   Surface(
-    // 一覧の地（surface）と行の区切り線からはっきり離れる濃さにして、どこまでが欄かを見分けられるようにする
-    // （Low では明るい・暗いとも一覧とほぼ同じ色に見えた → specs/screens.md）。
+    // 一覧の地（surface）より濃い地と枠で、どこまでが欄かを見分けられるようにする（→ specs/screens.md）。
+    // 明るいテーマは地の差が小さく色だけでは分かりにくかったので、一覧の区切り線と同じ色の枠も付ける。
     color = MaterialTheme.colorScheme.surfaceContainerHigh,
     shape = MaterialTheme.shapes.medium,
+    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
     modifier = modifier
       .fillMaxWidth()
       .testTag("listFilterPanel"),
