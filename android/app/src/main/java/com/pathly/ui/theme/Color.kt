@@ -105,15 +105,20 @@ internal val PathlyDarkColorScheme = darkColorScheme(
 
 /**
  * Material 3 の役割に無い「状態」の色。明るい・暗いで値を持ち、ダイナミックカラーでも変えない
- * （緑が「行った」を表すので、壁紙の色に置き換えると意味が消える）。`PathlyTheme.statusColors` で取る。
+ * （緑が「行った」、赤が「行きたい」を表すので、壁紙の色に置き換えると意味が消える）。`PathlyTheme.statusColors` で取る。
  *
  * @property visited 行った・動いている（訪問済み・記録中）の文字とアイコン。地図の訪問済みの場所と同じ系統の緑。
+ * @property wishlist 行きたい（旗・「行きたい ★★★」・優先度の星）の文字とアイコン。地図の行きたいの旗と同じ紅。
+ *   地図の終了の赤（[PathlyMapColors.End]）より暗く青みに寄せ、小さな文字でも地と 4.5:1 以上の差を取る。
  */
 @Immutable
-data class PathlyStatusColors(val visited: Color)
+data class PathlyStatusColors(val visited: Color, val wishlist: Color)
 
-internal val PathlyLightStatusColors = PathlyStatusColors(visited = Color(0xFF2E7D32))
-internal val PathlyDarkStatusColors = PathlyStatusColors(visited = Color(0xFF8FD49A))
+/** 行きたいの紅（明るいテーマ）。地図の地は明暗で変わらないので、地図の旗にも同じ値を使う。 */
+private val WishlistRed = Color(0xFFC62D42)
+
+internal val PathlyLightStatusColors = PathlyStatusColors(visited = Color(0xFF2E7D32), wishlist = WishlistRed)
+internal val PathlyDarkStatusColors = PathlyStatusColors(visited = Color(0xFF8FD49A), wishlist = Color(0xFFFF8A95))
 
 /** ビルドの種類の印の色。テーマに従わない。 */
 object PathlyBuildColors {
@@ -193,8 +198,11 @@ object PathlyMapColors {
   /** 登録済みの場所（未訪問）。 */
   val PlaceUnvisited = Color(0xFF6B6B6B)
 
-  /** 「行きたい」の小さな旗のバッジ。訪問状態（緑／灰）とは別の軸なので色も別に取る。 */
-  val Wishlist = Color(0xFFE08A00)
+  /**
+   * 「行きたい」の小さな旗のバッジ。訪問状態（緑／灰）とは別の軸なので色も別に取る。
+   * 一覧・場所の詳細の行きたい（[PathlyStatusColors.wishlist] の明るいテーマ）と同じ紅。
+   */
+  val Wishlist = WishlistRed
 
   /** 近くの場所をまとめた数のバッジ。訪問状態の緑・灰と被らない濃い色。 */
   val Cluster = Color(0xFF263238)
