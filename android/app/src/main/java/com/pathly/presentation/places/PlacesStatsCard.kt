@@ -38,7 +38,7 @@ internal fun PlacesStatsCardContent(
       tone = StatsTileTone.PRIMARY,
     )
     StatsTile(icon = R.drawable.ic_check_circle, value = "${statistics.visitedCount}", label = "訪問済み", tone = StatsTileTone.GREEN)
-    StatsTile(icon = R.drawable.ic_flag, value = "${details.wishlistedCount}", label = "いま行きたい", tone = StatsTileTone.TERTIARY)
+    StatsTile(icon = R.drawable.ic_flag, value = "${details.wishlistedCount}", label = "いま行きたい", tone = StatsTileTone.WISHLIST)
   }
   if (statistics.placeCount == 0) return
   WishFulfilledRow(statistics)

@@ -140,9 +140,9 @@ fun StatsTileRow(content: @Composable RowScope.() -> Unit) {
 
 /**
  * タイルの色。数字の種類ごとに変える（並べたタイルを見分けやすく）。secondary の container は primary とほぼ同じ青に
- * 見えるので、2 つ目は訪問済みの緑を薄く敷く。
+ * 見えるので、2 つ目は訪問済みの緑を薄く敷く。行きたいの数は、一覧の旗と同じ行きたいの紅を薄く敷く。
  */
-enum class StatsTileTone { PRIMARY, GREEN, TERTIARY }
+enum class StatsTileTone { PRIMARY, GREEN, WISHLIST, TERTIARY }
 
 /**
  * 数字のタイル（アイコン・値・名前を縦に）。[value] の中の数字を大きく太く、単位は小さく出す。
@@ -161,6 +161,10 @@ fun RowScope.StatsTile(
 
     StatsTileTone.GREEN -> PathlyTheme.statusColors.visited.let { green ->
       green.copy(alpha = 0.16f).compositeOver(MaterialTheme.colorScheme.surfaceContainer) to green
+    }
+
+    StatsTileTone.WISHLIST -> PathlyTheme.statusColors.wishlist.let { red ->
+      red.copy(alpha = 0.16f).compositeOver(MaterialTheme.colorScheme.surfaceContainer) to red
     }
 
     StatsTileTone.TERTIARY -> MaterialTheme.colorScheme.tertiaryContainer to MaterialTheme.colorScheme.onTertiaryContainer
