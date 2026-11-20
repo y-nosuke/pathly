@@ -184,7 +184,7 @@ private fun regionsOf(track: GpsTrack): Set<PlaceRegion> = track.stopRegions.ifE
 internal fun listTitleOf(track: GpsTrack): String = track.name?.takeIf { track.hasName } ?: DateFormatters.shortDate(track.startTime)
 
 /** 経路の所要時間（ミリ秒）。終了時刻が無ければ 0（並べ替えの安定用）。 */
-private fun durationMillisOf(track: GpsTrack): Long = track.endTime?.let { it.time - track.startTime.time }?.coerceAtLeast(0L) ?: 0L
+internal fun durationMillisOf(track: GpsTrack): Long = track.endTime?.let { it.time - track.startTime.time }?.coerceAtLeast(0L) ?: 0L
 
 private const val KEY_FAVORITE = "history.favoriteFilter"
 private const val KEY_NAMED = "history.namedFilter"

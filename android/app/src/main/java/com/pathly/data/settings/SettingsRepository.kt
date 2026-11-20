@@ -134,6 +134,18 @@ class SettingsRepository @Inject constructor(
     openPlaceGroupsFlows.getValue(grouping).value = keys
   }
 
+  // 一覧の統計の帯を、統計のカードに広げているか。一覧（履歴・場所）ごとに覚え、アプリを閉じても残す。
+  private val statsExpandedFlows: Map<StatsList, MutableStateFlow<Boolean>> =
+    StatsList.entries.associateWith { list -> MutableStateFlow(prefs.getBoolean(keyStatsExpanded(list), false)) }
+
+  /** その一覧で統計のカードを広げているか。UI が購読する。既定は畳んだ帯。 */
+  fun statsExpanded(list: StatsList): StateFlow<Boolean> = statsExpandedFlows.getValue(list).asStateFlow()
+
+  fun setStatsExpanded(list: StatsList, expanded: Boolean) {
+    prefs.edit { putBoolean(keyStatsExpanded(list), expanded) }
+    statsExpandedFlows.getValue(list).value = expanded
+  }
+
   // 知らない値（版が変わって名前が無くなった業種など）は読み飛ばし、指定なしとして扱う。
   private fun readMapPlaceFilter(surface: MapSurface): MapPlaceFilter {
     val categoryNames = prefs.getString(keyMapFilterCategories(surface), null).orEmpty().split(",").toSet()
@@ -160,6 +172,8 @@ class SettingsRepository @Inject constructor(
     private const val GROUP_KEY_SEPARATOR = "\n"
 
     private fun keyOpenPlaceGroups(grouping: PlaceGrouping): String = "places_list_open_groups_${grouping.name.lowercase()}"
+
+    private fun keyStatsExpanded(list: StatsList): String = "${list.key}_stats_expanded"
 
     private fun keyShowPlaces(surface: MapSurface): String = "show_registered_places_${surface.key}"
 
@@ -221,6 +235,12 @@ enum class ThemeMode(val key: String) {
 
     fun fromKey(key: String?): ThemeMode = entries.firstOrNull { it.key == key } ?: DEFAULT
   }
+}
+
+/** 統計の帯（と広げたカード）を置く一覧。[key] は設定のキーに使うので変えない。 */
+enum class StatsList(val key: String) {
+  HISTORY("history_list"),
+  PLACES("places_list"),
 }
 
 /** 「登録済みの場所」トグルを保持する画面（それぞれ独立して ON/OFF を記憶する）。 */
