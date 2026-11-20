@@ -34,6 +34,7 @@ import com.pathly.presentation.common.FloatingSheetState
 import com.pathly.presentation.common.SheetDetent
 import com.pathly.presentation.common.SheetFormLayout
 import com.pathly.presentation.common.rememberFloatingSheetState
+import com.pathly.ui.theme.PathlySpacing
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.emptyFlow
 
@@ -253,7 +254,7 @@ private fun ColumnScope.ExistingPlaceEditor(
 
   val loaded = item
   if (loaded == null) {
-    Box(modifier = Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) {
+    Box(modifier = Modifier.fillMaxWidth().padding(PathlySpacing.xxl), contentAlignment = Alignment.Center) {
       CircularProgressIndicator()
     }
     return

@@ -41,7 +41,6 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
-import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.luminance
@@ -115,7 +114,8 @@ private fun ListStatsBar(items: List<StatsBarItem>, onClick: () -> Unit) {
       painter = painterResource(R.drawable.ic_expand_more),
       contentDescription = "統計を広げる",
       tint = MaterialTheme.colorScheme.onSurfaceVariant,
-      modifier = Modifier.size(20.dp),
+      // 字に添える ▾▴ は 18dp（表示のメニュー・絞り込みのボタンと同じ）。
+      modifier = Modifier.size(18.dp),
     )
   }
 }
@@ -173,7 +173,7 @@ private fun ListStatsCard(isFiltered: Boolean, onCollapse: () -> Unit, content: 
           style = MaterialTheme.typography.labelLarge,
           modifier = Modifier.weight(1f),
         )
-        Icon(painter = painterResource(R.drawable.ic_expand_less), contentDescription = "統計を畳む", modifier = Modifier.size(20.dp))
+        Icon(painter = painterResource(R.drawable.ic_expand_less), contentDescription = "統計を畳む", modifier = Modifier.size(18.dp))
       }
       Column(
         modifier = Modifier.padding(start = PathlySpacing.md, end = PathlySpacing.md, bottom = PathlySpacing.md),
@@ -202,21 +202,19 @@ fun StatsTileRow(content: @Composable RowScope.() -> Unit) {
  */
 enum class StatsTileTone { PRIMARY, GREEN, WISHLIST, TERTIARY }
 
-/** タイルの地の色と文字の色（統計の帯とカードで同じ）。緑・紅は一覧の地の上に薄く敷く。 */
+/**
+ * タイルの地の色と文字の色（統計の帯とカードで同じ）。4 色とも同じ作り（その色を薄く敷き、字をその色に）にして、
+ * どれか 1 つだけが濃く塗られて主役に見えないようにする（以前の藍は container の塗りで、暗い表示で目立っていた）。
+ */
 @Composable
-private fun statsToneColors(tone: StatsTileTone): Pair<Color, Color> = when (tone) {
-  StatsTileTone.PRIMARY -> MaterialTheme.colorScheme.primaryContainer to MaterialTheme.colorScheme.onPrimaryContainer
-
-  StatsTileTone.GREEN -> PathlyTheme.statusColors.visited.let { green ->
-    green.copy(alpha = 0.16f).compositeOver(MaterialTheme.colorScheme.surfaceContainer) to green
-  }
-
-  StatsTileTone.WISHLIST -> PathlyTheme.statusColors.wishlist.let { red ->
-    red.copy(alpha = 0.16f).compositeOver(MaterialTheme.colorScheme.surfaceContainer) to red
-  }
-
-  StatsTileTone.TERTIARY -> MaterialTheme.colorScheme.tertiaryContainer to MaterialTheme.colorScheme.onTertiaryContainer
-}
+private fun statsToneColors(tone: StatsTileTone): Pair<Color, Color> = tintedColors(
+  when (tone) {
+    StatsTileTone.PRIMARY -> MaterialTheme.colorScheme.primary
+    StatsTileTone.GREEN -> PathlyTheme.statusColors.visited
+    StatsTileTone.WISHLIST -> PathlyTheme.statusColors.wishlist
+    StatsTileTone.TERTIARY -> MaterialTheme.colorScheme.tertiary
+  },
+)
 
 /**
  * 数字のタイル（アイコン・値・名前を縦に）。[value] の中の数字を大きく太く、単位は小さく出す。
@@ -301,7 +299,7 @@ fun StatsBarChart(values: List<Double>, labels: List<String>, modifier: Modifier
     // 棒と同じ幅・すき間で並べ、名前を棒の真下に置く。
     Row(
       modifier = Modifier.fillMaxWidth().padding(top = PathlySpacing.xxs),
-      horizontalArrangement = Arrangement.spacedBy(4.dp),
+      horizontalArrangement = Arrangement.spacedBy(PathlySpacing.xs),
     ) {
       labels.forEachIndexed { i, label ->
         val last = i == labels.lastIndex

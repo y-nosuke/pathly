@@ -213,13 +213,13 @@ fun FloatingSheet(
         shadowElevation = PathlyElevation.floating,
         modifier = Modifier
           .navigationBarsPadding()
-          .padding(bottom = 24.dp),
+          .padding(bottom = PathlySpacing.xl),
       ) {
         Text(
           text = restoreLabel,
           style = MaterialTheme.typography.labelLarge,
           fontWeight = FontWeight.Medium,
-          modifier = Modifier.padding(horizontal = 20.dp, vertical = 10.dp),
+          modifier = Modifier.padding(horizontal = PathlySpacing.lg, vertical = PathlySpacing.md),
         )
       }
     }

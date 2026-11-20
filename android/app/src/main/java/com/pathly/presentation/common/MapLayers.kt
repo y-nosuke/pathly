@@ -79,7 +79,7 @@ fun MapLayersButton(
           .align(Alignment.TopEnd)
           .size(14.dp)
           .border(2.dp, MaterialTheme.colorScheme.surfaceContainerLowest, CircleShape)
-          .padding(2.dp)
+          .padding(PathlySpacing.xxs)
           .background(MaterialTheme.colorScheme.tertiary, CircleShape)
           .testTag("mapLayersFilteredBadge"),
       )
@@ -122,7 +122,7 @@ fun RegisteredPlacesLayerItems(
       .padding(horizontal = PathlySpacing.lg),
     verticalAlignment = Alignment.CenterVertically,
   ) {
-    Icon(painter = painterResource(R.drawable.ic_place), contentDescription = null, modifier = Modifier.size(22.dp))
+    Icon(painter = painterResource(R.drawable.ic_place), contentDescription = null)
     Spacer(modifier = Modifier.width(PathlySpacing.md))
     Text(text = "登録済みの場所", style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
     // 行全体で切り替える（スイッチ単体は押せる範囲が狭い）。
@@ -168,7 +168,7 @@ fun MapLayerActionItem(
       .padding(horizontal = PathlySpacing.lg, vertical = PathlySpacing.sm),
     verticalAlignment = Alignment.CenterVertically,
   ) {
-    Icon(painter = painterResource(icon), contentDescription = null, tint = color, modifier = Modifier.size(22.dp))
+    Icon(painter = painterResource(icon), contentDescription = null, tint = color)
     Spacer(modifier = Modifier.width(PathlySpacing.md))
     Column(modifier = Modifier.weight(1f)) {
       Text(text = title, style = MaterialTheme.typography.bodyLarge, color = color)

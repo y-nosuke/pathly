@@ -17,7 +17,9 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.sizeIn
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.wrapContentSize
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.FilterChip
@@ -40,9 +42,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.core.net.toUri
@@ -64,7 +66,9 @@ import com.pathly.presentation.common.MapPinMarker
 import com.pathly.presentation.common.heightOf
 import com.pathly.presentation.common.rememberFloatingSheetState
 import com.pathly.presentation.common.rememberMapInfoWindowState
+import com.pathly.presentation.common.tintedColors
 import com.pathly.ui.theme.PathlyMapColors
+import com.pathly.ui.theme.PathlySpacing
 import com.pathly.ui.theme.PathlyTheme
 import com.pathly.util.DateFormatters
 
@@ -214,7 +218,7 @@ private fun SearchAddContent(
   Column(
     modifier = modifier
       .fillMaxSize()
-      .padding(16.dp),
+      .padding(PathlySpacing.lg),
   ) {
     Row(
       modifier = Modifier.fillMaxWidth(),
@@ -229,7 +233,7 @@ private fun SearchAddContent(
       TextButton(onClick = onCancel) { Text("閉じる") }
     }
 
-    Spacer(modifier = Modifier.height(8.dp))
+    Spacer(modifier = Modifier.height(PathlySpacing.sm))
 
     PlaceKeywordSearchBody(
       query = search.query,
@@ -287,7 +291,7 @@ private fun SearchResultForm(
       onClick = onBack,
       modifier = Modifier
         .align(Alignment.TopStart)
-        .padding(12.dp),
+        .padding(PathlySpacing.md),
     ) {
       Icon(painter = painterResource(R.drawable.ic_arrow_back), contentDescription = "候補に戻る")
     }
@@ -316,7 +320,7 @@ internal fun VisitRow(
     modifier = modifier
       .fillMaxWidth()
       .clickable(onClick = onClick)
-      .padding(vertical = 10.dp),
+      .padding(vertical = PathlySpacing.md),
   ) {
     Text(
       text = DateFormatters.shortDate(visit.outingDate),
@@ -333,7 +337,7 @@ internal fun VisitRow(
       Text(
         text = note,
         style = MaterialTheme.typography.bodyMedium,
-        modifier = Modifier.padding(top = 2.dp),
+        modifier = Modifier.padding(top = PathlySpacing.xxs),
       )
     }
   }
@@ -380,14 +384,14 @@ internal fun PlaceFormBody(
         text = it,
         style = MaterialTheme.typography.titleMedium,
         fontWeight = FontWeight.Bold,
-        modifier = Modifier.padding(bottom = 12.dp),
+        modifier = Modifier.padding(bottom = PathlySpacing.md),
       )
     }
 
     // 主役: 行きたい・訪問済み・優先度・メモ（いちばんよく直すもの。シートを開いてすぐ見える位置に置く）。
     // 行きたいと訪問済みは名前付きの切り替えボタンを 1 行に並べ、ハーフのシートでもメモまで見えるようにする。
     // 色は一覧の旗・マーカーと同じ（行きたい＝紅・訪問済み＝緑）。
-    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+    Row(horizontalArrangement = Arrangement.spacedBy(PathlySpacing.sm), verticalAlignment = Alignment.CenterVertically) {
       PlaceStatusChip(
         selected = wishlist,
         onClick = { onWishlistChange(!wishlist) },
@@ -409,12 +413,12 @@ internal fun PlaceFormBody(
 
     // 優先度は「行きたい」に属する情報なので、行きたいを入れたときだけ出す。
     if (wishlist) {
-      Spacer(modifier = Modifier.height(4.dp))
+      Spacer(modifier = Modifier.height(PathlySpacing.xs))
       PrioritySelector(selected = priority, onSelect = onPriorityChange)
     }
 
     // メモは「行きたい」に関係なく常に入力できる。
-    Spacer(modifier = Modifier.height(12.dp))
+    Spacer(modifier = Modifier.height(PathlySpacing.md))
     OutlinedTextField(
       value = memo,
       onValueChange = onMemoChange,
@@ -423,24 +427,24 @@ internal fun PlaceFormBody(
     )
 
     // 脇役: 自分で付ける名前（登録のときだけ）・業種・住所・Google マップで開く。
-    Spacer(modifier = Modifier.height(16.dp))
+    Spacer(modifier = Modifier.height(PathlySpacing.lg))
     HorizontalDivider()
-    Spacer(modifier = Modifier.height(16.dp))
+    Spacer(modifier = Modifier.height(PathlySpacing.lg))
     nameField?.invoke()
 
     // Google 由来のカテゴリ・住所（あれば）。「どんな場所か」の手がかり。読取専用。
     category?.let { c ->
-      Spacer(modifier = Modifier.height(4.dp))
+      Spacer(modifier = Modifier.height(PathlySpacing.xs))
       Text(text = c.label, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
     }
     address?.takeIf { it.isNotBlank() }?.let { a ->
-      Spacer(modifier = Modifier.height(4.dp))
+      Spacer(modifier = Modifier.height(PathlySpacing.xs))
       Text(text = a, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 
     // Google マップアプリで開く（写真・口コミ・営業時間・経路は Google に委ねる）。
     onOpenInMaps?.let { open ->
-      Spacer(modifier = Modifier.height(8.dp))
+      Spacer(modifier = Modifier.height(PathlySpacing.sm))
       OutlinedButton(onClick = open) {
         Icon(painter = painterResource(R.drawable.ic_place), contentDescription = null)
         Text(text = " Google マップで開く")
@@ -520,7 +524,7 @@ private fun PlaceStatusChip(
   color: Color,
   enabled: Boolean = true,
 ) {
-  val container = color.copy(alpha = 0.16f).compositeOver(MaterialTheme.colorScheme.surface)
+  val (container, content) = tintedColors(color, base = MaterialTheme.colorScheme.surface)
   FilterChip(
     selected = selected,
     onClick = onClick,
@@ -528,19 +532,21 @@ private fun PlaceStatusChip(
     label = { Text(text = label, maxLines = 1, overflow = TextOverflow.Ellipsis) },
     leadingIcon = { Icon(painter = painterResource(icon), contentDescription = null, modifier = Modifier.size(FilterChipDefaults.IconSize)) },
     colors = FilterChipDefaults.filterChipColors(
+      // 切っているときのアイコンは字と同じ灰色（既定の藍だと、入っているように見える）。
+      iconColor = MaterialTheme.colorScheme.onSurfaceVariant,
       selectedContainerColor = container,
-      selectedLabelColor = color,
-      selectedLeadingIconColor = color,
+      selectedLabelColor = content,
+      selectedLeadingIconColor = content,
       disabledSelectedContainerColor = container,
-      disabledLabelColor = color,
-      disabledLeadingIconColor = color,
+      disabledLabelColor = content,
+      disabledLeadingIconColor = content,
     ),
     border = FilterChipDefaults.filterChipBorder(
       enabled = enabled,
       selected = selected,
-      selectedBorderColor = color,
+      selectedBorderColor = content,
       selectedBorderWidth = 1.dp,
-      disabledSelectedBorderColor = color,
+      disabledSelectedBorderColor = content,
     ),
   )
 }
@@ -560,16 +566,19 @@ internal fun PrioritySelector(
       style = MaterialTheme.typography.bodyMedium,
       color = MaterialTheme.colorScheme.onSurfaceVariant,
     )
-    Spacer(modifier = Modifier.width(8.dp))
+    Spacer(modifier = Modifier.width(PathlySpacing.sm))
     (1..3).forEach { i ->
       Text(
         text = if (i <= level) "★" else "☆",
         style = MaterialTheme.typography.headlineSmall,
         color = PathlyTheme.statusColors.wishlist,
+        // 星の押せる範囲は 48dp 以上にする（字の周りだけだと 36dp ほどで押し外しやすい）。
+        textAlign = TextAlign.Center,
         modifier = Modifier
           .clip(CircleShape)
           .clickable { onSelect(Priority.fromValue(i - 1)) }
-          .padding(6.dp),
+          .sizeIn(minWidth = 48.dp, minHeight = 48.dp)
+          .wrapContentSize(),
       )
     }
   }

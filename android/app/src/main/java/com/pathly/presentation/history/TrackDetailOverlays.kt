@@ -30,8 +30,10 @@ import com.pathly.domain.model.PlacePrediction
 import com.pathly.domain.model.PlaceSearchResult
 import com.pathly.domain.model.StopCandidate
 import com.pathly.presentation.common.PlaceNameSearchField
+import com.pathly.presentation.common.SheetContentHorizontalPadding
 import com.pathly.ui.theme.PathlyElevation
 import com.pathly.ui.theme.PathlyShapes
+import com.pathly.ui.theme.PathlySpacing
 import com.pathly.util.DateFormatters
 
 // 地図の上に重ねる下部オーバーレイ群（再解析の候補選択・手動追加の案内と入力）。
@@ -67,9 +69,9 @@ internal fun CandidateOverlay(
       Column(
         modifier = Modifier
           .fillMaxWidth()
-          .padding(horizontal = 20.dp)
-          .padding(top = 16.dp, bottom = 8.dp),
-        verticalArrangement = Arrangement.spacedBy(4.dp),
+          .padding(horizontal = SheetContentHorizontalPadding)
+          .padding(top = PathlySpacing.lg, bottom = PathlySpacing.sm),
+        verticalArrangement = Arrangement.spacedBy(PathlySpacing.xs),
       ) {
         Text(
           text = "一覧に無い立ち寄り ${candidates.size}件",
@@ -88,18 +90,18 @@ internal fun CandidateOverlay(
           .weight(1f)
           .fillMaxWidth()
           .verticalScroll(rememberScrollState())
-          .padding(horizontal = 20.dp),
+          .padding(horizontal = SheetContentHorizontalPadding),
       ) {
         candidates.forEachIndexed { index, candidate ->
           Row(
             modifier = Modifier
               .fillMaxWidth()
               .clickable { onFocus(candidate) }
-              .padding(vertical = 6.dp),
+              .padding(vertical = PathlySpacing.sm),
             verticalAlignment = Alignment.CenterVertically,
           ) {
             Checkbox(checked = index in selectedIndices, onCheckedChange = { onToggle(index) })
-            Column(modifier = Modifier.padding(start = 4.dp)) {
+            Column(modifier = Modifier.padding(start = PathlySpacing.xs)) {
               Text(
                 text = candidate.name ?: "名称未取得",
                 style = MaterialTheme.typography.bodyLarge,
@@ -119,9 +121,9 @@ internal fun CandidateOverlay(
       Row(
         modifier = Modifier
           .fillMaxWidth()
-          .padding(horizontal = 20.dp)
-          .padding(top = 8.dp, bottom = 16.dp),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
+          .padding(horizontal = SheetContentHorizontalPadding)
+          .padding(top = PathlySpacing.sm, bottom = PathlySpacing.lg),
+        horizontalArrangement = Arrangement.spacedBy(PathlySpacing.sm),
       ) {
         TextButton(onClick = onCancel, modifier = Modifier.weight(1f)) { Text("キャンセル") }
         Button(
@@ -147,7 +149,7 @@ internal fun ManualPickPrompt(
   Surface(
     modifier = modifier
       .fillMaxWidth()
-      .padding(16.dp),
+      .padding(PathlySpacing.lg),
     shape = MaterialTheme.shapes.medium,
     color = MaterialTheme.colorScheme.surface,
     shadowElevation = PathlyElevation.sheet,
@@ -155,7 +157,7 @@ internal fun ManualPickPrompt(
     Column(
       modifier = Modifier
         .fillMaxWidth()
-        .padding(start = 20.dp, end = 8.dp, top = 8.dp, bottom = 8.dp),
+        .padding(start = SheetContentHorizontalPadding, end = PathlySpacing.sm, top = PathlySpacing.sm, bottom = PathlySpacing.sm),
     ) {
       Row(
         modifier = Modifier.fillMaxWidth(),
@@ -177,7 +179,7 @@ internal fun ManualPickPrompt(
           onFetchPrediction = onFetchPrediction,
           onPicked = onPicked,
           heading = "地図に出ていない場所は名前で検索",
-          modifier = Modifier.padding(end = 12.dp, top = 4.dp, bottom = 8.dp),
+          modifier = Modifier.padding(end = PathlySpacing.md, top = PathlySpacing.xs, bottom = PathlySpacing.sm),
         )
       }
     }

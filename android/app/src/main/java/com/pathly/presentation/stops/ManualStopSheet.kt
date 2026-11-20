@@ -37,7 +37,9 @@ import com.pathly.domain.model.PlaceSearchResult
 import com.pathly.presentation.common.FloatingSheet
 import com.pathly.presentation.common.FloatingSheetState
 import com.pathly.presentation.common.PlaceNameSearchField
+import com.pathly.presentation.common.SheetContentHorizontalPadding
 import com.pathly.presentation.common.rememberFloatingSheetState
+import com.pathly.ui.theme.PathlySpacing
 import java.util.Date
 
 /**
@@ -147,8 +149,8 @@ fun ManualStopSheet(
         .weight(1f)
         .fillMaxWidth()
         .verticalScroll(rememberScrollState())
-        .padding(horizontal = 20.dp),
-      verticalArrangement = Arrangement.spacedBy(12.dp),
+        .padding(horizontal = SheetContentHorizontalPadding),
+      verticalArrangement = Arrangement.spacedBy(PathlySpacing.md),
     ) {
       // 見出しは場所の名前。名前欄は空で始まるので、識別はここが担う。
       Text(
@@ -223,9 +225,9 @@ fun ManualStopSheet(
     Row(
       modifier = Modifier
         .fillMaxWidth()
-        .padding(horizontal = 20.dp)
-        .padding(top = 8.dp, bottom = 16.dp),
-      horizontalArrangement = Arrangement.spacedBy(8.dp),
+        .padding(horizontal = SheetContentHorizontalPadding)
+        .padding(top = PathlySpacing.sm, bottom = PathlySpacing.lg),
+      horizontalArrangement = Arrangement.spacedBy(PathlySpacing.sm),
     ) {
       TextButton(onClick = onCancel, modifier = Modifier.weight(1f)) { Text("キャンセル") }
       Button(
@@ -306,7 +308,7 @@ private fun CandidatePicker(
   when (candidates) {
     null -> Row(verticalAlignment = Alignment.CenterVertically) {
       CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
-      Spacer(modifier = Modifier.width(8.dp))
+      Spacer(modifier = Modifier.width(PathlySpacing.sm))
       Text("近くの候補を検索中…", style = MaterialTheme.typography.bodySmall)
     }
 
@@ -329,7 +331,7 @@ private fun CandidatePicker(
               selected = selected?.googlePlaceId == poi.googlePlaceId,
               onClick = { onSelect(poi) },
             )
-            Column(modifier = Modifier.padding(start = 4.dp)) {
+            Column(modifier = Modifier.padding(start = PathlySpacing.xs)) {
               Text(poi.name ?: "（名称不明）", style = MaterialTheme.typography.bodyMedium)
               poi.category?.let {
                 Text(it.label, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -338,7 +340,7 @@ private fun CandidatePicker(
           }
         }
       }
-      Spacer(modifier = Modifier.height(4.dp))
+      Spacer(modifier = Modifier.height(PathlySpacing.xs))
       UserNameField(name = name, onNameChange = onNameChange, googleName = googleName)
     }
   }

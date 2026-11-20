@@ -24,7 +24,9 @@ import com.pathly.domain.model.GpsPoint
 import com.pathly.domain.model.Stop
 import com.pathly.presentation.common.FloatingSheet
 import com.pathly.presentation.common.FloatingSheetState
+import com.pathly.presentation.common.SheetContentHorizontalPadding
 import com.pathly.presentation.common.rememberFloatingSheetState
+import com.pathly.ui.theme.PathlySpacing
 
 /**
  * 保存済みの立ち寄りの滞在期間（到着〜出発）を手で直すシート。
@@ -67,8 +69,8 @@ fun StopDurationSheet(
         .weight(1f)
         .fillMaxWidth()
         .verticalScroll(rememberScrollState())
-        .padding(horizontal = 20.dp),
-      verticalArrangement = Arrangement.spacedBy(12.dp),
+        .padding(horizontal = SheetContentHorizontalPadding),
+      verticalArrangement = Arrangement.spacedBy(PathlySpacing.md),
     ) {
       Text(
         text = stop.place.displayName,
@@ -96,9 +98,9 @@ fun StopDurationSheet(
     Row(
       modifier = Modifier
         .fillMaxWidth()
-        .padding(horizontal = 20.dp)
-        .padding(top = 8.dp, bottom = 16.dp),
-      horizontalArrangement = Arrangement.spacedBy(8.dp),
+        .padding(horizontal = SheetContentHorizontalPadding)
+        .padding(top = PathlySpacing.sm, bottom = PathlySpacing.lg),
+      horizontalArrangement = Arrangement.spacedBy(PathlySpacing.sm),
     ) {
       TextButton(onClick = onCancel, modifier = Modifier.weight(1f)) { Text("キャンセル") }
       Button(

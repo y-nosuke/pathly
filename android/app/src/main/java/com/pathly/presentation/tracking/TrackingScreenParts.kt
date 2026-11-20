@@ -76,7 +76,7 @@ internal fun InterruptedTrackDialog(
         if (isLocationDisabled) {
           Text(
             text = "端末の位置情報がオフのため再開できません。",
-            modifier = Modifier.padding(top = 12.dp),
+            modifier = Modifier.padding(top = PathlySpacing.md),
             color = MaterialTheme.colorScheme.error,
           )
           TextButton(onClick = onOpenLocationSettings) {
@@ -251,7 +251,7 @@ internal fun PlaceRegisteredToast(
   ) {
     Text(
       text = message,
-      modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+      modifier = Modifier.padding(horizontal = PathlySpacing.lg, vertical = PathlySpacing.sm),
       style = MaterialTheme.typography.labelLarge,
       color = MaterialTheme.colorScheme.onSecondaryContainer,
     )
@@ -268,11 +268,11 @@ internal fun LocatingPill(modifier: Modifier = Modifier) {
     shadowElevation = PathlyElevation.floating,
   ) {
     Row(
-      modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+      modifier = Modifier.padding(horizontal = PathlySpacing.lg, vertical = PathlySpacing.sm),
       verticalAlignment = Alignment.CenterVertically,
     ) {
       CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
-      Spacer(modifier = Modifier.width(8.dp))
+      Spacer(modifier = Modifier.width(PathlySpacing.sm))
       Text(text = "現在地を取得中…", style = MaterialTheme.typography.labelMedium)
     }
   }

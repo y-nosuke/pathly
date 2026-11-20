@@ -147,7 +147,7 @@ internal fun RecordingStatusPill(
     shadowElevation = PathlyElevation.floating,
   ) {
     Row(
-      modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
+      modifier = Modifier.padding(horizontal = PathlySpacing.md, vertical = PathlySpacing.sm),
       verticalAlignment = Alignment.CenterVertically,
     ) {
       Box(
@@ -155,13 +155,13 @@ internal fun RecordingStatusPill(
           .size(10.dp)
           .background(PathlyTheme.statusColors.visited, CircleShape),
       )
-      Spacer(modifier = Modifier.width(8.dp))
+      Spacer(modifier = Modifier.width(PathlySpacing.sm))
       Text(
         text = "記録中",
         style = MaterialTheme.typography.labelLarge,
         fontWeight = FontWeight.Bold,
       )
-      Spacer(modifier = Modifier.width(8.dp))
+      Spacer(modifier = Modifier.width(PathlySpacing.sm))
       Text(
         text = elapsedText,
         style = MaterialTheme.typography.labelLarge,
@@ -188,9 +188,9 @@ internal fun FinalizingOverlay() {
   ) {
     Card {
       Column(
-        modifier = Modifier.padding(horizontal = 28.dp, vertical = 24.dp),
+        modifier = Modifier.padding(horizontal = PathlySpacing.xl, vertical = PathlySpacing.xl),
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(12.dp),
+        verticalArrangement = Arrangement.spacedBy(PathlySpacing.md),
       ) {
         CircularProgressIndicator()
         Text(text = "記録を保存しています", style = MaterialTheme.typography.titleSmall)
@@ -243,9 +243,9 @@ internal fun LocationPermissionOverlay(
     ),
   ) {
     Column(
-      modifier = Modifier.padding(24.dp),
+      modifier = Modifier.padding(PathlySpacing.xl),
       horizontalAlignment = Alignment.CenterHorizontally,
-      verticalArrangement = Arrangement.spacedBy(12.dp),
+      verticalArrangement = Arrangement.spacedBy(PathlySpacing.md),
     ) {
       Text(
         text = "位置情報の権限が必要です",
@@ -306,7 +306,7 @@ internal fun RegionMarkerChips(
           text = "すべて外す",
           style = MaterialTheme.typography.labelLarge,
           fontWeight = FontWeight.Medium,
-          modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
+          modifier = Modifier.padding(horizontal = PathlySpacing.md, vertical = PathlySpacing.sm),
         )
       }
     }
@@ -350,7 +350,7 @@ private fun FoldedRegionChip(
       modifier = Modifier.testTag("regionMarkerFoldedChip"),
     ) {
       Row(
-        modifier = Modifier.padding(start = 14.dp, end = 10.dp, top = 8.dp, bottom = 8.dp),
+        modifier = Modifier.padding(start = PathlySpacing.md, end = PathlySpacing.md, top = PathlySpacing.sm, bottom = PathlySpacing.sm),
         verticalAlignment = Alignment.CenterVertically,
       ) {
         Text(
@@ -447,7 +447,7 @@ internal fun RegionMarkerChip(
       Row(
         modifier = Modifier
           .clickable(onClickLabel = "この地域へ地図を寄せる", onClick = onRefit)
-          .padding(start = 14.dp, top = 8.dp, bottom = 8.dp, end = 4.dp),
+          .padding(start = PathlySpacing.md, top = PathlySpacing.sm, bottom = PathlySpacing.sm, end = PathlySpacing.xs),
         verticalAlignment = Alignment.CenterVertically,
       ) {
         Icon(
@@ -456,7 +456,7 @@ internal fun RegionMarkerChip(
           tint = PathlyMapColors.Region,
           modifier = Modifier.size(18.dp),
         )
-        Spacer(modifier = Modifier.width(6.dp))
+        Spacer(modifier = Modifier.width(PathlySpacing.sm))
         // 横にスクロールする行の中なので、長い地名は幅を決めて省略する。
         Text(
           text = name,

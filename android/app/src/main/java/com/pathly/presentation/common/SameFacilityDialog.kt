@@ -12,6 +12,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import com.pathly.ui.theme.PathlySpacing
 
 /** 名前の無い場所を文中で呼ぶときの言い方。 */
 private const val UNNAMED_PLACE = "名前の無い場所"
@@ -44,7 +45,7 @@ fun SameFacilityDialog(
     onDismissRequest = onDismiss,
     title = { Text("同じ施設の場所があります") },
     text = {
-      Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+      Column(verticalArrangement = Arrangement.spacedBy(PathlySpacing.sm)) {
         Text(
           "「${placeName ?: UNNAMED_PLACE}」は、登録済みの「$other」と同じ施設のようです。",
           style = MaterialTheme.typography.bodyMedium,

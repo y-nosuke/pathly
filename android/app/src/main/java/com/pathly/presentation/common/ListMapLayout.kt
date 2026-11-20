@@ -113,7 +113,7 @@ internal fun ListMapOverlay(
         summary = collapsedSummary,
         onExpand = { onCollapsedChange(false) },
         actions = collapsedActions,
-        modifier = Modifier.padding(12.dp),
+        modifier = Modifier.padding(PathlySpacing.md),
       )
     } else {
       Surface(
@@ -165,7 +165,7 @@ private fun ListMapCollapsedBar(
     shadowElevation = PathlyElevation.low,
   ) {
     Row(
-      modifier = Modifier.padding(horizontal = 4.dp),
+      modifier = Modifier.padding(horizontal = PathlySpacing.xs),
       verticalAlignment = Alignment.CenterVertically,
     ) {
       ListMapToggle(mode = mode, onChange = onModeChange)
@@ -177,7 +177,7 @@ private fun ListMapCollapsedBar(
         modifier = Modifier
           .weight(1f)
           .clickable(onClick = onExpand)
-          .padding(horizontal = 4.dp, vertical = 12.dp),
+          .padding(horizontal = PathlySpacing.xs, vertical = PathlySpacing.md),
       )
       actions()
       IconButton(onClick = onExpand) {

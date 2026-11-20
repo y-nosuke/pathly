@@ -337,7 +337,7 @@ fun TrackingScreen(
         onRequestPermission = onRequestPermission,
         modifier = Modifier
           .align(Alignment.Center)
-          .padding(24.dp),
+          .padding(PathlySpacing.xl),
       )
     }
 

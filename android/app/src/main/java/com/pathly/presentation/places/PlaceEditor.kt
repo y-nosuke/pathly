@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.material3.AlertDialog
@@ -285,16 +286,22 @@ private fun PlaceEditorHeader(
       .padding(start = SheetContentHorizontalPadding, end = PathlySpacing.xs, bottom = PathlySpacing.xs),
     verticalAlignment = Alignment.CenterVertically,
   ) {
-    Text(
-      text = title,
-      style = MaterialTheme.typography.titleMedium,
-      fontWeight = FontWeight.Bold,
-      maxLines = 2,
-      overflow = TextOverflow.Ellipsis,
+    // 押せる範囲は 1 行の名前でも 48dp 以上にする（右の ⋮ と同じ高さ）。
+    Box(
       modifier = Modifier
         .weight(1f)
+        .heightIn(min = 48.dp)
         .clickable(onClickLabel = titleClickLabel, role = Role.Button, onClick = onTitleClick),
-    )
+      contentAlignment = Alignment.CenterStart,
+    ) {
+      Text(
+        text = title,
+        style = MaterialTheme.typography.titleMedium,
+        fontWeight = FontWeight.Bold,
+        maxLines = 2,
+        overflow = TextOverflow.Ellipsis,
+      )
+    }
     Box {
       IconButton(onClick = { menuOpen = true }) {
         Icon(painter = painterResource(R.drawable.ic_more_vert), contentDescription = "その他の操作")

@@ -28,6 +28,7 @@ import com.pathly.domain.model.PlaceListItem
 import com.pathly.domain.model.PlaceWithDistance
 import com.pathly.domain.model.SameFacilityPlace
 import com.pathly.domain.usecase.PlaceEditUseCase
+import com.pathly.ui.theme.PathlySpacing
 import kotlinx.coroutines.CancellationException
 import kotlin.math.roundToInt
 
@@ -63,7 +64,7 @@ internal fun PlaceMergePickerDialog(
       onDismissRequest = onDismiss,
       title = { Text("ほかの場所とまとめる") },
       text = {
-        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Column(verticalArrangement = Arrangement.spacedBy(PathlySpacing.sm)) {
           Text(
             "「${item.displayName}」と同じ場所を選んでください。" +
               "${PlaceEditUseCase.MERGE_RADIUS_METERS.roundToInt()}m 以内の場所を近い順に出します。",
@@ -74,7 +75,7 @@ internal fun PlaceMergePickerDialog(
             list == null -> Box(
               modifier = Modifier
                 .fillMaxWidth()
-                .padding(16.dp),
+                .padding(PathlySpacing.lg),
               contentAlignment = Alignment.Center,
             ) { CircularProgressIndicator() }
 
@@ -105,7 +106,7 @@ internal fun PlaceMergePickerDialog(
       onDismissRequest = onDismiss,
       title = { Text("「$otherName」にまとめますか？") },
       text = {
-        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Column(verticalArrangement = Arrangement.spacedBy(PathlySpacing.sm)) {
           Text(
             "「${item.displayName}」を「$otherName」にまとめます。立ち寄り・メモ・行きたいは「$otherName」に引き継ぎます。" +
               "名前は「$otherName」に付けた名前を優先し、無ければ「${item.displayName}」の名前を使います。",
@@ -141,7 +142,7 @@ private fun CandidateRow(candidate: PlaceWithDistance, onClick: () -> Unit) {
     modifier = Modifier
       .fillMaxWidth()
       .clickable(onClick = onClick)
-      .padding(vertical = 8.dp),
+      .padding(vertical = PathlySpacing.sm),
   ) {
     Text(candidate.place.displayName, style = MaterialTheme.typography.bodyLarge)
     Text(

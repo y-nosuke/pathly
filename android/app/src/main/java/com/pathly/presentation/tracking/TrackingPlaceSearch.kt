@@ -42,6 +42,7 @@ import com.pathly.domain.model.PlacePrediction
 import com.pathly.presentation.places.PlaceSearchPredictions
 import com.pathly.ui.theme.PathlyElevation
 import com.pathly.ui.theme.PathlyShapes
+import com.pathly.ui.theme.PathlySpacing
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -97,7 +98,7 @@ internal fun <T : Any> TrackingPlaceSearchBar(
   Column(
     modifier = modifier
       .statusBarsPadding()
-      .padding(12.dp)
+      .padding(PathlySpacing.md)
       .fillMaxWidth()
       .testTag("trackingPlaceSearch"),
   ) {
@@ -112,7 +113,7 @@ internal fun <T : Any> TrackingPlaceSearchBar(
           contentDescription = null,
           tint = MaterialTheme.colorScheme.onSurfaceVariant,
           modifier = Modifier
-            .padding(start = 16.dp)
+            .padding(start = PathlySpacing.lg)
             .size(20.dp),
         )
         TextField(
@@ -147,17 +148,17 @@ internal fun <T : Any> TrackingPlaceSearchBar(
         color = MaterialTheme.colorScheme.surface,
         shadowElevation = PathlyElevation.floating,
         modifier = Modifier
-          .padding(top = 8.dp)
+          .padding(top = PathlySpacing.sm)
           .fillMaxWidth()
           .heightIn(max = maxCardHeight),
       ) {
-        Column(modifier = Modifier.padding(horizontal = 16.dp)) {
+        Column(modifier = Modifier.padding(horizontal = PathlySpacing.lg)) {
           if (fetchFailed) {
             Text(
               text = fetchFailedText,
               style = MaterialTheme.typography.bodySmall,
               color = MaterialTheme.colorScheme.error,
-              modifier = Modifier.padding(top = 8.dp),
+              modifier = Modifier.padding(top = PathlySpacing.sm),
             )
           }
           PlaceSearchPredictions(

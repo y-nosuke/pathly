@@ -98,6 +98,6 @@ private fun LongestTrackRow(track: GpsTrack, onClick: () -> Unit) {
       color = MaterialTheme.colorScheme.onSurface,
       modifier = Modifier.padding(start = PathlySpacing.sm),
     )
-    Icon(painter = painterResource(R.drawable.ic_chevron_right), contentDescription = null, modifier = Modifier.size(18.dp))
+    Icon(painter = painterResource(R.drawable.ic_chevron_right), contentDescription = null, modifier = Modifier.size(20.dp))
   }
 }
