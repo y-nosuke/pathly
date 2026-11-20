@@ -1,5 +1,8 @@
 package com.pathly.presentation.common
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
@@ -25,11 +28,14 @@ val SheetContentHorizontalPadding = 20.dp
  * 保存・登録のような主役のボタンを、本文が長くてもスクロールせずに押せるようにする（→ docs/designs/ui.md）。
  *
  * [FloatingSheet] の content（つまみの行の下）に置く。本文は残りの高さを使い、操作の行は右寄せで並べる。
+ * [showActions] が false の間は操作の行をしまい、その分を本文に回す（押せるものが無いうちに場所を取らないように。
+ * 場所詳細の「保存」だけの行は、変更があるときだけ下から出す）。
  */
 @Composable
 fun ColumnScope.SheetFormLayout(
   actions: @Composable FlowRowScope.() -> Unit,
   modifier: Modifier = Modifier,
+  showActions: Boolean = true,
   content: @Composable ColumnScope.() -> Unit,
 ) {
   Column(
@@ -41,16 +47,20 @@ fun ColumnScope.SheetFormLayout(
       .padding(bottom = PathlySpacing.lg),
     content = content,
   )
-  HorizontalDivider()
-  // 文字が大きい設定でボタンが横に収まらないときは、次の行へ折り返す（右寄せのまま）。
-  FlowRow(
-    modifier = Modifier
-      .fillMaxWidth()
-      .testTag("sheetActions")
-      .padding(horizontal = SheetContentHorizontalPadding, vertical = PathlySpacing.md),
-    horizontalArrangement = Arrangement.spacedBy(PathlySpacing.sm, Alignment.End),
-    verticalArrangement = Arrangement.spacedBy(PathlySpacing.xs),
-    itemVerticalAlignment = Alignment.CenterVertically,
-    content = actions,
-  )
+  AnimatedVisibility(visible = showActions, enter = expandVertically(), exit = shrinkVertically()) {
+    Column {
+      HorizontalDivider()
+      // 文字が大きい設定でボタンが横に収まらないときは、次の行へ折り返す（右寄せのまま）。
+      FlowRow(
+        modifier = Modifier
+          .fillMaxWidth()
+          .testTag("sheetActions")
+          .padding(horizontal = SheetContentHorizontalPadding, vertical = PathlySpacing.md),
+        horizontalArrangement = Arrangement.spacedBy(PathlySpacing.sm, Alignment.End),
+        verticalArrangement = Arrangement.spacedBy(PathlySpacing.xs),
+        itemVerticalAlignment = Alignment.CenterVertically,
+        content = actions,
+      )
+    }
+  }
 }

@@ -1,5 +1,6 @@
 package com.pathly.presentation.places
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -10,6 +11,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -20,6 +22,8 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -35,6 +39,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -51,7 +56,6 @@ import com.pathly.presentation.common.SameFacilityDialog
 import com.pathly.presentation.common.SheetContentHorizontalPadding
 import com.pathly.presentation.common.SheetFormLayout
 import com.pathly.ui.theme.PathlySpacing
-import com.pathly.ui.theme.PathlyTheme
 import com.pathly.util.DateFormatters
 
 /**
@@ -76,6 +80,9 @@ class PlaceMergeActions(
 class PlaceEditorState internal constructor(initiallyOpenLinkPicker: Boolean) {
   /** 「Googleで情報を取得」（施設を選ぶ）ダイアログの開閉。 */
   var linkPickerOpen by mutableStateOf(initiallyOpenLinkPicker)
+
+  /** 名前を付ける・直すダイアログの開閉（見出しを押して開く）。 */
+  var renameOpen by mutableStateOf(false)
 
   /** 「ほかの場所とまとめる」ダイアログの開閉。 */
   var mergePickerOpen by mutableStateOf(false)
@@ -106,7 +113,8 @@ internal fun rememberPlaceEditorState(placeId: Long, initiallyOpenLinkPicker: Bo
  *
  * [FloatingSheet][com.pathly.presentation.common.FloatingSheet] の content に置く。並びは段（→ docs/designs/ui-direction.md）に沿う:
  * 見出しの行（[showHeader]。名前と ⋮）→ 本文（確認待ち → 主役: 行きたい・優先度・訪問済み・メモ →
- * 脇役: 自分で付ける名前・業種・住所・Google マップで開く → 訪問履歴）→ 下端に固定する操作の行（閉じる・立ち寄りに追加・保存）。
+ * 脇役: 業種・住所・Google マップで開く → 訪問履歴）→ 下端に固定する操作の行（閉じる・立ち寄りに追加・保存）。
+ * 自分で付ける名前は、経路の名前と同じく見出しを押して開くダイアログで付け、その場で保存する（空にすると Google の名前に戻る）。
  * しまうもの（Google 施設を選び直す・ほかの場所とまとめる・削除）は ⋮（[PlaceEditorMenuItems]）の中。
  * 地図・カメラ・戻る操作は画面側が持つ。
  *
@@ -138,31 +146,35 @@ internal fun ColumnScope.PlaceEditorBody(
 ) {
   val context = LocalContext.current
 
-  val savedName = item.place.name ?: ""
   val savedNote = item.note ?: ""
   val savedPriority = item.priority ?: Priority.MEDIUM
-  // 編集はすべてローカルに溜め、「保存」でまとめて確定する（何が未保存かを一目で分かるように）。
-  var name by remember(item.place.id) { mutableStateOf(savedName) }
+  // 名前以外の編集はローカルに溜め、「保存」でまとめて確定する（何が未保存かを一目で分かるように）。
   var note by remember(item.place.id) { mutableStateOf(savedNote) }
   var wishlist by remember(item.wishlistId) { mutableStateOf(item.isWishlisted) }
   var priority by remember(item.wishlistId) { mutableStateOf(savedPriority) }
   // 訪問済みは行きたいとは別の軸なので、行きたい行の有無ではなく場所そのものに紐付けて覚える。
   var visited by remember(item.place.id) { mutableStateOf(item.isManuallyVisited) }
 
-  val hasChanges = name.trim() != savedName.trim() ||
-    note.trim() != savedNote.trim() ||
+  val hasChanges = note.trim() != savedNote.trim() ||
     wishlist != item.isWishlisted ||
     (wishlist && priority != savedPriority) ||
     (item.visitCount == 0 && visited != item.isManuallyVisited) ||
     state.pendingLink != null
 
   if (showHeader) {
-    PlaceEditorHeader(title = item.displayName) { close ->
+    PlaceEditorHeader(
+      title = item.displayName,
+      onTitleClick = { state.renameOpen = true },
+      titleClickLabel = renameLabel(item),
+    ) { close ->
       PlaceEditorMenuItems(item = item, state = state, canMerge = mergeActions != null, onDelete = onDelete, close = close)
     }
   }
 
   SheetFormLayout(
+    // 「保存」しか無い行（場所詳細）は、変更があるときだけ出す（押せない保存でシートの下を取らないように）。
+    // 閉じる・立ち寄りに追加があるマーカーのシートは常に出す。
+    showActions = hasChanges || onClose != null || onAddStop != null,
     actions = {
       onClose?.let { TextButton(onClick = it) { Text("閉じる") } }
       // 記録中のみ「立ち寄りに追加」（この訪問を既存 place にひも付ける）。
@@ -170,7 +182,7 @@ internal fun ColumnScope.PlaceEditorBody(
       Button(
         onClick = {
           if (state.pendingLink != null) state.awaitingLinkResult = true
-          onSave(name, note, wishlist, priority, visited, state.pendingLink)
+          onSave(item.place.name.orEmpty(), note, wishlist, priority, visited, state.pendingLink)
           // 保存したら紐付け予定は消化済み。残すとボタンが活性のまま・予定表示が残るため確実にクリアする。
           state.pendingLink = null
         },
@@ -207,12 +219,8 @@ internal fun ColumnScope.PlaceEditorBody(
     }
 
     PlaceFormBody(
-      name = name,
-      onNameChange = { name = it },
-      nameLabel = "自分で付ける名前（任意）",
-      // 書き換えの元にできるのは Google 名だけ（住所・座標のフォールバックは元にしない）。
-      namePrefill = item.place.googleName,
-      category = item.place.category,
+      // 場所詳細（見出しの行を出さない）は上のバーの名前の下に業種があるので、シートでは繰り返さない。
+      category = if (showHeader) item.place.category else null,
       address = item.place.googleAddress,
       onOpenInMaps = {
         openPlaceInGoogleMaps(context, item.place.googlePlaceId, item.place.latitude, item.place.longitude, item.displayName)
@@ -223,17 +231,10 @@ internal fun ColumnScope.PlaceEditorBody(
       onWishlistChange = { wishlist = it },
       priority = priority,
       onPriorityChange = { priority = it },
-      wishlistOffHint = "「行きたい」に登録すると、優先度を付けられます。",
       wishlistHistory = wishlistHistoryText(item),
       // 立ち寄り記録がある場所は自動で訪問済み（切替不可・件数を表示）。無ければ手動トグル。
       visitedContent = if (item.visitCount > 0) {
-        {
-          Text(
-            text = "訪問済み（立ち寄り記録 ${item.visitCount} 件）",
-            style = MaterialTheme.typography.bodyMedium,
-            color = PathlyTheme.statusColors.visited,
-          )
-        }
+        { VisitedByStopsChip(item.visitCount) }
       } else {
         { VisitedToggle(visited) { visited = it } }
       },
@@ -260,6 +261,7 @@ internal fun ColumnScope.PlaceEditorBody(
     PlaceEditorDialogs(
       item = item,
       state = state,
+      onSave = onSave,
       mergeActions = mergeActions,
       onFetchNearbyPois = onFetchNearbyPois,
       onSearchPredictions = onSearchPredictions,
@@ -272,6 +274,8 @@ internal fun ColumnScope.PlaceEditorBody(
 @Composable
 private fun PlaceEditorHeader(
   title: String,
+  onTitleClick: () -> Unit,
+  titleClickLabel: String,
   menu: @Composable ColumnScope.(close: () -> Unit) -> Unit,
 ) {
   var menuOpen by rememberSaveable { mutableStateOf(false) }
@@ -287,7 +291,9 @@ private fun PlaceEditorHeader(
       fontWeight = FontWeight.Bold,
       maxLines = 2,
       overflow = TextOverflow.Ellipsis,
-      modifier = Modifier.weight(1f),
+      modifier = Modifier
+        .weight(1f)
+        .clickable(onClickLabel = titleClickLabel, role = Role.Button, onClick = onTitleClick),
     )
     Box {
       IconButton(onClick = { menuOpen = true }) {
@@ -368,6 +374,8 @@ internal fun ColumnScope.PlaceEditorMenuItems(
 internal fun PlaceEditorDialogs(
   item: PlaceListItem,
   state: PlaceEditorState,
+  // 名前のダイアログの保存に使う（名前だけを変え、ほかは保存済みの値のまま渡す）。
+  onSave: (name: String, note: String, wishlist: Boolean, priority: Priority, visited: Boolean, link: PlaceSearchResult?) -> Unit,
   mergeActions: PlaceMergeActions?,
   onFetchNearbyPois: suspend (lat: Double, lng: Double) -> List<PlaceSearchResult>,
   onSearchPredictions: suspend (query: String) -> List<PlacePrediction>,
@@ -405,6 +413,21 @@ internal fun PlaceEditorDialogs(
     )
   }
 
+  if (state.renameOpen) {
+    RenamePlaceDialog(
+      initialName = item.place.name.orEmpty(),
+      // 自分の名前が無いときの表示名（Google の名前・無ければ住所や座標）。
+      defaultName = item.place.copy(name = null).displayName,
+      googleName = item.place.googleName,
+      onDismiss = { state.renameOpen = false },
+      onConfirm = { name ->
+        state.renameOpen = false
+        // 保存は変わったものだけを書く（PlaceEditUseCase.saveEdits）ので、名前以外は保存済みの値を渡す。
+        onSave(name, item.note.orEmpty(), item.isWishlisted, item.priority ?: Priority.MEDIUM, item.isManuallyVisited, null)
+      },
+    )
+  }
+
   if (state.mergePickerOpen && mergeActions != null) {
     PlaceMergePickerDialog(
       item = item,
@@ -438,6 +461,58 @@ internal fun PlaceEditorDialogs(
       onFetchPrediction = onFetchPrediction,
     )
   }
+}
+
+/** 見出しを押したときの読み上げ（経路の見出しと同じ言い方）。 */
+internal fun renameLabel(item: PlaceListItem): String = if (item.place.name.isNullOrBlank()) "名前を付ける" else "名前を編集"
+
+/**
+ * 場所の名前を付ける・直すダイアログ（経路の名前のダイアログと同じ形）。空で保存すると自分で付けた名前が消え、
+ * Google の名前（無ければ住所など）に戻る。Google の名前があれば、それを元に書き換える導線を出す。
+ * 欄は自分で付ける名前だけ。欄の名札（ラベル）に、自分の名前が無いときに出る名前（[defaultName]。ふつうは Google の
+ * 名前）を出す。空のうちは欄の中に薄い字で、打ち始めると枠の上に移るので、自分の名前と Google の名前を見分けられる。
+ */
+@Composable
+private fun RenamePlaceDialog(
+  initialName: String,
+  defaultName: String,
+  googleName: String?,
+  onDismiss: () -> Unit,
+  onConfirm: (String) -> Unit,
+) {
+  var text by remember { mutableStateOf(initialName) }
+  AlertDialog(
+    onDismissRequest = onDismiss,
+    title = { Text("場所の名前") },
+    text = {
+      Column {
+        OutlinedTextField(
+          value = text,
+          onValueChange = { text = it },
+          singleLine = true,
+          label = { Text(defaultName, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+          // 欄の中の名札（Google の名前）は、打った字（自分の名前）と見分けられるよう薄くする。
+          colors = OutlinedTextFieldDefaults.colors(unfocusedLabelColor = MaterialTheme.colorScheme.outline),
+          supportingText = {
+            Text(if (googleName != null) "空のときは Google の名前で表示します" else "空のときは住所などで表示します")
+          },
+          modifier = Modifier.testTag("placeNameField"),
+        )
+        // 施設名を少し変えたいだけのときに打ち直さずに済むよう、Google の名前から書き換えられるようにする。
+        googleName?.takeIf { it.isNotBlank() && text.isEmpty() }?.let { candidate ->
+          TextButton(onClick = { text = candidate }) { Text("Google の名前から書き換える") }
+        }
+      }
+    },
+    confirmButton = {
+      // 名前が変わっていないうちは押せない（自分の名前が無いまま空で保存しても何も起きないため）。
+      // 自分の名前を消して空にしたときは押せる（Google の名前に戻す）。
+      TextButton(onClick = { onConfirm(text) }, enabled = text.trim() != initialName.trim()) { Text("保存") }
+    },
+    dismissButton = {
+      TextButton(onClick = onDismiss) { Text("キャンセル") }
+    },
+  )
 }
 
 /** 「◯◯と同じ施設らしい」の確認待ち。押すと選択肢のダイアログを開く。 */

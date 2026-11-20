@@ -125,8 +125,8 @@ DB に持たないのは、`R.drawable` の ID を DB に入れられず結局�
 - **登録済みの場所を編集する部分は `PlaceEditorBody` 1 つに集約する。**場所タブの詳細画面と、
   地図のマーカーをタップして出るシートは、これを呼ぶ器が違うだけ（→ [ADR-0019](../adr/0019-single-place-editor.md)）。
   片方にだけ機能を足さないこと。
-  - 並びは段に沿う: 本文は 確認待ち → 主役（行きたい・優先度・訪問済み・メモ）→ 脇役（自分で付ける名前・業種・住所・
-    Google マップで開く）→ 訪問履歴。しまうもの（Google 施設を選び直す・まとめる・削除）は ⋮（`PlaceEditorMenuItems`）。
+  - 並びは段に沿う: 本文は 確認待ち → 主役（行きたい・優先度・訪問済み・メモ）→ 脇役（業種・住所・
+    Google マップで開く）→ 訪問履歴。自分で付ける名前は見出しを押して開くダイアログ（`PlaceEditorState.renameOpen`）。しまうもの（Google 施設を選び直す・まとめる・削除）は ⋮（`PlaceEditorMenuItems`）。
   - マーカーのシートは見出しの行（名前と ⋮）を自分で出す。場所詳細は上のバーに見出しと ⋮ があるので `showHeader = false`。
     ⋮ から開くダイアログと紐付け予定は `PlaceEditorState` に持たせ、場所詳細は画面側で作って上のバーと本文に渡す
     （ダイアログも画面側の `PlaceEditorDialogs`。地図タップの場所シートで本文が引っ込んでいても出せるように）。
@@ -171,7 +171,8 @@ DB に持たないのは、`R.drawable` の ID を DB に入れられず結局�
   Material 3 Expressive を入れるとき（#201）に FAB のメニューへ差し替える。地図表示の右下の操作（現在地）はその上に積む。
 - **一覧の画面の型の部品は `ListScreenParts.kt`**: 見出し `ListHeader`（検索のアイコンを押すと見出しの位置が検索の窓になる。
   語がある間は窓のまま）、ツール行 `ListToolRow`（左に絞り込み・右に表示のメニュー／地図表示ではレイヤー）、表示のメニュー
-  `ListDisplayMenuButton`（中身は `ListMenuSectionTitle`・`ListMenuChoice`）、統計の帯 `ListStatsBar`。履歴と場所の一覧で使う。
+  `ListDisplayMenuButton`（中身は `ListMenuSectionTitle`・`ListMenuChoice`）。履歴と場所の一覧で使う。
+  統計の帯とカードは `ListStatsCard.kt`（`ExpandableListStats` に帯のタイル `StatsBarItem` とカードの中身を渡す）。
 - **カメラは `ListMapCamera`**（`MapCamera.kt`。地図表示の外で持ち、一覧に切り替えても・詳細から戻っても範囲を保つ）。
   同じファイルに、既定の位置 `DefaultMapLocation`、`GeoBounds` と `LatLngBounds` の変換、現在地を一度だけ取る
   `requestCurrentLatLng` がある。

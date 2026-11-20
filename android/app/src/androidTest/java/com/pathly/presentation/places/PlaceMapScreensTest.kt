@@ -16,12 +16,14 @@ import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.isDialog
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextInput
+import androidx.compose.ui.test.performTextReplacement
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.pathly.domain.model.MapPlaceFilter
 import com.pathly.domain.model.Place
@@ -48,13 +50,16 @@ class PlaceMapScreensTest {
   val composeTestRule = createComposeRule()
 
   @Test
-  fun `場所詳細は上のバーに名前と戻るがあり保存はスクロールせずに見える`() {
+  fun `場所詳細は上のバーに名前と戻るがあり保存は直したときだけ下端に出る`() {
     var backed = false
     setDetail(item(visitCount = 0), visits = List(8) { visit(it.toLong()) }, onBack = { backed = true })
 
     composeTestRule.onNodeWithText("喫茶ひなた").assertIsDisplayed()
-    // 訪問履歴が長くても、保存は下端に固定されているので見える（変更が無いうちは押せない）。
-    composeTestRule.onNodeWithText("保存").assertIsDisplayed().assertIsNotEnabled()
+    // 変更が無いうちは保存の行をしまい、シートを中身に使う。
+    composeTestRule.onNodeWithText("保存").assertDoesNotExist()
+    // 直すと、訪問履歴が長くても下端に固定された保存が見える。
+    composeTestRule.onNodeWithText("メモ（任意）").performTextInput("窓際の席")
+    composeTestRule.onNodeWithText("保存").assertIsDisplayed().assertIsEnabled()
 
     composeTestRule.onNodeWithContentDescription("戻る").performClick()
     assertTrue(backed)
@@ -69,6 +74,29 @@ class PlaceMapScreensTest {
     composeTestRule.onNodeWithText("保存").assertIsEnabled().performClick()
 
     assertEquals("窓際の席", savedNote)
+  }
+
+  // 名前は経路と同じく見出しを押して付ける。保存は名前だけを変え、メモなどの書きかけは渡さない。
+  @Test
+  fun `見出しを押すと名前のダイアログが開き保存で名前だけが渡る`() {
+    var saved: Pair<String, String>? = null
+    setDetail(item(visitCount = 0), onSaveAll = { name, note -> saved = name to note })
+
+    // シートの中に名前の欄は無い。
+    composeTestRule.onNodeWithText("自分で付ける名前（任意）").assertDoesNotExist()
+    composeTestRule.onNodeWithText("メモ（任意）").performTextInput("書きかけ")
+
+    composeTestRule.onNodeWithText("喫茶ひなた").performClick()
+    // 欄は空のまま、名札（ラベル）に Google の名前を出す（自分の名前が無いことが分かる）。
+    composeTestRule.onNodeWithTag("placeNameField").assert(hasText("喫茶ひなた"))
+    composeTestRule.onNodeWithText("空のときは Google の名前で表示します").assertIsDisplayed()
+    // まだ何も入れていないうちは保存を押せない。
+    composeTestRule.onNode(hasText("保存") and hasAnyAncestor(isDialog())).assertIsNotEnabled()
+    composeTestRule.onNodeWithText("Google の名前から書き換える").performClick()
+    composeTestRule.onNodeWithTag("placeNameField").assert(hasText("喫茶ひなた")).performTextReplacement("ひなた")
+    composeTestRule.onNode(hasText("保存") and hasAnyAncestor(isDialog())).performClick()
+
+    assertEquals("ひなた" to "", saved)
   }
 
   @Test
@@ -216,6 +244,7 @@ class PlaceMapScreensTest {
     onBack: () -> Unit = {},
     onDelete: () -> Unit = {},
     onSave: (note: String) -> Unit = {},
+    onSaveAll: (name: String, note: String) -> Unit = { _, note -> onSave(note) },
   ) {
     val placeEdit = object : PlaceEditUi by PlaceEditUi.None {
       override fun savePlaceEdits(
@@ -226,7 +255,7 @@ class PlaceMapScreensTest {
         priority: Priority,
         visited: Boolean,
         link: com.pathly.domain.model.PlaceSearchResult?,
-      ) = onSave(note)
+      ) = onSaveAll(name, note)
     }
     composeTestRule.setContent {
       PathlyAndroidTheme {

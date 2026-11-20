@@ -16,9 +16,12 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.FilledTonalIconButton
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -27,8 +30,6 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
-import androidx.compose.material3.Switch
-import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -38,6 +39,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -342,17 +345,14 @@ internal fun VisitRow(
 
 /**
  * 場所フォームの共通本体。地図で追加・検索で追加・POI 登録・詳細編集のどこでも同じ並びで
- * 名前 → カテゴリ/住所（Google 由来・読取専用）→ Google マップで開く → メモ →
- * 行きたいに登録（ラベル付きスイッチ）→ 優先度 → 訪問済み を出す。
+ * 主役（行きたい・訪問済みの切り替えボタンの行 → 優先度 → メモ）→ 脇役（[nameField] → カテゴリ/住所（Google 由来・
+ * 読取専用）→ Google マップで開く）を出す。
  * 送信ボタン・地図・履歴・削除などは呼び出し側が持つ。
  *
  * **行きたいと訪問済みは別の軸**なので、訪問済みは行きたいの中に入れ子にしない（adr/0020）。
  */
 @Composable
 internal fun PlaceFormBody(
-  name: String,
-  onNameChange: (String) -> Unit,
-  nameLabel: String,
   category: PlaceCategory?,
   address: String?,
   onOpenInMaps: (() -> Unit)?,
@@ -366,12 +366,12 @@ internal fun PlaceFormBody(
   // この場所の名前（表示名）。名前欄は空で始まるので、識別はこの見出しが担う。
   // 施設でない地点のように名前が無いときは、操作の説明を入れる。
   heading: String? = null,
-  // Google 由来の名前。空欄のときだけ「これを直して使う」導線を出す。名前欄は「自分で付けた名前」
-  // 専用にしたので、施設名を少し変えたいだけのときに打ち直さずに済むようにする。
-  namePrefill: String? = null,
-  wishlistOffHint: String? = null,
+  // 脇役の先頭に置く名前の欄（登録のシートの [PlaceNameField]）。登録済みの場所は見出しを押して開く
+  // ダイアログで名前を付けるので渡さない。
+  nameField: (@Composable () -> Unit)? = null,
   // 行きたいで行ったことがあるとき、行きたいの切り替えの下に出す一文（「行きたいで 3 回行った…」）。
   wishlistHistory: String? = null,
+  // 行きたいの右に並べる訪問済みのボタン（[VisitedToggle]・[VisitedByStopsChip]）。
   visitedContent: (@Composable () -> Unit)? = null,
 ) {
   Column(modifier = modifier) {
@@ -384,22 +384,18 @@ internal fun PlaceFormBody(
       )
     }
 
-    // 主役: 行きたい・優先度・訪問済み・メモ（いちばんよく直すもの。シートを開いてすぐ見える位置に置く）。
-    Row(
-      modifier = Modifier.fillMaxWidth(),
-      horizontalArrangement = Arrangement.SpaceBetween,
-      verticalAlignment = Alignment.CenterVertically,
-    ) {
-      Text("行きたいに登録")
-      // 下の優先度の星・一覧の旗と同じ「行きたい」の紅にする（藍だと別のものに見える）。
-      Switch(
-        checked = wishlist,
-        onCheckedChange = onWishlistChange,
-        colors = SwitchDefaults.colors(
-          checkedTrackColor = PathlyTheme.statusColors.wishlist,
-          checkedThumbColor = MaterialTheme.colorScheme.surface,
-        ),
+    // 主役: 行きたい・訪問済み・優先度・メモ（いちばんよく直すもの。シートを開いてすぐ見える位置に置く）。
+    // 行きたいと訪問済みは名前付きの切り替えボタンを 1 行に並べ、ハーフのシートでもメモまで見えるようにする。
+    // 色は一覧の旗・マーカーと同じ（行きたい＝紅・訪問済み＝緑）。
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+      PlaceStatusChip(
+        selected = wishlist,
+        onClick = { onWishlistChange(!wishlist) },
+        label = "行きたい",
+        icon = if (wishlist) R.drawable.ic_flag_filled else R.drawable.ic_flag,
+        color = PathlyTheme.statusColors.wishlist,
       )
+      visitedContent?.invoke()
     }
 
     // 行きたいは行けば終わるので、かつて行きたいだったことをここで見せる（→ adr/0036）。
@@ -411,23 +407,10 @@ internal fun PlaceFormBody(
       )
     }
 
-    // 優先度は「行きたい」に属する情報なので、こちらは入れ子のままにする。
+    // 優先度は「行きたい」に属する情報なので、行きたいを入れたときだけ出す。
     if (wishlist) {
       Spacer(modifier = Modifier.height(4.dp))
       PrioritySelector(selected = priority, onSelect = onPriorityChange)
-    } else if (wishlistOffHint != null) {
-      Spacer(modifier = Modifier.height(4.dp))
-      Text(
-        text = wishlistOffHint,
-        style = MaterialTheme.typography.bodySmall,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-      )
-    }
-
-    // 訪問済みは行きたいと独立。行きたいOFFのままでも付け外しできる。
-    visitedContent?.let { content ->
-      Spacer(modifier = Modifier.height(12.dp))
-      content()
     }
 
     // メモは「行きたい」に関係なく常に入力できる。
@@ -439,32 +422,11 @@ internal fun PlaceFormBody(
       modifier = Modifier.fillMaxWidth(),
     )
 
-    // 脇役: 自分で付ける名前・業種・住所・Google マップで開く。
+    // 脇役: 自分で付ける名前（登録のときだけ）・業種・住所・Google マップで開く。
     Spacer(modifier = Modifier.height(16.dp))
     HorizontalDivider()
     Spacer(modifier = Modifier.height(16.dp))
-    OutlinedTextField(
-      value = name,
-      onValueChange = onNameChange,
-      label = { Text(nameLabel) },
-      singleLine = true,
-      modifier = Modifier.fillMaxWidth(),
-    )
-
-    // 名前は見出しに出ているので、ここでは繰り返さない（1行に収める）。
-    namePrefill?.takeIf { it.isNotBlank() && name.isEmpty() }?.let { candidate ->
-      TextButton(
-        onClick = { onNameChange(candidate) },
-        contentPadding = PaddingValues(horizontal = 4.dp, vertical = 0.dp),
-      ) {
-        Text(
-          text = "この名前から書き換える",
-          style = MaterialTheme.typography.labelLarge,
-          maxLines = 1,
-          overflow = TextOverflow.Ellipsis,
-        )
-      }
-    }
+    nameField?.invoke()
 
     // Google 由来のカテゴリ・住所（あれば）。「どんな場所か」の手がかり。読取専用。
     category?.let { c ->
@@ -488,19 +450,99 @@ internal fun PlaceFormBody(
 }
 
 /**
- * 手動の「訪問済み」トグル。登録フォームでも編集フォームでも同じ見た目にする。
- * 立ち寄り記録がある場所はそれ自体で訪問済みなので、そちらでは出さない（件数を出す）。
+ * 登録のシートの名前の欄。欄は「自分で付ける名前」専用で、空なら Google の名前などで表示する。
+ * [prefill]（Google の名前）があれば、欄が空のときだけ「この名前から書き換える」を出す（施設名を少し変えたいだけの
+ * ときに打ち直さずに済むように。名前は見出しに出ているので、ここでは繰り返さない）。
+ */
+@Composable
+internal fun PlaceNameField(name: String, onNameChange: (String) -> Unit, prefill: String?) {
+  OutlinedTextField(
+    value = name,
+    onValueChange = onNameChange,
+    label = { Text("自分で付ける名前（任意）") },
+    singleLine = true,
+    modifier = Modifier.fillMaxWidth(),
+  )
+  prefill?.takeIf { it.isNotBlank() && name.isEmpty() }?.let { candidate ->
+    TextButton(
+      onClick = { onNameChange(candidate) },
+      contentPadding = PaddingValues(horizontal = 4.dp, vertical = 0.dp),
+    ) {
+      Text(
+        text = "この名前から書き換える",
+        style = MaterialTheme.typography.labelLarge,
+        maxLines = 1,
+        overflow = TextOverflow.Ellipsis,
+      )
+    }
+  }
+}
+
+/**
+ * 手動の「訪問済み」の切り替えボタン。登録フォームでも編集フォームでも同じ見た目にする。
+ * 訪問済みは行きたいと独立で、行きたいを切ったままでも付け外しできる。
+ * 立ち寄り記録がある場所はそれ自体で訪問済みなので、こちらではなく [VisitedByStopsChip] を出す。
  */
 @Composable
 internal fun VisitedToggle(visited: Boolean, onVisitedChange: (Boolean) -> Unit) {
-  Row(
-    modifier = Modifier.fillMaxWidth(),
-    horizontalArrangement = Arrangement.SpaceBetween,
-    verticalAlignment = Alignment.CenterVertically,
-  ) {
-    Text(text = if (visited) "訪問済み" else "未訪問")
-    Switch(checked = visited, onCheckedChange = onVisitedChange)
-  }
+  PlaceStatusChip(
+    selected = visited,
+    onClick = { onVisitedChange(!visited) },
+    label = "訪問済み",
+    icon = R.drawable.ic_check_circle,
+    color = PathlyTheme.statusColors.visited,
+  )
+}
+
+/** 立ち寄り記録がある場所の訪問済み（記録から決まるので切り替えられない。一覧の「訪問1回」と同じく回数を添える）。 */
+@Composable
+internal fun VisitedByStopsChip(visitCount: Int) {
+  PlaceStatusChip(
+    selected = true,
+    onClick = {},
+    label = "訪問済み $visitCount 回",
+    icon = R.drawable.ic_check_circle,
+    color = PathlyTheme.statusColors.visited,
+    enabled = false,
+  )
+}
+
+/**
+ * 場所の状態（行きたい・訪問済み）の切り替えボタン。入れているときは状態の色を薄く敷いて文字とアイコンをその色に、
+ * 切っているときは枠だけ。[enabled] が false でも入れているときの見た目のまま（記録から決まる訪問済み）。
+ */
+@Composable
+private fun PlaceStatusChip(
+  selected: Boolean,
+  onClick: () -> Unit,
+  label: String,
+  icon: Int,
+  color: Color,
+  enabled: Boolean = true,
+) {
+  val container = color.copy(alpha = 0.16f).compositeOver(MaterialTheme.colorScheme.surface)
+  FilterChip(
+    selected = selected,
+    onClick = onClick,
+    enabled = enabled,
+    label = { Text(text = label, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+    leadingIcon = { Icon(painter = painterResource(icon), contentDescription = null, modifier = Modifier.size(FilterChipDefaults.IconSize)) },
+    colors = FilterChipDefaults.filterChipColors(
+      selectedContainerColor = container,
+      selectedLabelColor = color,
+      selectedLeadingIconColor = color,
+      disabledSelectedContainerColor = container,
+      disabledLabelColor = color,
+      disabledLeadingIconColor = color,
+    ),
+    border = FilterChipDefaults.filterChipBorder(
+      enabled = enabled,
+      selected = selected,
+      selectedBorderColor = color,
+      selectedBorderWidth = 1.dp,
+      disabledSelectedBorderColor = color,
+    ),
+  )
 }
 
 @Composable

@@ -194,12 +194,9 @@ private fun ColumnScope.NewPlaceEditor(
     },
   ) {
     PlaceFormBody(
-      name = name,
-      onNameChange = { name = it },
-      nameLabel = "自分で付ける名前（任意）",
       // 施設なら名前を見出しに。名前を持たない地点は、何をしようとしているかを出す。
       heading = initialName ?: "この地点を場所として登録",
-      namePrefill = initialName,
+      nameField = { PlaceNameField(name = name, onNameChange = { name = it }, prefill = initialName) },
       category = details?.category,
       address = details?.address,
       // 施設のときだけ。空き地点は Google に開く先（施設ページ）が無く、座標にピンが立つだけなので出さない。

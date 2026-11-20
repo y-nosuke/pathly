@@ -299,8 +299,9 @@ internal fun PlaceDetailContent(
   val context = LocalContext.current
 
   // 地図タップ・地図で選ぶ・検索して追加と同じ非モーダルのシートで出す（ADR-0010）。
-  // 畳めば地図を全画面で確認できる。
-  val sheetState = rememberFloatingSheetState(peekFraction = 0.55f)
+  // 畳めば地図を全画面で確認できる。ハーフは画面の 4 割にとどめ、地図で場所の周りを見られるようにする
+  // （シートの中身はスクロールとフルで見る）。
+  val sheetState = rememberFloatingSheetState(peekFraction = 0.4f)
   val placeSheetState = rememberFloatingSheetState()
   // いま出ているシート（この場所／地図タップの場所シート）。地図の下パディングと右下の操作はこれに合わせる。
   val shownSheet = if (placeSheetTarget == null) sheetState else placeSheetState
@@ -378,6 +379,9 @@ internal fun PlaceDetailContent(
           title = item.displayName,
           subtitle = item.place.category?.label,
           onBack = onBack,
+          // 経路の見出しと同じく、押すと名前のダイアログ（空にすると Google の名前に戻る）。
+          onTitleClick = { editorState.renameOpen = true },
+          titleClickLabel = renameLabel(item),
           modifier = Modifier.weight(1f),
         )
       },
@@ -454,6 +458,9 @@ internal fun PlaceDetailContent(
     PlaceEditorDialogs(
       item = item,
       state = editorState,
+      onSave = { name, note, wishlist, priority, visited, link ->
+        placeEdit.savePlaceEdits(item, name, note, wishlist, priority, visited, link)
+      },
       mergeActions = mergeActions,
       onFetchNearbyPois = placeEdit::nearbyPois,
       onSearchPredictions = placeEdit::predictPlaces,

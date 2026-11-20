@@ -247,7 +247,7 @@ internal fun PlacesListContent(
         stats = { statsModifier ->
           val isFiltered = !state.noFilter
           ExpandableListStats(
-            barText = placesStatsText(state.statistics, totalCount = state.items.size, isFiltered = isFiltered),
+            barItems = placesStatsBarItems(state.statistics, totalCount = state.items.size, isFiltered = isFiltered),
             expanded = statsExpanded,
             onExpandedChange = onStatsExpandedChange,
             isFiltered = isFiltered,

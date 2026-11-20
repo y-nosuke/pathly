@@ -30,7 +30,6 @@ class PlacesStatisticsTest {
 
     assertEquals(PlacesStatistics(placeCount = 6, visitedCount = 4, wishedCount = 3, fulfilledCount = 2), stats)
     assertEquals(66, stats.fulfilledPercent)
-    assertEquals("2 / 3（66%）", stats.fulfilledLabel())
   }
 
   // まだ残っているのに 100% と出さないよう切り捨てる。
@@ -46,7 +45,6 @@ class PlacesStatisticsTest {
     val stats = PlacesStatistics.of(listOf(item(id = 1, visitCount = 1)))
 
     assertNull(stats.fulfilledPercent)
-    assertEquals("0 / 0", stats.fulfilledLabel())
   }
 
   @Test
@@ -66,10 +64,13 @@ class PlacesStatisticsTest {
   }
 
   @Test
-  fun statsText_addsTotalOnlyWhenFiltered() {
+  fun statsBar_addsTotalOnlyWhenFiltered() {
     val stats = PlacesStatistics(placeCount = 4, visitedCount = 3, wishedCount = 7, fulfilledCount = 2)
-    assertEquals("4 か所 ・ 訪問 3 ・ 行きたいで行けた 2 / 7（28%）", placesStatsText(stats, totalCount = 4, isFiltered = false))
-    assertEquals("4 / 12 か所 ・ 訪問 3 ・ 行きたいで行けた 2 / 7（28%）", placesStatsText(stats, totalCount = 12, isFiltered = true))
+    assertEquals(
+      listOf("場所" to "4 か所", "訪問済み" to "3", "行けた" to "2 / 7"),
+      placesStatsBarItems(stats, totalCount = 4, isFiltered = false).map { it.label to it.value },
+    )
+    assertEquals("4 / 12 か所", placesStatsBarItems(stats, totalCount = 12, isFiltered = true).first().value)
   }
 
   private fun item(
