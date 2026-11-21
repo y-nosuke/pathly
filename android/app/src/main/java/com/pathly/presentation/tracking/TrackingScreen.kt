@@ -194,6 +194,10 @@ fun TrackingScreen(
   }
   // 記録が止まったら手動追加モードは自動で抜ける（立ち寄りを足すトラックが無い）。
   LaunchedEffect(uiState.isTracking) { if (!uiState.isTracking) manualMode = false }
+  // システムバックは、画面（アプリ）を抜ける前に、出ているものを 1 つずつ閉じる: 立ち寄りを足すシート → 地図で指すモード。
+  // （場所シートは自分でバックを受ける。）
+  BackHandler(enabled = manualTarget == null && manualMode) { manualMode = false }
+  BackHandler(enabled = manualTarget != null) { manualTarget = null }
 
   /**
    * 地図のタップ。検索窓を開いている間は、窓を閉じるだけ（地図を見たくてタップしたとみなす）。
@@ -559,10 +563,10 @@ private enum class MapSearchMode {
 }
 
 /** 記録中でまだ立ち寄りが無いときの記録のシートの高さ（つまみ・情報の段・脇役の操作の段・「まだ立ち寄りはありません」）。 */
-private val RECORDING_SHEET_HEIGHT = 216.dp
+private val RECORDING_SHEET_HEIGHT = 248.dp
 
 /** 記録中で立ち寄りがあるときの、記録のシートのハーフの高さ（上の段に加えて、新しい立ち寄りが 2 件ほど見える）。 */
-private val RECORDING_SHEET_WITH_STOPS_HEIGHT = 312.dp
+private val RECORDING_SHEET_WITH_STOPS_HEIGHT = 344.dp
 
 /** 記録中で立ち寄りがあるときの、記録のシートのフルの高さ（画面に対する割合）。シートの上に乗る丸が、上の案内の帯に重ならない高さにとどめる。 */
 private const val RECORDING_SHEET_FULL_FRACTION = 0.45f

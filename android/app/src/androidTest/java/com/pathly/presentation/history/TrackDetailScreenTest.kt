@@ -319,11 +319,11 @@ class TrackDetailScreenTest {
     }
 
     // 記録中は記録画面と同じ名前・同じ並び。現在地が取れるまでは「今ここ」を押せない。
-    composeTestRule.onNodeWithText("今ここを立ち寄り").assertIsDisplayed().assertIsNotEnabled()
-    composeTestRule.onNodeWithText("地図で指して追加").assertIsDisplayed()
+    composeTestRule.onNodeWithText("今ここを\n立ち寄り").assertIsDisplayed().assertIsNotEnabled()
+    composeTestRule.onNodeWithText("地図で指して\n追加").assertIsDisplayed()
 
     target = ManualStopTarget(35.0, 139.0, ManualStopOrigin.CurrentLocation)
-    composeTestRule.onNodeWithText("今ここを立ち寄り").assertIsEnabled()
+    composeTestRule.onNodeWithText("今ここを\n立ち寄り").assertIsEnabled()
   }
 
   @Test
@@ -340,8 +340,8 @@ class TrackDetailScreenTest {
       }
     }
 
-    composeTestRule.onNodeWithText("今ここを立ち寄り").assertDoesNotExist()
-    composeTestRule.onNodeWithText("地図で指して追加").assertIsDisplayed()
+    composeTestRule.onNodeWithText("今ここを\n立ち寄り").assertDoesNotExist()
+    composeTestRule.onNodeWithText("地図で指して\n追加").assertIsDisplayed()
   }
 
   @Test
@@ -753,7 +753,7 @@ class TrackDetailScreenTest {
     }
 
     // 地図をタップできない場所（地図に POI が出ていない施設）は、名前から選んで足せる。
-    composeTestRule.onNodeWithText("地図で指して追加").performClick()
+    composeTestRule.onNodeWithText("地図で指して\n追加").performClick()
     composeTestRule.onNodeWithText("店名・場所名で検索").performTextInput("どうぶつ")
     composeTestRule.waitUntil(timeoutMillis = 5_000) {
       composeTestRule.onAllNodesWithText("テスト動物園").fetchSemanticsNodes().isNotEmpty()

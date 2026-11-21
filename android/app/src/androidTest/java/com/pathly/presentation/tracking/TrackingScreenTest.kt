@@ -446,7 +446,7 @@ class TrackingScreenTest {
 
     // 記録中も、上の下で記録中のピルと並んで出る（記録中の操作は下のシート）。
     uiStateFlow.value = TrackingState(hasLocationPermission = true, isTracking = true)
-    composeTestRule.onNodeWithText("地図で指して追加").assertIsDisplayed()
+    composeTestRule.onNodeWithText("地図で指して\n追加").assertIsDisplayed()
     composeTestRule.onNodeWithTag("regionMarkerChip").assertIsDisplayed()
 
     // × で目印ごとチップが消える。
@@ -586,8 +586,8 @@ class TrackingScreenTest {
     }
 
     // 記録中のシートに情報と脇役の操作が並ぶ。
-    composeTestRule.onNodeWithText("今ここを立ち寄り").assertIsDisplayed()
-    composeTestRule.onNodeWithText("地図で指して追加").assertIsDisplayed()
+    composeTestRule.onNodeWithText("今ここを\n立ち寄り").assertIsDisplayed()
+    composeTestRule.onNodeWithText("地図で指して\n追加").assertIsDisplayed()
 
     // 畳むと、主役の停止の丸も一緒に隠れ、戻すボタンだけが残る。
     composeTestRule.onNodeWithContentDescription("シートを畳む").performClick()
