@@ -285,6 +285,7 @@ private fun RegisteredPlaceSingleMarker(
     snippet = place.statusLabel,
     anchor = icon.anchor,
     zIndex = REGISTERED_PLACE_Z_INDEX,
+    bubbleColor = if (place.isVisited) PathlyMapColors.PlaceVisited else PathlyMapColors.PlaceUnvisited,
     onClick = { onRegisteredPlaceClick(place) },
   )
 }
@@ -491,6 +492,7 @@ internal fun RouteMapContent(
       state = startMarkerState,
       title = "開始",
       snippet = "記録開始地点 - ${DateFormatters.time(track.startTime)}",
+      bubbleColor = PathlyMapColors.Start,
     ) {
       RouteBadgeMarker(bg = PathlyMapColors.Start) {
         Icon(
@@ -519,6 +521,7 @@ internal fun RouteMapContent(
         snippet = track.endTime?.let {
           "記録終了地点 - ${DateFormatters.time(it)}"
         } ?: "記録中の最新地点",
+        bubbleColor = if (track.isActive) PathlyMapColors.Current else PathlyMapColors.End,
       ) {
         if (track.isActive) {
           RouteBadgeMarker(bg = PathlyMapColors.Current) {
@@ -578,6 +581,7 @@ internal fun RouteMapContent(
         title = stop.place.displayName,
         snippet = "${DateFormatters.shortTime(stop.arrivalTime)} ・ 滞在${stop.durationMinutes}分",
         anchor = icon.anchor,
+        bubbleColor = PathlyMapColors.Stop,
         onClick = { onStopClick(stop) },
       )
     }
@@ -600,6 +604,7 @@ internal fun RouteMapContent(
       title = name ?: "立ち寄り中",
       snippet = "%.5f, %.5f ・ 滞在%d分".format(stop.place.latitude, stop.place.longitude, stop.durationMinutes),
       anchor = icon.anchor,
+      bubbleColor = PathlyMapColors.CurrentStop,
     )
   }
 }

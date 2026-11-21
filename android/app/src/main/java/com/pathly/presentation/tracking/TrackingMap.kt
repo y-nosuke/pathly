@@ -322,6 +322,7 @@ internal fun TrackingMapView(
           infoWindow = infoWindow,
           state = pickMarkerState,
           title = "追加する地点",
+          bubbleColor = PathlyMapColors.Picked,
         ) {
           MapPinMarker(bg = PathlyMapColors.Picked, glyph = R.drawable.ic_add)
         }

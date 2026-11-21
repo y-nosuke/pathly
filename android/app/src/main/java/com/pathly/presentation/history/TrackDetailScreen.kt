@@ -52,6 +52,7 @@ import com.pathly.presentation.common.rememberFloatingSheetState
 import com.pathly.presentation.common.rememberLocationPermitted
 import com.pathly.presentation.common.rememberMapInfoWindowState
 import com.pathly.presentation.common.requestCurrentLatLng
+import com.pathly.presentation.places.PLACE_SHEET_PEEK_FRACTION
 import com.pathly.presentation.places.PlaceEditHost
 import com.pathly.presentation.places.PlaceEditUi
 import com.pathly.presentation.places.PlaceSheetTarget
@@ -107,7 +108,7 @@ fun TrackDetailScreen(
 ) {
   val state = rememberTrackDetailScreenState()
   // 場所シートの開き具合。地図の下パディングを合わせて、選んだ地点が裏に来ないようにする。
-  val placeSheetState = rememberFloatingSheetState()
+  val placeSheetState = rememberFloatingSheetState(peekFraction = PLACE_SHEET_PEEK_FRACTION)
   // 期間編集シートの開き具合。本体シートを畳んでいても開いた状態で出したいので別に持つ。
   val durationSheetState = rememberFloatingSheetState(peekFraction = 0.5f)
   // --- 自前フローティングシートの開閉（地図の上に重ねる。標準ボトムシートは使わない）---

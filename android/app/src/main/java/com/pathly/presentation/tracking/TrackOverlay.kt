@@ -120,6 +120,7 @@ internal fun TrackOverlayContent(tracks: List<OverlayTrack>, infoWindow: MapInfo
             title = stop.place.displayName,
             snippet = "${listTitleOf(overlay.track)} ・ ${DateFormatters.shortTime(stop.arrivalTime)} ・ 滞在${stop.durationMinutes}分",
             anchor = icon.anchor,
+            bubbleColor = color,
           )
         }
       }

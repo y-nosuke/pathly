@@ -17,6 +17,7 @@ import com.pathly.domain.model.StopCandidate
 import com.pathly.domain.model.TrackSmoother
 import com.pathly.presentation.common.MapInfoWindowState
 import com.pathly.presentation.common.MapRegisteredPlaces
+import com.pathly.presentation.common.MapTopBarInset
 import com.pathly.presentation.common.stopSegmentPoints
 import com.pathly.presentation.places.PlaceSheetTarget
 import com.pathly.presentation.stops.ManualStopOrigin
@@ -119,8 +120,9 @@ internal fun TrackDetailMapLayer(
     focusTarget = state.focusTarget,
     focusNonce = state.focusNonce,
     fitNonce = state.fitNonce,
-    // フォーカスがピンをシート/オーバーレイの裏に隠さないよう、下端を空ける。
-    contentPadding = PaddingValues(bottom = bottomPadding),
+    // フォーカスがピンをシート/オーバーレイの裏に隠さないよう、下端を空ける。上は上のバーの分を空け、
+    // マーカーを押して地図が寄ったときに吹き出しがバーに被らないようにする。
+    contentPadding = PaddingValues(top = MapTopBarInset, bottom = bottomPadding),
     showMyLocation = showMyLocation,
     onPoiClick = { poi ->
       if (manualMode) {

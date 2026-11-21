@@ -89,7 +89,7 @@ internal fun PlaceActionSheet(
   // 触ると閉じてしまう。ここでは地図のパン・ズーム・タップをそのまま生かす（ADR-0010）。
   // シートの下に隠れる地点があると困る画面（対象を地図で示す画面）は、地図の下パディングを
   // 合わせるためにここへ自分で作った state を渡す。
-  sheetState: FloatingSheetState = rememberFloatingSheetState(),
+  sheetState: FloatingSheetState = rememberFloatingSheetState(peekFraction = PLACE_SHEET_PEEK_FRACTION),
 ) {
   // 非モーダルなのでバックは自分で受ける（モーダルのときは自動で閉じていた）。
   BackHandler { onDismiss() }
@@ -149,6 +149,12 @@ internal fun PlaceActionSheet(
     }
   }
 }
+
+/**
+ * 場所のシート（場所詳細・地図をタップして出る場所シート・登録のシート）のハーフの高さ（画面に対する割合）。
+ * どの画面から出しても同じ高さにし、地図で場所の周りを見られるよう低めにする（中身はスクロールとフルで見る）。
+ */
+internal const val PLACE_SHEET_PEEK_FRACTION = 0.4f
 
 /**
  * 未登録の地点/施設を場所として登録する編集部。施設（POI・検索結果）なら Google 情報
