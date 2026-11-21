@@ -17,6 +17,8 @@ import androidx.compose.ui.unit.dp
 import com.pathly.domain.model.GpsTrack
 import com.pathly.domain.model.SmoothingParams
 import com.pathly.domain.model.TrackSmoother
+import com.pathly.presentation.common.SheetContentHorizontalPadding
+import com.pathly.ui.theme.PathlySpacing
 import kotlin.math.roundToInt
 
 // 補正パラメータの調整パネル（デバッグビルドのみ）。生データと補正後を数値で見比べる。
@@ -37,9 +39,9 @@ internal fun TuningSheet(
   Column(
     modifier = modifier
       .fillMaxWidth()
-      .padding(horizontal = 20.dp)
-      .padding(bottom = 24.dp),
-    verticalArrangement = Arrangement.spacedBy(8.dp),
+      .padding(horizontal = SheetContentHorizontalPadding)
+      .padding(bottom = PathlySpacing.xl),
+    verticalArrangement = Arrangement.spacedBy(PathlySpacing.sm),
   ) {
     Text(
       text = "補正の調整（デバッグ）",

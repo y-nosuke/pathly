@@ -22,6 +22,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.pathly.domain.model.Geo
 import com.pathly.domain.model.GpsPoint
+import com.pathly.ui.theme.PathlySpacing
 import com.pathly.util.DateFormatters
 import java.util.Date
 import kotlin.math.abs
@@ -93,7 +94,7 @@ fun StopRangeEditor(
   modifier: Modifier = Modifier,
 ) {
   val durationMinutes = ((departureTime.time - arrivalTime.time) / 1000 / 60).toInt()
-  Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(12.dp)) {
+  Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(PathlySpacing.md)) {
     Text(
       text = "滞在${durationMinutes}分（青いハイライトが滞在区間）",
       style = MaterialTheme.typography.bodyMedium,
@@ -156,7 +157,7 @@ private fun StepperRow(
       text = DateFormatters.time(time),
       style = MaterialTheme.typography.titleMedium,
       fontWeight = FontWeight.Medium,
-      modifier = Modifier.padding(start = 12.dp),
+      modifier = Modifier.padding(start = PathlySpacing.md),
     )
     Spacer(modifier = Modifier.weight(1f))
     OutlinedButton(
@@ -166,7 +167,7 @@ private fun StepperRow(
       contentPadding = PaddingValues(0.dp),
       modifier = Modifier.size(40.dp),
     ) { Text("−", style = MaterialTheme.typography.titleLarge) }
-    Spacer(modifier = Modifier.width(8.dp))
+    Spacer(modifier = Modifier.width(PathlySpacing.sm))
     OutlinedButton(
       onClick = onPlus,
       enabled = plusEnabled,

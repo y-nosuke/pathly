@@ -29,6 +29,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.pathly.domain.model.PlacePrediction
 import com.pathly.domain.model.PlaceSearchResult
+import com.pathly.ui.theme.PathlySpacing
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -78,7 +79,7 @@ fun PlaceNameSearchField(
         style = MaterialTheme.typography.labelMedium,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
       )
-      Spacer(modifier = Modifier.height(4.dp))
+      Spacer(modifier = Modifier.height(PathlySpacing.xs))
     }
     OutlinedTextField(
       value = query,
@@ -88,9 +89,9 @@ fun PlaceNameSearchField(
       modifier = Modifier.fillMaxWidth(),
     )
     if (searching) {
-      Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(vertical = 6.dp)) {
+      Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(vertical = PathlySpacing.sm)) {
         CircularProgressIndicator(modifier = Modifier.size(14.dp), strokeWidth = 2.dp)
-        Spacer(modifier = Modifier.width(8.dp))
+        Spacer(modifier = Modifier.width(PathlySpacing.sm))
         Text("検索中…", style = MaterialTheme.typography.bodySmall)
       }
     }
@@ -112,7 +113,7 @@ fun PlaceNameSearchField(
                   predictions = emptyList()
                 }
               }
-              .padding(vertical = 8.dp),
+              .padding(vertical = PathlySpacing.sm),
           ) {
             Text(
               text = prediction.primaryText,

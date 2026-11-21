@@ -56,8 +56,7 @@ internal fun HistoryStatsCardContent(
       StatsSectionTitle(title = "月ごとの距離", trailing = "今月 ${formatTotalKm(stats.thisMonthMeters)}")
       StatsBarChart(
         values = stats.monthly.map { it.meters },
-        startLabel = "${stats.monthly.first().month.monthValue}月",
-        endLabel = "今月",
+        labels = stats.monthly.map { "${it.month.monthValue}" },
         modifier = Modifier.padding(top = PathlySpacing.xs),
       )
     }
@@ -99,6 +98,6 @@ private fun LongestTrackRow(track: GpsTrack, onClick: () -> Unit) {
       color = MaterialTheme.colorScheme.onSurface,
       modifier = Modifier.padding(start = PathlySpacing.sm),
     )
-    Icon(painter = painterResource(R.drawable.ic_chevron_right), contentDescription = null, modifier = Modifier.size(18.dp))
+    Icon(painter = painterResource(R.drawable.ic_chevron_right), contentDescription = null, modifier = Modifier.size(20.dp))
   }
 }

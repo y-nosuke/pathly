@@ -247,7 +247,7 @@ internal fun PlacesListContent(
         stats = { statsModifier ->
           val isFiltered = !state.noFilter
           ExpandableListStats(
-            barText = placesStatsText(state.statistics, totalCount = state.items.size, isFiltered = isFiltered),
+            barItems = placesStatsBarItems(state.statistics, totalCount = state.items.size, isFiltered = isFiltered),
             expanded = statsExpanded,
             onExpandedChange = onStatsExpandedChange,
             isFiltered = isFiltered,
@@ -653,10 +653,11 @@ private fun PlaceItemRow(
         )
 
         // カテゴリ（業種）。あれば名前の下に小さく出す（「どんな場所か」の手がかり）。
+        // 業種・住所・日付は脇役なので、太さの付かない bodySmall の灰色にそろえる（名前と状態の色だけが目立つように）。
         item.place.category?.let { category ->
           Text(
             text = category.label,
-            style = MaterialTheme.typography.labelMedium,
+            style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
@@ -715,7 +716,7 @@ private fun PlaceItemRow(
         sortDate?.let {
           Text(
             text = it,
-            style = MaterialTheme.typography.labelSmall,
+            style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
           )
         }

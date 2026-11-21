@@ -50,6 +50,7 @@ import com.pathly.domain.model.GpsTrack
 import com.pathly.domain.model.Stop
 import com.pathly.domain.model.WishlistFlag
 import com.pathly.presentation.common.MapSideActions
+import com.pathly.presentation.common.SheetContentHorizontalPadding
 import com.pathly.presentation.common.WishlistFlagButton
 import com.pathly.ui.theme.PathlyMapColors
 import com.pathly.ui.theme.PathlySpacing
@@ -130,7 +131,7 @@ internal fun TrackDetailSheet(
       modifier = Modifier
         .weight(1f)
         .fillMaxWidth()
-        .padding(horizontal = 20.dp),
+        .padding(horizontal = SheetContentHorizontalPadding),
       contentPadding = PaddingValues(top = 4.dp, bottom = 24.dp),
     ) {
       itemsIndexed(stops, key = { _, stop -> stop.id }) { index, stop ->
@@ -294,8 +295,8 @@ internal fun SelectionBar(
     FlowRow(
       modifier = Modifier
         .fillMaxWidth()
-        .padding(start = 16.dp, end = 8.dp, top = 4.dp, bottom = 4.dp),
-      horizontalArrangement = Arrangement.spacedBy(4.dp),
+        .padding(start = PathlySpacing.lg, end = PathlySpacing.sm, top = PathlySpacing.xs, bottom = PathlySpacing.xs),
+      horizontalArrangement = Arrangement.spacedBy(PathlySpacing.xs),
       verticalArrangement = Arrangement.Center,
       itemVerticalAlignment = Alignment.CenterVertically,
     ) {
@@ -352,7 +353,7 @@ internal fun StopRow(
         onClick = { if (selectionMode) onToggleSelect() else onFocus() },
         onLongClick = { if (!selectionMode) onEnterSelection() },
       )
-      .padding(horizontal = 4.dp, vertical = 4.dp),
+      .padding(horizontal = PathlySpacing.xs, vertical = PathlySpacing.xs),
     verticalAlignment = Alignment.CenterVertically,
   ) {
     if (selectionMode) {
@@ -361,7 +362,7 @@ internal fun StopRow(
       // 訪問順の番号バッジ（地図のピン番号と対応）。
       Box(
         modifier = Modifier
-          .padding(end = 10.dp)
+          .padding(end = PathlySpacing.md)
           .size(26.dp)
           .background(PathlyMapColors.Stop, CircleShape),
         contentAlignment = Alignment.Center,
@@ -372,7 +373,7 @@ internal fun StopRow(
     Column(
       modifier = Modifier
         .weight(1f)
-        .padding(vertical = 4.dp),
+        .padding(vertical = PathlySpacing.xs),
     ) {
       Text(
         text = title,
@@ -393,7 +394,7 @@ internal fun StopRow(
           style = MaterialTheme.typography.bodyMedium,
           maxLines = 2,
           overflow = TextOverflow.Ellipsis,
-          modifier = Modifier.padding(top = 2.dp),
+          modifier = Modifier.padding(top = PathlySpacing.xxs),
         )
       }
     }

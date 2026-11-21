@@ -1,6 +1,7 @@
 package com.pathly.presentation.places
 
 import androidx.lifecycle.SavedStateHandle
+import com.pathly.R
 import com.pathly.domain.model.PlaceCategoryFacet
 import com.pathly.domain.model.PlaceGrouping
 import com.pathly.domain.model.PlaceListItem
@@ -12,6 +13,8 @@ import com.pathly.domain.model.categoryFacetCounts
 import com.pathly.domain.model.matchesAnyOf
 import com.pathly.domain.model.regionCounts
 import com.pathly.presentation.common.ListMapMode
+import com.pathly.presentation.common.StatsBarItem
+import com.pathly.presentation.common.StatsTileTone
 import com.pathly.presentation.common.getEnum
 import com.pathly.presentation.common.getEnumSet
 import com.pathly.presentation.common.getRegionSet
@@ -255,16 +258,23 @@ data class PlacesStatistics(
 }
 
 /**
- * 統計の帯の文。「42 か所 ・ 訪問 30 ・ 行きたいで行けた 2 / 7（28%）」。絞り込み中は、絞った数字を全体と
- * 取り違えないよう「42 / 176 か所」と全体の数を添える（履歴の帯と同じ）。
+ * 統計の帯のタイル。場所「42 か所」・訪問済み「30」・行けた「2 / 7」（行きたいにした場所のうち行きたいで行けた数。
+ * タイルに収まるよう名前を縮め、旗と紅で行きたいのことと分かるようにする。割合は広げたカードで出す）。
+ * 絞り込み中は、絞った数字を全体と取り違えないよう「42 / 176 か所」と全体の数を添える（履歴の帯と同じ）。
  */
-internal fun placesStatsText(statistics: PlacesStatistics, totalCount: Int, isFiltered: Boolean): String {
+internal fun placesStatsBarItems(statistics: PlacesStatistics, totalCount: Int, isFiltered: Boolean): List<StatsBarItem> {
   val count = if (isFiltered) "${statistics.placeCount} / $totalCount か所" else "${statistics.placeCount} か所"
-  return "$count ・ 訪問 ${statistics.visitedCount} ・ 行きたいで行けた ${statistics.fulfilledLabel()}"
+  return listOf(
+    StatsBarItem(icon = R.drawable.ic_place, value = count, label = "場所", tone = StatsTileTone.PRIMARY),
+    StatsBarItem(icon = R.drawable.ic_check_circle, value = "${statistics.visitedCount}", label = "訪問済み", tone = StatsTileTone.GREEN),
+    StatsBarItem(
+      icon = R.drawable.ic_flag,
+      value = "${statistics.fulfilledCount} / ${statistics.wishedCount}",
+      label = "行けた",
+      tone = StatsTileTone.WISHLIST,
+    ),
+  )
 }
-
-/** 「行きたいで行けた」の値。例「2 / 7（29%）」。行きたいにした場所が無ければ割合を出さない。 */
-internal fun PlacesStatistics.fulfilledLabel(): String = "$fulfilledCount / $wishedCount" + (fulfilledPercent?.let { "（$it%）" } ?: "")
 
 private const val KEY_WISHLIST = "places.wishlistFilter"
 private const val KEY_VISITED = "places.visitedFilter"

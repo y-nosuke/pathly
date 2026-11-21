@@ -31,6 +31,7 @@ import androidx.compose.ui.unit.dp
 import com.pathly.data.crash.CrashKind
 import com.pathly.data.crash.CrashReport
 import com.pathly.data.crash.CrashReportFiles
+import com.pathly.ui.theme.PathlySpacing
 import com.pathly.util.DateFormatters
 import kotlinx.coroutines.launch
 import java.util.Date
@@ -49,7 +50,7 @@ fun CrashReportSection(
   Text(
     text = "異常終了の記録",
     style = MaterialTheme.typography.titleMedium,
-    modifier = Modifier.padding(top = 24.dp),
+    modifier = Modifier.padding(top = PathlySpacing.xl),
   )
   Text(
     text = "落ちた・応答しなくなった・OS に止められたときの記録です（新しい順に ${CrashReportFiles.MAX_REPORTS} 件まで）。" +
@@ -61,7 +62,7 @@ fun CrashReportSection(
     Text(
       text = "ありません",
       style = MaterialTheme.typography.bodyLarge,
-      modifier = Modifier.padding(vertical = 8.dp),
+      modifier = Modifier.padding(vertical = PathlySpacing.sm),
     )
   } else {
     reports.forEach { report ->
@@ -69,7 +70,7 @@ fun CrashReportSection(
         modifier = Modifier
           .fillMaxWidth()
           .clickable { opened = report }
-          .padding(vertical = 10.dp)
+          .padding(vertical = PathlySpacing.md)
           .testTag(CRASH_REPORT_ROW_TAG),
       ) {
         Text(

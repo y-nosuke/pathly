@@ -28,6 +28,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.pathly.domain.model.GpsPoint
 import com.pathly.domain.model.Stop
+import com.pathly.ui.theme.PathlySpacing
 import com.pathly.util.DateFormatters
 import java.util.Locale
 
@@ -74,12 +75,12 @@ internal fun GpsDebugDialog(
           "鉛直精度あり: $withVertical / MSL高度あり: $withMsl / extrasあり: $withExtras / mock: $mockCount",
           style = MaterialTheme.typography.bodySmall,
         )
-        HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+        HorizontalDivider(modifier = Modifier.padding(vertical = PathlySpacing.sm))
 
         // 点ごとの明細（多いのでスクロール）。
         LazyColumn(modifier = Modifier.heightIn(max = 360.dp)) {
           itemsIndexed(points) { i, p ->
-            Column(modifier = Modifier.padding(vertical = 4.dp)) {
+            Column(modifier = Modifier.padding(vertical = PathlySpacing.xs)) {
               Text(
                 "#$i  ${DateFormatters.time(p.timestamp)}" +
                   (if (p.isMock) "  [MOCK]" else ""),
@@ -164,7 +165,7 @@ internal fun StopNoteDialog(
           style = MaterialTheme.typography.bodyMedium,
           color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
-        Spacer(modifier = Modifier.height(8.dp))
+        Spacer(modifier = Modifier.height(PathlySpacing.sm))
         OutlinedTextField(
           value = text,
           onValueChange = { text = it },

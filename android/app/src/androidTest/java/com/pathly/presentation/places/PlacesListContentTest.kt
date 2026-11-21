@@ -254,7 +254,9 @@ class PlacesListContentTest {
   @Test
   fun `一覧の先頭に統計が出て_絞り込むと数字が変わり全体の数が添えられる`() {
     setContent(PlacesState(items = listOf(plain, wished)))
-    composeTestRule.onNodeWithText("2 か所 ・ 訪問 0 ・ 行きたいで行けた 0 / 1（0%）").assertIsDisplayed()
+    composeTestRule.onNodeWithContentDescription("場所 2 か所").assertIsDisplayed()
+    composeTestRule.onNodeWithContentDescription("訪問済み 0").assertIsDisplayed()
+    composeTestRule.onNodeWithContentDescription("行けた 0 / 1").assertIsDisplayed()
 
     composeTestRule.onNodeWithTag("filterPanelButton").performClick()
     // 絞り込みの欄を開いている間は出さない。
@@ -262,7 +264,8 @@ class PlacesListContentTest {
     composeTestRule.onNodeWithTag("行きたい=行きたい").performClick()
     composeTestRule.onNodeWithTag("filterPanelButton").performClick()
 
-    composeTestRule.onNodeWithText("1 / 2 か所 ・ 訪問 0 ・ 行きたいで行けた 0 / 1（0%）").assertIsDisplayed()
+    composeTestRule.onNodeWithContentDescription("場所 1 / 2 か所").assertIsDisplayed()
+    composeTestRule.onNodeWithContentDescription("行けた 0 / 1").assertIsDisplayed()
   }
 
   // 統計の帯を押すとその場で統計のカードに広がり、見出しの行で帯に戻る。

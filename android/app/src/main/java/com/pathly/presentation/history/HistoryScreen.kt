@@ -71,6 +71,8 @@ import com.pathly.presentation.common.MapRegisteredPlaces
 import com.pathly.presentation.common.RegionFilterSection
 import com.pathly.presentation.common.ScrollToTopButton
 import com.pathly.presentation.common.ScrollToTopButtonClearance
+import com.pathly.presentation.common.StatsBarItem
+import com.pathly.presentation.common.StatsTileTone
 import com.pathly.presentation.common.categoryChipLabel
 import com.pathly.presentation.common.choiceLabel
 import com.pathly.presentation.common.flippedChoice
@@ -188,6 +190,7 @@ fun HistoryScreen(
   renameTarget?.let { target ->
     RenameTrackDialog(
       initialName = target.name.orEmpty(),
+      defaultName = DateFormatters.date(target.startTime),
       onDismiss = { renameTarget = null },
       onConfirm = { newName ->
         viewModel.renameTrack(target.id, newName)
@@ -279,7 +282,7 @@ private fun HistoryListContent(
               // 帯を押すと、その場で統計のカードに広がる。
               val isFiltered = !uiState.noFilter
               ExpandableListStats(
-                barText = historyStatsText(tracks = visibleTracks, totalCount = uiState.tracks.size, isFiltered = isFiltered),
+                barItems = historyStatsBarItems(tracks = visibleTracks, totalCount = uiState.tracks.size, isFiltered = isFiltered),
                 expanded = statsExpanded,
                 onExpandedChange = viewModel::setStatsExpanded,
                 isFiltered = isFiltered,
@@ -634,14 +637,18 @@ internal fun trackRowSummaryParts(track: GpsTrack): List<String> {
 }
 
 /**
- * 統計の帯の文。「12 回 ・ 148.3 km ・ 41 時間 20 分」。絞り込み中は、絞った数字を全体と取り違えないよう
- * 「12 / 38 回」と全体の数を添える（一致していても絞り込み中であることは出す）。
+ * 統計の帯のタイル。回数「12 回」・距離「148.3 km」・時間「41 時間 20 分」（カードのタイルと同じ色）。絞り込み中は、
+ * 絞った数字を全体と取り違えないよう「12 / 38 回」と全体の数を添える（一致していても絞り込み中であることは出す）。
  */
-internal fun historyStatsText(tracks: List<GpsTrack>, totalCount: Int, isFiltered: Boolean): String {
+internal fun historyStatsBarItems(tracks: List<GpsTrack>, totalCount: Int, isFiltered: Boolean): List<StatsBarItem> {
   val count = if (isFiltered) "${tracks.size} / $totalCount 回" else "${tracks.size} 回"
   val distanceMeters = tracks.sumOf { it.totalDistanceMeters }
   val minutes = tracks.sumOf { durationMinutesOf(it) }
-  return "$count ・ ${formatTotalKm(distanceMeters)} ・ ${formatDuration(minutes)}"
+  return listOf(
+    StatsBarItem(icon = R.drawable.ic_route, value = count, label = "回数", tone = StatsTileTone.PRIMARY),
+    StatsBarItem(icon = R.drawable.ic_straighten, value = formatTotalKm(distanceMeters), label = "距離", tone = StatsTileTone.GREEN),
+    StatsBarItem(icon = R.drawable.ic_schedule, value = formatDuration(minutes), label = "時間", tone = StatsTileTone.TERTIARY),
+  )
 }
 
 /** 合計の距離。100 km 以上は小数を落として 3 桁区切り（「3,815 km」）、それより短ければ小数 1 桁（「4.3 km」）。 */

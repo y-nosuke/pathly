@@ -41,6 +41,7 @@ import androidx.compose.ui.unit.dp
 import com.pathly.R
 import com.pathly.ui.theme.PathlyElevation
 import com.pathly.ui.theme.PathlyShapes
+import com.pathly.ui.theme.PathlySpacing
 
 /**
  * 一覧の絞り込みで、いま効いている条件 1 つ。一覧の上にチップで並べ、× で外す（→ specs/screens.md）。
@@ -104,7 +105,7 @@ fun ActiveFilterChips(
     modifier = modifier
       .fillMaxWidth()
       .horizontalScroll(rememberScrollState()),
-    horizontalArrangement = Arrangement.spacedBy(8.dp),
+    horizontalArrangement = Arrangement.spacedBy(PathlySpacing.sm),
     verticalAlignment = Alignment.CenterVertically,
   ) {
     if (onReset != null) {
@@ -164,8 +165,8 @@ fun ListFilterPanel(
       .testTag("listFilterPanel"),
   ) {
     Column(
-      modifier = Modifier.padding(start = 16.dp, end = 8.dp, top = 4.dp, bottom = 16.dp),
-      verticalArrangement = Arrangement.spacedBy(16.dp),
+      modifier = Modifier.padding(start = PathlySpacing.lg, end = PathlySpacing.sm, top = PathlySpacing.xs, bottom = PathlySpacing.lg),
+      verticalArrangement = Arrangement.spacedBy(PathlySpacing.lg),
     ) {
       Row(verticalAlignment = Alignment.CenterVertically) {
         Text(
@@ -177,7 +178,7 @@ fun ListFilterPanel(
         TextButton(onClick = onReset, enabled = canReset) { Text("初期状態に戻す") }
         TextButton(onClick = onClearAll, enabled = canClear) { Text("すべて外す") }
       }
-      Column(modifier = Modifier.padding(end = 8.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+      Column(modifier = Modifier.padding(end = PathlySpacing.sm), verticalArrangement = Arrangement.spacedBy(PathlySpacing.lg)) {
         content()
       }
     }
@@ -202,9 +203,9 @@ fun FilterPanelCloseButton(onClick: () -> Unit, modifier: Modifier = Modifier) {
       .testTag("filterPanelCloseButton"),
   ) {
     Row(
-      modifier = Modifier.padding(start = 12.dp, end = 16.dp),
+      modifier = Modifier.padding(start = PathlySpacing.md, end = PathlySpacing.lg),
       verticalAlignment = Alignment.CenterVertically,
-      horizontalArrangement = Arrangement.spacedBy(8.dp),
+      horizontalArrangement = Arrangement.spacedBy(PathlySpacing.sm),
     ) {
       Icon(painter = painterResource(R.drawable.ic_expand_less), contentDescription = null, modifier = Modifier.size(18.dp))
       Text("絞り込みを閉じる", style = MaterialTheme.typography.labelLarge)
@@ -215,7 +216,7 @@ fun FilterPanelCloseButton(onClick: () -> Unit, modifier: Modifier = Modifier) {
 /** 絞り込みの欄の中の 1 つの軸（見出し＋中身）。 */
 @Composable
 fun FilterSection(title: String, content: @Composable ColumnScope.() -> Unit) {
-  Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+  Column(verticalArrangement = Arrangement.spacedBy(PathlySpacing.sm)) {
     Text(title, style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
     content()
   }
@@ -228,12 +229,12 @@ fun FilterSection(title: String, content: @Composable ColumnScope.() -> Unit) {
 @Composable
 fun CollapsibleFilterSection(title: String, summary: String?, content: @Composable ColumnScope.() -> Unit) {
   var expanded by rememberSaveable(title) { mutableStateOf(false) }
-  Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+  Column(verticalArrangement = Arrangement.spacedBy(PathlySpacing.sm)) {
     Row(
       modifier = Modifier
         .fillMaxWidth()
         .clickable(role = Role.Button, onClick = { expanded = !expanded })
-        .padding(vertical = 4.dp),
+        .padding(vertical = PathlySpacing.xs),
       verticalAlignment = Alignment.CenterVertically,
     ) {
       Text(title, style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -245,7 +246,7 @@ fun CollapsibleFilterSection(title: String, summary: String?, content: @Composab
         overflow = TextOverflow.Ellipsis,
         modifier = Modifier
           .weight(1f)
-          .padding(horizontal = 12.dp),
+          .padding(horizontal = PathlySpacing.md),
       )
       Icon(
         painter = painterResource(if (expanded) R.drawable.ic_expand_less else R.drawable.ic_expand_more),

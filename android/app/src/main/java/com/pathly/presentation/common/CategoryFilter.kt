@@ -17,6 +17,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.unit.dp
 import com.pathly.domain.model.PlaceCategoryFacet
+import com.pathly.ui.theme.PathlySpacing
 
 /**
  * 絞り込みの欄の「業種」（ふだんはたたみ、見出しに選んでいるものを出す）。件数つきのチップを並べ、複数選べる（選んだどれかに当たれば残す）。
@@ -36,7 +37,7 @@ fun CategoryFilterSection(
   if (options.isEmpty()) return
 
   CollapsibleFilterSection("業種", summary = categoryChipLabel(selected)) {
-    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+    FlowRow(horizontalArrangement = Arrangement.spacedBy(PathlySpacing.sm)) {
       options.forEach { facet ->
         FilterChip(
           selected = facet in selected,

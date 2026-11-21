@@ -46,10 +46,12 @@ import com.pathly.presentation.common.FloatingSheetState
 import com.pathly.presentation.common.MapInfoWindowState
 import com.pathly.presentation.common.MapMarker
 import com.pathly.presentation.common.RouteBadgeMarker
+import com.pathly.presentation.common.SheetContentHorizontalPadding
 import com.pathly.presentation.common.rememberMarkerIconCache
 import com.pathly.presentation.history.listTitleOf
 import com.pathly.ui.theme.PathlyElevation
 import com.pathly.ui.theme.PathlyMapColors
+import com.pathly.ui.theme.PathlySpacing
 import com.pathly.util.DateFormatters
 import kotlin.math.roundToInt
 
@@ -192,7 +194,7 @@ internal fun TrackPickerSheet(
     Row(
       modifier = Modifier
         .fillMaxWidth()
-        .padding(start = 20.dp, end = 8.dp),
+        .padding(start = SheetContentHorizontalPadding, end = PathlySpacing.sm),
       verticalAlignment = Alignment.CenterVertically,
     ) {
       Column(modifier = Modifier.weight(1f)) {
@@ -226,7 +228,7 @@ internal fun TrackPickerSheet(
       isLoading -> Box(
         modifier = Modifier
           .fillMaxWidth()
-          .padding(24.dp),
+          .padding(PathlySpacing.xl),
         contentAlignment = Alignment.Center,
       ) {
         CircularProgressIndicator(modifier = Modifier.size(32.dp))
@@ -234,7 +236,7 @@ internal fun TrackPickerSheet(
 
       errorMessage != null -> Text(
         text = errorMessage,
-        modifier = Modifier.padding(20.dp),
+        modifier = Modifier.padding(horizontal = SheetContentHorizontalPadding, vertical = PathlySpacing.lg),
         color = MaterialTheme.colorScheme.error,
       )
 
@@ -250,7 +252,7 @@ internal fun TrackPickerSheet(
             item {
               Text(
                 text = emptyText,
-                modifier = Modifier.padding(20.dp),
+                modifier = Modifier.padding(horizontal = SheetContentHorizontalPadding, vertical = PathlySpacing.lg),
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
               )
             }
@@ -260,12 +262,12 @@ internal fun TrackPickerSheet(
           }
           if (outside.isNotEmpty()) {
             item {
-              HorizontalDivider(modifier = Modifier.padding(top = 8.dp))
+              HorizontalDivider(modifier = Modifier.padding(top = PathlySpacing.sm))
               Text(
                 text = outsideLabel,
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(start = 20.dp, top = 12.dp, bottom = 4.dp),
+                modifier = Modifier.padding(start = SheetContentHorizontalPadding, top = PathlySpacing.md, bottom = PathlySpacing.xs),
               )
             }
             items(outside, key = { "out-${it.id}" }) { track ->
@@ -301,10 +303,10 @@ private fun TrackPickerRow(
           Modifier.clickable(enabled = enabled) { onToggle(track) }
         },
       )
-      .padding(start = 8.dp, end = 4.dp, top = 2.dp, bottom = 2.dp)
+      .padding(start = PathlySpacing.sm, end = PathlySpacing.xs, top = PathlySpacing.xxs, bottom = PathlySpacing.xxs)
       .testTag("${testTagPrefix}Row-${track.id}"),
     verticalAlignment = Alignment.CenterVertically,
-    horizontalArrangement = Arrangement.spacedBy(4.dp),
+    horizontalArrangement = Arrangement.spacedBy(PathlySpacing.xs),
   ) {
     Checkbox(
       checked = checked,
@@ -321,14 +323,11 @@ private fun TrackPickerRow(
           shape = CircleShape,
         ),
     )
-    Column(
-      modifier = Modifier
-        .weight(1f)
-        .padding(start = 8.dp),
-    ) {
+    // 一覧の経路の行と同じ字の段（見出しは titleMedium、2 行目は bodySmall）。
+    Column(modifier = Modifier.weight(1f)) {
       Text(
         text = listTitleOf(track),
-        style = MaterialTheme.typography.bodyLarge,
+        style = MaterialTheme.typography.titleMedium,
         maxLines = 1,
         overflow = TextOverflow.Ellipsis,
       )

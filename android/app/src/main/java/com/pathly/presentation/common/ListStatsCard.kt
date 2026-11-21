@@ -41,20 +41,22 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
-import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
 import com.pathly.R
 import com.pathly.ui.theme.PathlySpacing
@@ -64,12 +66,12 @@ import com.pathly.ui.theme.PathlyTheme
 // 中身（数字のタイル・絵 1 つ・読み物 1 つ）は一覧ごとに組み、外側と部品はここで揃える。
 
 /**
- * 統計の帯と、押して広げた統計のカード。[expanded] なら [card] を中に持つカード、そうでなければ 1 行の帯
- * （[barText]）を出す。カードの見出しの行（「統計」・絞り込み中・▴）を押すと帯に戻る。
+ * 統計の帯と、押して広げた統計のカード。[expanded] なら [card] を中に持つカード、そうでなければ小さなタイルを
+ * 並べた帯（[barItems]）を出す。カードの見出しの行（「統計」・絞り込み中・▴）を押すと帯に戻る。
  */
 @Composable
 fun ExpandableListStats(
-  barText: String,
+  barItems: List<StatsBarItem>,
   expanded: Boolean,
   onExpandedChange: (Boolean) -> Unit,
   isFiltered: Boolean,
@@ -85,8 +87,72 @@ fun ExpandableListStats(
     if (isExpanded) {
       ListStatsCard(isFiltered = isFiltered, onCollapse = { onExpandedChange(false) }, content = card)
     } else {
-      ListStatsBar(text = barText, onClick = { onExpandedChange(true) })
+      ListStatsBar(items = barItems, onClick = { onExpandedChange(true) })
     }
+  }
+}
+
+/** 統計の帯の 1 つ（アイコン・値・名前・色）。値の中の数字は大きく太く出る。 */
+data class StatsBarItem(@DrawableRes val icon: Int, val value: String, val label: String, val tone: StatsTileTone)
+
+/**
+ * 一覧の統計の帯。カードの数字のタイルを小さくしたもの（名前の行・値の行）を横に並べ、右端に ▾ を出す。
+ * 押すとその場で統計のカードに広がる。一覧の行や絞り込みの欄と見分けやすいよう、灰の地ではなく数字の種類の色を敷く。
+ */
+@Composable
+private fun ListStatsBar(items: List<StatsBarItem>, onClick: () -> Unit) {
+  Row(
+    modifier = Modifier
+      .fillMaxWidth()
+      .padding(horizontal = PathlySpacing.screenEdge)
+      .clip(MaterialTheme.shapes.small)
+      .clickable(role = Role.Button, onClick = onClick)
+      .height(IntrinsicSize.Min)
+      .testTag("listStatsBar"),
+    horizontalArrangement = Arrangement.spacedBy(PathlySpacing.sm),
+    verticalAlignment = Alignment.CenterVertically,
+  ) {
+    items.forEach { item -> StatsBarTile(item) }
+    Icon(
+      painter = painterResource(R.drawable.ic_expand_more),
+      contentDescription = "統計を広げる",
+      tint = MaterialTheme.colorScheme.onSurfaceVariant,
+      // 字に添える ▾▴ は 18dp（表示のメニュー・絞り込みのボタンと同じ）。
+      modifier = Modifier.size(18.dp),
+    )
+  }
+}
+
+@Composable
+private fun RowScope.StatsBarTile(item: StatsBarItem) {
+  val (container, content) = statsToneColors(item.tone)
+  Column(
+    modifier = Modifier
+      .weight(1f)
+      .fillMaxHeight()
+      .clip(MaterialTheme.shapes.small)
+      .background(container)
+      .padding(horizontal = PathlySpacing.md, vertical = PathlySpacing.sm)
+      .semantics(mergeDescendants = true) { contentDescription = "${item.label} ${item.value}" },
+    verticalArrangement = Arrangement.spacedBy(PathlySpacing.xxs),
+  ) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+      Icon(painter = painterResource(item.icon), contentDescription = null, tint = content, modifier = Modifier.size(16.dp))
+      Spacer(modifier = Modifier.width(PathlySpacing.xs))
+      Text(text = item.label, style = MaterialTheme.typography.labelSmall, color = content, maxLines = 1, overflow = TextOverflow.Ellipsis)
+    }
+    // 数字の大きさは地の字に対する倍率（em）で渡す。sp で渡すと、収まらないときに autoSize が地の字を縮めても
+    // 数字だけ縮まずに切れる。
+    val numberStyle = SpanStyle(
+      fontSize = relativeSize(MaterialTheme.typography.headlineSmall.fontSize, MaterialTheme.typography.labelMedium.fontSize),
+      fontWeight = FontWeight.Bold,
+    )
+    BasicText(
+      text = remember(item.value, numberStyle) { emphasizeNumbers(item.value, numberStyle) },
+      style = MaterialTheme.typography.labelMedium.copy(color = content, lineHeight = MaterialTheme.typography.headlineSmall.lineHeight),
+      maxLines = 1,
+      autoSize = TextAutoSize.StepBased(minFontSize = 8.sp, maxFontSize = MaterialTheme.typography.labelMedium.fontSize),
+    )
   }
 }
 
@@ -115,7 +181,7 @@ private fun ListStatsCard(isFiltered: Boolean, onCollapse: () -> Unit, content: 
           style = MaterialTheme.typography.labelLarge,
           modifier = Modifier.weight(1f),
         )
-        Icon(painter = painterResource(R.drawable.ic_expand_less), contentDescription = "統計を畳む", modifier = Modifier.size(20.dp))
+        Icon(painter = painterResource(R.drawable.ic_expand_less), contentDescription = "統計を畳む", modifier = Modifier.size(18.dp))
       }
       Column(
         modifier = Modifier.padding(start = PathlySpacing.md, end = PathlySpacing.md, bottom = PathlySpacing.md),
@@ -145,6 +211,20 @@ fun StatsTileRow(content: @Composable RowScope.() -> Unit) {
 enum class StatsTileTone { PRIMARY, GREEN, WISHLIST, TERTIARY }
 
 /**
+ * タイルの地の色と文字の色（統計の帯とカードで同じ）。4 色とも同じ作り（その色を薄く敷き、字をその色に）にして、
+ * どれか 1 つだけが濃く塗られて主役に見えないようにする（以前の藍は container の塗りで、暗い表示で目立っていた）。
+ */
+@Composable
+private fun statsToneColors(tone: StatsTileTone): Pair<Color, Color> = tintedColors(
+  when (tone) {
+    StatsTileTone.PRIMARY -> MaterialTheme.colorScheme.primary
+    StatsTileTone.GREEN -> PathlyTheme.statusColors.visited
+    StatsTileTone.WISHLIST -> PathlyTheme.statusColors.wishlist
+    StatsTileTone.TERTIARY -> MaterialTheme.colorScheme.tertiary
+  },
+)
+
+/**
  * 数字のタイル（アイコン・値・名前を縦に）。[value] の中の数字を大きく太く、単位は小さく出す。
  * 収まらないときは字を小さくして 1 行に収める。
  */
@@ -156,19 +236,7 @@ fun RowScope.StatsTile(
   tone: StatsTileTone,
   modifier: Modifier = Modifier,
 ) {
-  val (container, content) = when (tone) {
-    StatsTileTone.PRIMARY -> MaterialTheme.colorScheme.primaryContainer to MaterialTheme.colorScheme.onPrimaryContainer
-
-    StatsTileTone.GREEN -> PathlyTheme.statusColors.visited.let { green ->
-      green.copy(alpha = 0.16f).compositeOver(MaterialTheme.colorScheme.surfaceContainer) to green
-    }
-
-    StatsTileTone.WISHLIST -> PathlyTheme.statusColors.wishlist.let { red ->
-      red.copy(alpha = 0.16f).compositeOver(MaterialTheme.colorScheme.surfaceContainer) to red
-    }
-
-    StatsTileTone.TERTIARY -> MaterialTheme.colorScheme.tertiaryContainer to MaterialTheme.colorScheme.onTertiaryContainer
-  }
+  val (container, content) = statsToneColors(tone)
   Column(
     modifier = modifier
       .weight(1f)
@@ -180,7 +248,10 @@ fun RowScope.StatsTile(
     horizontalAlignment = Alignment.CenterHorizontally,
   ) {
     Icon(painter = painterResource(icon), contentDescription = null, tint = content, modifier = Modifier.size(20.dp))
-    val numberStyle = SpanStyle(fontSize = MaterialTheme.typography.headlineSmall.fontSize, fontWeight = FontWeight.Bold)
+    val numberStyle = SpanStyle(
+      fontSize = relativeSize(MaterialTheme.typography.headlineSmall.fontSize, MaterialTheme.typography.bodySmall.fontSize),
+      fontWeight = FontWeight.Bold,
+    )
     BasicText(
       text = remember(value, numberStyle) { emphasizeNumbers(value, numberStyle) },
       style = MaterialTheme.typography.bodySmall.copy(color = content, textAlign = TextAlign.Center),
@@ -191,6 +262,9 @@ fun RowScope.StatsTile(
     Text(text = label, style = MaterialTheme.typography.labelSmall, color = content, maxLines = 1, overflow = TextOverflow.Ellipsis)
   }
 }
+
+/** [size] を [base] に対する倍率（em）にする（autoSize で地の字と一緒に縮むように）。 */
+private fun relativeSize(size: TextUnit, base: TextUnit): TextUnit = (size.value / base.value).em
 
 /** カードの中の小見出し（左）と、添える数字（右）。 */
 @Composable
@@ -205,10 +279,10 @@ fun StatsSectionTitle(title: String, trailing: String? = null) {
 
 /**
  * 棒グラフ（左から順に）。高さは [values] の最大に合わせ、最後の棒（今）を強める。すべて 0 なら棒は出さない。
- * 棒の下の左右に [startLabel] と [endLabel] を出す。
+ * 棒の下にそれぞれの [labels]（「12」など。[values] と同じ数）を出し、最後の名前も強める。
  */
 @Composable
-fun StatsBarChart(values: List<Double>, startLabel: String, endLabel: String, modifier: Modifier = Modifier) {
+fun StatsBarChart(values: List<Double>, labels: List<String>, modifier: Modifier = Modifier) {
   val strong = MaterialTheme.colorScheme.primary
   val weak = strong.copy(alpha = 0.35f)
   val baseline = MaterialTheme.colorScheme.outlineVariant
@@ -236,9 +310,28 @@ fun StatsBarChart(values: List<Double>, startLabel: String, endLabel: String, mo
       }
       drawLine(baseline, Offset(0f, size.height), Offset(size.width, size.height), strokeWidth = 1.dp.toPx())
     }
-    Row(modifier = Modifier.fillMaxWidth().padding(top = PathlySpacing.xxs)) {
-      Text(text = startLabel, style = MaterialTheme.typography.labelSmall, modifier = Modifier.weight(1f))
-      Text(text = endLabel, style = MaterialTheme.typography.labelSmall)
+    // 棒と同じ幅・すき間で並べ、名前を棒の真下に置く。読み上げでは数字だけが 12 個並ぶと意味が分からないので読ませない
+    // （見出しの行が「月ごとの距離・今月 ◯ km」を読む）。
+    Row(
+      modifier = Modifier
+        .fillMaxWidth()
+        .padding(top = PathlySpacing.xxs)
+        .clearAndSetSemantics {},
+      horizontalArrangement = Arrangement.spacedBy(PathlySpacing.xs),
+    ) {
+      labels.forEachIndexed { i, label ->
+        val last = i == labels.lastIndex
+        Text(
+          text = label,
+          style = MaterialTheme.typography.labelSmall,
+          fontWeight = if (last) FontWeight.Bold else null,
+          color = if (last) strong else MaterialTheme.colorScheme.onSurfaceVariant,
+          textAlign = TextAlign.Center,
+          maxLines = 1,
+          softWrap = false,
+          modifier = Modifier.weight(1f),
+        )
+      }
     }
   }
 }

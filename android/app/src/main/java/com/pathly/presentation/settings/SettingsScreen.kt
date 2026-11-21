@@ -6,12 +6,15 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
@@ -39,8 +42,34 @@ import com.pathly.data.backup.BackupCounts
 import com.pathly.data.backup.BackupException
 import com.pathly.data.settings.LocationAccuracy
 import com.pathly.data.settings.ThemeMode
+import com.pathly.ui.theme.PathlySpacing
 import com.pathly.util.DateFormatters
 import java.util.Date
+
+/**
+ * 設定の 1 つだけ選ぶ行。行全体で押せる（48dp 以上）。丸の左端を見出しの左端にそろえ、丸自身は押す範囲を持たない
+ * （行と二重に押せないように。以前は丸の 48dp の箱のぶん字下げされ、行も 72dp ほどに間延びしていた）。
+ */
+@Composable
+private fun SettingsRadioRow(label: String, selected: Boolean, onClick: () -> Unit) {
+  Row(
+    modifier = Modifier
+      .fillMaxWidth()
+      .heightIn(min = 48.dp)
+      .selectable(selected = selected, role = Role.RadioButton, onClick = onClick),
+    verticalAlignment = Alignment.CenterVertically,
+    horizontalArrangement = Arrangement.spacedBy(PathlySpacing.md),
+  ) {
+    RadioButton(selected = selected, onClick = null)
+    Text(text = label, style = MaterialTheme.typography.bodyLarge)
+  }
+}
+
+/** 1 つだけ選ぶ行のまとまり（読み上げで、まとまりの中の何番目かが分かるように）。行の間は画面の行の間と同じ。 */
+@Composable
+private fun SettingsRadioGroup(content: @Composable ColumnScope.() -> Unit) {
+  Column(modifier = Modifier.selectableGroup(), verticalArrangement = Arrangement.spacedBy(PathlySpacing.sm), content = content)
+}
 
 @Composable
 fun SettingsScreen(
@@ -54,8 +83,8 @@ fun SettingsScreen(
     modifier = modifier
       .fillMaxSize()
       .verticalScroll(rememberScrollState())
-      .padding(16.dp),
-    verticalArrangement = Arrangement.spacedBy(8.dp),
+      .padding(PathlySpacing.lg),
+    verticalArrangement = Arrangement.spacedBy(PathlySpacing.sm),
   ) {
     Text(
       text = "設定",
@@ -65,7 +94,7 @@ fun SettingsScreen(
     Text(
       text = "GPS記録間隔",
       style = MaterialTheme.typography.titleMedium,
-      modifier = Modifier.padding(top = 8.dp),
+      modifier = Modifier.padding(top = PathlySpacing.sm),
     )
     Text(
       text = "短いほど軌跡が滑らかですが電池を多く使います。長いほど省電力です。",
@@ -73,24 +102,12 @@ fun SettingsScreen(
       color = MaterialTheme.colorScheme.onSurfaceVariant,
     )
 
-    viewModel.gpsIntervalOptions.forEach { seconds ->
-      Row(
-        modifier = Modifier
-          .fillMaxWidth()
-          .selectable(
-            selected = interval == seconds,
-            onClick = { viewModel.setGpsIntervalSeconds(seconds) },
-          )
-          .padding(vertical = 8.dp),
-        verticalAlignment = Alignment.CenterVertically,
-      ) {
-        RadioButton(
+    SettingsRadioGroup {
+      viewModel.gpsIntervalOptions.forEach { seconds ->
+        SettingsRadioRow(
+          label = gpsIntervalLabel(seconds),
           selected = interval == seconds,
           onClick = { viewModel.setGpsIntervalSeconds(seconds) },
-        )
-        Text(
-          text = gpsIntervalLabel(seconds),
-          style = MaterialTheme.typography.bodyLarge,
         )
       }
     }
@@ -98,7 +115,7 @@ fun SettingsScreen(
     Text(
       text = "位置の取り方",
       style = MaterialTheme.typography.titleMedium,
-      modifier = Modifier.padding(top = 16.dp),
+      modifier = Modifier.padding(top = PathlySpacing.lg),
     )
     Text(
       text = "高精度は衛星（GNSS）を積極的に使うので、電車や車で移動中の取りこぼしが減りますが電池を多く使います。" +
@@ -107,24 +124,12 @@ fun SettingsScreen(
       color = MaterialTheme.colorScheme.onSurfaceVariant,
     )
 
-    viewModel.locationAccuracyOptions.forEach { option ->
-      Row(
-        modifier = Modifier
-          .fillMaxWidth()
-          .selectable(
-            selected = accuracy == option,
-            onClick = { viewModel.setLocationAccuracy(option) },
-          )
-          .padding(vertical = 8.dp),
-        verticalAlignment = Alignment.CenterVertically,
-      ) {
-        RadioButton(
+    SettingsRadioGroup {
+      viewModel.locationAccuracyOptions.forEach { option ->
+        SettingsRadioRow(
+          label = locationAccuracyLabel(option),
           selected = accuracy == option,
           onClick = { viewModel.setLocationAccuracy(option) },
-        )
-        Text(
-          text = locationAccuracyLabel(option),
-          style = MaterialTheme.typography.bodyLarge,
         )
       }
     }
@@ -133,7 +138,7 @@ fun SettingsScreen(
       text = "※ 変更は次に記録を開始したときから反映されます。",
       style = MaterialTheme.typography.bodySmall,
       color = MaterialTheme.colorScheme.onSurfaceVariant,
-      modifier = Modifier.padding(top = 8.dp),
+      modifier = Modifier.padding(top = PathlySpacing.sm),
     )
 
     BatteryOptimizationSection(viewModel)
@@ -160,7 +165,7 @@ private fun BatteryOptimizationSection(viewModel: SettingsViewModel) {
   Text(
     text = "電池の最適化",
     style = MaterialTheme.typography.titleMedium,
-    modifier = Modifier.padding(top = 16.dp),
+    modifier = Modifier.padding(top = PathlySpacing.lg),
   )
   Text(
     text = if (ignoring) {
@@ -186,26 +191,14 @@ private fun AppearanceSection(viewModel: SettingsViewModel) {
   Text(
     text = "見た目",
     style = MaterialTheme.typography.titleMedium,
-    modifier = Modifier.padding(top = 24.dp),
+    modifier = Modifier.padding(top = PathlySpacing.xl),
   )
-  viewModel.themeModeOptions.forEach { mode ->
-    Row(
-      modifier = Modifier
-        .fillMaxWidth()
-        .selectable(
-          selected = themeMode == mode,
-          onClick = { viewModel.setThemeMode(mode) },
-        )
-        .padding(vertical = 8.dp),
-      verticalAlignment = Alignment.CenterVertically,
-    ) {
-      RadioButton(
+  SettingsRadioGroup {
+    viewModel.themeModeOptions.forEach { mode ->
+      SettingsRadioRow(
+        label = themeModeLabel(mode),
         selected = themeMode == mode,
         onClick = { viewModel.setThemeMode(mode) },
-      )
-      Text(
-        text = themeModeLabel(mode),
-        style = MaterialTheme.typography.bodyLarge,
       )
     }
   }
@@ -217,7 +210,7 @@ private fun AppearanceSection(viewModel: SettingsViewModel) {
         role = Role.Switch,
         onValueChange = viewModel::setUseDynamicColor,
       )
-      .padding(vertical = 8.dp),
+      .padding(vertical = PathlySpacing.sm),
     verticalAlignment = Alignment.CenterVertically,
   ) {
     Column(modifier = Modifier.weight(1f)) {
@@ -245,7 +238,7 @@ private fun AboutSection() {
   Text(
     text = "このアプリについて",
     style = MaterialTheme.typography.titleMedium,
-    modifier = Modifier.padding(top = 24.dp),
+    modifier = Modifier.padding(top = PathlySpacing.xl),
   )
   SelectionContainer {
     Column {
@@ -282,7 +275,7 @@ private fun BackupSection(viewModel: SettingsViewModel) {
   Text(
     text = "データ",
     style = MaterialTheme.typography.titleMedium,
-    modifier = Modifier.padding(top = 24.dp),
+    modifier = Modifier.padding(top = PathlySpacing.xl),
   )
   Text(
     text = "記録・場所・設定をまとめて1つのファイルに書き出し、あとで読み込めます。" +
@@ -290,7 +283,7 @@ private fun BackupSection(viewModel: SettingsViewModel) {
     style = MaterialTheme.typography.bodySmall,
     color = MaterialTheme.colorScheme.onSurfaceVariant,
   )
-  Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+  Row(horizontalArrangement = Arrangement.spacedBy(PathlySpacing.sm)) {
     OutlinedButton(
       onClick = { exportLauncher.launch(exportFileName()) },
       enabled = !state.busy,

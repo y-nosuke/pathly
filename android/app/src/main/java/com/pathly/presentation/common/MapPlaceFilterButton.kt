@@ -26,6 +26,7 @@ import com.pathly.domain.model.PlaceCategoryFacet
 import com.pathly.domain.model.RegisteredPlace
 import com.pathly.domain.model.nextTriState
 import com.pathly.ui.theme.PathlyElevation
+import com.pathly.ui.theme.PathlySpacing
 
 /**
  * 地図の「登録済みの場所」の絞り込みボタン。「登録済みの場所を表示」のトグルの隣に、表示 ON のときだけ置く。
@@ -55,7 +56,7 @@ fun MapPlaceFilterButton(
         painter = painterResource(R.drawable.ic_filter),
         contentDescription = if (active) "登録済みの場所を絞り込み中" else "登録済みの場所を絞り込む",
         tint = if (active) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface,
-        modifier = Modifier.padding(8.dp),
+        modifier = Modifier.padding(PathlySpacing.sm),
       )
     }
     DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
@@ -73,7 +74,7 @@ internal fun MapPlaceFilterPanel(
 ) {
   // 業種の件数は行きたい・訪問の条件に合う場所で数える（場所一覧と同じ）。
   val counts: Map<PlaceCategoryFacet, Int> = remember(places, filter) { filter.categoryCounts(places) }
-  Column(modifier = Modifier.padding(horizontal = 12.dp)) {
+  Column(modifier = Modifier.padding(horizontal = PathlySpacing.md)) {
     // 行きたい・訪問は 1 つのチップで 指定なし→あり→なし→… と切り替える（場所一覧と同じ）。
     FilterChip(
       selected = filter.wishlisted != null,

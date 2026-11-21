@@ -1,6 +1,5 @@
 package com.pathly.presentation.common
 
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
@@ -20,7 +19,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.RadioButton
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextField
@@ -40,11 +38,9 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -52,7 +48,7 @@ import com.pathly.R
 import com.pathly.ui.theme.PathlyShapes
 import com.pathly.ui.theme.PathlySpacing
 
-// 一覧の画面の型（docs/designs/ui-direction.md）の「見出し」「ツール行」「統計の帯」。履歴・場所の一覧で同じものを使う。
+// 一覧の画面の型（docs/designs/ui-direction.md）の「見出し」「ツール行」（統計の帯は ListStatsCard.kt）。履歴・場所の一覧で同じものを使う。
 
 /**
  * 一覧の見出し。左に画面の名前、右端に検索のアイコンと [actions]（一覧／地図の切り替えなど）。
@@ -240,47 +236,6 @@ fun ListMenuChoice(text: String, selected: Boolean, onClick: () -> Unit) {
     leadingIcon = { RadioButton(selected = selected, onClick = null) },
     onClick = onClick,
   )
-}
-
-/**
- * 一覧の統計の帯（1 行）。絞り込み中は「12 / 38 回」のように全体の数を添えた文を渡す。
- * [onClick] を渡すと右端に ▾ を出し、押すとその場で統計のカードに広がる（→ [ExpandableListStats]）。
- */
-@Composable
-fun ListStatsBar(text: String, modifier: Modifier = Modifier, onClick: (() -> Unit)? = null) {
-  Surface(
-    modifier = modifier
-      .fillMaxWidth()
-      .padding(horizontal = PathlySpacing.screenEdge)
-      .testTag("listStatsBar"),
-    shape = MaterialTheme.shapes.small,
-    color = MaterialTheme.colorScheme.surfaceContainer,
-    contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
-  ) {
-    Row(
-      modifier = Modifier
-        .then(if (onClick != null) Modifier.clickable(role = Role.Button, onClick = onClick) else Modifier)
-        .padding(horizontal = PathlySpacing.md, vertical = PathlySpacing.sm),
-      verticalAlignment = Alignment.CenterVertically,
-    ) {
-      // 数字を大きく太く、単位・区切りは小さく控えめにして、1 行のまま数字が目に入るようにする。
-      val numberStyle = SpanStyle(
-        fontSize = MaterialTheme.typography.titleMedium.fontSize,
-        fontWeight = FontWeight.Bold,
-        color = MaterialTheme.colorScheme.onSurface,
-      )
-      Text(
-        text = remember(text, numberStyle) { emphasizeNumbers(text, numberStyle) },
-        style = MaterialTheme.typography.bodySmall.copy(lineHeight = MaterialTheme.typography.titleMedium.lineHeight),
-        maxLines = 1,
-        overflow = TextOverflow.Ellipsis,
-        modifier = Modifier.weight(1f),
-      )
-      if (onClick != null) {
-        Icon(painter = painterResource(R.drawable.ic_expand_more), contentDescription = "統計を広げる", modifier = Modifier.size(20.dp))
-      }
-    }
-  }
 }
 
 /** [text] の中の数字（「3,815」「4.3」など）だけに [numberStyle] をかける。 */

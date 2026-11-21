@@ -23,6 +23,7 @@ import com.pathly.R
 import com.pathly.domain.model.RegionCount
 import com.pathly.domain.model.RegionKey
 import com.pathly.domain.model.sortedForDisplay
+import com.pathly.ui.theme.PathlySpacing
 
 /**
  * 絞り込みの欄の「地域」（→ adr/0029・adr/0030）。1 段目（日本の都道府県、続けて海外の国。件数つき）を並べ、
@@ -73,7 +74,7 @@ fun RegionFilterSection(
               label = "$city（$count）",
               checked = cityKey in selected,
               onToggle = { onToggle(cityKey) },
-              modifier = Modifier.padding(start = 32.dp),
+              modifier = Modifier.padding(start = PathlySpacing.xxl),
             )
           }
         }
@@ -100,7 +101,7 @@ private fun RegionRow(
       .clickable(role = Role.Checkbox, onClick = onToggle),
     verticalAlignment = Alignment.CenterVertically,
   ) {
-    Checkbox(checked = checked, onCheckedChange = null, modifier = Modifier.padding(12.dp))
+    Checkbox(checked = checked, onCheckedChange = null, modifier = Modifier.padding(PathlySpacing.md))
     Text(label, modifier = Modifier.weight(1f))
     trailing?.invoke()
   }

@@ -4,6 +4,9 @@ import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertHasClickAction
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsNotEnabled
+import androidx.compose.ui.test.hasAnyAncestor
+import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.isPopup
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onNodeWithContentDescription
@@ -191,10 +194,10 @@ class HistoryScreenTest {
       }
     }
 
-    // Then: 行の 2 行目に時刻・距離・立ち寄りの数。上に統計の帯（1 行）。
+    // Then: 行の 2 行目に時刻・距離・立ち寄りの数。上に統計の帯（回数・距離・時間のタイル）。
     assertRowSummaryDisplayed(tracks[0])
     composeTestRule.onNodeWithTag("listStatsBar").assertIsDisplayed()
-    composeTestRule.onNodeWithText("1 回 ・", substring = true).assertIsDisplayed()
+    composeTestRule.onNodeWithContentDescription("回数 1 回").assertIsDisplayed()
   }
 
   // 統計の帯を押すとその場で統計のカードに広がり、見出しの行で帯に戻る。いちばん長いお出掛けを押すと経路詳細へ。
@@ -513,7 +516,8 @@ class HistoryScreenTest {
 
     composeTestRule.onNodeWithText("日付 ・ 新しい順").assertIsDisplayed()
     composeTestRule.onNodeWithTag("listDisplayMenuButton").performClick()
-    composeTestRule.onNodeWithText("距離").performClick()
+    // 統計の帯にも「距離」のタイルがあるので、メニューの中から選ぶ。
+    composeTestRule.onNode(hasText("距離") and hasAnyAncestor(isPopup())).performClick()
     verify { mockViewModel.setSort(TrackSort.DISTANCE) }
 
     composeTestRule.onNodeWithTag("listDisplayMenuButton").performClick()

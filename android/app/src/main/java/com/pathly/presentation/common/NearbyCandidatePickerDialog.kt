@@ -31,6 +31,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.pathly.domain.model.PlacePrediction
 import com.pathly.domain.model.PlaceSearchResult
+import com.pathly.ui.theme.PathlySpacing
 
 /**
  * 座標の近くの POI 候補を Nearby 検索して、ラジオで選ぶ（任意で自分でも入力／名前でも検索する）汎用ダイアログ。
@@ -82,12 +83,12 @@ fun NearbyCandidatePickerDialog(
         description?.let {
           Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
-        Spacer(modifier = Modifier.height(12.dp))
+        Spacer(modifier = Modifier.height(PathlySpacing.md))
 
         when (val list = candidates) {
-          null -> Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(vertical = 8.dp)) {
+          null -> Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(vertical = PathlySpacing.sm)) {
             CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
-            Spacer(modifier = Modifier.width(8.dp))
+            Spacer(modifier = Modifier.width(PathlySpacing.sm))
             Text("近くの候補を検索中…", style = MaterialTheme.typography.bodySmall)
           }
 
@@ -103,7 +104,7 @@ fun NearbyCandidatePickerDialog(
                 },
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(vertical = 4.dp),
+                modifier = Modifier.padding(vertical = PathlySpacing.xs),
               )
             } else {
               Column(
@@ -119,7 +120,7 @@ fun NearbyCandidatePickerDialog(
                         selected = poi
                         customName = ""
                       }
-                      .padding(vertical = 6.dp),
+                      .padding(vertical = PathlySpacing.sm),
                     verticalAlignment = Alignment.CenterVertically,
                   ) {
                     RadioButton(
@@ -129,7 +130,7 @@ fun NearbyCandidatePickerDialog(
                         customName = ""
                       },
                     )
-                    Column(modifier = Modifier.padding(start = 4.dp)) {
+                    Column(modifier = Modifier.padding(start = PathlySpacing.xs)) {
                       Text(poi.name ?: "（名称不明）", style = MaterialTheme.typography.bodyMedium)
                       poi.category?.let {
                         Text(it.label, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -141,7 +142,7 @@ fun NearbyCandidatePickerDialog(
             }
 
             if (allowCustomName) {
-              Spacer(modifier = Modifier.height(8.dp))
+              Spacer(modifier = Modifier.height(PathlySpacing.sm))
               OutlinedTextField(
                 value = customName,
                 onValueChange = {
@@ -155,9 +156,9 @@ fun NearbyCandidatePickerDialog(
             }
 
             if (searchEnabled) {
-              Spacer(modifier = Modifier.height(12.dp))
+              Spacer(modifier = Modifier.height(PathlySpacing.md))
               HorizontalDivider()
-              Spacer(modifier = Modifier.height(8.dp))
+              Spacer(modifier = Modifier.height(PathlySpacing.sm))
               PlaceNameSearchField(
                 onSearchPredictions = onSearchPredictions,
                 onFetchPrediction = onFetchPrediction,

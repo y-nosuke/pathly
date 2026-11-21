@@ -23,17 +23,20 @@ class HistoryListTextTest {
   )
 
   @Test
-  fun statsText_notFiltered_showsCountDistanceAndDuration() {
+  fun statsBar_notFiltered_showsCountDistanceAndDuration() {
     val tracks = listOf(track(minutes = 90, meters = 1_250.0), track(minutes = 45, meters = 3_000.0))
-    assertEquals("2 回 ・ 4.3 km ・ 2 時間 15 分", historyStatsText(tracks, totalCount = 2, isFiltered = false))
+    assertEquals(
+      listOf("回数" to "2 回", "距離" to "4.3 km", "時間" to "2 時間 15 分"),
+      historyStatsBarItems(tracks, totalCount = 2, isFiltered = false).map { it.label to it.value },
+    )
   }
 
   // 絞り込み中は、絞った数字を全体と取り違えないよう全体の数を添える（一致していても絞り込み中であることは出す）。
   @Test
-  fun statsText_filtered_showsShownAndTotalCounts() {
+  fun statsBar_filtered_showsShownAndTotalCounts() {
     val tracks = listOf(track(minutes = 30, meters = 500.0))
-    assertEquals("1 / 4 回 ・ 0.5 km ・ 30 分", historyStatsText(tracks, totalCount = 4, isFiltered = true))
-    assertEquals("1 / 1 回 ・ 0.5 km ・ 30 分", historyStatsText(tracks, totalCount = 1, isFiltered = true))
+    assertEquals("1 / 4 回", historyStatsBarItems(tracks, totalCount = 4, isFiltered = true).first().value)
+    assertEquals("1 / 1 回", historyStatsBarItems(tracks, totalCount = 1, isFiltered = true).first().value)
   }
 
   // 合計の距離は 100 km 以上で小数を落として 3 桁区切りにする（帯の数字を短く読みやすく）。

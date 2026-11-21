@@ -22,6 +22,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.pathly.domain.model.PlacePrediction
+import com.pathly.ui.theme.PathlySpacing
 
 /**
  * キーワードで Google の場所を探す欄と候補の一覧（「検索して追加」の中身）。
@@ -46,7 +47,7 @@ internal fun PlaceKeywordSearchBody(
       modifier = Modifier.fillMaxWidth(),
     )
 
-    Spacer(modifier = Modifier.height(8.dp))
+    Spacer(modifier = Modifier.height(PathlySpacing.sm))
 
     PlaceSearchPredictions(
       query = query,
@@ -73,13 +74,13 @@ internal fun PlaceSearchPredictions(
 ) {
   when {
     isSearching -> {
-      Box(modifier = modifier.padding(vertical = 16.dp), contentAlignment = Alignment.Center) {
+      Box(modifier = modifier.padding(vertical = PathlySpacing.lg), contentAlignment = Alignment.Center) {
         CircularProgressIndicator()
       }
     }
 
     query.isNotBlank() && predictions.isEmpty() -> {
-      Box(modifier = modifier.padding(vertical = 16.dp), contentAlignment = Alignment.Center) {
+      Box(modifier = modifier.padding(vertical = PathlySpacing.lg), contentAlignment = Alignment.Center) {
         Text(
           text = "候補がありません\n（オンライン・キーワードを確認）",
           style = MaterialTheme.typography.bodyMedium,
@@ -110,7 +111,7 @@ private fun PredictionRow(
     modifier = modifier
       .fillMaxWidth()
       .clickable(onClick = onClick)
-      .padding(vertical = 12.dp),
+      .padding(vertical = PathlySpacing.md),
   ) {
     Text(
       text = prediction.primaryText,

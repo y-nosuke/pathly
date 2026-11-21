@@ -3,10 +3,13 @@ package com.pathly.presentation.history
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertHasClickAction
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsNotEnabled
+import androidx.compose.ui.test.hasSetTextAction
+import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.longClick
 import androidx.compose.ui.test.onAllNodesWithContentDescription
@@ -31,6 +34,7 @@ import com.pathly.domain.model.Stop
 import com.pathly.presentation.common.MapRegisteredPlaces
 import com.pathly.presentation.places.PlaceEditUi
 import com.pathly.ui.theme.PathlyAndroidTheme
+import com.pathly.util.DateFormatters
 import io.mockk.mockk
 import io.mockk.verify
 import org.junit.Assert.assertEquals
@@ -730,7 +734,10 @@ class TrackDetailScreenTest {
     composeTestRule.onNodeWithContentDescription("その他の操作").performClick()
     composeTestRule.onNodeWithText("名前を付ける").performClick()
     composeTestRule.onNodeWithText("経路の名前").assertIsDisplayed()
-    composeTestRule.onNodeWithText("例: 鎌倉さんぽ").performTextInput("鎌倉さんぽ")
+    // 何も入れていないうちは保存を押せない。
+    composeTestRule.onNodeWithText("保存").assertIsNotEnabled()
+    // 欄の名札は、名前が無いときに見出しになる日付。
+    composeTestRule.onNode(hasSetTextAction()).assert(hasText(DateFormatters.date(track.startTime))).performTextInput("鎌倉さんぽ")
     composeTestRule.onNodeWithText("保存").performClick()
 
     verify { onRenameTrack("鎌倉さんぽ") }

@@ -63,6 +63,7 @@ import com.pathly.presentation.stops.StopDurationSheet
 import com.pathly.presentation.stops.StopReassignHost
 import com.pathly.ui.theme.PathlyElevation
 import com.pathly.ui.theme.PathlyShapes
+import com.pathly.util.DateFormatters
 import kotlinx.coroutines.launch
 
 private val tuningSheetPeekHeight = 360.dp
@@ -560,6 +561,7 @@ private fun TrackDetailDialogs(
   if (state.renamingTrack) {
     RenameTrackDialog(
       initialName = track.name.orEmpty(),
+      defaultName = DateFormatters.date(track.startTime),
       onDismiss = { state.renamingTrack = false },
       onConfirm = { name ->
         onRenameTrack(name)
