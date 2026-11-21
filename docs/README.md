@@ -56,6 +56,7 @@
 | -------------------------------------------------------------- | ------------------------------------------ |
 | [development/branch-and-pr.md](development/branch-and-pr.md)   | ブランチ名・コミットメッセージ・PR・マージ |
 | [development/issues-and-adr.md](development/issues-and-adr.md) | Issue・ADR・ドキュメントの住み分け         |
+| [development/parallel.md](development/parallel.md)             | Issue を並行して進めるときの決まり         |
 
 ### 決定（Why this way）
 

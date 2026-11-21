@@ -6,6 +6,7 @@ description: GitHub Issue を読んで着手し、実装・コード確認・コ
 # Issue に着手して PR で閉じる
 
 運用ルールの正は `docs/development/issues-and-adr.md` と `docs/development/branch-and-pr.md`。ここはその手順書。
+ほかの Issue と並行して（worktree で）進めるときの決まりは `docs/development/parallel.md`。手順の違いは各段に「並行のとき」と書く。
 ユーザーへの返答は日本語。**commit・push・マージ・タグ・GitHub の設定変更は、ユーザーの確認を取ってから**
 （自動マージは 8 の push の確認で一緒に取る）。
 
@@ -19,6 +20,13 @@ gh project item-list 3 --owner y-nosuke --format json --limit 100 \
 ```
 
 並び順は API の返す順で、先頭がいちばん上。`idea` ラベルのものは飛ばす。
+
+**並行のとき**: In Progress の Issue（`select(.status=="In Progress")`）と見比べ、次のものは飛ばしてユーザーに伝える
+（`docs/development/parallel.md` の「並べ方の決まり」）。
+
+- In Progress がもう 2 本ある。
+- In Progress の Issue と同じ画面・層を触りそう。
+- DB のスキーマを変えそうで、In Progress にも DB を変えるものがある。
 
 ## 2. 読む
 
@@ -57,6 +65,15 @@ git checkout -b <種類>/<英語のケバブケース>
 
 種類は Issue のラベル（`feat` / `fix` / `test` / `docs` / `build` / `ci` / `chore` …）に合わせる。日付・番号は入れない。
 
+**並行のとき（worktree の中）**: main は本体で checkout されているので `git checkout main` できない。
+
+```bash
+.claude/skills/start-issue/setup-worktree.sh   # android/local.properties（Maps のキー）を本体からコピーする
+git fetch origin
+git switch -c <種類>/<英語のケバブケース> origin/main   # worktree を作ったときのブランチ（claude/… など）にいるなら、
+                                                     # 代わりに git branch -m <種類>/<英語のケバブケース>（origin/main から作られていれば）
+```
+
 ## 5. 作る・確かめる
 
 - CLAUDE.md の「守ること」に従う。DB を変えるなら version を上げてからコンパイル（schemas の上書きの罠）。
@@ -72,6 +89,13 @@ git checkout -b <種類>/<英語のケバブケース>
   あふれたとき（数を多く・名前を長く）・記録中・シートを畳んだときなど、2 で決めた形どおりかをスクリーンショットで確かめる。
   押せない・はみ出すといった見た目の問題は、ユーザーの確認の前に見つける。
 - 仕様・設計が変わったら docs も同じ PR で直す。判断の理由が要るなら ADR を書く。
+
+**並行のとき**:
+
+- `run-build.sh`・`run-instrumented.sh` は、別の worktree で走っていれば終わるまで待つ（「順番待ち: …」と出る）。
+  待っている間に止めない。重いビルドは順番待ちのスクリプトで回し、素の `./gradlew build` は使わない。
+- エミュレータで画面を触る間は `hold-check-lock.sh` でロックを持つ（`emulator-check` の「APK を入れて触る」）。
+- エミュレータに別のブランチの開発版が入っていたら、アンインストールしてから入れる（`emulator-check` の「APK を入れて触る」）。
 
 ## 6. 自分の変更をレビューする
 
@@ -95,6 +119,8 @@ PR を出す前に、ユーザーにコードと実機の動きを見てもら�
    - **気づいたこと（不具合も、足したい・変えたいことも）は、手順を最後まで試してからまとめて送ってもらう**よう頼む。
      1 つずつ直して入れ直すと、確認の往復が増える。
    - 問題があれば直してコミットし、3 をやり直す。直しが仕様の変更なら、作る前に 2 と同じく形を見せて決める。
+   - **並行のとき**: スマホには 1 つずつ入れる。別のブランチの開発版が入っていればアンインストールしてから入れ、
+     リリース版の書き出しを読み込んでもらう（`phone-check` の 2）。別のセッションの確認がまだ終わっていなければ、終わるまで待つ。
 
 ## 8. push して PR・完了の条件のチェック・自動マージ（ユーザーの確認を取ってから）
 
@@ -103,6 +129,9 @@ PR を出す前に、ユーザーにコードと実機の動きを見てもら�
 
 - PR: タイトルはコミットと同じ形（**リリースノートの 1 行になる**）。本文は `.github/pull_request_template.md` に沿って、
   概要・`Closes #<番号>`・変更内容・検証。確かめていないことは「未確認」と書く。スマホで確かめたなら「スマホ（開発版）で確かめた（ユーザー）」。
+- **並行のとき（main が進んでいたら）**: push の前に `git fetch origin && git merge origin/main` で取り込み、
+  `run-build.sh` と `run-instrumented.sh` をやり直す（取り込んだ変更でアプリの動きが変わるなら、スマホの確認もやり直す）。
+  DB の版がぶつかったら、こちらの版を付け直してマイグレーションと schema を作り直す（`docs/development/parallel.md`）。
 - `git push -u origin <ブランチ>` → `gh pr create --base main --head <ブランチ> --title ... --body-file ...`
 - Claude Desktop では、出したら Auto-fix を有効にする（CI を自分でポーリングしない。CLAUDE.md の「確かめ方」）。
 - **PR を出したら、Issue の完了の条件にチェックを付ける**（GitHub は自動では付けない）。確かめられた項目だけ `- [x]` にし、
@@ -120,10 +149,16 @@ PR を出す前に、ユーザーにコードと実機の動きを見てもら�
   - CI がもう通っていてマージできる状態（clean）だと、GitHub は自動マージを受け付けない。そのときはユーザーに確かめてから
     `gh pr merge <PR> --merge` でマージする。
   - CI が落ちて直す push をしても、自動マージの予約は残る。
+  - **並行のとき**: main の保護は「最新の main と合わせてから」を求めていない（strict でない）。PR の CI が通った後に
+    別の PR がマージされると、合わせた姿は CI を通らないままマージされる。自動マージを有効にする前・手でマージする前に、
+    PR の CI の後に main が進んでいないか見る（`gh pr view <PR> --json mergeStateStatus` が `BEHIND`、または
+    `git fetch && git log HEAD..origin/main`）。進んでいれば `gh pr update-branch <PR>` で main を取り込み、CI を回し直す。
 
 ## 9. マージの後（自動マージにしなかったときは、マージもユーザーの確認を取ってから）
 
 - 自動マージにしなかった PR: 必須チェック（`build` と `instrumented-test`）が通り、残った項目の扱いをユーザーと決めてから
   `gh pr merge <PR> --merge`（マージコミットのみ）。
 - マージ後: `git checkout main && git pull --ff-only && git branch -d <ブランチ> && git fetch --prune`。
+  worktree の中では main に移れないので `git fetch --prune` だけにし、worktree とブランチの片付けはセッションを閉じるとき
+  （Claude Desktop のアーカイブ・`ExitWorktree`）に任せる。本体の main は本体で `git pull --ff-only` する。
 - Issue が閉じて Project で Done になったことを確かめる。マージ後にしか確かめられない項目があれば、確かめてからチェックを付ける。

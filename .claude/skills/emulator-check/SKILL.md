@@ -62,6 +62,7 @@ Bash ツールで起動するときは、起動と待ちを 1 回の呼び出し
 ```
 
 - 始める前に、エミュレータが応答して起動し終えているかを見る。応答しなければ止めて起動し直す。起動していなければ起動する。
+- 別のブランチの開発版が入っていれば、アンインストールしてから始める（versionCode が下がって入らないことがあるため）。
 - テスト中は 1 分ごとに、adb が応答するかと、終わったテストの数（logcat の `TestRunner` の `finished:`）が
   増えているかを見る。どちらかが 3 回続けて駄目なら、gradle とエミュレータを止めて
   「エミュレータが固まった（最後に確かめたときは N 件まで終わっていた）」と出し、終了コード 125 で終える。
@@ -88,9 +89,37 @@ Bash ツールで起動するときは、起動と待ちを 1 回の呼び出し
   止めて「ビルドが止まった（最後のタスク: …）」と出し、終了コード 124 で終える。それ以外は gradle の終了コードのまま。
 - 見張りの仕組みは `watch-lib.sh` を 2 つのスクリプトで使い回している。
 - 止めるときの `./gradlew --stop` は、この PC の同じ版の gradle のデーモンを**すべて**止める。別のセッション（別のワークツリー）で
-  ビルドしている最中だと、そちらも落ちる。
+  ビルドしている最中だと、そちらも落ちる。このため重いビルドは下の順番待ちに並べる。
+
+## 順番待ち（worktree をまたいだロック）
+
+`run-build.sh`・`run-instrumented.sh`・`hold-check-lock.sh` は、どの worktree から呼ばれても 1 つずつ走る
+（`docs/development/parallel.md`）。
+
+- ロックは本体の `.git/pathly-check.lock`（全 worktree で共通）。中の `owner` に持ち主（pid・何を・ブランチ・worktree・始めた時刻）。
+- 別のものが走っていれば「順番待ち: 別の確認が走っている（…）」と出して待つ。順番が来たら「順番が来た（N 分待った）」。
+  60 分（`LOCK_WAIT_MIN`）待っても来なければ終了コード 123。
+- 持ち主のシェルが死んでいれば（強制終了されて片付けられなかったとき）取り上げる。スクリプトが終われば（止まって終えたときも）手放す。
+- 走っていないのにロックが残って待たされるなら、`owner` を見てから `.git/pathly-check.lock` を消す。
+- `run_in_background` で回していれば、待っている間もほかの作業を続けられる。
 
 ## APK を入れて触る
+
+**別の worktree と並行しているときは、触る間ロックを持つ**（`docs/development/parallel.md`）。instrumented test は開発版を
+入れ直して消すので、触っている最中に別の worktree で走ると画面が消える。
+
+```bash
+.claude/skills/emulator-check/hold-check-lock.sh          # run_in_background で起動し、出力に「ロックを持った」が出てから触る
+# … 入れて触る …
+.claude/skills/emulator-check/hold-check-lock.sh release  # 触り終わったら手放す（忘れても 30 分で手放す）
+```
+
+開発版を入れる前に、入っている開発版を見る。`2`（別のブランチの開発版）なら、上書きせずにアンインストールしてから入れる
+（DB の版や形が違うと入らない・落ちる。エミュレータのデータはテスト用なので、確かめずに消してよい）。
+
+```bash
+.claude/skills/phone-check/installed-dev.sh emulator-5554 || [ $? = 1 ] || $ADB -s emulator-5554 uninstall com.pathly.debug
+```
 
 ```bash
 ANDROID_SERIAL=emulator-5554 ./gradlew installDebug             # 開発版 com.pathly.debug

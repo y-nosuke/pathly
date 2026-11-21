@@ -9,6 +9,8 @@
 #   （起動し直しても 3 分で起動し終わらないときも 125。）
 # - テストが始まる前（コンパイル・インストール中）は、ログが WATCH_STALL_MIN 分（既定 10）増えなければ止まったとみなす。
 # - 終わったら tests= failures= errors= の 1 行を出す。それ以外は gradle の終了コードのまま。
+# - 別の worktree で run-build.sh・run-instrumented.sh が走っていれば、終わるまで待ってから始める
+#   （エミュレータに触る前に待つ。LOCK_WAIT_MIN 分（既定 60）待っても順番が来なければ終了コード 123）。
 set -u
 . "$(dirname "$0")/watch-lib.sh"
 
@@ -38,6 +40,8 @@ start_emulator() {
   return 1
 }
 
+acquire_check_lock "run-instrumented $*"
+
 if ! emulator_ready; then
   # adb から見えなくても qemu が残っていることがある（そのまま起動すると 2 台目が別の番号で立ち上がる）。
   if tasklist 2> /dev/null | grep -qi '^qemu-system-x86_64' || timeout 10 "$ADB" devices 2> /dev/null | grep -q "^$SERIAL"; then
@@ -50,6 +54,14 @@ if ! emulator_ready; then
     echo "エミュレータが 3 分で起動し終わらなかった。"
     exit 125
   fi
+fi
+
+# 別のブランチの開発版が入っていると、versionCode（コミット数）が下がって入らないことがある。消してから始める
+# （エミュレータのデータはテスト用）。
+"$(dirname "$0")/../phone-check/installed-dev.sh" "$SERIAL" > /dev/null
+if [ $? = 2 ]; then
+  echo "別のブランチの開発版が入っているので、アンインストールしてから始める。"
+  adb_e uninstall com.pathly.debug > /dev/null 2>&1 || true
 fi
 
 # 前の結果を読まないよう消す。終わったテストを数えるため、logcat を空にして大きくする（溢れて数が減らないように）。
