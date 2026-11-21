@@ -76,6 +76,8 @@ private val tuningSheetPeekHeight = 360.dp
  * [sameFacility]・地図の登録済みの場所 [mapPlaces]・場所の編集 [placeEdit]・立ち寄りの手での追加 [manualStop]）。
  *
  * @param currentStop 記録中に開いたときの「立ち寄り中（ライブ）」。地図にだけ出す（一覧・保存には出さない）。
+ * @param addStopHereTarget 記録中に開いたときの「今ここを立ち寄り」の対象（現在地）。記録中の経路では、取れるまで
+ *   ボタンを押せない状態で出す。記録が終わった経路ではボタンを出さない。
  * @param onRenameTrack 経路そのものの名前（空なら未命名に戻す）。一覧のカードのメニューと同じダイアログを使う。
  * @param onToggleFavorite 経路のお気に入りの付け外し（上のバーの ⋮）。
  * @param onDeleteTrack この経路を消す（上のバーの ⋮）。確かめずに消す予定にし、取り消しはスナックバーで（呼ぶ側が画面を戻る）。
@@ -91,6 +93,7 @@ fun TrackDetailScreen(
   modifier: Modifier = Modifier,
   stops: List<Stop> = emptyList(),
   currentStop: Stop? = null,
+  addStopHereTarget: ManualStopTarget? = null,
   unresolvedCount: Int = 0,
   message: String? = null,
   onMessageShown: () -> Unit = {},
@@ -149,8 +152,9 @@ fun TrackDetailScreen(
   // 補正の調整（開発版）のシステムバックは、画面を抜けるのではなく調整をやめる（入口は ⋮ の中で遠いため）。
   BackHandler(enabled = state.tuningMode) { state.tuningMode = false }
   // バックは2段階で戻す: 地点確定後は地点選択（マップ）に戻すだけ、地点選択中は追加モードを抜ける。
+  // 「今ここ」から始めたときは地点選択を通っていないので、一度で抜ける（キャンセルと同じ）。
   BackHandler(enabled = state.manualMode) {
-    if (state.manualPick != null) state.manualPick = null else state.exitManual()
+    if (state.manualPick != null) state.cancelManualPick() else state.exitManual()
   }
 
   // 立ち寄りの削除・統合は確認ダイアログを出さず即時実行し、スナックバーの「取り消す」で元に戻せる。
@@ -246,6 +250,7 @@ fun TrackDetailScreen(
         sameFacility = sameFacility,
         reanalysis = reanalysis,
         mapPlaces = mapPlaces,
+        addStopHereTarget = addStopHereTarget,
         onDelete = deleteWithUndo,
         onMerge = mergeWithUndo,
       )
@@ -381,6 +386,7 @@ private fun BoxScope.StopListSheet(
   sameFacility: SameFacilityReview,
   reanalysis: StopReanalysis,
   mapPlaces: MapRegisteredPlaces,
+  addStopHereTarget: ManualStopTarget?,
   onDelete: (List<Long>) -> Unit,
   onMerge: (List<Long>) -> Unit,
 ) {
@@ -422,6 +428,13 @@ private fun BoxScope.StopListSheet(
       sameFacilityPendingCount = sameFacility.pending.size,
       onOpenSameFacility = sameFacility.onOpen,
       onManualAdd = state::startManual,
+      // 記録中だけ。現在地を起点にした手動追加のシートを開く（地図で指すモードは通らない）。
+      onAddStopHere = if (track.isActive) {
+        { addStopHereTarget?.let(state::startManualAt) }
+      } else {
+        null
+      },
+      addStopHereEnabled = addStopHereTarget != null,
       onEnterSelection = { stop ->
         state.selectionMode = true
         if (stop.id !in state.selectedStopIds) state.selectedStopIds.add(stop.id)
@@ -513,7 +526,7 @@ private fun BoxScope.ManualAddPanels(
     target = if (state.manualMode) state.manualPick else null,
     points = track.smoothedPoints,
     onAdded = state::exitManual,
-    onCancel = { state.manualPick = null },
+    onCancel = state::cancelManualPick,
     onRangeChange = { start, end -> state.manualRange = start to end },
     modifier = Modifier.align(Alignment.BottomCenter),
     infoWindow = infoWindow,

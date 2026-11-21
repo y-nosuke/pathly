@@ -18,6 +18,7 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
@@ -150,10 +151,28 @@ fun TrackingScreen(
   }
   // 場所シート・手動追加のシートが出ている間は、経路の一覧は下がる（閉じれば戻る）。
   val showOverlaySheet = overlayState.isSheetOpen && placeSheetTarget == null && manualTarget == null
-  // 下の記録のシート（記録中は情報と脇役の操作、停止中は小さなシート）。ほかのシートが出ている間は下がる。
+  // 下の記録のシート（記録中は情報と脇役の操作と立ち寄りの一覧、停止中は小さなシート）。ほかのシートが出ている間は下がる。
   // 高さが記録中と停止中で違うので、切り替わると開いた状態で作り直す（記録を始めたらシートが開く）。
+  // 記録中は、立ち寄りがあればハーフで新しい 2 件ほどが見える高さにし、上へ引くと一覧が広がる（停止中は広げない）。
   val showRecordSheet = uiState.hasLocationPermission && placeSheetTarget == null && manualTarget == null && !showOverlaySheet
-  val recordSheetState = rememberFixedFloatingSheetState(height = if (uiState.isTracking) RECORDING_SHEET_HEIGHT else STOPPED_SHEET_HEIGHT)
+  val hasRecordingStops = uiState.stops.isNotEmpty() || uiState.currentStop != null
+  // 畳んだときの記録の状態（記録中/停止中）。最初の立ち寄りで高さが変わって作り直しても、同じ記録のあいだは畳んだまま
+  // にする（勝手に開かない）。記録を始めた・止めたときは開く。
+  var recordSheetHiddenWhileTracking by remember { mutableStateOf<Boolean?>(null) }
+  val recordSheetState = rememberFixedFloatingSheetState(
+    initialDetent = if (recordSheetHiddenWhileTracking == uiState.isTracking) SheetDetent.HIDDEN else SheetDetent.PEEK,
+    height = when {
+      !uiState.isTracking -> STOPPED_SHEET_HEIGHT
+      hasRecordingStops -> RECORDING_SHEET_WITH_STOPS_HEIGHT
+      else -> RECORDING_SHEET_HEIGHT
+    },
+    fullFraction = if (uiState.isTracking && hasRecordingStops) RECORDING_SHEET_FULL_FRACTION else null,
+  )
+  LaunchedEffect(recordSheetState, uiState.isTracking) {
+    snapshotFlow { recordSheetState.detent }.collect { detent ->
+      recordSheetHiddenWhileTracking = if (detent == SheetDetent.HIDDEN) uiState.isTracking else null
+    }
+  }
   // いま地図の下に出ているシート（地図の下の余白・右下の操作・主役の丸の位置を合わせる）。
   val activeSheet = when {
     manualTarget != null -> manualSheetState
@@ -352,6 +371,7 @@ fun TrackingScreen(
         manualMode = manualMode,
         onToggleManualMode = { manualMode = !manualMode },
         onAddStopHere = { loc -> manualTarget = ManualStopTarget(loc.latitude, loc.longitude, ManualStopOrigin.CurrentLocation) },
+        onFocusStop = { stop -> focusOn(LatLng(stop.place.latitude, stop.place.longitude)) },
         modifier = Modifier.align(Alignment.BottomCenter),
       )
       if (recordSheetState.detent != SheetDetent.HIDDEN) {
@@ -538,8 +558,14 @@ private enum class MapSearchMode {
   Region,
 }
 
-/** 記録中の記録のシートの高さ（つまみ・情報の段・脇役の操作の段）。 */
-private val RECORDING_SHEET_HEIGHT = 176.dp
+/** 記録中でまだ立ち寄りが無いときの記録のシートの高さ（つまみ・情報の段・脇役の操作の段・「まだ立ち寄りはありません」）。 */
+private val RECORDING_SHEET_HEIGHT = 216.dp
+
+/** 記録中で立ち寄りがあるときの、記録のシートのハーフの高さ（上の段に加えて、新しい立ち寄りが 2 件ほど見える）。 */
+private val RECORDING_SHEET_WITH_STOPS_HEIGHT = 312.dp
+
+/** 記録中で立ち寄りがあるときの、記録のシートのフルの高さ（画面に対する割合）。シートの上に乗る丸が、上の案内の帯に重ならない高さにとどめる。 */
+private const val RECORDING_SHEET_FULL_FRACTION = 0.45f
 
 /** 停止中の記録のシートの高さ（つまみと「記録していません」）。 */
 private val STOPPED_SHEET_HEIGHT = 80.dp

@@ -6,6 +6,7 @@ import androidx.compose.ui.test.assertHasClickAction
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsNotSelected
 import androidx.compose.ui.test.assertIsSelected
+import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasAnyDescendant
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
@@ -22,8 +23,10 @@ import androidx.test.platform.app.InstrumentationRegistry
 import com.pathly.domain.model.GeoBounds
 import com.pathly.domain.model.MapPlaceFilter
 import com.pathly.domain.model.MapRegion
+import com.pathly.domain.model.Place
 import com.pathly.domain.model.PlacePrediction
 import com.pathly.domain.model.PlaceSearchResult
+import com.pathly.domain.model.Stop
 import com.pathly.presentation.places.PlaceDeleteUndo
 import com.pathly.presentation.places.PlaceEditActions
 import com.pathly.presentation.stops.ManualStopActions
@@ -38,6 +41,7 @@ import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
+import java.util.Date
 
 @RunWith(AndroidJUnit4::class)
 class TrackingScreenTest {
@@ -590,6 +594,102 @@ class TrackingScreenTest {
     composeTestRule.onNodeWithContentDescription("記録停止").assertDoesNotExist()
     composeTestRule.onNodeWithText("▲ 記録中", substring = true).performClick()
     composeTestRule.onNodeWithContentDescription("記録停止").assertIsDisplayed()
+  }
+
+  @Test
+  fun trackingScreen_recordSheet_listsStopsNewestFirst() {
+    uiStateFlow.value = TrackingState(
+      hasLocationPermission = true,
+      isTracking = true,
+      stops = listOf(stop(id = 1L, name = "動物園", minutesFromStart = 0), stop(id = 2L, name = "売店", minutesFromStart = 60)),
+      currentStop = stop(id = 0L, name = "カフェ", minutesFromStart = 120),
+    )
+    composeTestRule.setContent {
+      PathlyAndroidTheme {
+        TrackingScreen(
+          onRequestPermission = mockOnRequestPermission,
+          viewModel = mockViewModel,
+          trackOverlayViewModel = overlayViewModel,
+          mapContent = {},
+        )
+      }
+    }
+
+    // 立ち寄り中も数に入れ、新しい順（立ち寄り中 → 2 → 1）に並ぶ。
+    composeTestRule.onNodeWithText("立ち寄り 3件（新しい順）").assertIsDisplayed()
+    // 立ち寄り中の名前は上の段（● 立ち寄り中）にも出るので、一覧の中の行を指す。
+    fun rowTop(name: String) = composeTestRule
+      .onNode(hasText(name, substring = true) and hasAnyAncestor(hasTestTag("recordingStopList")))
+      .fetchSemanticsNode().boundsInRoot.top
+    val current = rowTop("カフェ")
+    val second = rowTop("売店")
+    val first = rowTop("動物園")
+    assert(current < second && second < first) { "新しい順になっていない: $current, $second, $first" }
+    composeTestRule.onNodeWithText("滞在中", substring = true).assertIsDisplayed()
+  }
+
+  @Test
+  fun trackingScreen_recordSheet_staysHiddenWhenFirstStopArrives() {
+    uiStateFlow.value = TrackingState(hasLocationPermission = true, isTracking = true)
+    composeTestRule.setContent {
+      PathlyAndroidTheme {
+        TrackingScreen(
+          onRequestPermission = mockOnRequestPermission,
+          viewModel = mockViewModel,
+          trackOverlayViewModel = overlayViewModel,
+          mapContent = {},
+        )
+      }
+    }
+
+    // 畳んだあとに最初の立ち寄りが来て、シートの高さが変わっても、勝手に開かない。
+    composeTestRule.onNodeWithContentDescription("シートを畳む").performClick()
+    composeTestRule.waitForIdle()
+    uiStateFlow.value = uiStateFlow.value.copy(stops = listOf(stop(id = 1L, name = "動物園", minutesFromStart = 0)))
+    composeTestRule.waitForIdle()
+    composeTestRule.onNodeWithContentDescription("記録停止").assertDoesNotExist()
+    composeTestRule.onNodeWithText("▲ 記録中", substring = true).assertIsDisplayed()
+  }
+
+  @Test
+  fun trackingScreen_recordSheet_saysNoStopsYet() {
+    uiStateFlow.value = TrackingState(hasLocationPermission = true, isTracking = true)
+    composeTestRule.setContent {
+      PathlyAndroidTheme {
+        TrackingScreen(
+          onRequestPermission = mockOnRequestPermission,
+          viewModel = mockViewModel,
+          trackOverlayViewModel = overlayViewModel,
+          mapContent = {},
+        )
+      }
+    }
+
+    composeTestRule.onNodeWithText("まだ立ち寄りはありません").assertIsDisplayed()
+  }
+
+  /** 記録中の経路の立ち寄り（[minutesFromStart] 分後に着いて 30 分いた）。 */
+  private fun stop(id: Long, name: String, minutesFromStart: Int): Stop {
+    val arrival = Date(1_700_000_000_000L + minutesFromStart * 60_000L)
+    return Stop(
+      id = id,
+      place = Place(
+        id = id + 100L,
+        name = name,
+        latitude = 35.0,
+        longitude = 139.0,
+        note = null,
+        googleName = null,
+        googleAddress = null,
+        category = null,
+        googlePlaceId = null,
+        createdAt = Date(0L),
+        updatedAt = Date(0L),
+      ),
+      trackId = 1L,
+      arrivalTime = arrival,
+      departureTime = Date(arrival.time + 30 * 60_000L),
+    )
   }
 
   @Test

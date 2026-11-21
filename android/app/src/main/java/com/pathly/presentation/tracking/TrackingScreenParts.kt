@@ -38,6 +38,7 @@ import androidx.compose.ui.unit.dp
 import com.pathly.R
 import com.pathly.domain.model.MapPlaceFilter
 import com.pathly.domain.model.RegisteredPlace
+import com.pathly.domain.model.Stop
 import com.pathly.presentation.common.FloatingSheet
 import com.pathly.presentation.common.FloatingSheetState
 import com.pathly.presentation.common.MapLayerActionItem
@@ -47,6 +48,7 @@ import com.pathly.presentation.common.MapNoticeBanner
 import com.pathly.presentation.common.MapSideActions
 import com.pathly.presentation.common.MapTopBar
 import com.pathly.presentation.common.RegisteredPlacesLayerItems
+import com.pathly.presentation.stops.AddStopActions
 import com.pathly.ui.theme.PathlyElevation
 import com.pathly.ui.theme.PathlyShapes
 import com.pathly.ui.theme.PathlySpacing
@@ -310,9 +312,10 @@ internal fun TrackingNotices(
 }
 
 /**
- * 下の記録のシート。記録中は距離・地点数・立ち寄り中と、脇役の操作（今ここを立ち寄り・地図で指して追加）。
- * 停止中は「記録していません」だけの小さなシート。主役の開始・停止の丸はシートの上に置き、シートを畳むと一緒に隠れる
- * （戻すボタンは [restoreLabel]）。
+ * 下の記録のシート。記録中は距離・地点数・立ち寄り中と、脇役の操作（今ここを立ち寄り・地図で指して追加）と、
+ * このお出掛けの立ち寄りの一覧（新しい順。押すと地図がその立ち寄りへ寄る）。ハーフでは新しい立ち寄りが 2 件ほど見え、
+ * 上へ引くと広がって全部見える。停止中は「記録していません」だけの小さなシート。主役の開始・停止の丸はシートの上に置き、
+ * シートと一緒に動く・畳むと一緒に隠れる（戻すボタンは [restoreLabel]）。
  */
 @Composable
 internal fun TrackingRecordSheet(
@@ -321,6 +324,7 @@ internal fun TrackingRecordSheet(
   manualMode: Boolean,
   onToggleManualMode: () -> Unit,
   onAddStopHere: (LocationInfo) -> Unit,
+  onFocusStop: (Stop) -> Unit,
   modifier: Modifier = Modifier,
 ) {
   FloatingSheet(
@@ -336,30 +340,20 @@ internal fun TrackingRecordSheet(
         modifier = Modifier.padding(horizontal = PathlySpacing.screenEdge),
       )
       Spacer(modifier = Modifier.height(PathlySpacing.md))
-      MapSideActions {
-        // 「今ここ」を立ち寄りに追加。地点を指していないので、近くの施設候補から選ばせる。
-        FilledTonalButton(
-          onClick = { uiState.currentLocation?.let(onAddStopHere) },
-          enabled = uiState.hasLocationPermission && uiState.currentLocation != null,
-          modifier = Modifier.weight(1f),
-        ) {
-          Icon(painter = painterResource(R.drawable.ic_place), contentDescription = null, modifier = Modifier.size(18.dp))
-          Spacer(modifier = Modifier.width(PathlySpacing.xs))
-          Text("今ここを立ち寄り", maxLines = 1, overflow = TextOverflow.Ellipsis)
-        }
-        // 「地図で指して追加」モード（ON=地図タップが立ち寄り追加／OFF=場所登録）。
-        if (manualMode) {
-          FilledTonalButton(onClick = onToggleManualMode, modifier = Modifier.weight(1f)) {
-            Text("地図をタップ（やめる）", maxLines = 1, overflow = TextOverflow.Ellipsis)
-          }
-        } else {
-          OutlinedButton(onClick = onToggleManualMode, modifier = Modifier.weight(1f)) {
-            Icon(painter = painterResource(R.drawable.ic_add), contentDescription = null, modifier = Modifier.size(18.dp))
-            Spacer(modifier = Modifier.width(PathlySpacing.xs))
-            Text("地図で指して追加", maxLines = 1, overflow = TextOverflow.Ellipsis)
-          }
-        }
-      }
+      // 「今ここ」は近くの施設候補から選ばせる。「地図で指して追加」はモード（ON=地図タップが立ち寄り追加／OFF=場所登録）。
+      AddStopActions(
+        onAddHere = { uiState.currentLocation?.let(onAddStopHere) },
+        addHereEnabled = uiState.hasLocationPermission && uiState.currentLocation != null,
+        onMapPick = onToggleManualMode,
+        mapPickActive = manualMode,
+      )
+      Spacer(modifier = Modifier.height(PathlySpacing.md))
+      RecordingStopList(
+        stops = uiState.stops,
+        currentStop = uiState.currentStop,
+        onFocusStop = onFocusStop,
+        modifier = Modifier.weight(1f),
+      )
     } else {
       Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
         Text(

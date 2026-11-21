@@ -10,23 +10,19 @@ import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -44,15 +40,14 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.pathly.R
 import com.pathly.domain.model.GpsTrack
 import com.pathly.domain.model.Stop
 import com.pathly.domain.model.WishlistFlag
-import com.pathly.presentation.common.MapSideActions
 import com.pathly.presentation.common.SheetContentHorizontalPadding
 import com.pathly.presentation.common.WishlistFlagButton
-import com.pathly.ui.theme.PathlyMapColors
+import com.pathly.presentation.stops.AddStopActions
+import com.pathly.presentation.stops.StopNumberBadge
 import com.pathly.ui.theme.PathlySpacing
 import com.pathly.util.DateFormatters
 import kotlin.math.roundToInt
@@ -78,6 +73,9 @@ internal fun TrackDetailSheet(
   sameFacilityPendingCount: Int,
   onOpenSameFacility: () -> Unit,
   onManualAdd: () -> Unit,
+  // 記録中の経路だけ「今ここを立ち寄り」を出す（null なら出さない）。現在地が取れるまでは押せない。
+  onAddStopHere: (() -> Unit)?,
+  addStopHereEnabled: Boolean,
   onEnterSelection: (Stop) -> Unit,
   onToggleSelect: (Stop) -> Unit,
   onSelectAll: () -> Unit,
@@ -123,6 +121,8 @@ internal fun TrackDetailSheet(
         sameFacilityPendingCount = sameFacilityPendingCount,
         onOpenSameFacility = onOpenSameFacility,
         onManualAdd = onManualAdd,
+        onAddStopHere = onAddStopHere,
+        addStopHereEnabled = addStopHereEnabled,
       )
     }
     // 立ち寄り一覧（ここだけスクロール）。シートの残り領域を埋め、独立してスクロールする。
@@ -161,7 +161,7 @@ internal fun TrackDetailSheet(
 /**
  * 経路の固定ヘッダー（シートの先頭）。スクロールしても消えないよう一覧の外に置く。
  * 見出し（名前・日付）と記録中の印は上のバー、経路への操作は ⋮ に置くので、ここは
- * 時刻・1 行の数字・出ているときだけの「やること」の帯・脇役の「立ち寄りを追加」だけにする（→ docs/designs/ui-direction.md）。
+ * 時刻・1 行の数字・出ているときだけの「やること」の帯・脇役の立ち寄りを足す操作だけにする（→ docs/designs/ui-direction.md）。
  */
 @Composable
 internal fun TrackSummaryHeader(
@@ -172,6 +172,8 @@ internal fun TrackSummaryHeader(
   onManualAdd: () -> Unit,
   sameFacilityPendingCount: Int = 0,
   onOpenSameFacility: () -> Unit = {},
+  onAddStopHere: (() -> Unit)? = null,
+  addStopHereEnabled: Boolean = false,
 ) {
   Column(
     modifier = Modifier
@@ -233,16 +235,17 @@ internal fun TrackSummaryHeader(
       SheetTodoBanner(text = "同じ施設の確認待ち ${sameFacilityPendingCount}件", onClick = onOpenSameFacility)
     }
 
-    // 立ち寄りを追加: 検出に頼らず、地図で指した地点を立ち寄りとして足す（完全手動）。到着/出発は
+    // 立ち寄りを手で足す（検出に頼らない）。記録画面の記録のシートと同じ名前・同じ並び。到着/出発は
     // その時点の軌跡から仮置きする。記録中も使える（末尾が伸びる分は確定時の軌跡で推定）。
-    if (track.points.size >= 2) {
-      MapSideActions {
-        OutlinedButton(onClick = onManualAdd) {
-          Icon(painter = painterResource(R.drawable.ic_add), contentDescription = null, modifier = Modifier.size(18.dp))
-          Spacer(modifier = Modifier.width(PathlySpacing.xs))
-          Text("立ち寄りを追加")
-        }
-      }
+    // 「地図で指して追加」は軌跡から到着/出発を決めるので点が 2 つ以上要る。「今ここ」は記録中だけ。
+    val canPick = track.points.size >= 2
+    if (canPick || onAddStopHere != null) {
+      AddStopActions(
+        onAddHere = onAddStopHere,
+        addHereEnabled = addStopHereEnabled,
+        onMapPick = onManualAdd,
+        mapPickEnabled = canPick,
+      )
     }
   }
 }
@@ -360,15 +363,7 @@ internal fun StopRow(
       Checkbox(checked = selected, onCheckedChange = { onToggleSelect() })
     } else {
       // 訪問順の番号バッジ（地図のピン番号と対応）。
-      Box(
-        modifier = Modifier
-          .padding(end = PathlySpacing.md)
-          .size(26.dp)
-          .background(PathlyMapColors.Stop, CircleShape),
-        contentAlignment = Alignment.Center,
-      ) {
-        Text(text = "$number", color = PathlyMapColors.OnMarker, fontWeight = FontWeight.Bold, fontSize = 13.sp)
-      }
+      StopNumberBadge(number = number, modifier = Modifier.padding(end = PathlySpacing.md))
     }
     Column(
       modifier = Modifier
