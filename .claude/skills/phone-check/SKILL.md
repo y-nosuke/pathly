@@ -32,11 +32,21 @@ PHONE=$($ADB devices | grep -oE '^adb-[^[:space:]]+' | head -1)
 
 ```bash
 $ADB -s "$PHONE" shell dumpsys activity services com.pathly.debug | grep -c LocationTrackingService   # 0 = 開発版で記録中でない
+.claude/skills/phone-check/installed-dev.sh "$PHONE"   # 0 = 上書きでよい / 1 = 入っていない / 2 = 入れ替え（下）
 cd android && ANDROID_SERIAL="$PHONE" ./gradlew installDebug
 $ADB -s "$PHONE" shell dumpsys package com.pathly.debug | grep -m1 lastUpdateTime                      # 入れた時刻
 ```
 
 - 開発版で記録中なら、上書きで記録が止まる。ユーザーに止めてもらってから入れる。
+- **`installed-dev.sh` が 2（入れ替え）なら、上書きしない**。入っているのは別のブランチの開発版で、DB の版や形が違うと
+  上書きでは入らない・落ちる（`docs/development/parallel.md` の「開発版の入れ替え」）。次の順にする。
+  1. ユーザーに「開発版をアンインストールしてデータを消してよいか（残したいものがあれば先に開発版から書き出す）」を確かめる。
+     アンインストールはデータを消すので、必ず OK を取ってから。
+  2. `$ADB -s "$PHONE" uninstall com.pathly.debug` → `installDebug`。
+  3. 3 の手順の「準備」の先頭に、**リリース版で書き出したファイルを開発版の「設定 → データ → 読み込む」で読み込む**ことを書く
+     （データの要らない確認なら省いてよい）。
+- 0（祖先）のときは、同じブランチの前のコミットか分岐元の main なので、上書きでよい（データも残る）。
+- 別のセッション（別の worktree）がスマホでの確認をユーザーに頼んでいる最中なら、終わるまで入れない（ユーザーに聞く）。
 - **入れるのはコミットした中身**（作業中の変更を混ぜない）。何を入れたか（コミットの短い ID）を伝える。
 
 ### Wi-Fi でつながらないとき（外出中など）
@@ -55,6 +65,8 @@ cd app/build/outputs/apk/debug && powershell.exe -NoProfile -Command \
 - SendUserFile（`display: "attach"`）で添付し、PC 上のパス（`D:\root\opt\pathly\android\app\build\outputs\apk\debug\app-debug.apk`）も伝える。
 - スマホでは展開して `app-debug.apk` を開く（「提供元不明のアプリ」の許可が要ることがある）。
 - 開発版は PC の debug 鍵で署名しているので、adb で入れた開発版にそのまま上書きで入る（データは残る）。
+  ただし別のブランチの開発版が入っているとき（2 の入れ替え）は、先にスマホで開発版をアンインストールしてから入れてもらう。
+  外出中は adb で見られないので、最後に入れたものを覚えていなければ、ユーザーに設定タブの「このアプリについて」の版を聞く。
 - **入れるのはコミットした中身**（作業中の変更を混ぜない）。何を入れたか（コミットの短い ID）を伝える。記録中の確認は 2 と同じく、
   ユーザーに見てもらってから入れてもらう。
 - まれにスマホのアプリから添付を落とせないことがある。そのときはもう一度添付し、それでも駄目なら帰ってから adb で入れる。
