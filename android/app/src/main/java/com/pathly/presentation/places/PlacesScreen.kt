@@ -257,7 +257,7 @@ private fun SearchResultForm(
   val cameraPositionState = rememberCameraPositionState {
     this.position = CameraPosition.fromLatLngZoom(position, 16f)
   }
-  val sheetState = rememberFloatingSheetState()
+  val sheetState = rememberFloatingSheetState(peekFraction = PLACE_SHEET_PEEK_FRACTION)
   // マーカーの吹き出しをシステムバックで閉じられるようにする。
   val infoWindow = rememberMapInfoWindowState()
 
@@ -283,6 +283,7 @@ private fun SearchResultForm(
         infoWindow = infoWindow,
         state = markerState,
         title = result.name,
+        bubbleColor = PathlyMapColors.Picked,
       ) {
         MapPinMarker(bg = PathlyMapColors.Picked, glyph = R.drawable.ic_add)
       }

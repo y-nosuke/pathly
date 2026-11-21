@@ -176,7 +176,7 @@ internal fun AddPlaceContent(
   val cameraPositionState = rememberCameraPositionState {
     position = CameraPosition.fromLatLngZoom(DefaultMapLocation, 12f)
   }
-  val sheetState = rememberFloatingSheetState()
+  val sheetState = rememberFloatingSheetState(peekFraction = PLACE_SHEET_PEEK_FRACTION)
   // シートが出ている間は、その分を除いた範囲を地図の可視領域として扱う（段の確定値。ドラッグ中に地図を描き直さない）。
   val sheetHeight = if (target == null) 0.dp else sheetState.heightOf(sheetState.detent)
 
@@ -219,7 +219,15 @@ internal fun AddPlaceContent(
         // 登録前に選んだ地点（青いピン）。まだ決めている最中なので丸バッジにはしない。
         picked?.let { p ->
           val markerState = remember(p) { MarkerState(position = p) }
-          MapMarker("picked", p.latitude, p.longitude, infoWindow = infoWindow, state = markerState, title = "選んだ地点") {
+          MapMarker(
+            "picked",
+            p.latitude,
+            p.longitude,
+            infoWindow = infoWindow,
+            state = markerState,
+            title = "選んだ地点",
+            bubbleColor = PathlyMapColors.Picked,
+          ) {
             MapPinMarker(bg = PathlyMapColors.Picked, glyph = R.drawable.ic_add)
           }
         }
@@ -301,8 +309,8 @@ internal fun PlaceDetailContent(
   // 地図タップ・地図で選ぶ・検索して追加と同じ非モーダルのシートで出す（ADR-0010）。
   // 畳めば地図を全画面で確認できる。ハーフは画面の 4 割にとどめ、地図で場所の周りを見られるようにする
   // （シートの中身はスクロールとフルで見る）。
-  val sheetState = rememberFloatingSheetState(peekFraction = 0.4f)
-  val placeSheetState = rememberFloatingSheetState()
+  val sheetState = rememberFloatingSheetState(peekFraction = PLACE_SHEET_PEEK_FRACTION)
+  val placeSheetState = rememberFloatingSheetState(peekFraction = PLACE_SHEET_PEEK_FRACTION)
   // いま出ているシート（この場所／地図タップの場所シート）。地図の下パディングと右下の操作はこれに合わせる。
   val shownSheet = if (placeSheetTarget == null) sheetState else placeSheetState
   // マップ下部の余白はシートの段に合わせる（高さそのものを読むと、ドラッグのたびに地図が再描画される）。
@@ -349,6 +357,7 @@ internal fun PlaceDetailContent(
           state = markerState,
           title = item.displayName,
           snippet = item.statusLabel,
+          bubbleColor = if (item.isVisited) PathlyMapColors.PlaceVisited else PathlyMapColors.PlaceUnvisited,
           // この吹き出しは画面の一部（下のシートと同じ場所を指している）。自分でタップして開き直しても
           // 同じ扱いにして、バックは常に画面を戻す。
           dismissWithBack = false,

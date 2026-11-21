@@ -209,7 +209,7 @@ internal fun PlaceEditHost(
       onAddStop = onAddStop,
       mergeActions = placeEdit.mergeActions(),
       modifier = modifier,
-      sheetState = sheetState ?: rememberFloatingSheetState(),
+      sheetState = sheetState ?: rememberFloatingSheetState(peekFraction = PLACE_SHEET_PEEK_FRACTION),
     )
   }
 

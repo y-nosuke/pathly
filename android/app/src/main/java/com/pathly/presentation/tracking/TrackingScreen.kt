@@ -36,6 +36,7 @@ import com.pathly.domain.model.PlacePrediction
 import com.pathly.domain.model.PlaceSearchResult
 import com.pathly.domain.model.Stop
 import com.pathly.presentation.common.DefaultMapLocation
+import com.pathly.presentation.common.MapTopBarInset
 import com.pathly.presentation.common.SheetDetent
 import com.pathly.presentation.common.SheetRestoreButtonInset
 import com.pathly.presentation.common.heightOf
@@ -44,6 +45,7 @@ import com.pathly.presentation.common.rememberFloatingSheetState
 import com.pathly.presentation.common.rememberMapInfoWindowState
 import com.pathly.presentation.common.toGeoBounds
 import com.pathly.presentation.common.toLatLngBounds
+import com.pathly.presentation.places.PLACE_SHEET_PEEK_FRACTION
 import com.pathly.presentation.places.PlaceEditHost
 import com.pathly.presentation.places.PlaceSheetTarget
 import com.pathly.presentation.stops.ManualStopHost
@@ -117,7 +119,7 @@ fun TrackingScreen(
   // 検索窓を開いたときに地図に映っていた範囲。候補はこの中を優先する（範囲の外も出る）。
   var mapSearchBias by remember { mutableStateOf<GeoBounds?>(null) }
   // シートの開き具合。地図の下パディングを合わせて、選んだ地点がシートの裏に来ないようにする。
-  val placeSheetState = rememberFloatingSheetState()
+  val placeSheetState = rememberFloatingSheetState(peekFraction = PLACE_SHEET_PEEK_FRACTION)
   val manualSheetState = rememberFloatingSheetState(peekFraction = 0.5f)
   // 経路の一覧は畳みきれないようにする（開け閉めは経路のボタンと × で。畳んだまま閉じて線ごと消えないように）。
   // 地図を広く見られるよう、開いたときは低めにする。
@@ -236,8 +238,9 @@ fun TrackingScreen(
         // 登録前に選んだ地点の青いピン。手動追加の地点か、検索で選んだ場所（地図の上に施設アイコンが無いこともあるので示す）。
         manualPickTarget = manualTarget?.let { LatLng(it.latitude, it.longitude) }
           ?: (placeSheetTarget as? PlaceSheetTarget.NewSearchResult)?.result?.let { LatLng(it.latitude, it.longitude) },
-        // シートが出ている分だけ可視領域を狭める（ドラッグ中の逐次値ではなく段の確定値）。
-        contentPadding = PaddingValues(bottom = activeSheet?.let { it.heightOf(it.detent) } ?: 0.dp),
+        // シートが出ている分だけ可視領域を狭める（ドラッグ中の逐次値ではなく段の確定値）。上は検索窓の分を空け、
+        // マーカーを押して地図が寄ったときに吹き出しが検索窓に被らないようにする（ほかの地図の画面と同じ）。
+        contentPadding = PaddingValues(top = MapTopBarInset, bottom = activeSheet?.let { it.heightOf(it.detent) } ?: 0.dp),
         // 右下の現在地ボタンはシートの上端に沿わせる。畳んだシートは戻すボタンの上。
         controlsBottomInset = activeSheet?.let {
           if (it.detent == SheetDetent.HIDDEN) SheetRestoreButtonInset else it.heightOf(it.detent)

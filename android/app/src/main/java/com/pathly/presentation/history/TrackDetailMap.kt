@@ -174,6 +174,7 @@ internal fun TrackMapView(
           state = candidateMarkerState,
           title = candidate.name ?: "候補（名称未取得）",
           snippet = "${DateFormatters.shortTime(d.arrivalTime)} ・ 滞在${d.durationMinutes}分",
+          bubbleColor = PathlyMapColors.Candidate,
         ) {
           MapPinMarker(bg = PathlyMapColors.Candidate, glyph = R.drawable.ic_help)
         }
@@ -199,6 +200,7 @@ internal fun TrackMapView(
         infoWindow = infoWindow,
         state = pickMarkerState,
         title = "追加する地点",
+        bubbleColor = PathlyMapColors.Picked,
       ) {
         MapPinMarker(bg = PathlyMapColors.Picked, glyph = R.drawable.ic_add)
       }
