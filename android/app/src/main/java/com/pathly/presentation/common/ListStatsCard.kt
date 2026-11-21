@@ -47,13 +47,16 @@ import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
 import com.pathly.R
 import com.pathly.ui.theme.PathlySpacing
@@ -138,7 +141,12 @@ private fun RowScope.StatsBarTile(item: StatsBarItem) {
       Spacer(modifier = Modifier.width(PathlySpacing.xs))
       Text(text = item.label, style = MaterialTheme.typography.labelSmall, color = content, maxLines = 1, overflow = TextOverflow.Ellipsis)
     }
-    val numberStyle = SpanStyle(fontSize = MaterialTheme.typography.headlineSmall.fontSize, fontWeight = FontWeight.Bold)
+    // 数字の大きさは地の字に対する倍率（em）で渡す。sp で渡すと、収まらないときに autoSize が地の字を縮めても
+    // 数字だけ縮まずに切れる。
+    val numberStyle = SpanStyle(
+      fontSize = relativeSize(MaterialTheme.typography.headlineSmall.fontSize, MaterialTheme.typography.labelMedium.fontSize),
+      fontWeight = FontWeight.Bold,
+    )
     BasicText(
       text = remember(item.value, numberStyle) { emphasizeNumbers(item.value, numberStyle) },
       style = MaterialTheme.typography.labelMedium.copy(color = content, lineHeight = MaterialTheme.typography.headlineSmall.lineHeight),
@@ -240,7 +248,10 @@ fun RowScope.StatsTile(
     horizontalAlignment = Alignment.CenterHorizontally,
   ) {
     Icon(painter = painterResource(icon), contentDescription = null, tint = content, modifier = Modifier.size(20.dp))
-    val numberStyle = SpanStyle(fontSize = MaterialTheme.typography.headlineSmall.fontSize, fontWeight = FontWeight.Bold)
+    val numberStyle = SpanStyle(
+      fontSize = relativeSize(MaterialTheme.typography.headlineSmall.fontSize, MaterialTheme.typography.bodySmall.fontSize),
+      fontWeight = FontWeight.Bold,
+    )
     BasicText(
       text = remember(value, numberStyle) { emphasizeNumbers(value, numberStyle) },
       style = MaterialTheme.typography.bodySmall.copy(color = content, textAlign = TextAlign.Center),
@@ -251,6 +262,9 @@ fun RowScope.StatsTile(
     Text(text = label, style = MaterialTheme.typography.labelSmall, color = content, maxLines = 1, overflow = TextOverflow.Ellipsis)
   }
 }
+
+/** [size] を [base] に対する倍率（em）にする（autoSize で地の字と一緒に縮むように）。 */
+private fun relativeSize(size: TextUnit, base: TextUnit): TextUnit = (size.value / base.value).em
 
 /** カードの中の小見出し（左）と、添える数字（右）。 */
 @Composable
@@ -296,9 +310,13 @@ fun StatsBarChart(values: List<Double>, labels: List<String>, modifier: Modifier
       }
       drawLine(baseline, Offset(0f, size.height), Offset(size.width, size.height), strokeWidth = 1.dp.toPx())
     }
-    // 棒と同じ幅・すき間で並べ、名前を棒の真下に置く。
+    // 棒と同じ幅・すき間で並べ、名前を棒の真下に置く。読み上げでは数字だけが 12 個並ぶと意味が分からないので読ませない
+    // （見出しの行が「月ごとの距離・今月 ◯ km」を読む）。
     Row(
-      modifier = Modifier.fillMaxWidth().padding(top = PathlySpacing.xxs),
+      modifier = Modifier
+        .fillMaxWidth()
+        .padding(top = PathlySpacing.xxs)
+        .clearAndSetSemantics {},
       horizontalArrangement = Arrangement.spacedBy(PathlySpacing.xs),
     ) {
       labels.forEachIndexed { i, label ->

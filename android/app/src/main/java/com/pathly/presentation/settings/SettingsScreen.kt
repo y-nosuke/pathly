@@ -6,6 +6,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -13,6 +14,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
@@ -63,6 +65,12 @@ private fun SettingsRadioRow(label: String, selected: Boolean, onClick: () -> Un
   }
 }
 
+/** 1 つだけ選ぶ行のまとまり（読み上げで、まとまりの中の何番目かが分かるように）。行の間は画面の行の間と同じ。 */
+@Composable
+private fun SettingsRadioGroup(content: @Composable ColumnScope.() -> Unit) {
+  Column(modifier = Modifier.selectableGroup(), verticalArrangement = Arrangement.spacedBy(PathlySpacing.sm), content = content)
+}
+
 @Composable
 fun SettingsScreen(
   modifier: Modifier = Modifier,
@@ -94,12 +102,14 @@ fun SettingsScreen(
       color = MaterialTheme.colorScheme.onSurfaceVariant,
     )
 
-    viewModel.gpsIntervalOptions.forEach { seconds ->
-      SettingsRadioRow(
-        label = gpsIntervalLabel(seconds),
-        selected = interval == seconds,
-        onClick = { viewModel.setGpsIntervalSeconds(seconds) },
-      )
+    SettingsRadioGroup {
+      viewModel.gpsIntervalOptions.forEach { seconds ->
+        SettingsRadioRow(
+          label = gpsIntervalLabel(seconds),
+          selected = interval == seconds,
+          onClick = { viewModel.setGpsIntervalSeconds(seconds) },
+        )
+      }
     }
 
     Text(
@@ -114,12 +124,14 @@ fun SettingsScreen(
       color = MaterialTheme.colorScheme.onSurfaceVariant,
     )
 
-    viewModel.locationAccuracyOptions.forEach { option ->
-      SettingsRadioRow(
-        label = locationAccuracyLabel(option),
-        selected = accuracy == option,
-        onClick = { viewModel.setLocationAccuracy(option) },
-      )
+    SettingsRadioGroup {
+      viewModel.locationAccuracyOptions.forEach { option ->
+        SettingsRadioRow(
+          label = locationAccuracyLabel(option),
+          selected = accuracy == option,
+          onClick = { viewModel.setLocationAccuracy(option) },
+        )
+      }
     }
 
     Text(
@@ -181,12 +193,14 @@ private fun AppearanceSection(viewModel: SettingsViewModel) {
     style = MaterialTheme.typography.titleMedium,
     modifier = Modifier.padding(top = PathlySpacing.xl),
   )
-  viewModel.themeModeOptions.forEach { mode ->
-    SettingsRadioRow(
-      label = themeModeLabel(mode),
-      selected = themeMode == mode,
-      onClick = { viewModel.setThemeMode(mode) },
-    )
+  SettingsRadioGroup {
+    viewModel.themeModeOptions.forEach { mode ->
+      SettingsRadioRow(
+        label = themeModeLabel(mode),
+        selected = themeMode == mode,
+        onClick = { viewModel.setThemeMode(mode) },
+      )
+    }
   }
   Row(
     modifier = Modifier

@@ -427,8 +427,10 @@ internal fun PlaceEditorDialogs(
       defaultName = item.place.copy(name = null).displayName,
       googleName = item.place.googleName,
       onDismiss = { state.renameOpen = false },
-      onConfirm = { name ->
+      onConfirm = { typed ->
         state.renameOpen = false
+        // Google の名前と同じなら、自分の名前は付けなかった扱いにする（登録のときと同じ。Google の名前が変わっても追う）。
+        val name = typed.takeUnless { it.trim() == item.place.googleName?.trim() }.orEmpty()
         // 保存は変わったものだけを書く（PlaceEditUseCase.saveEdits）ので、名前以外は保存済みの値を渡す。
         onSave(name, item.note.orEmpty(), item.isWishlisted, item.priority ?: Priority.MEDIUM, item.isManuallyVisited, null)
       },

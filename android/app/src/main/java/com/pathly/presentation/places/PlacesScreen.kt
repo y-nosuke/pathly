@@ -9,6 +9,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -391,7 +392,8 @@ internal fun PlaceFormBody(
     // 主役: 行きたい・訪問済み・優先度・メモ（いちばんよく直すもの。シートを開いてすぐ見える位置に置く）。
     // 行きたいと訪問済みは名前付きの切り替えボタンを 1 行に並べ、ハーフのシートでもメモまで見えるようにする。
     // 色は一覧の旗・マーカーと同じ（行きたい＝紅・訪問済み＝緑）。
-    Row(horizontalArrangement = Arrangement.spacedBy(PathlySpacing.sm), verticalAlignment = Alignment.CenterVertically) {
+    // 文字が大きい設定で横に収まらないときは、訪問済みを次の行へ送る。
+    FlowRow(horizontalArrangement = Arrangement.spacedBy(PathlySpacing.sm)) {
       PlaceStatusChip(
         selected = wishlist,
         onClick = { onWishlistChange(!wishlist) },

@@ -236,7 +236,7 @@ internal fun TrackPickerSheet(
 
       errorMessage != null -> Text(
         text = errorMessage,
-        modifier = Modifier.padding(SheetContentHorizontalPadding),
+        modifier = Modifier.padding(horizontal = SheetContentHorizontalPadding, vertical = PathlySpacing.lg),
         color = MaterialTheme.colorScheme.error,
       )
 
@@ -252,7 +252,7 @@ internal fun TrackPickerSheet(
             item {
               Text(
                 text = emptyText,
-                modifier = Modifier.padding(SheetContentHorizontalPadding),
+                modifier = Modifier.padding(horizontal = SheetContentHorizontalPadding, vertical = PathlySpacing.lg),
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
               )
             }
