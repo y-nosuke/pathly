@@ -12,14 +12,14 @@ description: GitHub Issue を読んで着手し、実装・コード確認・コ
 
 ## 1. どの Issue をやるか決める
 
-番号を言われたらそれ。「次をやって」なら Project の「着手できるもの」ビューの先頭（＝並び順の先頭で、`idea` でないもの）:
+番号を言われたらそれ。「次をやって」なら Project の「着手できるもの」ビューの先頭（＝Status が Todo のものの並び順の先頭。`idea` は Status が Idea なので入らない）:
 
 ```bash
 gh project item-list 3 --owner y-nosuke --format json --limit 100 \
   --jq '.items[] | select(.status=="Todo") | "\(.content.number) \(.labels // [] | join(",")) \(.title)"'
 ```
 
-並び順は API の返す順で、先頭がいちばん上。`idea` ラベルのものは飛ばす。
+並び順は API の返す順で、先頭がいちばん上。念のため `idea` ラベルのものが混じっていたら飛ばす。
 
 **並行のとき**: In Progress の Issue（`select(.status=="In Progress")`）と見比べ、次のものは飛ばしてユーザーに伝える
 （`docs/development/parallel.md` の「並べ方の決まり」）。
@@ -36,7 +36,7 @@ gh issue view <番号> --repo y-nosuke/pathly --comments
 
 - 背景・やること・完了の条件・関連（仕様・設計・ADR）を読み、関連の文書も開く。
 - `idea` ラベル、または「やること」に**未定**がある → いきなり実装しない。仕様の案を出してユーザーと決め、
-  docs/specs（必要なら ADR）に落としてから実装する。
+  docs/specs（必要なら ADR）に落としてから実装する。決まったら `idea` ラベルを外す（`gh issue edit <番号> --remove-label idea`）。
 - 完了の条件に**実機でしか確かめられないもの**があれば、ユーザーに頼む前提で進める。
 - **画面が変わるなら、作る前に画面の形を見せて決める。** スマホで見てから並べ方を変えると、実装・build・テスト・
   スマホでの確認を丸ごとやり直すことになる（#203 では 2 回やり直した）。案と一緒に、`docs/specs/screens.md` と同じ
@@ -54,7 +54,7 @@ gh project item-edit --project-id PVT_kwHOAqZ51M4BAMaO --id "$ID" \
   --field-id PVTSSF_lAHOAqZ51M4BAMaOzgzEies --single-select-option-id 47fc9ee4   # In Progress
 ```
 
-Status の選択肢 id: Todo `f75ad846` / In Progress `47fc9ee4` / Done `98236657`（Issue を閉じれば自動で Done になる）。
+Status の選択肢 id: Idea `533a6515` / Todo `f75ad846` / In Progress `47fc9ee4` / Done `98236657`（Issue を閉じれば自動で Done になる）。
 
 ## 4. ブランチを切る
 
