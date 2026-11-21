@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.pathly.data.places.PlacesTextSearcher
 import com.pathly.data.settings.MapSurface
 import com.pathly.data.settings.SettingsRepository
+import com.pathly.data.tracking.TrackingController
 import com.pathly.domain.model.GpsTrack
 import com.pathly.domain.model.MapPlaceFilter
 import com.pathly.domain.model.NearbyRegisterPrompt
@@ -28,6 +29,8 @@ import com.pathly.domain.usecase.PlaceEditUseCase
 import com.pathly.presentation.places.PlaceDeleteUndo
 import com.pathly.presentation.places.PlaceEditActions
 import com.pathly.presentation.stops.ManualStopActions
+import com.pathly.presentation.stops.ManualStopOrigin
+import com.pathly.presentation.stops.ManualStopTarget
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.Flow
@@ -62,6 +65,8 @@ class TrackDetailViewModel @Inject constructor(
   // 「Googleで情報を取得」の名前検索フォールバック用（場所詳細と同じ編集機能を出すため）。
   private val placesTextSearcher: PlacesTextSearcher,
   private val trackDeletionQueue: TrackDeletionQueue,
+  // 記録中の経路の「今ここを立ち寄り」に使う現在地（記録サービスが受けている最新の位置）。
+  private val trackingController: TrackingController,
 ) : ViewModel() {
 
   private val _stops = MutableStateFlow<List<Stop>>(emptyList())
@@ -116,6 +121,18 @@ class TrackDetailViewModel @Inject constructor(
    */
   val currentStop: StateFlow<Stop?> = combine(placeRepository.currentStop, loadedTrackId) { stop, id ->
     stop?.takeIf { it.trackId == id }
+  }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
+
+  /**
+   * 記録中の経路を開いているときの「今ここを立ち寄り」の対象（現在地）。記録が終わった経路・現在地がまだ取れていない
+   * ときは null。記録画面の「今ここを立ち寄り」と同じく、地点を指していないので近くの施設候補から選ばせる。
+   */
+  val addStopHereTarget: StateFlow<ManualStopTarget?> = combine(trackingController.currentLocation, _displayTrack) { location, track ->
+    if (location == null || track?.isActive != true) {
+      null
+    } else {
+      ManualStopTarget(location.latitude, location.longitude, ManualStopOrigin.CurrentLocation)
+    }
   }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
   /** 未取得（googlePlaceId 無し）の place 件数。「場所を取得」ボタンの表示に使う。 */

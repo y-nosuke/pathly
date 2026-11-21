@@ -266,6 +266,7 @@ private fun TrackDetailRoute(
 
   val stops by viewModel.stops.collectAsStateWithLifecycle()
   val currentStop by viewModel.currentStop.collectAsStateWithLifecycle()
+  val addStopHereTarget by viewModel.addStopHereTarget.collectAsStateWithLifecycle()
   val unresolvedCount by viewModel.unresolvedCount.collectAsStateWithLifecycle()
   val message by viewModel.message.collectAsStateWithLifecycle()
   val reanalyzeCandidates by viewModel.reanalyzeCandidates.collectAsStateWithLifecycle()
@@ -294,6 +295,7 @@ private fun TrackDetailRoute(
     onBackClick = onBack,
     stops = stops,
     currentStop = currentStop,
+    addStopHereTarget = addStopHereTarget,
     unresolvedCount = unresolvedCount,
     message = message,
     onMessageShown = viewModel::clearMessage,

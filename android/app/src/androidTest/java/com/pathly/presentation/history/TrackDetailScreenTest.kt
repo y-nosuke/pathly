@@ -7,6 +7,7 @@ import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertHasClickAction
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasText
@@ -33,6 +34,8 @@ import com.pathly.domain.model.SameFacilityPlace
 import com.pathly.domain.model.Stop
 import com.pathly.presentation.common.MapRegisteredPlaces
 import com.pathly.presentation.places.PlaceEditUi
+import com.pathly.presentation.stops.ManualStopOrigin
+import com.pathly.presentation.stops.ManualStopTarget
 import com.pathly.ui.theme.PathlyAndroidTheme
 import com.pathly.util.DateFormatters
 import io.mockk.mockk
@@ -289,6 +292,56 @@ class TrackDetailScreenTest {
     composeTestRule
       .onNodeWithText("– 記録中", substring = true)
       .assertIsDisplayed()
+  }
+
+  @Test
+  fun trackDetailScreen_activeTrack_showsAddStopHereLikeRecordingScreen() {
+    val track = GpsTrack(
+      id = 456L,
+      startTime = Date(),
+      endTime = null,
+      isActive = true,
+      points = createSamplePoints(3),
+      createdAt = Date(),
+      updatedAt = Date(),
+    )
+    var target by mutableStateOf<ManualStopTarget?>(null)
+
+    composeTestRule.setContent {
+      PathlyAndroidTheme {
+        TrackDetailScreen(
+          track = track,
+          onBackClick = mockOnBackClick,
+          addStopHereTarget = target,
+          mapContent = {},
+        )
+      }
+    }
+
+    // 記録中は記録画面と同じ名前・同じ並び。現在地が取れるまでは「今ここ」を押せない。
+    composeTestRule.onNodeWithContentDescription("今ここを立ち寄り").assertIsDisplayed().assertIsNotEnabled()
+    composeTestRule.onNodeWithContentDescription("地図で指して追加").assertIsDisplayed()
+
+    target = ManualStopTarget(35.0, 139.0, ManualStopOrigin.CurrentLocation)
+    composeTestRule.onNodeWithContentDescription("今ここを立ち寄り").assertIsEnabled()
+  }
+
+  @Test
+  fun trackDetailScreen_completedTrack_hasNoAddStopHere() {
+    composeTestRule.setContent {
+      PathlyAndroidTheme {
+        TrackDetailScreen(
+          track = createSampleTrack(isActive = false),
+          onBackClick = mockOnBackClick,
+          // 現在地があっても、記録が終わった経路には出さない。
+          addStopHereTarget = ManualStopTarget(35.0, 139.0, ManualStopOrigin.CurrentLocation),
+          mapContent = {},
+        )
+      }
+    }
+
+    composeTestRule.onNodeWithContentDescription("今ここを立ち寄り").assertDoesNotExist()
+    composeTestRule.onNodeWithContentDescription("地図で指して追加").assertIsDisplayed()
   }
 
   @Test
@@ -700,7 +753,7 @@ class TrackDetailScreenTest {
     }
 
     // 地図をタップできない場所（地図に POI が出ていない施設）は、名前から選んで足せる。
-    composeTestRule.onNodeWithText("立ち寄りを追加").performClick()
+    composeTestRule.onNodeWithContentDescription("地図で指して追加").performClick()
     composeTestRule.onNodeWithText("店名・場所名で検索").performTextInput("どうぶつ")
     composeTestRule.waitUntil(timeoutMillis = 5_000) {
       composeTestRule.onAllNodesWithText("テスト動物園").fetchSemanticsNodes().isNotEmpty()

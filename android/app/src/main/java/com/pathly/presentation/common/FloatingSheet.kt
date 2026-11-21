@@ -68,7 +68,13 @@ class FloatingSheetState internal constructor(
   private val scope: CoroutineScope,
   initialDetent: SheetDetent,
 ) {
-  private val heightPx = Animatable(if (initialDetent == SheetDetent.FULL) fullPx else peekPx)
+  private val heightPx = Animatable(
+    when (initialDetent) {
+      SheetDetent.HIDDEN -> 0f
+      SheetDetent.PEEK -> peekPx
+      SheetDetent.FULL -> fullPx
+    },
+  )
 
   /** 現在の段。地図の下パディングなど、確定値で判断したいときに読む。 */
   var detent: SheetDetent by mutableStateOf(initialDetent)
@@ -150,25 +156,31 @@ fun rememberFloatingSheetState(
 }
 
 /**
- * 高さを dp で決める [FloatingSheetState]（中身の量が決まっている小さなシート向け）。ハーフとフルは同じ高さで、
- * つまみのタップでは広げない。[allowHidden] なら畳める（戻すボタンは [FloatingSheet] の restoreLabel）。
- * 文字の大きさの設定が大きいと中身が伸びるので、高さも同じ割合で伸ばす（小さくはしない）。
+ * ハーフの高さを dp で決める [FloatingSheetState]（ハーフの中身の量が決まっているシート向け）。
+ * [fullFraction] が null ならハーフとフルは同じ高さで、つまみのタップでは広げない。渡すと、フルは画面高に対するその割合
+ * （ハーフより低くはならない）で、引き上げると続きの一覧などが見える。[allowHidden] なら畳める（戻すボタンは
+ * [FloatingSheet] の restoreLabel）。文字の大きさの設定が大きいと中身が伸びるので、ハーフも同じ割合で伸ばす（小さくはしない）。
  */
 @Composable
 fun rememberFixedFloatingSheetState(
   height: Dp,
   allowHidden: Boolean = true,
+  fullFraction: Float? = null,
+  // 作り直したときの段（高さが変わって作り直しても、畳んでいたなら畳んだままにしたいときに渡す）。
+  initialDetent: SheetDetent = SheetDetent.PEEK,
 ): FloatingSheetState {
   val density = LocalDensity.current
   val heightPx = with(density) { height.toPx() } * density.fontScale.coerceAtLeast(1f)
+  val containerHeightPx = LocalWindowInfo.current.containerSize.height.toFloat()
+  val fullPx = fullFraction?.let { maxOf(heightPx, containerHeightPx * it) } ?: heightPx
   val scope = rememberCoroutineScope()
-  return remember(heightPx, allowHidden) {
+  return remember(heightPx, fullPx, allowHidden) {
     FloatingSheetState(
       peekPx = heightPx,
-      fullPx = heightPx,
+      fullPx = fullPx,
       allowHidden = allowHidden,
       scope = scope,
-      initialDetent = SheetDetent.PEEK,
+      initialDetent = initialDetent,
     )
   }
 }

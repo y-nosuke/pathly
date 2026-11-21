@@ -12,6 +12,7 @@ import com.google.android.gms.maps.model.LatLng
 import com.pathly.domain.model.SmoothingParams
 import com.pathly.domain.model.Stop
 import com.pathly.presentation.places.PlaceSheetTarget
+import com.pathly.presentation.stops.ManualStopOrigin
 import com.pathly.presentation.stops.ManualStopTarget
 
 /**
@@ -122,6 +123,20 @@ internal class TrackDetailScreenState {
   fun startManual() {
     manualPick = null
     manualMode = true
+  }
+
+  /** 地点が決まっている手動追加（「今ここを立ち寄り」）を、地図で指すモードを通らずに始める。 */
+  fun startManualAt(target: ManualStopTarget) {
+    manualMode = true
+    pickManual(target)
+  }
+
+  /**
+   * 指した地点の立ち寄りシートをやめる。地図で指して始めたときは地点選択（マップ）に戻すだけ、「今ここ」から始めたときは
+   * 地点選択を通っていないので手動追加ごと抜ける。
+   */
+  fun cancelManualPick() {
+    if (manualPick?.origin == ManualStopOrigin.CurrentLocation) exitManual() else manualPick = null
   }
 
   fun exitManual() {
