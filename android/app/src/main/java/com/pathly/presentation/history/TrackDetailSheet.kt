@@ -252,7 +252,7 @@ internal fun TrackSummaryHeader(
 
 /** シートの中の「やること」の帯。出ているときだけ出し、押すとその操作を始める（右端に ›）。 */
 @Composable
-private fun SheetTodoBanner(text: String, onClick: () -> Unit) {
+internal fun SheetTodoBanner(text: String, onClick: () -> Unit) {
   Surface(
     onClick = onClick,
     modifier = Modifier

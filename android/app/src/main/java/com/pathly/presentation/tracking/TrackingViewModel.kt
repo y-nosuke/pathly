@@ -26,6 +26,7 @@ import com.pathly.domain.usecase.AddManualStopUseCase
 import com.pathly.domain.usecase.PlaceEditUseCase
 import com.pathly.presentation.places.PlaceEditActions
 import com.pathly.presentation.stops.ManualStopActions
+import com.pathly.presentation.stops.StopEditActions
 import com.pathly.util.DateFormatters
 import com.pathly.util.Logger
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -179,6 +180,28 @@ class TrackingViewModel @Inject constructor(
     onMessage = ::showMessage,
     onError = ::showError,
   )
+
+  /** 記録中の経路の立ち寄りを直す・場所を取得する・同じ施設の確認待ち（経路詳細と共有）。 */
+  val stopEdit = StopEditActions(
+    scope = viewModelScope,
+    placeRepository = placeRepository,
+    placeEditUseCase = placeEditUseCase,
+    trackId = _uiState.map { it.currentTrackId },
+    placeEdit = placeEdit,
+    onError = ::showError,
+  )
+
+  /** 記録中の経路の名前を付ける・直す（空なら未命名に戻す）。表示は記録中の経路の購読で変わる。 */
+  fun renameTrack(name: String) {
+    val trackId = _uiState.value.currentTrackId ?: return
+    viewModelScope.launch {
+      try {
+        gpsTrackRepository.renameTrack(trackId, name)
+      } catch (e: Exception) {
+        showError("名前の変更に失敗しました: ${e.message}")
+      }
+    }
+  }
 
   /** 「地域へ移動」で出した地域の目印（複数・上限あり）。タブを行き来しても残る。 */
   val regionMarkers = RegionMarkerActions()

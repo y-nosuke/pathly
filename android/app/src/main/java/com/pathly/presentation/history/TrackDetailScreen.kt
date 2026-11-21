@@ -283,7 +283,7 @@ fun TrackDetailScreen(
     }
 
     // 手動追加: 地点を指す前は案内、指したあとは入力＋区間調整のシートを出す。
-    ManualAddPanels(track, state, placeEdit, manualStop, infoWindow)
+    ManualAddPanels(track, state, placeEdit, manualStop, infoWindow, liveStop = currentStop)
 
     // 期間の編集: 地図を見ながら滞在区間を調整する（手動追加と同じレンジUI）。
     state.durationEditStop?.let { stop ->
@@ -498,6 +498,7 @@ private fun BoxScope.ManualAddPanels(
   placeEdit: PlaceEditUi,
   manualStop: ManualStopUi,
   infoWindow: MapInfoWindowState,
+  liveStop: Stop?,
 ) {
   if (state.manualMode && state.manualPick == null) {
     ManualPickPrompt(
@@ -530,6 +531,7 @@ private fun BoxScope.ManualAddPanels(
     onRangeChange = { start, end -> state.manualRange = start to end },
     modifier = Modifier.align(Alignment.BottomCenter),
     infoWindow = infoWindow,
+    liveStop = liveStop,
   )
 }
 
@@ -547,30 +549,12 @@ private fun TrackDetailDialogs(
   onRenameTrack: (String) -> Unit,
   infoWindow: MapInfoWindowState,
 ) {
-  // 同じ施設の確認待ちを 1 件ずつ聞く。答えると一覧から外れ、次の 1 件が出る。
-  // 名前は一覧の行と同じ表示名で呼ぶ（名前も施設も無い場所は座標）。
-  val firstPending = sameFacility.pending.firstOrNull()?.let { pending ->
-    pending.copy(placeName = stops.firstOrNull { it.place.id == pending.placeId }?.place?.displayName ?: pending.placeName)
-  }
-  if (sameFacility.dialogOpen && firstPending != null) {
-    SameFacilityDialog(
-      placeName = firstPending.placeName,
-      otherName = firstPending.other.name,
-      remaining = sameFacility.pending.size - 1,
-      // まとめたら閉じる。開いたままだとスナックバーの「取り消す」が押せない。残りはシートの帯から続けて聞く。
-      onMerge = {
-        sameFacility.onMerge(firstPending)
-        sameFacility.onDismiss()
-      },
-      // 選び直しは、その場所の編集部の「Google施設を選び直す」を開いて行う（場所詳細と同じ）。
-      onPickAnother = {
-        sameFacility.onDismiss()
-        state.placeSheetTarget = PlaceSheetTarget.Existing(firstPending.placeId, openLinkPicker = true)
-      },
-      onKeepSeparate = { placeEdit.keepAsSeparatePlace(firstPending.placeId) },
-      onDismiss = sameFacility.onDismiss,
-    )
-  }
+  SameFacilityReviewDialog(
+    sameFacility = sameFacility,
+    stops = stops,
+    placeEdit = placeEdit,
+    onPickAnother = { placeId -> state.placeSheetTarget = PlaceSheetTarget.Existing(placeId, openLinkPicker = true) },
+  )
 
   if (state.renamingTrack) {
     RenameTrackDialog(

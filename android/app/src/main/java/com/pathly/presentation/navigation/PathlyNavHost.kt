@@ -267,28 +267,14 @@ private fun TrackDetailRoute(
   val stops by viewModel.stops.collectAsStateWithLifecycle()
   val currentStop by viewModel.currentStop.collectAsStateWithLifecycle()
   val addStopHereTarget by viewModel.addStopHereTarget.collectAsStateWithLifecycle()
-  val unresolvedCount by viewModel.unresolvedCount.collectAsStateWithLifecycle()
+  val unresolvedCount by viewModel.stopEdit.unresolvedCount.collectAsStateWithLifecycle()
   val message by viewModel.message.collectAsStateWithLifecycle()
   val reanalyzeCandidates by viewModel.reanalyzeCandidates.collectAsStateWithLifecycle()
   val registeredPlaces by viewModel.registeredPlaces.collectAsStateWithLifecycle()
   val showRegisteredPlaces by viewModel.showRegisteredPlaces.collectAsStateWithLifecycle()
   val mapPlaceFilter by viewModel.mapPlaceFilter.collectAsStateWithLifecycle()
-  val sameFacilityPending by viewModel.sameFacilityPending.collectAsStateWithLifecycle()
-  val sameFacilityDialogOpen by viewModel.sameFacilityDialogOpen.collectAsStateWithLifecycle()
-
-  // 状態を持たない操作のまとまりは、ViewModel が変わらない限り作り直さない。
-  val stopActions = remember(viewModel) {
-    TrackStopActions(
-      onEditPlaceName = viewModel::updatePlaceName,
-      onEditNote = viewModel::updateStopNote,
-      onToggleWishlist = viewModel::toggleStopWishlist,
-      onUpdateDuration = viewModel::updateStopDuration,
-      onDelete = viewModel::deleteStops,
-      onMerge = viewModel::mergeStops,
-      onUndo = viewModel::undoStopChange,
-      onResolveNames = viewModel::resolveNames,
-    )
-  }
+  val sameFacilityPending by viewModel.stopEdit.sameFacilityPending.collectAsStateWithLifecycle()
+  val sameFacilityDialogOpen by viewModel.stopEdit.sameFacilityDialogOpen.collectAsStateWithLifecycle()
 
   TrackDetailScreen(
     track = track,
@@ -306,20 +292,14 @@ private fun TrackDetailRoute(
       viewModel.requestDeleteTrack()
       onBack()
     },
-    stopActions = stopActions,
+    stopActions = viewModel.stopEdit.actions,
     reanalysis = StopReanalysis(
       candidates = reanalyzeCandidates,
       onStart = viewModel::reanalyze,
       onAdd = viewModel::addStops,
       onDismiss = viewModel::dismissReanalyze,
     ),
-    sameFacility = SameFacilityReview(
-      pending = sameFacilityPending,
-      dialogOpen = sameFacilityDialogOpen,
-      onOpen = viewModel::openSameFacilityDialog,
-      onDismiss = viewModel::dismissSameFacilityDialog,
-      onMerge = viewModel::mergeSameFacility,
-    ),
+    sameFacility = viewModel.stopEdit.sameFacilityReview(sameFacilityPending, sameFacilityDialogOpen),
     mapPlaces = MapRegisteredPlaces(
       places = registeredPlaces,
       shown = showRegisteredPlaces,

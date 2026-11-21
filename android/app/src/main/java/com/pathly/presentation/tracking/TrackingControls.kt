@@ -28,7 +28,6 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -51,11 +50,14 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
@@ -204,32 +206,71 @@ internal fun FinalizingOverlay() {
   }
 }
 
+/**
+ * 停止中の記録のシートの主役: 幅いっぱいの「▶ 記録を始める」（→ adr/0044）。読み上げは「記録開始」。
+ */
 @Composable
-internal fun RecordFab(
-  isTracking: Boolean,
-  onStartTracking: () -> Unit,
-  onStopTracking: () -> Unit,
+internal fun RecordStartButton(
+  onClick: () -> Unit,
   modifier: Modifier = Modifier,
 ) {
-  FloatingActionButton(
-    onClick = if (isTracking) onStopTracking else onStartTracking,
-    modifier = modifier.size(72.dp),
-    shape = CircleShape,
-    containerColor = if (isTracking) {
-      MaterialTheme.colorScheme.error
-    } else {
-      MaterialTheme.colorScheme.primary
-    },
+  Button(
+    onClick = onClick,
+    modifier = modifier
+      .fillMaxWidth()
+      .height(RECORD_START_BUTTON_HEIGHT)
+      .semantics { contentDescription = "記録開始" },
   ) {
     Icon(
-      painter = painterResource(
-        if (isTracking) R.drawable.ic_stop else R.drawable.ic_play_arrow,
-      ),
-      contentDescription = if (isTracking) "記録停止" else "記録開始",
-      modifier = Modifier.size(32.dp),
+      painter = painterResource(R.drawable.ic_play_arrow),
+      contentDescription = null,
+      modifier = Modifier.size(24.dp),
     )
+    Spacer(modifier = Modifier.width(PathlySpacing.sm))
+    Text(text = "記録を始める", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
   }
 }
+
+/**
+ * 記録中の記録のシートの停止（情報の段の右端 → adr/0044）。誤って押しにくいよう塗らずに赤い枠の丸にし、
+ * 下に「停止」と添えて見つけやすくする。押すと確認ダイアログ（画面側）。読み上げは「記録停止」。
+ */
+@Composable
+internal fun RecordStopButton(
+  onClick: () -> Unit,
+  modifier: Modifier = Modifier,
+) {
+  val error = MaterialTheme.colorScheme.error
+  Column(
+    modifier = modifier
+      .clip(MaterialTheme.shapes.medium)
+      .clickable(role = Role.Button, onClick = onClick)
+      .semantics(mergeDescendants = true) { contentDescription = "記録停止" }
+      .padding(horizontal = PathlySpacing.xs, vertical = PathlySpacing.xxs),
+    horizontalAlignment = Alignment.CenterHorizontally,
+  ) {
+    Box(
+      modifier = Modifier
+        .size(RECORD_STOP_BUTTON_SIZE)
+        .border(2.dp, error, CircleShape),
+      contentAlignment = Alignment.Center,
+    ) {
+      Icon(
+        painter = painterResource(R.drawable.ic_stop),
+        contentDescription = null,
+        tint = error,
+        modifier = Modifier.size(24.dp),
+      )
+    }
+    Text(text = "停止", style = MaterialTheme.typography.labelMedium, color = error)
+  }
+}
+
+/** 「記録を始める」の高さ（シートの主役なので、ふつうのボタンより高くして押しやすくする）。 */
+private val RECORD_START_BUTTON_HEIGHT = 56.dp
+
+/** 停止の丸の大きさ。 */
+private val RECORD_STOP_BUTTON_SIZE = 48.dp
 
 @Composable
 internal fun LocationPermissionOverlay(

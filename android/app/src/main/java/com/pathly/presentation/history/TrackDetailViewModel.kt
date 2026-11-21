@@ -31,6 +31,7 @@ import com.pathly.presentation.places.PlaceEditActions
 import com.pathly.presentation.stops.ManualStopActions
 import com.pathly.presentation.stops.ManualStopOrigin
 import com.pathly.presentation.stops.ManualStopTarget
+import com.pathly.presentation.stops.StopEditActions
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.Flow
@@ -135,20 +136,6 @@ class TrackDetailViewModel @Inject constructor(
     }
   }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
-  /** 未取得（googlePlaceId 無し）の place 件数。「場所を取得」ボタンの表示に使う。 */
-  val unresolvedCount: StateFlow<Int> = loadedTrackId
-    .flatMapLatest { id -> if (id == null) flowOf(0) else placeRepository.unresolvedCountForTrack(id) }
-    .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 0)
-
-  /** この経路の、同じ施設の確認待ち（→ adr/0037）。経路詳細を開くと「確認待ち」として出す。 */
-  val sameFacilityPending: StateFlow<List<SameFacilityPending>> = loadedTrackId
-    .flatMapLatest { id -> if (id == null) flowOf(emptyList()) else placeRepository.observeSameFacilityPending(id) }
-    .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
-
-  // 確認待ちを 1 件ずつ聞くダイアログを出しているか。
-  private val _sameFacilityDialogOpen = MutableStateFlow(false)
-  val sameFacilityDialogOpen: StateFlow<Boolean> = _sameFacilityDialogOpen.asStateFlow()
-
   /** 場所の登録・編集・削除・まとめる（場所タブ・記録画面と共有）。結果も失敗も一時メッセージに出す。 */
   val placeEdit = PlaceEditActions(
     scope = viewModelScope,
@@ -172,14 +159,15 @@ class TrackDetailViewModel @Inject constructor(
     onError = { _message.value = it },
   )
 
-  init {
-    // 確認待ちを全部答え終えたら閉じる（開いたままだと、あとで裏の名前付けが見つけた分で勝手に開く）。
-    viewModelScope.launch {
-      sameFacilityPending.map { it.isEmpty() }.distinctUntilChanged().collect { empty ->
-        if (empty) _sameFacilityDialogOpen.value = false
-      }
-    }
-  }
+  /** この経路の立ち寄りを直す・場所を取得する・同じ施設の確認待ち（記録画面と共有）。 */
+  val stopEdit = StopEditActions(
+    scope = viewModelScope,
+    placeRepository = placeRepository,
+    placeEditUseCase = placeEditUseCase,
+    trackId = loadedTrackId,
+    placeEdit = placeEdit,
+    onError = { _message.value = it },
+  )
 
   private var collectJob: Job? = null
 
@@ -235,98 +223,6 @@ class TrackDetailViewModel @Inject constructor(
         _message.value = "お気に入りの更新に失敗しました: ${e.message}"
       }
     }
-  }
-
-  fun updatePlaceName(placeId: Long, name: String) {
-    viewModelScope.launch { placeRepository.updatePlaceName(placeId, name) }
-  }
-
-  /** 立ち寄り（訪問）のメモを更新する（stop 単位。空文字なら消す）。 */
-  fun updateStopNote(stopId: Long, note: String?) {
-    viewModelScope.launch { placeRepository.updateStopNote(stopId, note) }
-  }
-
-  /**
-   * 未取得の場所を Places で取り直す（手動・googlePlaceId 無しが対象）。
-   *
-   * 同じ施設を既に他の場所が持っていると施設情報は付かない（→ adr/0025）。その場で操作したので、
-   * まとめるか別のまま残すかをその場で聞く（→ adr/0037）。
-   */
-  fun resolveNames() {
-    val trackId = loadedTrackId.value ?: return
-    viewModelScope.launch {
-      val skipped = placeRepository.resolveUnresolvedNames(trackId)
-      if (skipped > 0) _sameFacilityDialogOpen.value = true
-    }
-  }
-
-  /** 同じ施設の確認待ちを聞くダイアログを開く（「確認待ち」のチップ）。 */
-  fun openSameFacilityDialog() {
-    _sameFacilityDialogOpen.value = true
-  }
-
-  /** 「あとで」: 決めずに閉じる（確認待ちのまま残る）。 */
-  fun dismissSameFacilityDialog() {
-    _sameFacilityDialogOpen.value = false
-  }
-
-  /**
-   * 確認待ちの場所を相手にまとめる（→ adr/0037）。スナックバーの「取り消す」で戻せる。
-   * ダイアログは開いたままにし、残りがあれば次の 1 件を聞く。
-   */
-  fun mergeSameFacility(pending: SameFacilityPending) {
-    placeEdit.mergeIntoSameFacility(pending.placeId, pending.placeName, pending.other)
-  }
-
-  /**
-   * 立ち寄り（訪問）を削除する（1件でも複数でも同じ）。参照が無くなった場所は自動で場所ごと削除し、
-   * 他の履歴で使われている／行きたい登録がある場所は「この訪問だけ」消して保持する。
-   * 確認ダイアログは出さず即時削除し、画面側のスナックバーから [undoStopChange] で取り消せる。
-   */
-  fun deleteStops(stopIds: List<Long>) {
-    if (stopIds.isEmpty()) return
-    viewModelScope.launch { placeRepository.deleteStops(stopIds) }
-  }
-
-  /**
-   * 立ち寄り（訪問）の滞在期間を手で直す。GPS 点・補正後の点は触らない（→ adr/0024）。
-   * 他の立ち寄りと期間が重なっても（入れ子でも）そのまま保存する。
-   */
-  fun updateStopDuration(stopId: Long, arrivalTime: Date, departureTime: Date) {
-    viewModelScope.launch { placeRepository.updateStopDuration(stopId, arrivalTime, departureTime) }
-  }
-
-  /**
-   * 選んだ立ち寄り（訪問）を1件にまとめる。同じ場所への訪問が2件以上あるときだけ成立し、
-   * 混ざっていれば何もしない。確認ダイアログは出さず即時実行し、画面側のスナックバーから
-   * [undoStopChange] で取り消せる（削除と同じ流儀）。
-   */
-  fun mergeStops(stopIds: List<Long>) {
-    if (stopIds.size < 2) return
-    viewModelScope.launch {
-      val result = placeRepository.mergeStops(stopIds)
-      if (result == null) _message.value = "同じ場所への立ち寄りだけまとめられます"
-    }
-  }
-
-  /**
-   * 立ち寄りの行の旗から、その場所の「行きたい」をワンタップで付け外しする。
-   * 付け外しの判断は DB の今の状態で行う（[PlaceEditUseCase.toggleWishlist]）。
-   * 旗の見た目は [registeredPlaces] の更新で変わるので、成功時のメッセージは出さない（場所タブと同じ）。
-   */
-  fun toggleStopWishlist(placeId: Long) {
-    viewModelScope.launch {
-      try {
-        placeEditUseCase.toggleWishlist(placeId)
-      } catch (e: Exception) {
-        _message.value = "行きたいの更新に失敗しました: ${e.message}"
-      }
-    }
-  }
-
-  /** 直近の削除・統合を取り消して元に戻す（スナックバーの「取り消す」）。 */
-  fun undoStopChange() {
-    viewModelScope.launch { placeRepository.undoLastStopChange() }
   }
 
   fun clearMessage() {

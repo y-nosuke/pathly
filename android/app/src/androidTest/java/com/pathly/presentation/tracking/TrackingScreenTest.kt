@@ -4,13 +4,16 @@ import android.Manifest
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertHasClickAction
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsNotDisplayed
 import androidx.compose.ui.test.assertIsNotSelected
 import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasAnyDescendant
+import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.v2.createComposeRule
+import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
@@ -21,15 +24,18 @@ import androidx.compose.ui.test.performTextInput
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.pathly.domain.model.GeoBounds
+import com.pathly.domain.model.GpsTrack
 import com.pathly.domain.model.MapPlaceFilter
 import com.pathly.domain.model.MapRegion
 import com.pathly.domain.model.Place
 import com.pathly.domain.model.PlacePrediction
 import com.pathly.domain.model.PlaceSearchResult
 import com.pathly.domain.model.Stop
+import com.pathly.presentation.history.SameFacilityReview
 import com.pathly.presentation.places.PlaceDeleteUndo
 import com.pathly.presentation.places.PlaceEditActions
 import com.pathly.presentation.stops.ManualStopActions
+import com.pathly.presentation.stops.StopEditActions
 import com.pathly.ui.theme.PathlyAndroidTheme
 import io.mockk.coEvery
 import io.mockk.coVerify
@@ -55,6 +61,9 @@ class TrackingScreenTest {
   private lateinit var uiStateFlow: MutableStateFlow<TrackingState>
   private lateinit var placeEdit: PlaceEditActions
   private lateinit var regionMarkers: RegionMarkerActions
+  private lateinit var stopEdit: StopEditActions
+  private lateinit var manualStop: ManualStopActions
+  private lateinit var unresolvedCountFlow: MutableStateFlow<Int>
 
   @Before
   fun setup() {
@@ -93,9 +102,17 @@ class TrackingScreenTest {
     io.mockk.every { placeEdit.nearbyRegisterPrompt } returns MutableStateFlow(null)
     io.mockk.every { placeEdit.deleteUndo } returns MutableStateFlow(PlaceDeleteUndo())
     io.mockk.every { mockViewModel.placeEdit } returns placeEdit
-    val manualStop = mockk<ManualStopActions>(relaxed = true)
+    manualStop = mockk(relaxed = true)
     io.mockk.every { manualStop.nearbyStopPrompt } returns MutableStateFlow(null)
     io.mockk.every { mockViewModel.manualStop } returns manualStop
+    // 記録中の経路の立ち寄りを直す部品。場所の未取得・同じ施設の確認待ちは無い状態にする（テストごとに変える）。
+    stopEdit = mockk(relaxed = true)
+    unresolvedCountFlow = MutableStateFlow(0)
+    io.mockk.every { stopEdit.unresolvedCount } returns unresolvedCountFlow
+    io.mockk.every { stopEdit.sameFacilityPending } returns MutableStateFlow(emptyList())
+    io.mockk.every { stopEdit.sameFacilityDialogOpen } returns MutableStateFlow(false)
+    io.mockk.every { stopEdit.sameFacilityReview(any(), any()) } returns SameFacilityReview()
+    io.mockk.every { mockViewModel.stopEdit } returns stopEdit
     // 地域の目印は本物（チップの増減・選び直し・上限を画面で確かめるため）。
     regionMarkers = RegionMarkerActions()
     io.mockk.every { mockViewModel.regionMarkers } returns regionMarkers
@@ -153,7 +170,7 @@ class TrackingScreenTest {
   }
 
   @Test
-  fun trackingScreen_hasPermissionNotTracking_showsStartFab() {
+  fun trackingScreen_hasPermissionNotTracking_showsStartButton() {
     uiStateFlow.value = TrackingState(hasLocationPermission = true, isTracking = false)
 
     composeTestRule.setContent {
@@ -179,7 +196,7 @@ class TrackingScreenTest {
   }
 
   @Test
-  fun trackingScreen_startFab_triggersViewModel() {
+  fun trackingScreen_startButton_triggersViewModel() {
     uiStateFlow.value = TrackingState(hasLocationPermission = true, isTracking = false)
 
     composeTestRule.setContent {
@@ -201,7 +218,7 @@ class TrackingScreenTest {
   }
 
   @Test
-  fun trackingScreen_tracking_showsStopFabAndStatus() {
+  fun trackingScreen_tracking_showsStopButtonAndStatus() {
     uiStateFlow.value = TrackingState(hasLocationPermission = true, isTracking = true)
 
     composeTestRule.setContent {
@@ -234,7 +251,7 @@ class TrackingScreenTest {
   }
 
   @Test
-  fun trackingScreen_stopFab_triggersViewModel() {
+  fun trackingScreen_stopButton_triggersViewModel() {
     uiStateFlow.value = TrackingState(hasLocationPermission = true, isTracking = true)
 
     composeTestRule.setContent {
@@ -572,7 +589,7 @@ class TrackingScreenTest {
   private fun chip(name: String) = composeTestRule.onNode(hasTestTag("regionMarkerChip") and hasAnyDescendant(hasText(name)))
 
   @Test
-  fun trackingScreen_recordSheet_hideAlsoHidesFabAndRestoreBringsItBack() {
+  fun trackingScreen_recordSheet_hideAlsoHidesStopAndRestoreBringsItBack() {
     uiStateFlow.value = TrackingState(hasLocationPermission = true, isTracking = true)
     composeTestRule.setContent {
       PathlyAndroidTheme {
@@ -589,11 +606,39 @@ class TrackingScreenTest {
     composeTestRule.onNodeWithContentDescription("今ここを立ち寄り").assertIsDisplayed()
     composeTestRule.onNodeWithContentDescription("地図で指して追加").assertIsDisplayed()
 
-    // 畳むと、主役の停止の丸も一緒に隠れ、戻すボタンだけが残る。
+    // 停止はシートの中にある。畳むと一緒に隠れ、戻すボタンだけが残る（地図の上に丸は無い）。
     composeTestRule.onNodeWithContentDescription("シートを畳む").performClick()
-    composeTestRule.onNodeWithContentDescription("記録停止").assertDoesNotExist()
+    composeTestRule.onNodeWithContentDescription("記録停止").assertIsNotDisplayed()
     composeTestRule.onNodeWithText("▲ 記録中", substring = true).performClick()
     composeTestRule.onNodeWithContentDescription("記録停止").assertIsDisplayed()
+  }
+
+  @Test
+  fun trackingScreen_recordSheet_startAndStopAreInsideSheet() {
+    uiStateFlow.value = TrackingState(hasLocationPermission = true, isTracking = false)
+    composeTestRule.setContent {
+      PathlyAndroidTheme {
+        TrackingScreen(
+          onRequestPermission = mockOnRequestPermission,
+          viewModel = mockViewModel,
+          trackOverlayViewModel = overlayViewModel,
+          mapContent = {},
+        )
+      }
+    }
+
+    // 停止中は、シートの中の「記録を始める」で始める。
+    composeTestRule.onNode(hasContentDescription("記録開始") and hasAnyAncestor(hasTestTag("trackingRecordSheet")))
+      .assertIsDisplayed()
+      .performClick()
+    verify { mockViewModel.startTracking() }
+
+    // 記録中は、シートの情報の段の停止。押すと確認ダイアログが出る（すぐには止めない）。
+    uiStateFlow.value = uiStateFlow.value.copy(isTracking = true)
+    composeTestRule.onNode(hasContentDescription("記録停止") and hasAnyAncestor(hasTestTag("trackingRecordSheet")))
+      .assertIsDisplayed()
+      .performClick()
+    verify(exactly = 0) { mockViewModel.stopTracking() }
   }
 
   @Test
@@ -647,7 +692,7 @@ class TrackingScreenTest {
     composeTestRule.waitForIdle()
     uiStateFlow.value = uiStateFlow.value.copy(stops = listOf(stop(id = 1L, name = "動物園", minutesFromStart = 0)))
     composeTestRule.waitForIdle()
-    composeTestRule.onNodeWithContentDescription("記録停止").assertDoesNotExist()
+    composeTestRule.onNodeWithContentDescription("記録停止").assertIsNotDisplayed()
     composeTestRule.onNodeWithText("▲ 記録中", substring = true).assertIsDisplayed()
   }
 
@@ -666,6 +711,78 @@ class TrackingScreenTest {
     }
 
     composeTestRule.onNodeWithText("まだ立ち寄りはありません").assertIsDisplayed()
+  }
+
+  @Test
+  fun trackingScreen_recordSheet_editsStopsLikeTrackDetail() {
+    uiStateFlow.value = TrackingState(
+      hasLocationPermission = true,
+      isTracking = true,
+      stops = listOf(stop(id = 1L, name = "動物園", minutesFromStart = 0)),
+      currentStop = stop(id = 0L, name = "カフェ", minutesFromStart = 60),
+      currentTrack = GpsTrack(
+        id = 1L,
+        startTime = Date(1_700_000_000_000L),
+        endTime = null,
+        isActive = true,
+        createdAt = Date(0L),
+        updatedAt = Date(0L),
+      ),
+    )
+    unresolvedCountFlow.value = 2
+    composeTestRule.setContent {
+      PathlyAndroidTheme {
+        TrackingScreen(
+          onRequestPermission = mockOnRequestPermission,
+          viewModel = mockViewModel,
+          trackOverlayViewModel = overlayViewModel,
+          mapContent = {},
+        )
+      }
+    }
+
+    // 未命名の経路は「名前を付ける」。押すと経路詳細と同じ名前のダイアログ。
+    composeTestRule.onNodeWithText("名前を付ける").performClick()
+    composeTestRule.onNodeWithText("経路の名前").assertIsDisplayed()
+    composeTestRule.onNodeWithText("キャンセル").performClick()
+
+    // 未取得の場所があれば「場所を取得」の帯。
+    composeTestRule.onNodeWithText("場所を取得（未取得 2件）").performClick()
+    verify { stopEdit.resolveNames() }
+
+    // 確定した立ち寄りの行だけ ⋮ の操作が出る（立ち寄り中の行には出さない）。
+    composeTestRule.onAllNodesWithContentDescription("操作").assertCountEquals(1)
+    composeTestRule.onNodeWithContentDescription("操作").performClick()
+    composeTestRule.onNodeWithText("削除").performClick()
+    verify { stopEdit.deleteStops(listOf(1L)) }
+    composeTestRule.onNodeWithText("取り消す").assertIsDisplayed()
+  }
+
+  @Test
+  fun trackingScreen_addHere_startsStopRightAway() {
+    coEvery { placeEdit.nearbyPois(any(), any()) } returns emptyList()
+    uiStateFlow.value = TrackingState(
+      hasLocationPermission = true,
+      isTracking = true,
+      currentLocation = LocationInfo(latitude = 35.0, longitude = 139.0, accuracy = 5f, timestamp = "10:00"),
+    )
+    composeTestRule.setContent {
+      PathlyAndroidTheme {
+        TrackingScreen(
+          onRequestPermission = mockOnRequestPermission,
+          viewModel = mockViewModel,
+          trackOverlayViewModel = overlayViewModel,
+          mapContent = {},
+        )
+      }
+    }
+
+    // 「今ここ」は区間を選ばず、その場で立ち寄り中にする（終わった立ち寄りは足さない）。
+    composeTestRule.onNodeWithContentDescription("今ここを立ち寄り").performClick()
+    composeTestRule.onNodeWithText("今から立ち寄り中にします", substring = true).assertIsDisplayed()
+    composeTestRule.onNodeWithText("立ち寄り中にする").performClick()
+    verify { manualStop.startStopHere(35.0, 139.0, any()) }
+    verify(exactly = 0) { manualStop.addManualStopWithNearbyCheck(any(), any(), any(), any(), any(), any(), any(), any()) }
   }
 
   /** 記録中の経路の立ち寄り（[minutesFromStart] 分後に着いて 30 分いた）。 */

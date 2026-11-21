@@ -1,7 +1,6 @@
 package com.pathly.presentation.tracking
 
 import androidx.activity.compose.BackHandler
-import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
@@ -9,14 +8,17 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.SnackbarResult
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
@@ -32,10 +34,13 @@ import com.google.android.gms.maps.model.LatLngBounds
 import com.google.maps.android.compose.CameraPositionState
 import com.google.maps.android.compose.rememberCameraPositionState
 import com.pathly.domain.model.GeoBounds
+import com.pathly.domain.model.GpsTrack
 import com.pathly.domain.model.MapRegion
 import com.pathly.domain.model.PlacePrediction
 import com.pathly.domain.model.PlaceSearchResult
 import com.pathly.domain.model.Stop
+import com.pathly.domain.model.WishlistFlag
+import com.pathly.presentation.common.CloseInfoWindowWithSheet
 import com.pathly.presentation.common.DefaultMapLocation
 import com.pathly.presentation.common.MapTopBarInset
 import com.pathly.presentation.common.SheetDetent
@@ -46,14 +51,24 @@ import com.pathly.presentation.common.rememberFloatingSheetState
 import com.pathly.presentation.common.rememberMapInfoWindowState
 import com.pathly.presentation.common.toGeoBounds
 import com.pathly.presentation.common.toLatLngBounds
+import com.pathly.presentation.history.PlaceNameDialog
+import com.pathly.presentation.history.RenameTrackDialog
+import com.pathly.presentation.history.SameFacilityReview
+import com.pathly.presentation.history.SameFacilityReviewDialog
+import com.pathly.presentation.history.StopNoteDialog
 import com.pathly.presentation.places.PLACE_SHEET_PEEK_FRACTION
 import com.pathly.presentation.places.PlaceEditHost
+import com.pathly.presentation.places.PlaceEditUi
 import com.pathly.presentation.places.PlaceSheetTarget
 import com.pathly.presentation.stops.ManualStopHost
 import com.pathly.presentation.stops.ManualStopOrigin
 import com.pathly.presentation.stops.ManualStopTarget
+import com.pathly.presentation.stops.StopDurationSheet
+import com.pathly.presentation.stops.StopEditActions
 import com.pathly.presentation.stops.StopReassignHost
 import com.pathly.ui.theme.PathlySpacing
+import com.pathly.util.DateFormatters
+import kotlinx.coroutines.launch
 
 /**
  * 記録画面。地図を全面に出し、記録の操作・場所の登録・立ち寄りの手での追加・この範囲の経路を地図の上に重ねる。
@@ -79,6 +94,9 @@ fun TrackingScreen(
   val mapPlaceFilter by viewModel.mapPlaceFilter.collectAsStateWithLifecycle()
   val overlayState by trackOverlayViewModel.uiState.collectAsStateWithLifecycle()
   val regionMarkers by viewModel.regionMarkers.state.collectAsStateWithLifecycle()
+  val unresolvedCount by viewModel.stopEdit.unresolvedCount.collectAsStateWithLifecycle()
+  val sameFacilityPending by viewModel.stopEdit.sameFacilityPending.collectAsStateWithLifecycle()
+  val sameFacilityDialogOpen by viewModel.stopEdit.sameFacilityDialogOpen.collectAsStateWithLifecycle()
   val snackbarHostState = remember { SnackbarHostState() }
 
   // 保存（確定）中はバックで抜けさせない。抜けられると「保存できていないのに終わった」ように
@@ -113,6 +131,17 @@ fun TrackingScreen(
   var manualRange by remember(manualTarget) { mutableStateOf<Pair<Int, Int>?>(null) }
   // 立ち寄りマーカーをタップして「場所を選び直す」対象（誤検知の訂正）。
   var reassignTarget by remember { mutableStateOf<Stop?>(null) }
+  // 記録のシートの立ち寄りの行から開く編集（経路詳細と同じ）: 場所の名前・訪問のメモ・滞在時間・経路の名前。
+  var editingStop by remember { mutableStateOf<Stop?>(null) }
+  var editingNoteStop by remember { mutableStateOf<Stop?>(null) }
+  var durationEditStop by remember { mutableStateOf<Stop?>(null) }
+  // 滞在時間の編集で選んでいる区間（到着〜出発の点インデックス）。地図に青くハイライトする。
+  var durationRange by remember(durationEditStop) { mutableStateOf<Pair<Int, Int>?>(null) }
+  var renamingTrack by remember { mutableStateOf(false) }
+  // 滞在区間を選ぶ軌跡の点（手動追加・滞在時間の編集）。記録中は点が増え続けるので、シートを開いた時点の点で固定する
+  // （そのまま渡すと、位置の更新のたびに選んでいた区間が初めの位置へ戻る）。
+  val manualPoints = remember(manualTarget) { uiState.currentTrack?.smoothedPoints.orEmpty() }
+  val durationPoints = remember(durationEditStop) { uiState.currentTrack?.smoothedPoints.orEmpty() }
   // 「立ち寄りを追加」モード（記録中のみ）。ONの間は地図タップ＝立ち寄り追加、OFF＝場所登録。
   var manualMode by remember { mutableStateOf(false) }
   // 地図の上の検索窓（「検索して登録」か「地域へ移動」）。null なら閉じている。
@@ -122,6 +151,7 @@ fun TrackingScreen(
   // シートの開き具合。地図の下パディングを合わせて、選んだ地点がシートの裏に来ないようにする。
   val placeSheetState = rememberFloatingSheetState(peekFraction = PLACE_SHEET_PEEK_FRACTION)
   val manualSheetState = rememberFloatingSheetState(peekFraction = 0.5f)
+  val durationSheetState = rememberFloatingSheetState(peekFraction = 0.5f)
   // 経路の一覧は畳みきれないようにする（開け閉めは経路のボタンと × で。畳んだまま閉じて線ごと消えないように）。
   // 地図を広く見られるよう、開いたときは低めにする。
   val overlaySheetState = rememberFloatingSheetState(peekFraction = 0.35f, allowHidden = false)
@@ -150,32 +180,36 @@ fun TrackingScreen(
     position = CameraPosition.fromLatLngZoom(DefaultMapLocation, 15f)
   }
   // 場所シート・手動追加のシートが出ている間は、経路の一覧は下がる（閉じれば戻る）。
-  val showOverlaySheet = overlayState.isSheetOpen && placeSheetTarget == null && manualTarget == null
+  val showOverlaySheet = overlayState.isSheetOpen && placeSheetTarget == null && manualTarget == null && durationEditStop == null
   // 下の記録のシート（記録中は情報と脇役の操作と立ち寄りの一覧、停止中は小さなシート）。ほかのシートが出ている間は下がる。
   // 高さが記録中と停止中で違うので、切り替わると開いた状態で作り直す（記録を始めたらシートが開く）。
   // 記録中は、立ち寄りがあればハーフで新しい 2 件ほどが見える高さにし、上へ引くと一覧が広がる（停止中は広げない）。
-  val showRecordSheet = uiState.hasLocationPermission && placeSheetTarget == null && manualTarget == null && !showOverlaySheet
+  val showRecordSheet = uiState.hasLocationPermission && placeSheetTarget == null && manualTarget == null &&
+    durationEditStop == null && !showOverlaySheet
   val hasRecordingStops = uiState.stops.isNotEmpty() || uiState.currentStop != null
-  // 畳んだときの記録の状態（記録中/停止中）。最初の立ち寄りで高さが変わって作り直しても、同じ記録のあいだは畳んだまま
-  // にする（勝手に開かない）。記録を始めた・止めたときは開く。
-  var recordSheetHiddenWhileTracking by remember { mutableStateOf<Boolean?>(null) }
+  // 出ているときだけの「やること」の帯の数（その分だけハーフを高くし、立ち寄りの行を押し出さない）。
+  val todoCount = (if (unresolvedCount > 0) 1 else 0) + (if (sameFacilityPending.isNotEmpty()) 1 else 0)
+  // 記録の状態（記録中/停止中）ごとの最後の段。最初の立ち寄り・やることの帯で高さが変わって作り直しても、同じ記録の
+  // あいだは畳んだまま・広げたままにする（勝手に開いたり縮んだりしない）。記録を始めた・止めたときはハーフで開く。
+  var recordSheetDetent by remember { mutableStateOf<Pair<Boolean, SheetDetent>?>(null) }
   val recordSheetState = rememberFixedFloatingSheetState(
-    initialDetent = if (recordSheetHiddenWhileTracking == uiState.isTracking) SheetDetent.HIDDEN else SheetDetent.PEEK,
+    initialDetent = recordSheetDetent?.takeIf { it.first == uiState.isTracking }?.second ?: SheetDetent.PEEK,
     height = when {
       !uiState.isTracking -> STOPPED_SHEET_HEIGHT
-      hasRecordingStops -> RECORDING_SHEET_WITH_STOPS_HEIGHT
-      else -> RECORDING_SHEET_HEIGHT
+      hasRecordingStops -> RECORDING_SHEET_WITH_STOPS_HEIGHT + RECORD_SHEET_TODO_HEIGHT * todoCount
+      else -> RECORDING_SHEET_HEIGHT + RECORD_SHEET_TODO_HEIGHT * todoCount
     },
     fullFraction = if (uiState.isTracking && hasRecordingStops) RECORDING_SHEET_FULL_FRACTION else null,
   )
   LaunchedEffect(recordSheetState, uiState.isTracking) {
     snapshotFlow { recordSheetState.detent }.collect { detent ->
-      recordSheetHiddenWhileTracking = if (detent == SheetDetent.HIDDEN) uiState.isTracking else null
+      recordSheetDetent = uiState.isTracking to detent
     }
   }
-  // いま地図の下に出ているシート（地図の下の余白・右下の操作・主役の丸の位置を合わせる）。
+  // いま地図の下に出ているシート（地図の下の余白・右下の操作の位置を合わせる）。
   val activeSheet = when {
     manualTarget != null -> manualSheetState
+    durationEditStop != null -> durationSheetState
     placeSheetTarget != null -> placeSheetState
     showOverlaySheet -> overlaySheetState
     showRecordSheet -> recordSheetState
@@ -198,6 +232,26 @@ fun TrackingScreen(
   // （場所シートは自分でバックを受ける。）
   BackHandler(enabled = manualTarget == null && manualMode) { manualMode = false }
   BackHandler(enabled = manualTarget != null) { manualTarget = null }
+  // 滞在時間の編集中のバックは、画面を抜けるのではなく編集をやめる。
+  BackHandler(enabled = durationEditStop != null) { durationEditStop = null }
+  // 記録が止まったら、記録中の経路の立ち寄りの編集はやめる（記録のシートが停止中に変わる）。
+  LaunchedEffect(uiState.isTracking) {
+    if (!uiState.isTracking) {
+      durationEditStop = null
+      editingStop = null
+      editingNoteStop = null
+      renamingTrack = false
+    }
+  }
+  // 立ち寄りの削除は確認を出さずにすぐ消し、スナックバーの「取り消す」で戻せる（経路詳細と同じ）。
+  val scope = rememberCoroutineScope()
+  fun deleteStopWithUndo(stop: Stop) {
+    viewModel.stopEdit.deleteStops(listOf(stop.id))
+    scope.launch {
+      val result = snackbarHostState.showSnackbar(message = "1件を削除しました", actionLabel = "取り消す", duration = SnackbarDuration.Short)
+      if (result == SnackbarResult.ActionPerformed) viewModel.stopEdit.undoStopChange()
+    }
+  }
 
   /**
    * 地図のタップ。検索窓を開いている間は、窓を閉じるだけ（地図を見たくてタップしたとみなす）。
@@ -252,11 +306,14 @@ fun TrackingScreen(
         modifier = Modifier.fillMaxSize(),
         // 表示 ON のとき、地図の絞り込みに合う場所だけを出す（まとまり・ラベルも絞った後で作られる）。
         registeredPlaces = if (uiState.showRegisteredPlaces) uiState.registeredPlaces.filter(mapPlaceFilter::matches) else emptyList(),
-        manualHighlight = manualTarget?.let { _ ->
-          val pts = uiState.currentTrack?.smoothedPoints.orEmpty()
-          manualRange?.let { (start, end) ->
-            if (pts.size >= 2) pts.subList(start, (end + 1).coerceAtMost(pts.size)) else emptyList()
-          }
+        // 手動追加・滞在時間の編集で選んでいる滞在区間。
+        manualHighlight = when {
+          manualTarget != null -> manualRange?.let { range -> manualPoints to range }
+          durationEditStop != null -> durationRange?.let { range -> durationPoints to range }
+          else -> null
+        }?.let { (pts, range) ->
+          val (start, end) = range
+          if (pts.size >= 2) pts.subList(start, (end + 1).coerceAtMost(pts.size)) else emptyList()
         }.orEmpty(),
         // 登録前に選んだ地点の青いピン。手動追加の地点か、検索で選んだ場所（地図の上に施設アイコンが無いこともあるので示す）。
         manualPickTarget = manualTarget?.let { LatLng(it.latitude, it.longitude) }
@@ -367,7 +424,7 @@ fun TrackingScreen(
       )
     }
 
-    // 下の記録のシートと、その上の主役（開始・停止の丸）。シートを畳むと丸も一緒に隠れる（戻すボタンで戻る）。
+    // 下の記録のシート。主役の開始・停止もシートの中にある（畳むと戻すボタンだけが残る → adr/0044）。
     if (showRecordSheet) {
       TrackingRecordSheet(
         uiState = uiState,
@@ -375,20 +432,37 @@ fun TrackingScreen(
         manualMode = manualMode,
         onToggleManualMode = { manualMode = !manualMode },
         onAddStopHere = { loc -> manualTarget = ManualStopTarget(loc.latitude, loc.longitude, ManualStopOrigin.CurrentLocation) },
-        onFocusStop = { stop -> focusOn(LatLng(stop.place.latitude, stop.place.longitude)) },
+        onStartTracking = viewModel::startTracking,
+        onStopTracking = { showStopConfirm = true },
+        todos = RecordSheetTodos(
+          unresolvedCount = unresolvedCount,
+          onResolveNames = viewModel.stopEdit::resolveNames,
+          sameFacilityPendingCount = sameFacilityPending.size,
+          onOpenSameFacility = viewModel.stopEdit::openSameFacilityDialog,
+        ),
+        onRenameTrack = { renamingTrack = true },
+        rowActions = RecordingStopRowActions(
+          onFocus = { stop -> focusOn(LatLng(stop.place.latitude, stop.place.longitude)) },
+          onToggleWishlist = { stop -> viewModel.stopEdit.toggleWishlist(stop.place.id) },
+          onEditName = { stop -> editingStop = stop },
+          onEditNote = { stop -> editingNoteStop = stop },
+          // 滞在時間の編集・場所の選び直しは、対象を地図に出してから始める（地図を見ながら直せるように）。
+          onEditDuration = { stop ->
+            focusOn(LatLng(stop.place.latitude, stop.place.longitude))
+            durationEditStop = stop
+          },
+          canEditDuration = (uiState.currentTrack?.smoothedPoints?.size ?: 0) >= 2,
+          onReassign = { stop ->
+            focusOn(LatLng(stop.place.latitude, stop.place.longitude))
+            reassignTarget = stop
+          },
+          onDelete = ::deleteStopWithUndo,
+        ),
+        wishlistFlags = remember(uiState.registeredPlaces) {
+          uiState.registeredPlaces.associate { it.placeId to WishlistFlag.of(it.isWishlisted, it.fulfilledWishCount) }
+        },
         modifier = Modifier.align(Alignment.BottomCenter),
       )
-      if (recordSheetState.detent != SheetDetent.HIDDEN) {
-        val fabInset by animateDpAsState(recordSheetState.heightOf(recordSheetState.detent), label = "recordFabInset")
-        RecordFab(
-          isTracking = uiState.isTracking,
-          onStartTracking = viewModel::startTracking,
-          onStopTracking = { showStopConfirm = true },
-          modifier = Modifier
-            .align(Alignment.BottomCenter)
-            .padding(bottom = fabInset + PathlySpacing.mapEdge),
-        )
-      }
     }
 
     // 地図の1点タップで開く統一の「場所シート」。未登録の空き地点/POI＝登録、登録済み＝その場で編集。
@@ -429,6 +503,26 @@ fun TrackingScreen(
       )
     }
 
+    // 滞在時間の編集: 地図を見ながら滞在区間を調整する（経路詳細と同じシート）。
+    durationEditStop?.let { stop ->
+      val points = durationPoints
+      if (points.size >= 2) {
+        CloseInfoWindowWithSheet(infoWindow)
+        StopDurationSheet(
+          stop = stop,
+          points = points,
+          onConfirm = { arrivalIdx, departureIdx ->
+            viewModel.stopEdit.updateStopDuration(stop.id, points[arrivalIdx].timestamp, points[departureIdx].timestamp)
+            durationEditStop = null
+          },
+          onCancel = { durationEditStop = null },
+          onRangeChange = { start, end -> durationRange = start to end },
+          sheetState = durationSheetState,
+          modifier = Modifier.align(Alignment.BottomCenter),
+        )
+      }
+    }
+
     // 保存（確定）中は画面全体を覆う。終わっていないのに終わったように見せない（→ adr/0021）。
     if (uiState.isFinalizing) {
       FinalizingOverlay()
@@ -446,13 +540,14 @@ fun TrackingScreen(
       manualStop = viewModel.manualStop,
       placeEdit = viewModel.placeEdit,
       target = manualTarget,
-      points = uiState.currentTrack?.smoothedPoints.orEmpty(),
+      points = manualPoints,
       onAdded = { manualTarget = null },
       onCancel = { manualTarget = null },
       onRangeChange = { start, end -> manualRange = start to end },
       modifier = Modifier.align(Alignment.BottomCenter),
       infoWindow = infoWindow,
       sheetState = manualSheetState,
+      liveStop = uiState.currentStop,
     )
 
     // 地図はそのままに上端へ検索窓を重ねる。
@@ -493,6 +588,22 @@ fun TrackingScreen(
       onDismiss = { showStopConfirm = false },
     )
   }
+
+  TrackingStopDialogs(
+    track = uiState.currentTrack,
+    stops = uiState.stops,
+    editingStop = editingStop,
+    editingNoteStop = editingNoteStop,
+    renamingTrack = renamingTrack,
+    stopEdit = viewModel.stopEdit,
+    sameFacility = viewModel.stopEdit.sameFacilityReview(sameFacilityPending, sameFacilityDialogOpen),
+    placeEdit = viewModel.placeEdit,
+    onRenameTrack = viewModel::renameTrack,
+    onPickAnotherFacility = { placeId -> placeSheetTarget = PlaceSheetTarget.Existing(placeId, openLinkPicker = true) },
+    onDismissEditingStop = { editingStop = null },
+    onDismissEditingNote = { editingNoteStop = null },
+    onDismissRename = { renamingTrack = false },
+  )
 
   StopReassignHost(
     stop = reassignTarget,
@@ -553,6 +664,57 @@ private fun TrackingMapSearch(
   }
 }
 
+/** 記録のシートの立ち寄りの行・経路の名前から開くダイアログ（経路詳細と同じもの）。 */
+@Composable
+private fun TrackingStopDialogs(
+  track: GpsTrack?,
+  stops: List<Stop>,
+  editingStop: Stop?,
+  editingNoteStop: Stop?,
+  renamingTrack: Boolean,
+  stopEdit: StopEditActions,
+  sameFacility: SameFacilityReview,
+  placeEdit: PlaceEditUi,
+  onRenameTrack: (String) -> Unit,
+  onPickAnotherFacility: (placeId: Long) -> Unit,
+  onDismissEditingStop: () -> Unit,
+  onDismissEditingNote: () -> Unit,
+  onDismissRename: () -> Unit,
+) {
+  SameFacilityReviewDialog(sameFacility = sameFacility, stops = stops, placeEdit = placeEdit, onPickAnother = onPickAnotherFacility)
+  if (renamingTrack && track != null) {
+    RenameTrackDialog(
+      initialName = track.name.orEmpty(),
+      defaultName = DateFormatters.date(track.startTime),
+      onDismiss = onDismissRename,
+      onConfirm = { name ->
+        onRenameTrack(name)
+        onDismissRename()
+      },
+    )
+  }
+  editingStop?.let { stop ->
+    PlaceNameDialog(
+      stop = stop,
+      onDismiss = onDismissEditingStop,
+      onConfirm = { name ->
+        stopEdit.updatePlaceName(stop.place.id, name)
+        onDismissEditingStop()
+      },
+    )
+  }
+  editingNoteStop?.let { stop ->
+    StopNoteDialog(
+      stop = stop,
+      onDismiss = onDismissEditingNote,
+      onConfirm = { note ->
+        stopEdit.updateStopNote(stop.id, note)
+        onDismissEditingNote()
+      },
+    )
+  }
+}
+
 /** 記録画面の地図に重ねる検索窓の種類。 */
 private enum class MapSearchMode {
   /** 検索して登録（施設を探して場所シートで登録する）。 */
@@ -562,17 +724,20 @@ private enum class MapSearchMode {
   Region,
 }
 
-/** 記録中でまだ立ち寄りが無いときの記録のシートの高さ（つまみ・情報の段・脇役の操作の段・「まだ立ち寄りはありません」）。 */
-private val RECORDING_SHEET_HEIGHT = 232.dp
+/** 記録中でまだ立ち寄りが無いときの記録のシートの高さ（つまみ・経路の名前・情報の段と停止・脇役の操作の段・「まだ立ち寄りはありません」）。 */
+private val RECORDING_SHEET_HEIGHT = 280.dp
 
 /** 記録中で立ち寄りがあるときの、記録のシートのハーフの高さ（上の段に加えて、新しい立ち寄りが 2 件ほど見える）。 */
-private val RECORDING_SHEET_WITH_STOPS_HEIGHT = 328.dp
+private val RECORDING_SHEET_WITH_STOPS_HEIGHT = 376.dp
 
-/** 記録中で立ち寄りがあるときの、記録のシートのフルの高さ（画面に対する割合）。シートの上に乗る丸が、上の案内の帯に重ならない高さにとどめる。 */
-private const val RECORDING_SHEET_FULL_FRACTION = 0.45f
+/** 記録中で立ち寄りがあるときの、記録のシートのフルの高さ（画面に対する割合）。上の区画（検索・ピル・案内の帯）は隠さない高さにとどめる。 */
+private const val RECORDING_SHEET_FULL_FRACTION = 0.6f
 
-/** 停止中の記録のシートの高さ（つまみと「記録していません」）。 */
-private val STOPPED_SHEET_HEIGHT = 80.dp
+/** 記録のシートの「やること」の帯 1 本ぶんの高さ（帯と上の余白）。出ている数だけハーフを高くする。 */
+private val RECORD_SHEET_TODO_HEIGHT = 52.dp
+
+/** 停止中の記録のシートの高さ（つまみと「▶ 記録を始める」）。 */
+private val STOPPED_SHEET_HEIGHT = 128.dp
 
 /** いま地図に映っている範囲（地図の準備前は null）。 */
 private fun CameraPositionState.visibleGeoBounds(): GeoBounds? = projection?.visibleRegion?.latLngBounds?.toGeoBounds()
