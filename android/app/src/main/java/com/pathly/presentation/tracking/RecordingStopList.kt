@@ -23,8 +23,10 @@ import androidx.compose.ui.text.style.TextOverflow
 import com.pathly.domain.model.Stop
 import com.pathly.domain.model.WishlistFlag
 import com.pathly.presentation.common.SheetContentHorizontalPadding
+import com.pathly.presentation.history.LiveStopRow
 import com.pathly.presentation.history.StopRow
 import com.pathly.presentation.stops.CurrentStopListBadge
+import com.pathly.presentation.stops.LiveStopActions
 import com.pathly.ui.theme.PathlySpacing
 import com.pathly.util.DateFormatters
 
@@ -32,7 +34,8 @@ import com.pathly.util.DateFormatters
  * 記録中のお出掛けの立ち寄りの一覧（記録のシートの下の段）。記録しながら取りこぼしに気付けるよう、新しい順に並べる
  * （ハーフで見えるのは新しい 2 件ほど）。立ち寄り中（滞在している最中で、まだ番号が無い）があれば先頭に出す。
  * 番号は訪問順で、地図の立ち寄りのピンの番号と同じ。確定した立ち寄りの行は経路詳細と同じ（行きたいの旗と ⋮ の操作。
- * 押すと地図がその立ち寄りへ寄る → [rowActions]）。立ち寄り中の行はまだ保存されていないので操作は出さず、押すと寄るだけ。
+ * 押すと地図がその立ち寄りへ寄る → [rowActions]）。立ち寄り中の行にも旗と ⋮ を出す（⋮ は保存前でもできることだけ
+ * → [LiveStopRow]）。
  * 長押しのまとめて削除は経路詳細だけ。
  */
 @Composable
@@ -71,11 +74,13 @@ internal fun RecordingStopList(
       ) {
         currentStop?.let { stop ->
           item(key = "current") {
-            RecordingStopRow(
-              badge = { CurrentStopListBadge() },
-              title = stop.place.name ?: stop.place.googleName ?: stop.place.googleAddress ?: "立ち寄り中",
-              time = "${DateFormatters.shortTime(stop.arrivalTime)} – 滞在中 ・ ${stop.durationMinutes}分",
-              onClick = { rowActions.onFocus(stop) },
+            LiveStopRow(
+              stop = stop,
+              actions = rowActions.live,
+              onFocus = { rowActions.onFocus(stop) },
+              canEditArrival = rowActions.canEditDuration,
+              wishlistFlag = wishlistFlags[stop.place.id] ?: WishlistFlag.NONE,
+              onToggleWishlist = { rowActions.onToggleWishlist(stop) },
             )
           }
         }
@@ -116,41 +121,6 @@ internal data class RecordingStopRowActions(
   val canEditDuration: Boolean = false,
   val onReassign: (Stop) -> Unit = {},
   val onDelete: (Stop) -> Unit = {},
+  /** 立ち寄り中の行の ⋮（保存前でもできることだけ）。 */
+  val live: LiveStopActions = LiveStopActions(),
 )
-
-/** 立ち寄り中の行（頭の丸・名前・時刻）。まだ保存されていないので操作は持たない。 */
-@Composable
-private fun RecordingStopRow(
-  badge: @Composable () -> Unit,
-  title: String,
-  time: String,
-  onClick: () -> Unit,
-) {
-  Row(
-    modifier = Modifier
-      .fillMaxWidth()
-      .clip(MaterialTheme.shapes.medium)
-      .clickable(onClickLabel = "地図で見る", onClick = onClick)
-      .padding(horizontal = PathlySpacing.xs, vertical = PathlySpacing.xs),
-    verticalAlignment = Alignment.CenterVertically,
-    horizontalArrangement = Arrangement.spacedBy(PathlySpacing.md),
-  ) {
-    badge()
-    Column(modifier = Modifier.weight(1f)) {
-      Text(
-        text = title,
-        style = MaterialTheme.typography.bodyMedium,
-        fontWeight = FontWeight.Medium,
-        maxLines = 1,
-        overflow = TextOverflow.Ellipsis,
-      )
-      Text(
-        text = time,
-        style = MaterialTheme.typography.bodySmall,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-        maxLines = 1,
-        overflow = TextOverflow.Ellipsis,
-      )
-    }
-  }
-}

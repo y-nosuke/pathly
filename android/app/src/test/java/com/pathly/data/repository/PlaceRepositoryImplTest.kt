@@ -419,6 +419,60 @@ class PlaceRepositoryImplTest {
     coVerify(exactly = 0) { placeResolutionDao.upsert(any()) }
   }
 
+  // 立ち寄り中に付けたメモ・直した到着は、確定した立ち寄りに入る。
+  @Test
+  fun liveStop_noteAndArrival_goIntoPersistedStop() = runTest {
+    storePlaces()
+    coEvery { stopDao.insert(any()) } returns 100L
+    coEvery { smoothedPointDao.getByTrackAfter(1L, any()) } returns emptyList()
+    coEvery { gpsPointDao.getLatestPoint(1L) } returns gpAt(35.0, 139.0, 500)
+
+    startHere(arrivalSec = 30)
+    repository.updateLiveStopNote(1L, "  ケーキがおいしい  ")
+    repository.updateLiveStopArrival(1L, Date(10_000L))
+    assertEquals("ケーキがおいしい", repository.currentStop.value?.note)
+    repository.updateStopsForTrack(1L, isFinal = true)
+
+    val stopSlot = slot<StopEntity>()
+    coVerify(exactly = 1) { stopDao.insert(capture(stopSlot)) }
+    assertEquals("ケーキがおいしい", stopSlot.captured.note)
+    assertEquals(Date(10_000L), stopSlot.captured.arrivalTime)
+  }
+
+  // 立ち寄り中の場所の名前を変えたら、次の位置の更新を待たずに表示が変わる。
+  @Test
+  fun updatePlaceName_ofLiveStopPlace_refreshesCurrentStopAtOnce() = runTest {
+    val stored = storePlaces()
+    coEvery { placeDao.updateName(any(), any(), any()) } answers {
+      val id = firstArg<Long>()
+      val index = stored.indexOfFirst { it.id == id }
+      stored[index] = stored[index].copy(name = secondArg())
+    }
+    startHere(arrivalSec = 30, name = "売店")
+
+    repository.updatePlaceName(stored.single().id, "カフェ")
+
+    assertEquals("カフェ", repository.currentStop.value?.place?.name)
+  }
+
+  // 検出の立ち寄り中をやめると、表示が消え、離れても記録を止めても保存しない。
+  @Test
+  fun dismissLiveStop_detected_hidesAndNeverPersists() = runTest {
+    storePlaces()
+    coEvery { smoothedPointDao.getByTrackAfter(1L, any()) } returns dwellingPoints()
+    coEvery { gpsPointDao.getLatestPoint(1L) } returns gpAt(35.0, 139.0, 240)
+    repository.updateStopsForTrack(1L, isFinal = false)
+    assertNotNull(repository.currentStop.value)
+
+    repository.dismissLiveStop(1L)
+    assertNull(repository.currentStop.value)
+    repository.updateStopsForTrack(1L, isFinal = false)
+    assertNull("やめたあとは出し直さない", repository.currentStop.value)
+    repository.updateStopsForTrack(1L, isFinal = true)
+
+    coVerify(exactly = 0) { stopDao.insert(any()) }
+  }
+
   // 記録を止めたときに立ち寄り中なら、その時刻（最後の点）で確定する。
   @Test
   fun startLiveStop_finalizedWhenRecordingStops() = runTest {

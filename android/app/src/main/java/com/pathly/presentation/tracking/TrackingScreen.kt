@@ -60,12 +60,14 @@ import com.pathly.presentation.places.PLACE_SHEET_PEEK_FRACTION
 import com.pathly.presentation.places.PlaceEditHost
 import com.pathly.presentation.places.PlaceEditUi
 import com.pathly.presentation.places.PlaceSheetTarget
+import com.pathly.presentation.stops.LiveStopActions
 import com.pathly.presentation.stops.ManualStopHost
 import com.pathly.presentation.stops.ManualStopOrigin
 import com.pathly.presentation.stops.ManualStopTarget
 import com.pathly.presentation.stops.StopDurationSheet
 import com.pathly.presentation.stops.StopEditActions
 import com.pathly.presentation.stops.StopReassignHost
+import com.pathly.presentation.stops.isLive
 import com.pathly.ui.theme.PathlySpacing
 import com.pathly.util.DateFormatters
 import kotlinx.coroutines.launch
@@ -457,6 +459,19 @@ fun TrackingScreen(
             reassignTarget = stop
           },
           onDelete = ::deleteStopWithUndo,
+          live = LiveStopActions(
+            onEditNote = { stop -> editingNoteStop = stop },
+            onEditName = { stop -> editingStop = stop },
+            onEditArrival = { stop ->
+              focusOn(LatLng(stop.place.latitude, stop.place.longitude))
+              durationEditStop = stop
+            },
+            // 場所の選び直しは「今ここを立ち寄り」と同じ候補のシートで（到着はそのまま、場所だけ変わる）。
+            onReassign = { stop ->
+              manualTarget = ManualStopTarget(stop.place.latitude, stop.place.longitude, ManualStopOrigin.CurrentLocation)
+            },
+            onDismiss = { viewModel.stopEdit.dismissLiveStop() },
+          ),
         ),
         wishlistFlags = remember(uiState.registeredPlaces) {
           uiState.registeredPlaces.associate { it.placeId to WishlistFlag.of(it.isWishlisted, it.fulfilledWishCount) }
@@ -512,9 +527,14 @@ fun TrackingScreen(
           stop = stop,
           points = points,
           onConfirm = { arrivalIdx, departureIdx ->
-            viewModel.stopEdit.updateStopDuration(stop.id, points[arrivalIdx].timestamp, points[departureIdx].timestamp)
+            if (stop.isLive) {
+              viewModel.stopEdit.updateLiveStopArrival(points[arrivalIdx].timestamp)
+            } else {
+              viewModel.stopEdit.updateStopDuration(stop.id, points[arrivalIdx].timestamp, points[departureIdx].timestamp)
+            }
             durationEditStop = null
           },
+          arrivalOnly = stop.isLive,
           onCancel = { durationEditStop = null },
           onRangeChange = { start, end -> durationRange = start to end },
           sheetState = durationSheetState,
@@ -708,7 +728,7 @@ private fun TrackingStopDialogs(
       stop = stop,
       onDismiss = onDismissEditingNote,
       onConfirm = { note ->
-        stopEdit.updateStopNote(stop.id, note)
+        stopEdit.updateNote(stop, note)
         onDismissEditingNote()
       },
     )
@@ -736,7 +756,7 @@ private const val RECORDING_SHEET_FULL_FRACTION = 0.6f
 /** 記録のシートの「やること」の帯 1 本ぶんの高さ（帯と上の余白）。出ている数だけハーフを高くする。 */
 private val RECORD_SHEET_TODO_HEIGHT = 52.dp
 
-/** 停止中の記録のシートの高さ（つまみと「▶ 記録を始める」）。 */
+/** 停止中の記録のシートの高さ（つまみと「記録していません」・開始の丸）。 */
 private val STOPPED_SHEET_HEIGHT = 128.dp
 
 /** いま地図に映っている範囲（地図の準備前は null）。 */

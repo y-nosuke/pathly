@@ -318,7 +318,7 @@ internal fun TrackingNotices(
  * 下の記録のシート。記録中は、経路の名前（押すと名前の編集）・距離・地点数・立ち寄り中と停止、出ているときだけの「やること」の帯
  * （場所を取得・同じ施設の確認待ち）、脇役の操作（今ここを立ち寄り・地図で指して追加）、このお出掛けの立ち寄りの一覧
  * （新しい順。行は経路詳細と同じ操作 → [RecordingStopList]）。ハーフでは新しい立ち寄りが 2 件ほど見え、上へ引くと広がって
- * 全部見える。停止中は「▶ 記録を始める」だけの小さなシート。主役の開始・停止はシートの中に置き、畳むと戻すボタン
+ * 全部見える。停止中は「記録していません」と右端の開始の丸だけの小さなシート。主役の開始・停止はシートの中に置き、畳むと戻すボタン
  * （[restoreLabel]）だけが残る（→ adr/0044）。
  */
 @Composable
@@ -367,7 +367,8 @@ internal fun TrackingRecordSheet(
       // 「今ここ」は近くの施設候補から選ばせる。「地図で指して追加」はモード（ON=地図タップが立ち寄り追加／OFF=場所登録）。
       AddStopActions(
         onAddHere = { uiState.currentLocation?.let(onAddStopHere) },
-        addHereEnabled = uiState.hasLocationPermission && uiState.currentLocation != null,
+        // 立ち寄り中は押せない（今いる立ち寄りを変えるのは、立ち寄り中の行の ⋮ から）。
+        addHereEnabled = uiState.hasLocationPermission && uiState.currentLocation != null && uiState.currentStop == null,
         onMapPick = onToggleManualMode,
         mapPickActive = manualMode,
       )
@@ -380,10 +381,21 @@ internal fun TrackingRecordSheet(
         modifier = Modifier.weight(1f),
       )
     } else {
-      RecordStartButton(
-        onClick = onStartTracking,
-        modifier = Modifier.padding(horizontal = PathlySpacing.screenEdge),
-      )
+      // 記録中の停止と同じ位置（右端）に開始の丸を置く。
+      Row(
+        modifier = Modifier
+          .fillMaxWidth()
+          .padding(horizontal = PathlySpacing.screenEdge),
+        verticalAlignment = Alignment.CenterVertically,
+      ) {
+        Text(
+          text = "記録していません",
+          style = MaterialTheme.typography.bodyMedium,
+          color = MaterialTheme.colorScheme.onSurfaceVariant,
+          modifier = Modifier.weight(1f),
+        )
+        RecordStartButton(onClick = onStartTracking)
+      }
     }
   }
 }

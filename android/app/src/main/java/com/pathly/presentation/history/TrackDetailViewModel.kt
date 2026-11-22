@@ -45,6 +45,7 @@ import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.takeWhile
 import kotlinx.coroutines.launch
 import java.util.Date
 import javax.inject.Inject
@@ -170,13 +171,26 @@ class TrackDetailViewModel @Inject constructor(
   )
 
   private var collectJob: Job? = null
+  private var trackJob: Job? = null
 
   fun load(trackId: Long) {
     if (loadedTrackId.value == trackId) return
     loadedTrackId.value = trackId
 
     // 開いても検出はしない。保存済みの立ち寄りと補正後軌跡を表示するだけ。
-    viewModelScope.launch { _displayTrack.value = gpsTrackRepository.getTrackById(trackId) }
+    trackJob?.cancel()
+    trackJob = viewModelScope.launch {
+      val track = gpsTrackRepository.getTrackById(trackId)
+      _displayTrack.value = track
+      if (track?.isActive != true) return@launch
+      // 記録中の経路は、記録の更新（点が増える・名前が変わる）に合わせて読み直す。開いた時点のままだと、記録を始めて
+      // すぐ開いたときに点が 2 つ未満のまま残り、「地図で指して追加」が押せない・線や距離が伸びない。
+      // 記録が終わったら、保存済みの補正後の形で読み直す。
+      gpsTrackRepository.getActiveTrackRealtime()
+        .takeWhile { it?.id == trackId }
+        .collect { _displayTrack.value = it }
+      _displayTrack.value = gpsTrackRepository.getTrackById(trackId)
+    }
 
     collectJob?.cancel()
     collectJob = viewModelScope.launch {

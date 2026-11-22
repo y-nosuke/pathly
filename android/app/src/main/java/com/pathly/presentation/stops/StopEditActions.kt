@@ -1,6 +1,7 @@
 package com.pathly.presentation.stops
 
 import com.pathly.domain.model.SameFacilityPending
+import com.pathly.domain.model.Stop
 import com.pathly.domain.repository.PlaceRepository
 import com.pathly.domain.usecase.PlaceEditUseCase
 import com.pathly.presentation.history.SameFacilityReview
@@ -66,6 +67,9 @@ class StopEditActions internal constructor(
     onMerge = ::mergeStops,
     onUndo = ::undoStopChange,
     onResolveNames = ::resolveNames,
+    onEditLiveNote = ::updateLiveStopNote,
+    onUpdateLiveArrival = ::updateLiveStopArrival,
+    onDismissLive = ::dismissLiveStop,
   )
 
   init {
@@ -161,6 +165,33 @@ class StopEditActions internal constructor(
     }
   }
 
+  /** 訪問のメモを直す。立ち寄り中（まだ保存していない・id が 0）なら、確定した立ち寄りに入るよう覚えておく。 */
+  fun updateNote(stop: Stop, note: String?) {
+    if (stop.isLive) {
+      updateLiveStopNote(note)
+    } else {
+      updateStopNote(stop.id, note)
+    }
+  }
+
+  /** 立ち寄り中のメモ（確定した立ち寄りに入る。空なら消す）。 */
+  fun updateLiveStopNote(note: String?) {
+    val id = trackId.value ?: return
+    scope.launch { placeRepository.updateLiveStopNote(id, note) }
+  }
+
+  /** 立ち寄り中の到着時刻を直す（出発は離れたときに決まる）。 */
+  fun updateLiveStopArrival(arrivalTime: Date) {
+    val id = trackId.value ?: return
+    scope.launch { placeRepository.updateLiveStopArrival(id, arrivalTime) }
+  }
+
+  /** 立ち寄り中をやめる（誤検知の取り消し。離れるまで同じ滞在を立ち寄りにしない）。 */
+  fun dismissLiveStop() {
+    val id = trackId.value ?: return
+    scope.launch { placeRepository.dismissLiveStop(id) }
+  }
+
   /** 同じ施設の確認待ちを聞くダイアログを開く（「確認待ち」の帯）。 */
   fun openSameFacilityDialog() {
     _sameFacilityDialogOpen.value = true
@@ -179,3 +210,18 @@ class StopEditActions internal constructor(
     placeEdit.mergeIntoSameFacility(pending.placeId, pending.placeName, pending.other)
   }
 }
+
+/** 立ち寄り中（まだ保存していない）の行か。保存していない立ち寄りは id が 0（→ PlaceRepository.currentStop）。 */
+internal val Stop.isLive: Boolean get() = id == 0L
+
+/**
+ * 立ち寄り中の行の ⋮ の操作（記録画面と経路詳細で共通）。保存前でもできることだけ: メモ・場所の名前・到着時刻・
+ * 場所の選び直し・立ち寄り中をやめる。
+ */
+internal data class LiveStopActions(
+  val onEditNote: (Stop) -> Unit = {},
+  val onEditName: (Stop) -> Unit = {},
+  val onEditArrival: (Stop) -> Unit = {},
+  val onReassign: (Stop) -> Unit = {},
+  val onDismiss: (Stop) -> Unit = {},
+)

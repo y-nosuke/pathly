@@ -1,10 +1,14 @@
 package com.pathly.presentation.tracking
 
 import android.Manifest
+import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.semantics.getOrNull
+import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertHasClickAction
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsNotDisplayed
+import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertIsNotSelected
 import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.hasAnyAncestor
@@ -662,6 +666,10 @@ class TrackingScreenTest {
 
     // 立ち寄り中も数に入れ、新しい順（立ち寄り中 → 2 → 1）に並ぶ。
     composeTestRule.onNodeWithText("立ち寄り 3件（新しい順）").assertIsDisplayed()
+    // ハーフでは新しい 2 件ほどしか見えないので、広げて全部を出す。
+    composeTestRule.onNode(
+      SemanticsMatcher("シートを広げる") { it.config.getOrNull(SemanticsActions.OnClick)?.label == "シートを広げる" },
+    ).performClick()
     // 立ち寄り中の名前は上の段（● 立ち寄り中）にも出るので、一覧の中の行を指す。
     fun rowTop(name: String) = composeTestRule
       .onNode(hasText(name, substring = true) and hasAnyAncestor(hasTestTag("recordingStopList")))
@@ -720,6 +728,7 @@ class TrackingScreenTest {
       isTracking = true,
       stops = listOf(stop(id = 1L, name = "動物園", minutesFromStart = 0)),
       currentStop = stop(id = 0L, name = "カフェ", minutesFromStart = 60),
+      currentLocation = LocationInfo(latitude = 35.0, longitude = 139.0, accuracy = 5f, timestamp = "10:00"),
       currentTrack = GpsTrack(
         id = 1L,
         startTime = Date(1_700_000_000_000L),
@@ -750,9 +759,17 @@ class TrackingScreenTest {
     composeTestRule.onNodeWithText("場所を取得（未取得 2件）").performClick()
     verify { stopEdit.resolveNames() }
 
-    // 確定した立ち寄りの行だけ ⋮ の操作が出る（立ち寄り中の行には出さない）。
-    composeTestRule.onAllNodesWithContentDescription("操作").assertCountEquals(1)
-    composeTestRule.onNodeWithContentDescription("操作").performClick()
+    // 立ち寄り中は「今ここ」を押せない（今いる立ち寄りは行の ⋮ から変える）。
+    composeTestRule.onNodeWithContentDescription("今ここを立ち寄り").assertIsNotEnabled()
+
+    // 立ち寄り中の行（先頭）にも ⋮ が出る。中身は保存前でもできることだけで、削除の代わりに「立ち寄り中をやめる」。
+    composeTestRule.onAllNodesWithContentDescription("操作").assertCountEquals(2)
+    composeTestRule.onAllNodesWithContentDescription("操作")[0].performClick()
+    composeTestRule.onNodeWithText("立ち寄り中をやめる").performClick()
+    verify { stopEdit.dismissLiveStop() }
+
+    // 確定した立ち寄りの行は経路詳細と同じ。削除はスナックバーの「取り消す」つき。
+    composeTestRule.onAllNodesWithContentDescription("操作")[1].performClick()
     composeTestRule.onNodeWithText("削除").performClick()
     verify { stopEdit.deleteStops(listOf(1L)) }
     composeTestRule.onNodeWithText("取り消す").assertIsDisplayed()

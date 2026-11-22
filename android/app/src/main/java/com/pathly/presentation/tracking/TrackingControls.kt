@@ -207,69 +207,87 @@ internal fun FinalizingOverlay() {
 }
 
 /**
- * 停止中の記録のシートの主役: 幅いっぱいの「▶ 記録を始める」（→ adr/0044）。読み上げは「記録開始」。
+ * 記録のシートの開始・停止の丸（右端の同じ位置・同じ大きさ → adr/0044）。開始は青い塗りの丸 ▶「開始」で目立たせ、
+ * 停止は誤って押しにくいよう塗らずに赤い枠の丸 ■「停止」にする（色と塗りで対にする）。停止は押すと確認ダイアログ（画面側）。
+ * 読み上げは「記録開始」「記録停止」。
  */
 @Composable
 internal fun RecordStartButton(
   onClick: () -> Unit,
   modifier: Modifier = Modifier,
 ) {
-  Button(
+  val primary = MaterialTheme.colorScheme.primary
+  RecordCircleButton(
+    label = "開始",
+    description = "記録開始",
+    labelColor = primary,
     onClick = onClick,
-    modifier = modifier
-      .fillMaxWidth()
-      .height(RECORD_START_BUTTON_HEIGHT)
-      .semantics { contentDescription = "記録開始" },
+    modifier = modifier,
+    circle = Modifier.background(primary, CircleShape),
   ) {
     Icon(
       painter = painterResource(R.drawable.ic_play_arrow),
       contentDescription = null,
-      modifier = Modifier.size(24.dp),
+      tint = MaterialTheme.colorScheme.onPrimary,
+      modifier = Modifier.size(28.dp),
     )
-    Spacer(modifier = Modifier.width(PathlySpacing.sm))
-    Text(text = "記録を始める", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
   }
 }
 
-/**
- * 記録中の記録のシートの停止（情報の段の右端 → adr/0044）。誤って押しにくいよう塗らずに赤い枠の丸にし、
- * 下に「停止」と添えて見つけやすくする。押すと確認ダイアログ（画面側）。読み上げは「記録停止」。
- */
+/** 停止（[RecordStartButton] と対）。 */
 @Composable
 internal fun RecordStopButton(
   onClick: () -> Unit,
   modifier: Modifier = Modifier,
 ) {
   val error = MaterialTheme.colorScheme.error
+  RecordCircleButton(
+    label = "停止",
+    description = "記録停止",
+    labelColor = error,
+    onClick = onClick,
+    modifier = modifier,
+    circle = Modifier.border(2.dp, error, CircleShape),
+  ) {
+    Icon(
+      painter = painterResource(R.drawable.ic_stop),
+      contentDescription = null,
+      tint = error,
+      modifier = Modifier.size(24.dp),
+    )
+  }
+}
+
+/** 丸と、その下の短い名前（開始・停止で共通の形）。 */
+@Composable
+private fun RecordCircleButton(
+  label: String,
+  description: String,
+  labelColor: Color,
+  onClick: () -> Unit,
+  circle: Modifier,
+  modifier: Modifier = Modifier,
+  icon: @Composable () -> Unit,
+) {
   Column(
     modifier = modifier
       .clip(MaterialTheme.shapes.medium)
       .clickable(role = Role.Button, onClick = onClick)
-      .semantics(mergeDescendants = true) { contentDescription = "記録停止" }
+      .semantics(mergeDescendants = true) { contentDescription = description }
       .padding(horizontal = PathlySpacing.xs, vertical = PathlySpacing.xxs),
     horizontalAlignment = Alignment.CenterHorizontally,
   ) {
     Box(
       modifier = Modifier
         .size(RECORD_STOP_BUTTON_SIZE)
-        .border(2.dp, error, CircleShape),
+        .then(circle),
       contentAlignment = Alignment.Center,
-    ) {
-      Icon(
-        painter = painterResource(R.drawable.ic_stop),
-        contentDescription = null,
-        tint = error,
-        modifier = Modifier.size(24.dp),
-      )
-    }
-    Text(text = "停止", style = MaterialTheme.typography.labelMedium, color = error)
+    ) { icon() }
+    Text(text = label, style = MaterialTheme.typography.labelMedium, color = labelColor)
   }
 }
 
-/** 「記録を始める」の高さ（シートの主役なので、ふつうのボタンより高くして押しやすくする）。 */
-private val RECORD_START_BUTTON_HEIGHT = 56.dp
-
-/** 停止の丸の大きさ。 */
+/** 開始・停止の丸の大きさ。 */
 private val RECORD_STOP_BUTTON_SIZE = 48.dp
 
 @Composable

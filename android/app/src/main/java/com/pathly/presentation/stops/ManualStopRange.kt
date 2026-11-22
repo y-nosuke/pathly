@@ -14,6 +14,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.RangeSlider
+import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -92,6 +93,8 @@ fun StopRangeEditor(
   lastIdx: Int,
   onRangeChange: (start: Int, end: Int) -> Unit,
   modifier: Modifier = Modifier,
+  // 到着だけを直す（立ち寄り中。出発は離れたときに決まるので、末尾に固定して出さない）。
+  arrivalOnly: Boolean = false,
 ) {
   val durationMinutes = ((departureTime.time - arrivalTime.time) / 1000 / 60).toInt()
   Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(PathlySpacing.md)) {
@@ -105,15 +108,23 @@ fun StopRangeEditor(
       style = MaterialTheme.typography.bodySmall,
       color = MaterialTheme.colorScheme.onSurfaceVariant,
     )
-    RangeSlider(
-      value = arrivalIdx.toFloat()..departureIdx.toFloat(),
-      onValueChange = { range ->
-        val start = range.start.roundToInt().coerceIn(0, lastIdx)
-        val end = range.endInclusive.roundToInt().coerceIn(start, lastIdx)
-        onRangeChange(start, end)
-      },
-      valueRange = 0f..lastIdx.toFloat(),
-    )
+    if (arrivalOnly) {
+      Slider(
+        value = arrivalIdx.toFloat(),
+        onValueChange = { value -> onRangeChange(value.roundToInt().coerceIn(0, departureIdx), departureIdx) },
+        valueRange = 0f..lastIdx.toFloat(),
+      )
+    } else {
+      RangeSlider(
+        value = arrivalIdx.toFloat()..departureIdx.toFloat(),
+        onValueChange = { range ->
+          val start = range.start.roundToInt().coerceIn(0, lastIdx)
+          val end = range.endInclusive.roundToInt().coerceIn(start, lastIdx)
+          onRangeChange(start, end)
+        },
+        valueRange = 0f..lastIdx.toFloat(),
+      )
+    }
     // 微調整（1点ずつ）。到着は出発を超えられず、出発は到着を下回れない。
     StepperRow(
       label = "到着",
@@ -123,6 +134,14 @@ fun StopRangeEditor(
       onMinus = { onRangeChange((arrivalIdx - 1).coerceAtLeast(0), departureIdx) },
       onPlus = { onRangeChange((arrivalIdx + 1).coerceAtMost(departureIdx), departureIdx) },
     )
+    if (arrivalOnly) {
+      Text(
+        text = "出発は、その場を離れたときに決まります。",
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+      )
+      return@Column
+    }
     StepperRow(
       label = "出発",
       time = departureTime,
