@@ -8,9 +8,11 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -20,6 +22,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.google.android.gms.maps.model.LatLng
@@ -94,6 +97,16 @@ internal fun PlaceActionSheet(
   // 非モーダルなのでバックは自分で受ける（モーダルのときは自動で閉じていた）。
   BackHandler { onDismiss() }
 
+  // 登録のシートだけ、ハーフをメモの欄まで見える高さ以上にする（横向き・文字が大きい設定では 4 割に収まらない）。
+  // 場所詳細などと同じ state を使い回すので、登録でなくなったら・閉じたら元の高さに戻す。
+  // 下の開き直しより先に置く（開き直す先のハーフを先に決める）。
+  val isNew = target !is PlaceSheetTarget.Existing
+  val registerPeekPx = rememberRegisterSheetMinPeekPx()
+  DisposableEffect(sheetState, isNew, registerPeekPx) {
+    sheetState.raisePeekTo(if (isNew) registerPeekPx else null)
+    onDispose { sheetState.raisePeekTo(null) }
+  }
+
   // 別の地点をタップし直したら、畳んでいても開き直す（変化が見えないと操作を見失う）。
   LaunchedEffect(target) { sheetState.settleTo(SheetDetent.PEEK) }
 
@@ -153,8 +166,39 @@ internal fun PlaceActionSheet(
 /**
  * 場所のシート（場所詳細・地図をタップして出る場所シート・登録のシート）のハーフの高さ（画面に対する割合）。
  * どの画面から出しても同じ高さにし、地図で場所の周りを見られるよう低めにする（中身はスクロールとフルで見る）。
+ * 登録のシートだけは [rememberRegisterSheetMinPeekPx] より低くしない。
  */
 internal const val PLACE_SHEET_PEEK_FRACTION = 0.4f
+
+/**
+ * 登録のシートのハーフの最低の高さ（px）。つまみ・見出し・行きたい／訪問済み・メモの欄・登録のボタンまでが入る高さ。
+ * 縦向きのふつうの画面では 4 割（[PLACE_SHEET_PEEK_FRACTION]）の方が高く、効くのは横向き・背の低い画面・文字が大きい
+ * 設定のとき。登録は入れるものが多く、メモの欄に気づけないと困るので、地図の見える広さよりこちらを優先する
+ * （フルより高くはならない）。
+ *
+ * 文字の大きさの設定で伸びるのは字の行だけなので、余白（dp）と字の行の高さ（sp）を分けて足す。sp は文字の設定で伸びるが、
+ * 大きな字ほど伸び方が小さい（Android の非線形の拡大）ので、全体を倍率で掛けると高くしすぎる。
+ */
+@Composable
+private fun rememberRegisterSheetMinPeekPx(): Float {
+  val density = LocalDensity.current
+  val typography = MaterialTheme.typography
+  return remember(density, typography) {
+    with(density) {
+      // 見出し・行きたい／訪問済み・メモの欄の字・登録のボタン、の 4 行。
+      val textLines = listOf(
+        typography.titleMedium.lineHeight,
+        typography.labelLarge.lineHeight,
+        typography.bodyLarge.lineHeight,
+        typography.labelLarge.lineHeight,
+      )
+      REGISTER_SHEET_MIN_PEEK_SPACING.toPx() + textLines.sumOf { it.toPx().toDouble() }.toFloat()
+    }
+  }
+}
+
+/** 登録のシートのハーフのうち、字の行でない部分（つまみの行・ボタンや欄の枠と余白・登録の行の余白）。エミュレータの実測から。 */
+private val REGISTER_SHEET_MIN_PEEK_SPACING = 216.dp
 
 /**
  * 未登録の地点/施設を場所として登録する編集部。施設（POI・検索結果）なら Google 情報
