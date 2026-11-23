@@ -15,6 +15,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.RangeSlider
 import androidx.compose.material3.Slider
+import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -109,10 +110,19 @@ fun StopRangeEditor(
       color = MaterialTheme.colorScheme.onSurfaceVariant,
     )
     if (arrivalOnly) {
+      // 滞在はつまみ（到着）から右端（いま）まで。Slider は既定で左側を濃く塗るので、色を入れ替えて滞在の側を濃くする
+      // （範囲のスライダーの濃い区間・地図の青いハイライトと向きをそろえる）。
+      val colors = SliderDefaults.colors()
       Slider(
         value = arrivalIdx.toFloat(),
         onValueChange = { value -> onRangeChange(value.roundToInt().coerceIn(0, departureIdx), departureIdx) },
         valueRange = 0f..lastIdx.toFloat(),
+        colors = SliderDefaults.colors(
+          activeTrackColor = colors.inactiveTrackColor,
+          inactiveTrackColor = colors.activeTrackColor,
+          activeTickColor = colors.inactiveTickColor,
+          inactiveTickColor = colors.activeTickColor,
+        ),
       )
     } else {
       RangeSlider(
