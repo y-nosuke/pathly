@@ -23,6 +23,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -62,7 +63,7 @@ enum class SheetDetent { HIDDEN, PEEK, FULL }
  */
 @Stable
 class FloatingSheetState internal constructor(
-  internal val peekPx: Float,
+  peekPx: Float,
   internal val fullPx: Float,
   internal val allowHidden: Boolean,
   private val scope: CoroutineScope,
@@ -75,6 +76,25 @@ class FloatingSheetState internal constructor(
       SheetDetent.FULL -> fullPx
     },
   )
+
+  // 作ったときのハーフの高さ。[raisePeekTo] で上げたものを戻す先。
+  private val basePeekPx = peekPx
+
+  /** ハーフの高さ（px）。ふつうは作ったときの値で、[raisePeekTo] で一時的に上げられる。 */
+  internal var peekPx: Float by mutableFloatStateOf(peekPx)
+    private set
+
+  /**
+   * ハーフの高さを [minPx] 以上に上げる（フルより高くはしない）。null なら作ったときの高さに戻す。
+   * 同じ state を中身の違うシートで使い回す画面で、中身の多いシートのときだけハーフを高くするのに使う。
+   * ハーフで開いていれば、新しい高さへ動かす。
+   */
+  fun raisePeekTo(minPx: Float?) {
+    val target = minPx?.let { maxOf(basePeekPx, minOf(it, fullPx)) } ?: basePeekPx
+    if (target == peekPx) return
+    peekPx = target
+    if (detent == SheetDetent.PEEK) settleTo(SheetDetent.PEEK)
+  }
 
   /** 現在の段。地図の下パディングなど、確定値で判断したいときに読む。 */
   var detent: SheetDetent by mutableStateOf(initialDetent)
