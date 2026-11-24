@@ -53,6 +53,9 @@ interface ManualStopUi {
   /** 誤検知の訂正: この訪問だけを、選んだ候補／手入力名の場所へ付け替える。 */
   fun reassignStop(stopId: Long, chosen: PlaceSearchResult?, customName: String?)
 
+  /** 「今ここを立ち寄り」: その場で立ち寄り中にする（すでに立ち寄り中なら場所だけ選び直す → ManualStopActions.startStopHere）。 */
+  fun startStopHere(anchorLatitude: Double, anchorLongitude: Double, input: ManualStopInput)
+
   /** 何もしない（画面のテストの既定）。 */
   object None : ManualStopUi {
     override val nearbyStopPrompt: StateFlow<NearbyStopPrompt?> = MutableStateFlow(null)
@@ -73,6 +76,7 @@ interface ManualStopUi {
     override fun dismissNearbyStopPrompt() = Unit
     override fun addManualStopForPlace(placeId: Long, arrivalTime: Date, departureTime: Date) = Unit
     override fun reassignStop(stopId: Long, chosen: PlaceSearchResult?, customName: String?) = Unit
+    override fun startStopHere(anchorLatitude: Double, anchorLongitude: Double, input: ManualStopInput) = Unit
   }
 }
 
@@ -88,6 +92,7 @@ interface ManualStopUi {
  * @param points 到着・出発を選ぶ軌跡の点。
  * @param onRangeChange 選んでいる滞在区間（点のインデックス）。地図のハイライトに使う。
  * @param sheetState 地図の下パディングをシートに合わせたい画面は、自分で作った state を渡す。
+ * @param liveStop いまの立ち寄り中（あれば）。「今ここを立ち寄り」は、これの場所の選び直しになる。
  */
 @Composable
 internal fun ManualStopHost(
@@ -101,6 +106,7 @@ internal fun ManualStopHost(
   modifier: Modifier = Modifier,
   infoWindow: MapInfoWindowState? = null,
   sheetState: FloatingSheetState? = null,
+  liveStop: Stop? = null,
 ) {
   target?.let { t ->
     infoWindow?.let { CloseInfoWindowWithSheet(it) }
@@ -112,9 +118,13 @@ internal fun ManualStopHost(
       onFetchCandidates = placeEdit::nearbyPois,
       onSearchPredictions = placeEdit::predictPlaces,
       onFetchPrediction = placeEdit::fetchPlaceResult,
+      liveStopArrival = liveStop?.arrivalTime,
       onConfirm = { input ->
         val origin = t.origin
-        if (origin is ManualStopOrigin.ExistingPlace) {
+        if (origin is ManualStopOrigin.CurrentLocation) {
+          // 「今ここを立ち寄り」は、終わった立ち寄りを足すのではなく、その場で立ち寄り中にする。
+          manualStop.startStopHere(t.latitude, t.longitude, input)
+        } else if (origin is ManualStopOrigin.ExistingPlace) {
           manualStop.addManualStopForPlace(origin.placeId, input.arrivalTime, input.departureTime)
         } else {
           manualStop.addManualStopWithNearbyCheck(

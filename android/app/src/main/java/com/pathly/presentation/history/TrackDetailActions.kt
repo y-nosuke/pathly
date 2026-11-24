@@ -25,6 +25,12 @@ data class TrackStopActions(
   val onUndo: () -> Unit = {},
   /** 名前の無い立ち寄りの名前を Google から引き直す。 */
   val onResolveNames: () -> Unit = {},
+  /** 立ち寄り中（まだ保存していない）のメモ（確定した立ち寄りに入る）。 */
+  val onEditLiveNote: (note: String?) -> Unit = {},
+  /** 立ち寄り中の到着時刻を直す。 */
+  val onUpdateLiveArrival: (arrival: Date) -> Unit = {},
+  /** 立ち寄り中をやめる（誤検知の取り消し）。 */
+  val onDismissLive: () -> Unit = {},
 )
 
 /** 再解析（一覧に無い立ち寄りを探し直す）。[candidates] が null の間は再解析していない。 */

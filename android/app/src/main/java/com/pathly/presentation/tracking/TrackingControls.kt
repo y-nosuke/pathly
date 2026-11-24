@@ -28,7 +28,6 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -51,11 +50,14 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
@@ -204,32 +206,89 @@ internal fun FinalizingOverlay() {
   }
 }
 
+/**
+ * 記録のシートの開始・停止の丸（右端の同じ位置・同じ大きさ → adr/0044）。開始は青い塗りの丸 ▶「開始」で目立たせ、
+ * 停止は誤って押しにくいよう塗らずに赤い枠の丸 ■「停止」にする（色と塗りで対にする）。停止は押すと確認ダイアログ（画面側）。
+ * 読み上げは「記録開始」「記録停止」。
+ */
 @Composable
-internal fun RecordFab(
-  isTracking: Boolean,
-  onStartTracking: () -> Unit,
-  onStopTracking: () -> Unit,
+internal fun RecordStartButton(
+  onClick: () -> Unit,
   modifier: Modifier = Modifier,
 ) {
-  FloatingActionButton(
-    onClick = if (isTracking) onStopTracking else onStartTracking,
-    modifier = modifier.size(72.dp),
-    shape = CircleShape,
-    containerColor = if (isTracking) {
-      MaterialTheme.colorScheme.error
-    } else {
-      MaterialTheme.colorScheme.primary
-    },
+  val primary = MaterialTheme.colorScheme.primary
+  RecordCircleButton(
+    label = "開始",
+    description = "記録開始",
+    labelColor = primary,
+    onClick = onClick,
+    modifier = modifier,
+    circle = Modifier.background(primary, CircleShape),
   ) {
     Icon(
-      painter = painterResource(
-        if (isTracking) R.drawable.ic_stop else R.drawable.ic_play_arrow,
-      ),
-      contentDescription = if (isTracking) "記録停止" else "記録開始",
-      modifier = Modifier.size(32.dp),
+      painter = painterResource(R.drawable.ic_play_arrow),
+      contentDescription = null,
+      tint = MaterialTheme.colorScheme.onPrimary,
+      modifier = Modifier.size(28.dp),
     )
   }
 }
+
+/** 停止（[RecordStartButton] と対）。 */
+@Composable
+internal fun RecordStopButton(
+  onClick: () -> Unit,
+  modifier: Modifier = Modifier,
+) {
+  val error = MaterialTheme.colorScheme.error
+  RecordCircleButton(
+    label = "停止",
+    description = "記録停止",
+    labelColor = error,
+    onClick = onClick,
+    modifier = modifier,
+    circle = Modifier.border(2.dp, error, CircleShape),
+  ) {
+    Icon(
+      painter = painterResource(R.drawable.ic_stop),
+      contentDescription = null,
+      tint = error,
+      modifier = Modifier.size(24.dp),
+    )
+  }
+}
+
+/** 丸と、その下の短い名前（開始・停止で共通の形）。 */
+@Composable
+private fun RecordCircleButton(
+  label: String,
+  description: String,
+  labelColor: Color,
+  onClick: () -> Unit,
+  circle: Modifier,
+  modifier: Modifier = Modifier,
+  icon: @Composable () -> Unit,
+) {
+  Column(
+    modifier = modifier
+      .clip(MaterialTheme.shapes.medium)
+      .clickable(role = Role.Button, onClick = onClick)
+      .semantics(mergeDescendants = true) { contentDescription = description }
+      .padding(horizontal = PathlySpacing.xs, vertical = PathlySpacing.xxs),
+    horizontalAlignment = Alignment.CenterHorizontally,
+  ) {
+    Box(
+      modifier = Modifier
+        .size(RECORD_STOP_BUTTON_SIZE)
+        .then(circle),
+      contentAlignment = Alignment.Center,
+    ) { icon() }
+    Text(text = label, style = MaterialTheme.typography.labelMedium, color = labelColor)
+  }
+}
+
+/** 開始・停止の丸の大きさ。 */
+private val RECORD_STOP_BUTTON_SIZE = 48.dp
 
 @Composable
 internal fun LocationPermissionOverlay(

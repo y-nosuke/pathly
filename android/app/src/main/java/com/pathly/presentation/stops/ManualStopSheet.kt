@@ -40,6 +40,7 @@ import com.pathly.presentation.common.PlaceNameSearchField
 import com.pathly.presentation.common.SheetContentHorizontalPadding
 import com.pathly.presentation.common.rememberFloatingSheetState
 import com.pathly.ui.theme.PathlySpacing
+import com.pathly.util.DateFormatters
 import java.util.Date
 
 /**
@@ -92,6 +93,9 @@ data class ManualStopInput(
  *
  * 施設がまだ決まっていない起点（地図の空き地点・「今ここ」）では、**名前でも探せる**ようにする。
  * 地図に POI が出ていない施設・代表点が敷地の中心にある広い施設は、地点を指すだけでは選べないため。
+ *
+ * 「今ここ」（[ManualStopOrigin.CurrentLocation]）は、終わった立ち寄りを足すのではなく**その場で立ち寄り中にする**ので、
+ * 滞在区間は選ばせない（到着はシートを開いた時刻）。[liveStopArrival] があれば（もう立ち寄り中）、到着はそのままに場所を選び直す。
  */
 @Composable
 fun ManualStopSheet(
@@ -110,9 +114,13 @@ fun ManualStopSheet(
   onFetchPrediction: (suspend (String) -> PlaceSearchResult?)? = null,
   // 地図の下パディングを合わせたい画面は、自分で作った state を渡す。
   sheetState: FloatingSheetState = rememberFloatingSheetState(peekFraction = 0.5f),
+  liveStopArrival: Date? = null,
 ) {
+  // 「今ここ」は押した時刻を到着にして立ち寄り中を始める（区間は選ばない）。
+  val isHere = origin is ManualStopOrigin.CurrentLocation
+  val openedAt = remember(origin) { Date() }
   // 滞在区間は軌跡点のインデックスで調整する。点が2つ未満なら近傍から推定する。
-  val hasRange = points.size >= 2
+  val hasRange = points.size >= 2 && !isHere
   val lastIdx = (points.size - 1).coerceAtLeast(0)
   var arrivalIdx by remember(origin, latitude, longitude, points) {
     mutableIntStateOf(if (hasRange) nearestPointIndex(points, latitude, longitude) else 0)
@@ -121,8 +129,16 @@ fun ManualStopSheet(
     mutableIntStateOf(if (hasRange) defaultDepartureIndex(points, arrivalIdx) else 0)
   }
   val fallback = remember(latitude, longitude, points) { deriveStopWindow(points, latitude, longitude) }
-  val arrival = if (hasRange) points[arrivalIdx].timestamp else fallback.first
-  val departure = if (hasRange) points[departureIdx].timestamp else fallback.second
+  val arrival = when {
+    isHere -> openedAt
+    hasRange -> points[arrivalIdx].timestamp
+    else -> fallback.first
+  }
+  val departure = when {
+    isHere -> openedAt
+    hasRange -> points[departureIdx].timestamp
+    else -> fallback.second
+  }
 
   LaunchedEffect(arrivalIdx, departureIdx) {
     if (hasRange) onRangeChange(arrivalIdx, departureIdx)
@@ -157,6 +173,7 @@ fun ManualStopSheet(
         text = when {
           origin is ManualStopOrigin.ExistingPlace -> origin.name ?: "登録済みの場所"
           googleName != null -> googleName
+          isHere -> ADD_HERE_NAME
           else -> "立ち寄りを追加"
         },
         style = MaterialTheme.typography.titleMedium,
@@ -201,7 +218,17 @@ fun ManualStopSheet(
         )
       }
 
-      if (hasRange) {
+      if (isHere) {
+        Text(
+          text = if (liveStopArrival != null) {
+            "いまの立ち寄り中の場所を選び直します（到着 ${DateFormatters.shortTime(liveStopArrival)} のまま）。"
+          } else {
+            "今から立ち寄り中にします。離れると立ち寄りとして残ります。"
+          },
+          style = MaterialTheme.typography.bodySmall,
+          color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+      } else if (hasRange) {
         StopRangeEditor(
           arrivalTime = arrival,
           departureTime = departure,
@@ -250,6 +277,8 @@ fun ManualStopSheet(
         Text(
           when {
             origin is ManualStopOrigin.ExistingPlace -> "この場所に追加"
+
+            isHere -> if (liveStopArrival != null) "この場所にする" else "立ち寄り中にする"
 
             // 名前欄が空でも、施設の名前が使われるなら「名前なし」ではない。
             googleName == null && name.isBlank() -> "名前なしで追加"

@@ -59,3 +59,4 @@
 | [0041](0041-adopt-material3-expressive-after-stable.md)     | Material 3 Expressive を使い、Compose Material 3 の 1.5.0 安定版が来てから入れる                      | Accepted |
 | [0042](0042-primary-action-moves-with-sheet.md)             | 地図の画面の主役はシートと一緒に動き、シートを畳めば隠れる。シートはタップでも開け閉めする            | Accepted |
 | [0043](0043-multiple-region-markers-kept-in-memory.md)      | 地域の目印は数を限らず並べ、チップは左上に縦に 5 つまで出して残りは 1 つにまとめる。保存はしない      | Accepted |
+| [0044](0044-record-start-stop-inside-sheet.md)              | 記録画面の開始・停止は記録のシートの中に置き、地図の上には出さない（0042 の一部を置き換え）           | Accepted |

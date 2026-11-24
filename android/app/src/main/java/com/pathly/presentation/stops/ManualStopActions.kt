@@ -115,6 +115,31 @@ class ManualStopActions internal constructor(
     }
   }
 
+  /**
+   * 「今ここを立ち寄り」: その場で立ち寄り中にする（すでに立ち寄り中なら場所だけ選び直す）。[anchorLatitude]・[anchorLongitude] は
+   * 押したときの現在地（離れたかの判定に使う）、[input] は選んだ場所と押した時刻（到着）。
+   */
+  override fun startStopHere(anchorLatitude: Double, anchorLongitude: Double, input: ManualStopInput) {
+    val id = trackId() ?: return
+    scope.launch {
+      try {
+        placeRepository.startLiveStop(
+          trackId = id,
+          anchorLatitude = anchorLatitude,
+          anchorLongitude = anchorLongitude,
+          arrivalTime = input.arrivalTime,
+          latitude = input.latitude,
+          longitude = input.longitude,
+          name = input.name,
+          googlePlaceId = input.googlePlaceId,
+          googleName = input.googleName,
+        )
+      } catch (e: Exception) {
+        onError("立ち寄り中にできませんでした: ${e.message}")
+      }
+    }
+  }
+
   /** 誤検知の訂正: この訪問だけを、選んだ候補／手入力名の場所へ付け替える。 */
   override fun reassignStop(stopId: Long, chosen: PlaceSearchResult?, customName: String?) {
     scope.launch {

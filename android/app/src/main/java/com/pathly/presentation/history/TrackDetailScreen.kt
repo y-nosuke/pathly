@@ -34,6 +34,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.google.android.gms.maps.model.LatLng
 import com.pathly.R
+import com.pathly.domain.model.GpsPoint
 import com.pathly.domain.model.GpsTrack
 import com.pathly.domain.model.Stop
 import com.pathly.domain.model.WishlistFlag
@@ -56,12 +57,14 @@ import com.pathly.presentation.places.PLACE_SHEET_PEEK_FRACTION
 import com.pathly.presentation.places.PlaceEditHost
 import com.pathly.presentation.places.PlaceEditUi
 import com.pathly.presentation.places.PlaceSheetTarget
+import com.pathly.presentation.stops.LiveStopActions
 import com.pathly.presentation.stops.ManualStopHost
 import com.pathly.presentation.stops.ManualStopOrigin
 import com.pathly.presentation.stops.ManualStopTarget
 import com.pathly.presentation.stops.ManualStopUi
 import com.pathly.presentation.stops.StopDurationSheet
 import com.pathly.presentation.stops.StopReassignHost
+import com.pathly.presentation.stops.isLive
 import com.pathly.ui.theme.PathlyElevation
 import com.pathly.ui.theme.PathlyShapes
 import com.pathly.util.DateFormatters
@@ -125,6 +128,10 @@ fun TrackDetailScreen(
   val screenHeightDp = with(LocalDensity.current) { LocalWindowInfo.current.containerSize.height.toDp() }
   // 位置情報の許可があるときだけ、地図に現在地を出し、右下に現在地ボタンを置く（この画面からは許可を求めない）。
   val hasLocationPermission = rememberLocationPermitted()
+
+  // 手動追加・期間の編集で区間を選ぶ軌跡の点。記録中は点が増え続けるので、選び始めた時点の点で固定する
+  // （そのまま渡すと、位置の更新で経路を読み直すたびに選んでいた区間が初めの位置へ戻る）。
+  val editPoints = remember(state.manualMode, state.manualPick, state.durationEditStop) { track.smoothedPoints }
 
   // 削除などで stops が変わったら、消えた ID を選択から外す。空になったら選択モードを抜ける。
   LaunchedEffect(stops) {
@@ -196,6 +203,7 @@ fun TrackDetailScreen(
         state = state,
         infoWindow = infoWindow,
         showMyLocation = hasLocationPermission,
+        editPoints = editPoints,
         bottomPadding = mapBottomPadding(state, candidateMode, candidateOverlayHeight, sheetState, placeSheetState, durationSheetState),
         // 通常モードの立ち寄りピン: 一覧の該当行を強調＆スクロール＋「選び直し」を出す（記録画面と統一）。
         onStopSelected = { stop ->
@@ -253,6 +261,7 @@ fun TrackDetailScreen(
         addStopHereTarget = addStopHereTarget,
         onDelete = deleteWithUndo,
         onMerge = mergeWithUndo,
+        liveStop = currentStop,
       )
     }
 
@@ -283,19 +292,24 @@ fun TrackDetailScreen(
     }
 
     // 手動追加: 地点を指す前は案内、指したあとは入力＋区間調整のシートを出す。
-    ManualAddPanels(track, state, placeEdit, manualStop, infoWindow)
+    ManualAddPanels(editPoints, state, placeEdit, manualStop, infoWindow, liveStop = currentStop)
 
     // 期間の編集: 地図を見ながら滞在区間を調整する（手動追加と同じレンジUI）。
     state.durationEditStop?.let { stop ->
-      val points = track.smoothedPoints
+      val points = editPoints
       CloseInfoWindowWithSheet(infoWindow)
       StopDurationSheet(
         stop = stop,
         points = points,
         onConfirm = { arrivalIdx, departureIdx ->
-          stopActions.onUpdateDuration(stop.id, points[arrivalIdx].timestamp, points[departureIdx].timestamp)
+          if (stop.isLive) {
+            stopActions.onUpdateLiveArrival(points[arrivalIdx].timestamp)
+          } else {
+            stopActions.onUpdateDuration(stop.id, points[arrivalIdx].timestamp, points[departureIdx].timestamp)
+          }
           state.durationEditStop = null
         },
+        arrivalOnly = stop.isLive,
         onCancel = { state.durationEditStop = null },
         onRangeChange = { start, end -> state.durationRange = start to end },
         sheetState = durationSheetState,
@@ -389,6 +403,7 @@ private fun BoxScope.StopListSheet(
   addStopHereTarget: ManualStopTarget?,
   onDelete: (List<Long>) -> Unit,
   onMerge: (List<Long>) -> Unit,
+  liveStop: Stop?,
 ) {
   FloatingSheet(
     state = sheetState,
@@ -434,7 +449,22 @@ private fun BoxScope.StopListSheet(
       } else {
         null
       },
-      addStopHereEnabled = addStopHereTarget != null,
+      // 立ち寄り中は押せない（今いる立ち寄りを変えるのは、立ち寄り中の行の ⋮ から）。
+      addStopHereEnabled = addStopHereTarget != null && liveStop == null,
+      liveStop = liveStop,
+      liveActions = LiveStopActions(
+        onEditNote = { state.editingNoteStop = it },
+        onEditName = { state.editingStop = it },
+        onEditArrival = {
+          state.focusOnStop(it)
+          state.durationEditStop = it
+        },
+        // 場所の選び直しは「今ここを立ち寄り」と同じ候補のシートで（到着はそのまま、場所だけ変わる）。
+        onReassign = { stop ->
+          state.startManualAt(ManualStopTarget(stop.place.latitude, stop.place.longitude, ManualStopOrigin.CurrentLocation))
+        },
+        onDismiss = { stopActions.onDismissLive() },
+      ),
       onEnterSelection = { stop ->
         state.selectionMode = true
         if (stop.id !in state.selectedStopIds) state.selectedStopIds.add(stop.id)
@@ -493,11 +523,13 @@ private fun BoxScope.TuningPanel(track: GpsTrack, state: TrackDetailScreenState)
  */
 @Composable
 private fun BoxScope.ManualAddPanels(
-  track: GpsTrack,
+  // 到着・出発を選ぶ軌跡の点（選び始めた時点で固定したもの）。
+  points: List<GpsPoint>,
   state: TrackDetailScreenState,
   placeEdit: PlaceEditUi,
   manualStop: ManualStopUi,
   infoWindow: MapInfoWindowState,
+  liveStop: Stop?,
 ) {
   if (state.manualMode && state.manualPick == null) {
     ManualPickPrompt(
@@ -524,12 +556,13 @@ private fun BoxScope.ManualAddPanels(
     manualStop = manualStop,
     placeEdit = placeEdit,
     target = if (state.manualMode) state.manualPick else null,
-    points = track.smoothedPoints,
+    points = points,
     onAdded = state::exitManual,
     onCancel = state::cancelManualPick,
     onRangeChange = { start, end -> state.manualRange = start to end },
     modifier = Modifier.align(Alignment.BottomCenter),
     infoWindow = infoWindow,
+    liveStop = liveStop,
   )
 }
 
@@ -547,30 +580,12 @@ private fun TrackDetailDialogs(
   onRenameTrack: (String) -> Unit,
   infoWindow: MapInfoWindowState,
 ) {
-  // 同じ施設の確認待ちを 1 件ずつ聞く。答えると一覧から外れ、次の 1 件が出る。
-  // 名前は一覧の行と同じ表示名で呼ぶ（名前も施設も無い場所は座標）。
-  val firstPending = sameFacility.pending.firstOrNull()?.let { pending ->
-    pending.copy(placeName = stops.firstOrNull { it.place.id == pending.placeId }?.place?.displayName ?: pending.placeName)
-  }
-  if (sameFacility.dialogOpen && firstPending != null) {
-    SameFacilityDialog(
-      placeName = firstPending.placeName,
-      otherName = firstPending.other.name,
-      remaining = sameFacility.pending.size - 1,
-      // まとめたら閉じる。開いたままだとスナックバーの「取り消す」が押せない。残りはシートの帯から続けて聞く。
-      onMerge = {
-        sameFacility.onMerge(firstPending)
-        sameFacility.onDismiss()
-      },
-      // 選び直しは、その場所の編集部の「Google施設を選び直す」を開いて行う（場所詳細と同じ）。
-      onPickAnother = {
-        sameFacility.onDismiss()
-        state.placeSheetTarget = PlaceSheetTarget.Existing(firstPending.placeId, openLinkPicker = true)
-      },
-      onKeepSeparate = { placeEdit.keepAsSeparatePlace(firstPending.placeId) },
-      onDismiss = sameFacility.onDismiss,
-    )
-  }
+  SameFacilityReviewDialog(
+    sameFacility = sameFacility,
+    stops = stops,
+    placeEdit = placeEdit,
+    onPickAnother = { placeId -> state.placeSheetTarget = PlaceSheetTarget.Existing(placeId, openLinkPicker = true) },
+  )
 
   if (state.renamingTrack) {
     RenameTrackDialog(
@@ -600,7 +615,7 @@ private fun TrackDetailDialogs(
       stop = stop,
       onDismiss = { state.editingNoteStop = null },
       onConfirm = { note ->
-        stopActions.onEditNote(stop.id, note)
+        if (stop.isLive) stopActions.onEditLiveNote(note) else stopActions.onEditNote(stop.id, note)
         state.editingNoteStop = null
       },
     )

@@ -49,6 +49,8 @@ fun StopDurationSheet(
   onRangeChange: (start: Int, end: Int) -> Unit = { _, _ -> },
   // 地図の下パディングを合わせたい画面は、自分で作った state を渡す。
   sheetState: FloatingSheetState = rememberFloatingSheetState(peekFraction = 0.5f),
+  // 立ち寄り中（まだ保存していない）の到着だけを直す。出発は末尾（いま）に固定する。
+  arrivalOnly: Boolean = false,
 ) {
   val lastIdx = (points.size - 1).coerceAtLeast(0)
   // 保存済みの時刻を、いちばん近い軌跡点に対応づけて始める。
@@ -56,7 +58,7 @@ fun StopDurationSheet(
     mutableIntStateOf(nearestIndexByTime(points, stop.arrivalTime))
   }
   var departureIdx by remember(stop.id, points) {
-    mutableIntStateOf(nearestIndexByTime(points, stop.departureTime).coerceAtLeast(arrivalIdx))
+    mutableIntStateOf(if (arrivalOnly) lastIdx else nearestIndexByTime(points, stop.departureTime).coerceAtLeast(arrivalIdx))
   }
   val arrival = points[arrivalIdx].timestamp
   val departure = points[departureIdx].timestamp
@@ -78,7 +80,7 @@ fun StopDurationSheet(
         fontWeight = FontWeight.Bold,
       )
       Text(
-        text = "滞在期間だけを直します（GPSの記録そのものは変わりません）。",
+        text = if (arrivalOnly) "立ち寄り中の到着時刻を直します（GPSの記録そのものは変わりません）。" else "滞在期間だけを直します（GPSの記録そのものは変わりません）。",
         style = MaterialTheme.typography.bodySmall,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
       )
@@ -92,6 +94,7 @@ fun StopDurationSheet(
           arrivalIdx = s
           departureIdx = e
         },
+        arrivalOnly = arrivalOnly,
       )
     }
 

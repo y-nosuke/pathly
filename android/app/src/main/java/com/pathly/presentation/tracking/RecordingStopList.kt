@@ -21,24 +21,30 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import com.pathly.domain.model.Stop
+import com.pathly.domain.model.WishlistFlag
 import com.pathly.presentation.common.SheetContentHorizontalPadding
+import com.pathly.presentation.history.LiveStopRow
+import com.pathly.presentation.history.StopRow
 import com.pathly.presentation.stops.CurrentStopListBadge
-import com.pathly.presentation.stops.StopNumberBadge
+import com.pathly.presentation.stops.LiveStopActions
 import com.pathly.ui.theme.PathlySpacing
 import com.pathly.util.DateFormatters
 
 /**
  * 記録中のお出掛けの立ち寄りの一覧（記録のシートの下の段）。記録しながら取りこぼしに気付けるよう、新しい順に並べる
  * （ハーフで見えるのは新しい 2 件ほど）。立ち寄り中（滞在している最中で、まだ番号が無い）があれば先頭に出す。
- * 番号は訪問順で、地図の立ち寄りのピンの番号と同じ。行は見るだけで、押すと地図がその立ち寄りへ寄る
- * （名前・メモ・時刻を直すのは経路詳細）。
+ * 番号は訪問順で、地図の立ち寄りのピンの番号と同じ。確定した立ち寄りの行は経路詳細と同じ（行きたいの旗と ⋮ の操作。
+ * 押すと地図がその立ち寄りへ寄る → [rowActions]）。立ち寄り中の行にも旗と ⋮ を出す（⋮ は保存前でもできることだけ
+ * → [LiveStopRow]）。
+ * 長押しのまとめて削除は経路詳細だけ。
  */
 @Composable
 internal fun RecordingStopList(
   stops: List<Stop>,
   currentStop: Stop?,
-  onFocusStop: (Stop) -> Unit,
+  rowActions: RecordingStopRowActions,
   modifier: Modifier = Modifier,
+  wishlistFlags: Map<Long, WishlistFlag> = emptyMap(),
 ) {
   val count = stops.size + if (currentStop != null) 1 else 0
   val listState = rememberLazyListState()
@@ -68,21 +74,34 @@ internal fun RecordingStopList(
       ) {
         currentStop?.let { stop ->
           item(key = "current") {
-            RecordingStopRow(
-              badge = { CurrentStopListBadge() },
-              title = stop.place.name ?: stop.place.googleName ?: stop.place.googleAddress ?: "立ち寄り中",
-              time = "${DateFormatters.shortTime(stop.arrivalTime)} – 滞在中 ・ ${stop.durationMinutes}分",
-              onClick = { onFocusStop(stop) },
+            LiveStopRow(
+              stop = stop,
+              actions = rowActions.live,
+              onFocus = { rowActions.onFocus(stop) },
+              canEditArrival = rowActions.canEditDuration,
+              wishlistFlag = wishlistFlags[stop.place.id] ?: WishlistFlag.NONE,
+              onToggleWishlist = { rowActions.onToggleWishlist(stop) },
             )
           }
         }
         items(numbered, key = { (_, stop) -> stop.id }) { (number, stop) ->
-          RecordingStopRow(
-            badge = { StopNumberBadge(number = number) },
-            title = stop.place.displayName,
-            time = "${DateFormatters.shortTime(stop.arrivalTime)} – ${DateFormatters.shortTime(stop.departureTime)}" +
-              " ・ 滞在${stop.durationMinutes}分",
-            onClick = { onFocusStop(stop) },
+          StopRow(
+            stop = stop,
+            number = number,
+            highlighted = false,
+            selectionMode = false,
+            selected = false,
+            onFocus = { rowActions.onFocus(stop) },
+            onEdit = { rowActions.onEditName(stop) },
+            onEditNote = { rowActions.onEditNote(stop) },
+            onEditDuration = { rowActions.onEditDuration(stop) },
+            canEditDuration = rowActions.canEditDuration,
+            onReassign = { rowActions.onReassign(stop) },
+            onDelete = { rowActions.onDelete(stop) },
+            onToggleSelect = {},
+            onEnterSelection = {},
+            wishlistFlag = wishlistFlags[stop.place.id] ?: WishlistFlag.NONE,
+            onToggleWishlist = { rowActions.onToggleWishlist(stop) },
           )
         }
       }
@@ -90,39 +109,18 @@ internal fun RecordingStopList(
   }
 }
 
-/** 一覧の 1 行（頭の丸・名前・時刻）。経路詳細の行より詰め、操作は持たない。 */
-@Composable
-private fun RecordingStopRow(
-  badge: @Composable () -> Unit,
-  title: String,
-  time: String,
-  onClick: () -> Unit,
-) {
-  Row(
-    modifier = Modifier
-      .fillMaxWidth()
-      .clip(MaterialTheme.shapes.medium)
-      .clickable(onClickLabel = "地図で見る", onClick = onClick)
-      .padding(horizontal = PathlySpacing.xs, vertical = PathlySpacing.xs),
-    verticalAlignment = Alignment.CenterVertically,
-    horizontalArrangement = Arrangement.spacedBy(PathlySpacing.md),
-  ) {
-    badge()
-    Column(modifier = Modifier.weight(1f)) {
-      Text(
-        text = title,
-        style = MaterialTheme.typography.bodyMedium,
-        fontWeight = FontWeight.Medium,
-        maxLines = 1,
-        overflow = TextOverflow.Ellipsis,
-      )
-      Text(
-        text = time,
-        style = MaterialTheme.typography.bodySmall,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-        maxLines = 1,
-        overflow = TextOverflow.Ellipsis,
-      )
-    }
-  }
-}
+/**
+ * 記録のシートの立ち寄りの行の操作（経路詳細の行と同じ → [StopRow]）。[canEditDuration] は軌跡の点が 2 つ以上あるときだけ。
+ */
+internal data class RecordingStopRowActions(
+  val onFocus: (Stop) -> Unit = {},
+  val onToggleWishlist: (Stop) -> Unit = {},
+  val onEditName: (Stop) -> Unit = {},
+  val onEditNote: (Stop) -> Unit = {},
+  val onEditDuration: (Stop) -> Unit = {},
+  val canEditDuration: Boolean = false,
+  val onReassign: (Stop) -> Unit = {},
+  val onDelete: (Stop) -> Unit = {},
+  /** 立ち寄り中の行の ⋮（保存前でもできることだけ）。 */
+  val live: LiveStopActions = LiveStopActions(),
+)

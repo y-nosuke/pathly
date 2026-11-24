@@ -291,6 +291,229 @@ class PlaceRepositoryImplTest {
     assertNull(repository.currentStop.value)
   }
 
+  /** 挿入した place を覚えて返す簡易ストア（今ここを立ち寄りのテスト用）。 */
+  private fun storePlaces(): MutableList<PlaceEntity> {
+    val stored = mutableListOf<PlaceEntity>()
+    var nextId = 1L
+    coEvery { placeDao.insert(any()) } answers {
+      val id = nextId++
+      stored += firstArg<PlaceEntity>().copy(id = id)
+      id
+    }
+    coEvery { placeDao.getInBounds(any(), any(), any(), any()) } returns emptyList()
+    coEvery { placeDao.getById(any()) } answers { stored.find { place -> place.id == firstArg<Long>() } }
+    coEvery { googlePlaceDao.getWithCategoryByPlace(any()) } returns null
+    coEvery { placeDao.getUnresolvedPlacesForTrack(1L) } returns emptyList()
+    coEvery { stopDao.getByTrack(1L) } returns emptyList()
+    coEvery { resolver.resolve(any(), any()) } returns PlacesNameResolver.Outcome.NotAttempted
+    return stored
+  }
+
+  private fun gpAt(lat: Double, lon: Double, timeSec: Long) = gp(lat, lon).copy(timestamp = Date(timeSec * 1000L))
+
+  private suspend fun startHere(arrivalSec: Long, name: String? = "売店") = repository.startLiveStop(
+    trackId = 1L,
+    anchorLatitude = 35.0,
+    anchorLongitude = 139.0,
+    arrivalTime = Date(arrivalSec * 1000L),
+    latitude = 35.0,
+    longitude = 139.0,
+    name = name,
+    googlePlaceId = null,
+    googleName = null,
+  )
+
+  // 「今ここを立ち寄り」: 押したらすぐ立ち寄り中になり、3 分待たない。保存はまだしない。
+  @Test
+  fun startLiveStop_showsCurrentStopAtOnce_withoutPersisting() = runTest {
+    val stored = storePlaces()
+
+    startHere(arrivalSec = 30)
+
+    val current = repository.currentStop.value
+    assertNotNull(current)
+    assertEquals(stored.single().id, current!!.place.id)
+    assertEquals(Date(30_000L), current.arrivalTime)
+    coVerify(exactly = 0) { stopDao.insert(any()) }
+  }
+
+  // 手で始めた立ち寄り中のあいだは、検出の立ち寄り中を出さず、検出用の place も確保しない。
+  // 離れて 1 分たったら、押した時刻〜最後に半径の中にいた時刻で確定し、同じ滞在を検出した立ち寄りは保存しない。
+  @Test
+  fun startLiveStop_thenLeave_persistsOnceFromPressTime_andSkipsDetectedDuplicate() = runTest {
+    val stored = storePlaces()
+    coEvery { stopDao.insert(any()) } returns 100L
+    coEvery { smoothedPointDao.getByTrackAfter(1L, any()) } returnsMany
+      listOf(dwellingPoints(), finishedVisitPoints(), finishedVisitPoints())
+    coEvery { gpsPointDao.getLatestPoint(1L) } returnsMany
+      listOf(gpAt(35.0, 139.0, 240), gpAt(35.01, 139.01, 300), gpAt(35.01, 139.01, 360))
+
+    startHere(arrivalSec = 30)
+    repository.updateStopsForTrack(1L, isFinal = false) // まだ中にいる
+    assertEquals("検出の立ち寄り中に place を作らない", 1, stored.size)
+    assertEquals(stored.single().id, repository.currentStop.value?.place?.id)
+
+    repository.updateStopsForTrack(1L, isFinal = false) // 外に出た（まだ確定しない）
+    coVerify(exactly = 0) { stopDao.insert(any()) }
+    repository.updateStopsForTrack(1L, isFinal = false) // 外にいるのが 1 分続いた
+
+    val stopSlot = slot<StopEntity>()
+    coVerify(exactly = 1) { stopDao.insert(capture(stopSlot)) }
+    assertEquals(stored.single().id, stopSlot.captured.placeId)
+    assertEquals(Date(30_000L), stopSlot.captured.arrivalTime)
+    assertEquals(Date(240_000L), stopSlot.captured.departureTime)
+    assertNull(repository.currentStop.value)
+  }
+
+  // 押してすぐ（3 分未満）離れても、自分で押したので立ち寄りとして残す。
+  @Test
+  fun startLiveStop_leftWithinMinutes_isStillKept() = runTest {
+    storePlaces()
+    coEvery { stopDao.insert(any()) } returns 100L
+    coEvery { smoothedPointDao.getByTrackAfter(1L, any()) } returns emptyList()
+    coEvery { gpsPointDao.getLatestPoint(1L) } returnsMany listOf(gpAt(35.01, 139.01, 60), gpAt(35.01, 139.01, 120))
+
+    startHere(arrivalSec = 30)
+    repository.updateStopsForTrack(1L, isFinal = false)
+    repository.updateStopsForTrack(1L, isFinal = false)
+
+    val stopSlot = slot<StopEntity>()
+    coVerify(exactly = 1) { stopDao.insert(capture(stopSlot)) }
+    assertEquals(Date(30_000L), stopSlot.captured.departureTime)
+  }
+
+  // 屋内の GPS の飛びで 1 点だけ外に出ても、すぐ中に戻れば確定しない。
+  @Test
+  fun startLiveStop_singleJumpOutside_doesNotFinalize() = runTest {
+    storePlaces()
+    coEvery { smoothedPointDao.getByTrackAfter(1L, any()) } returns emptyList()
+    coEvery { gpsPointDao.getLatestPoint(1L) } returnsMany
+      listOf(gpAt(35.01, 139.01, 60), gpAt(35.0, 139.0, 90), gpAt(35.01, 139.01, 130))
+
+    startHere(arrivalSec = 30)
+    repeat(3) { repository.updateStopsForTrack(1L, isFinal = false) }
+
+    coVerify(exactly = 0) { stopDao.insert(any()) }
+    assertEquals(Date(90_000L), repository.currentStop.value?.departureTime)
+  }
+
+  // 選び直したら、前にこの立ち寄り中のために作った場所は（誰も使っていなければ）片付ける。
+  @Test
+  fun startLiveStop_repick_removesPlaceMadeForIt() = runTest {
+    val stored = storePlaces()
+    coEvery { stopDao.countByPlace(any()) } returns 0
+    coEvery { wishlistDao.countByPlace(any()) } returns 0
+    startHere(arrivalSec = 30, name = "売店")
+    val first = stored.single().id
+    repository.startLiveStop(1L, 35.0, 139.0, Date(200_000L), 35.001, 139.0, "カフェ", null, null)
+
+    coVerify { placeDao.deleteById(first) }
+  }
+
+  // 名前も施設も選ばなかったときは、解決ログを書かない（あとで自動で名前が付く）。
+  @Test
+  fun startLiveStop_withoutNameOrFacility_leavesPlaceForAutoNaming() = runTest {
+    storePlaces()
+    startHere(arrivalSec = 30, name = null)
+
+    coVerify(exactly = 0) { placeResolutionDao.upsert(any()) }
+  }
+
+  // 立ち寄り中に付けたメモ・直した到着は、確定した立ち寄りに入る。
+  @Test
+  fun liveStop_noteAndArrival_goIntoPersistedStop() = runTest {
+    storePlaces()
+    coEvery { stopDao.insert(any()) } returns 100L
+    coEvery { smoothedPointDao.getByTrackAfter(1L, any()) } returns emptyList()
+    coEvery { gpsPointDao.getLatestPoint(1L) } returns gpAt(35.0, 139.0, 500)
+
+    startHere(arrivalSec = 30)
+    repository.updateLiveStopNote(1L, "  ケーキがおいしい  ")
+    repository.updateLiveStopArrival(1L, Date(10_000L))
+    assertEquals("ケーキがおいしい", repository.currentStop.value?.note)
+    repository.updateStopsForTrack(1L, isFinal = true)
+
+    val stopSlot = slot<StopEntity>()
+    coVerify(exactly = 1) { stopDao.insert(capture(stopSlot)) }
+    assertEquals("ケーキがおいしい", stopSlot.captured.note)
+    assertEquals(Date(10_000L), stopSlot.captured.arrivalTime)
+  }
+
+  // 立ち寄り中の場所の名前を変えたら、次の位置の更新を待たずに表示が変わる。
+  @Test
+  fun updatePlaceName_ofLiveStopPlace_refreshesCurrentStopAtOnce() = runTest {
+    val stored = storePlaces()
+    coEvery { placeDao.updateName(any(), any(), any()) } answers {
+      val id = firstArg<Long>()
+      val index = stored.indexOfFirst { it.id == id }
+      stored[index] = stored[index].copy(name = secondArg())
+    }
+    startHere(arrivalSec = 30, name = "売店")
+
+    repository.updatePlaceName(stored.single().id, "カフェ")
+
+    assertEquals("カフェ", repository.currentStop.value?.place?.name)
+  }
+
+  // 検出の立ち寄り中をやめると、表示が消え、離れても記録を止めても保存しない。
+  @Test
+  fun dismissLiveStop_detected_hidesAndNeverPersists() = runTest {
+    storePlaces()
+    coEvery { smoothedPointDao.getByTrackAfter(1L, any()) } returns dwellingPoints()
+    coEvery { gpsPointDao.getLatestPoint(1L) } returns gpAt(35.0, 139.0, 240)
+    repository.updateStopsForTrack(1L, isFinal = false)
+    assertNotNull(repository.currentStop.value)
+
+    repository.dismissLiveStop(1L)
+    assertNull(repository.currentStop.value)
+    repository.updateStopsForTrack(1L, isFinal = false)
+    assertNull("やめたあとは出し直さない", repository.currentStop.value)
+    repository.updateStopsForTrack(1L, isFinal = true)
+
+    coVerify(exactly = 0) { stopDao.insert(any()) }
+  }
+
+  // 記録を止めたときに立ち寄り中なら、その時刻（最後の点）で確定する。
+  @Test
+  fun startLiveStop_finalizedWhenRecordingStops() = runTest {
+    storePlaces()
+    coEvery { stopDao.insert(any()) } returns 100L
+    coEvery { smoothedPointDao.getByTrackAfter(1L, any()) } returns emptyList()
+    coEvery { gpsPointDao.getLatestPoint(1L) } returns gpAt(35.0, 139.0, 500)
+
+    startHere(arrivalSec = 30)
+    repository.updateStopsForTrack(1L, isFinal = true)
+
+    val stopSlot = slot<StopEntity>()
+    coVerify(exactly = 1) { stopDao.insert(capture(stopSlot)) }
+    assertEquals(Date(500_000L), stopSlot.captured.departureTime)
+    assertNull(repository.currentStop.value)
+  }
+
+  // すでに立ち寄り中のときに押すと、到着はそのままに場所だけ選び直す。
+  @Test
+  fun startLiveStop_whileAlreadyStopping_keepsArrivalAndChangesPlace() = runTest {
+    val stored = storePlaces()
+    startHere(arrivalSec = 30, name = "売店")
+    // 2 回目は別の座標の施設を選んだ（30m より離れているので別の場所になる）。
+    repository.startLiveStop(
+      trackId = 1L,
+      anchorLatitude = 35.0,
+      anchorLongitude = 139.0,
+      arrivalTime = Date(200_000L),
+      latitude = 35.001,
+      longitude = 139.0,
+      name = "カフェ",
+      googlePlaceId = null,
+      googleName = null,
+    )
+
+    val current = repository.currentStop.value
+    assertEquals(2, stored.size)
+    assertEquals(stored.last().id, current?.place?.id)
+    assertEquals(Date(30_000L), current?.arrivalTime)
+  }
+
   @Test
   fun updateStops_finalizesDwellingWhenIsFinal() = runTest {
     coEvery { smoothedPointDao.getByTrackAfter(1L, any()) } returns dwellingPoints()

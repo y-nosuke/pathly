@@ -27,6 +27,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.Role
@@ -38,7 +39,7 @@ import androidx.compose.ui.unit.dp
 import com.pathly.R
 import com.pathly.domain.model.MapPlaceFilter
 import com.pathly.domain.model.RegisteredPlace
-import com.pathly.domain.model.Stop
+import com.pathly.domain.model.WishlistFlag
 import com.pathly.presentation.common.FloatingSheet
 import com.pathly.presentation.common.FloatingSheetState
 import com.pathly.presentation.common.MapLayerActionItem
@@ -48,6 +49,8 @@ import com.pathly.presentation.common.MapNoticeBanner
 import com.pathly.presentation.common.MapSideActions
 import com.pathly.presentation.common.MapTopBar
 import com.pathly.presentation.common.RegisteredPlacesLayerItems
+import com.pathly.presentation.common.SheetContentHorizontalPadding
+import com.pathly.presentation.history.SheetTodoBanner
 import com.pathly.presentation.stops.AddStopActions
 import com.pathly.ui.theme.PathlyElevation
 import com.pathly.ui.theme.PathlyShapes
@@ -312,10 +315,11 @@ internal fun TrackingNotices(
 }
 
 /**
- * 下の記録のシート。記録中は距離・地点数・立ち寄り中と、脇役の操作（今ここを立ち寄り・地図で指して追加）と、
- * このお出掛けの立ち寄りの一覧（新しい順。押すと地図がその立ち寄りへ寄る）。ハーフでは新しい立ち寄りが 2 件ほど見え、
- * 上へ引くと広がって全部見える。停止中は「記録していません」だけの小さなシート。主役の開始・停止の丸はシートの上に置き、
- * シートと一緒に動く・畳むと一緒に隠れる（戻すボタンは [restoreLabel]）。
+ * 下の記録のシート。記録中は、経路の名前（押すと名前の編集）・距離・地点数・立ち寄り中と停止、出ているときだけの「やること」の帯
+ * （場所を取得・同じ施設の確認待ち）、脇役の操作（今ここを立ち寄り・地図で指して追加）、このお出掛けの立ち寄りの一覧
+ * （新しい順。行は経路詳細と同じ操作 → [RecordingStopList]）。ハーフでは新しい立ち寄りが 2 件ほど見え、上へ引くと広がって
+ * 全部見える。停止中は「記録していません」と右端の開始の丸だけの小さなシート。主役の開始・停止はシートの中に置き、畳むと戻すボタン
+ * （[restoreLabel]）だけが残る（→ adr/0044）。
  */
 @Composable
 internal fun TrackingRecordSheet(
@@ -324,8 +328,13 @@ internal fun TrackingRecordSheet(
   manualMode: Boolean,
   onToggleManualMode: () -> Unit,
   onAddStopHere: (LocationInfo) -> Unit,
-  onFocusStop: (Stop) -> Unit,
+  onStartTracking: () -> Unit,
+  onStopTracking: () -> Unit,
   modifier: Modifier = Modifier,
+  todos: RecordSheetTodos = RecordSheetTodos(),
+  onRenameTrack: () -> Unit = {},
+  rowActions: RecordingStopRowActions = RecordingStopRowActions(),
+  wishlistFlags: Map<Long, WishlistFlag> = emptyMap(),
 ) {
   FloatingSheet(
     state = sheetState,
@@ -333,17 +342,33 @@ internal fun TrackingRecordSheet(
     restoreLabel = if (uiState.isTracking) "▲ 記録中・${formatDistanceKm(uiState.currentTrack?.totalDistanceMeters)}" else "▲ 記録していません",
   ) {
     if (uiState.isTracking) {
+      RecordTrackName(
+        name = uiState.currentTrack?.name,
+        onClick = onRenameTrack,
+        modifier = Modifier.padding(horizontal = SheetContentHorizontalPadding),
+      )
       TrackingRecordInfo(
         distanceMeters = uiState.currentTrack?.totalDistanceMeters,
         pointCount = uiState.currentTrack?.points?.size ?: uiState.locationCount,
         currentStopName = uiState.currentStop?.place?.displayName,
+        onStopTracking = onStopTracking,
         modifier = Modifier.padding(horizontal = PathlySpacing.screenEdge),
       )
+      // 出ているときだけの「やること」（経路詳細のシートと同じ帯）。
+      if (todos.unresolvedCount > 0) {
+        Spacer(modifier = Modifier.height(PathlySpacing.sm))
+        SheetTodoBanner(text = "場所を取得（未取得 ${todos.unresolvedCount}件）", onClick = todos.onResolveNames)
+      }
+      if (todos.sameFacilityPendingCount > 0) {
+        Spacer(modifier = Modifier.height(PathlySpacing.sm))
+        SheetTodoBanner(text = "同じ施設の確認待ち ${todos.sameFacilityPendingCount}件", onClick = todos.onOpenSameFacility)
+      }
       Spacer(modifier = Modifier.height(PathlySpacing.md))
       // 「今ここ」は近くの施設候補から選ばせる。「地図で指して追加」はモード（ON=地図タップが立ち寄り追加／OFF=場所登録）。
       AddStopActions(
         onAddHere = { uiState.currentLocation?.let(onAddStopHere) },
-        addHereEnabled = uiState.hasLocationPermission && uiState.currentLocation != null,
+        // 立ち寄り中は押せない（今いる立ち寄りを変えるのは、立ち寄り中の行の ⋮ から）。
+        addHereEnabled = uiState.hasLocationPermission && uiState.currentLocation != null && uiState.currentStop == null,
         onMapPick = onToggleManualMode,
         mapPickActive = manualMode,
       )
@@ -351,32 +376,89 @@ internal fun TrackingRecordSheet(
       RecordingStopList(
         stops = uiState.stops,
         currentStop = uiState.currentStop,
-        onFocusStop = onFocusStop,
+        rowActions = rowActions,
+        wishlistFlags = wishlistFlags,
         modifier = Modifier.weight(1f),
       )
     } else {
-      Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+      // 記録中の停止と同じ位置（右端）に開始の丸を置く。
+      Row(
+        modifier = Modifier
+          .fillMaxWidth()
+          .padding(horizontal = PathlySpacing.screenEdge),
+        verticalAlignment = Alignment.CenterVertically,
+      ) {
         Text(
           text = "記録していません",
           style = MaterialTheme.typography.bodyMedium,
           color = MaterialTheme.colorScheme.onSurfaceVariant,
+          modifier = Modifier.weight(1f),
         )
+        RecordStartButton(onClick = onStartTracking)
       }
     }
   }
 }
 
-/** 記録中のシートの情報の段: 移動距離・地点数・立ち寄り中（いるときだけ）。数字は太さで目立たせる。 */
+/** 記録のシートの「やること」の帯（出ているときだけ。経路詳細のシートと同じ）。 */
+internal data class RecordSheetTodos(
+  /** 未取得（Google の施設が付いていない）場所の数。0 なら帯を出さない。 */
+  val unresolvedCount: Int = 0,
+  val onResolveNames: () -> Unit = {},
+  /** 同じ施設の確認待ちの数（→ adr/0037）。0 なら帯を出さない。 */
+  val sameFacilityPendingCount: Int = 0,
+  val onOpenSameFacility: () -> Unit = {},
+)
+
+/** 記録中の経路の名前（未命名なら「名前を付ける」）。押すと経路詳細と同じ名前のダイアログ。 */
+@Composable
+private fun RecordTrackName(
+  name: String?,
+  onClick: () -> Unit,
+  modifier: Modifier = Modifier,
+) {
+  Row(
+    modifier = modifier
+      .clip(MaterialTheme.shapes.small)
+      .clickable(onClickLabel = "経路の名前を編集", onClick = onClick)
+      .padding(horizontal = PathlySpacing.xs, vertical = PathlySpacing.xxs),
+    verticalAlignment = Alignment.CenterVertically,
+    horizontalArrangement = Arrangement.spacedBy(PathlySpacing.xs),
+  ) {
+    Text(
+      text = name ?: "名前を付ける",
+      style = MaterialTheme.typography.titleSmall,
+      fontWeight = if (name != null) FontWeight.Bold else null,
+      color = if (name != null) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.primary,
+      maxLines = 1,
+      overflow = TextOverflow.Ellipsis,
+      modifier = Modifier.weight(1f, fill = false),
+    )
+    Icon(
+      painter = painterResource(R.drawable.ic_edit),
+      contentDescription = null,
+      tint = MaterialTheme.colorScheme.onSurfaceVariant,
+      modifier = Modifier.size(16.dp),
+    )
+  }
+}
+
+/**
+ * 記録中のシートの情報の段: 移動距離・地点数・立ち寄り中（いるときだけ）と、右端の停止。数字は太さで目立たせる。
+ * 立ち寄り中の名前が長くても省いて縮め、停止を押し出さない。
+ */
 @Composable
 private fun TrackingRecordInfo(
   distanceMeters: Double?,
   pointCount: Int,
   currentStopName: String?,
+  onStopTracking: () -> Unit,
   modifier: Modifier = Modifier,
 ) {
   Row(
     modifier = modifier.fillMaxWidth(),
     horizontalArrangement = Arrangement.spacedBy(PathlySpacing.lg),
+    verticalAlignment = Alignment.CenterVertically,
   ) {
     RecordInfoColumn(value = formatDistanceKm(distanceMeters), label = "移動距離")
     RecordInfoColumn(value = "$pointCount", label = "地点数")
@@ -396,7 +478,10 @@ private fun TrackingRecordInfo(
           overflow = TextOverflow.Ellipsis,
         )
       }
+    } else {
+      Spacer(modifier = Modifier.weight(1f))
     }
+    RecordStopButton(onClick = onStopTracking)
   }
 }
 

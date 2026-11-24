@@ -28,6 +28,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.pathly.domain.model.GpsPoint
 import com.pathly.domain.model.Stop
+import com.pathly.presentation.common.SameFacilityDialog
+import com.pathly.presentation.places.PlaceEditUi
 import com.pathly.ui.theme.PathlySpacing
 import com.pathly.util.DateFormatters
 import java.util.Locale
@@ -183,5 +185,40 @@ internal fun StopNoteDialog(
     dismissButton = {
       TextButton(onClick = onDismiss) { Text("キャンセル") }
     },
+  )
+}
+
+/**
+ * 同じ施設の確認待ちを 1 件ずつ聞く（経路詳細と記録画面のシートで共有 → adr/0037）。答えると一覧から外れ、次の 1 件が出る。
+ * 名前は一覧の行と同じ表示名で呼ぶ（名前も施設も無い場所は座標）。
+ *
+ * @param onPickAnother 選び直す: その場所の編集の「Google施設を選び直す」を開く（場所詳細と同じ）。
+ */
+@Composable
+internal fun SameFacilityReviewDialog(
+  sameFacility: SameFacilityReview,
+  stops: List<Stop>,
+  placeEdit: PlaceEditUi,
+  onPickAnother: (placeId: Long) -> Unit,
+) {
+  val firstPending = sameFacility.pending.firstOrNull()?.let { pending ->
+    pending.copy(placeName = stops.firstOrNull { it.place.id == pending.placeId }?.place?.displayName ?: pending.placeName)
+  }
+  if (!sameFacility.dialogOpen || firstPending == null) return
+  SameFacilityDialog(
+    placeName = firstPending.placeName,
+    otherName = firstPending.other.name,
+    remaining = sameFacility.pending.size - 1,
+    // まとめたら閉じる。開いたままだとスナックバーの「取り消す」が押せない。残りはシートの帯から続けて聞く。
+    onMerge = {
+      sameFacility.onMerge(firstPending)
+      sameFacility.onDismiss()
+    },
+    onPickAnother = {
+      sameFacility.onDismiss()
+      onPickAnother(firstPending.placeId)
+    },
+    onKeepSeparate = { placeEdit.keepAsSeparatePlace(firstPending.placeId) },
+    onDismiss = sameFacility.onDismiss,
   )
 }

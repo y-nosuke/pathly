@@ -39,7 +39,6 @@ internal fun RenameTrackDialog(
         label = { Text(defaultName) },
         // 欄の中の名札（日付）は、打った字（自分の名前）と見分けられるよう薄くする。
         colors = OutlinedTextFieldDefaults.colors(unfocusedLabelColor = MaterialTheme.colorScheme.outline),
-        placeholder = { Text("例: 鎌倉さんぽ") },
         supportingText = { Text("空のときは日付で表示します") },
       )
     },

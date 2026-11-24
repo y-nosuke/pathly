@@ -98,6 +98,10 @@ class PlaceRepositoryImpl @Inject constructor(
   // アクセスは常に [mutex] 下。プロセス終了で自然にクリアされる。
   private val liveStopPlaces = mutableMapOf<Long, LiveStopPlace>()
 
+  // 「今ここを立ち寄り」で手で始めた立ち寄り中（トラック単位・メモリだけ）。あるあいだは検出の立ち寄り中より優先し、
+  // 同じ時間帯に検出した立ち寄りは保存しない（二重にしない）。アクセスは常に [mutex] 下。
+  private val manualLiveStops = mutableMapOf<Long, ManualLiveStop>()
+
   override fun getStopsForTrack(trackId: Long): Flow<List<Stop>> = stopDao.getStopsWithPlaceByTrack(trackId).map { list -> list.map { it.toStop() } }
 
   override fun observeRegisteredPlaces(): Flow<List<RegisteredPlace>> = placeDao.observeRegisteredPlaces().map { rows ->
@@ -265,14 +269,7 @@ class PlaceRepositoryImpl @Inject constructor(
     forceNewPlace: Boolean,
     googleName: String?,
   ): Long = mutex.withLock {
-    // 手動追加はユーザーの明示操作なので USER 由来（自動回収から守る）。
-    // POI 候補を選んだ（googlePlaceId あり）ときは施設の同一性で同定（隣接店を分離）。座標は Google 座標。
-    // forceNewPlace（近接確認で「新規」を選択）なら座標同定せず必ず新規。無いときは座標同定にフォールバック。
-    val placeId = when {
-      googlePlaceId != null -> findOrCreateByGooglePlaceId(googlePlaceId, latitude, longitude, PlaceSource.USER).first
-      forceNewPlace -> placeDao.insert(PlaceEntity(latitude = latitude, longitude = longitude, source = PlaceSource.USER.name))
-      else -> findOrCreatePlace(latitude, longitude, PlaceSource.USER)
-    }
+    val placeId = prepareManualPlace(latitude, longitude, name, googlePlaceId, googleName, forceNewPlace)
     val stopId = stopDao.insert(
       StopEntity(
         placeId = placeId,
@@ -281,6 +278,32 @@ class PlaceRepositoryImpl @Inject constructor(
         departureTime = departureTime,
       ),
     )
+    fulfillReachedWishes()
+    logger.i("Added manual stop $stopId (place $placeId) for track $trackId")
+    stopId
+  }
+
+  /**
+   * 手動で足す立ち寄り（手動追加・今ここを立ち寄り）の place を決めて、名前・施設・解決ログを付ける。呼び出しは [mutex] の下。
+   */
+  private suspend fun prepareManualPlace(
+    latitude: Double,
+    longitude: Double,
+    name: String?,
+    googlePlaceId: String?,
+    googleName: String?,
+    forceNewPlace: Boolean,
+    // 解決ログを書いて、以後の自動命名から外すか（今ここを立ち寄りで名前も施設も選ばなかったときは外さない）。
+    markResolved: Boolean = true,
+  ): Long {
+    // 手動追加はユーザーの明示操作なので USER 由来（自動回収から守る）。
+    // POI 候補を選んだ（googlePlaceId あり）ときは施設の同一性で同定（隣接店を分離）。座標は Google 座標。
+    // forceNewPlace（近接確認で「新規」を選択）なら座標同定せず必ず新規。無いときは座標同定にフォールバック。
+    val placeId = when {
+      googlePlaceId != null -> findOrCreateByGooglePlaceId(googlePlaceId, latitude, longitude, PlaceSource.USER).first
+      forceNewPlace -> placeDao.insert(PlaceEntity(latitude = latitude, longitude = longitude, source = PlaceSource.USER.name))
+      else -> findOrCreatePlace(latitude, longitude, PlaceSource.USER)
+    }
     // 手入力の名前はユーザー名（places.name）として、未命名の place にだけ焼き込む
     // （他の履歴で既に命名済みの共有 place を上書きしない）。
     val trimmedName = name?.trim()?.ifBlank { null }
@@ -294,13 +317,143 @@ class PlaceRepositoryImpl @Inject constructor(
     }
     // 手動追加は「ユーザーが名前を決めた」印として解決ログを残し、以後の自動命名（記録中のライブ検出）で
     // 勝手に近くの別施設名に上書きされないようにする。名前なしで追加した場合も未命名のまま保つ。
-    if (placeResolutionDao.getByPlace(placeId) == null) {
+    if (markResolved && placeResolutionDao.getByPlace(placeId) == null) {
       placeResolutionDao.upsert(PlaceResolutionEntity(placeId, Date()))
     }
-    fulfillReachedWishes()
-    logger.i("Added manual stop $stopId (place $placeId) for track $trackId")
-    stopId
+    return placeId
   }
+
+  override suspend fun startLiveStop(
+    trackId: Long,
+    anchorLatitude: Double,
+    anchorLongitude: Double,
+    arrivalTime: Date,
+    latitude: Double,
+    longitude: Double,
+    name: String?,
+    googlePlaceId: String?,
+    googleName: String?,
+  ) = mutex.withLock {
+    // GPS の誤差があるので、名前だけのときは 30m 以内の既存の場所に寄せる（自動検出・今までの「今ここ」と同じ）。
+    // 名前も施設も選ばなかったときは、検出の立ち寄りと同じく、あとで自動で名前を引けるようにしておく。
+    val startedAt = System.currentTimeMillis()
+    val placeId = prepareManualPlace(
+      latitude,
+      longitude,
+      name,
+      googlePlaceId,
+      googleName,
+      forceNewPlace = false,
+      markResolved = googlePlaceId != null || !name.isNullOrBlank(),
+    )
+    val createdPlace = (placeDao.getById(placeId)?.createdAt?.time ?: 0L) >= startedAt
+    // すでに立ち寄り中なら、到着はそのままに場所だけ選び直す（手で始めたもの・検出したもののどちらでも）。
+    // やめた立ち寄り中は引き継がない（今から始め直す）。
+    val manual = manualLiveStops[trackId]?.takeUnless { it.dismissed }
+    val detected = _currentStop.value?.takeIf { it.trackId == trackId && manual == null }
+    val arrival = manual?.arrivalTime ?: detected?.arrivalTime ?: arrivalTime
+    // 検出の立ち寄り中に先行確保していた place は使わなくなる。誰も参照していなければ回収する。
+    if (detected != null) {
+      liveStopPlaces.remove(trackId)
+      if (detected.place.id != placeId) recycleIfOrphanedDetected(detected.place.id)
+    }
+    // 手で始めた立ち寄り中の場所を選び直したら、前にこのために作った場所は、誰も使っていなければ片付ける。
+    if (manual != null && manual.createdPlace && manual.placeId != placeId) removeIfUnused(manual.placeId)
+    val lastInside = maxOf(manual?.lastInsideTime ?: arrival, arrivalTime)
+    manualLiveStops[trackId] = ManualLiveStop(
+      placeId = placeId,
+      arrivalTime = arrival,
+      anchorLatitude = manual?.anchorLatitude ?: anchorLatitude,
+      anchorLongitude = manual?.anchorLongitude ?: anchorLongitude,
+      lastInsideTime = lastInside,
+      createdPlace = createdPlace,
+      note = manual?.note,
+    )
+    _currentStop.value = manualLiveStopOf(trackId, manualLiveStops.getValue(trackId))
+    logger.i("Started live stop (place $placeId) for track $trackId")
+  }
+
+  /** 立ち寄り・行きたいのどれからも使われていない場所を消す（子は CASCADE で消える）。 */
+  private suspend fun removeIfUnused(placeId: Long) {
+    if (stopDao.countByPlace(placeId) == 0 && !hasWishes(placeId)) placeDao.deleteById(placeId)
+  }
+
+  /** 手で始めた立ち寄り中の表示用の [Stop]（id は 0。出発は最後に半径の中にいた時刻）。 */
+  private suspend fun manualLiveStopOf(trackId: Long, live: ManualLiveStop): Stop? {
+    if (live.dismissed) return null
+    val place = placeDao.getById(live.placeId)?.toPlace(googlePlaceDao.getWithCategoryByPlace(live.placeId)) ?: return null
+    return Stop(
+      id = 0,
+      place = place,
+      trackId = trackId,
+      arrivalTime = live.arrivalTime,
+      departureTime = live.lastInsideTime,
+      note = live.note,
+    )
+  }
+
+  /**
+   * 手で始めた立ち寄り中を、最新の生点で進める。押した地点から検出の半径の外に出た（または [isFinal]）なら確定して保存し、
+   * 保存した区間（到着〜出発）を返す。まだ滞在中なら出発（最後に半径の中にいた時刻）を進めて null。呼び出しは [mutex] の下。
+   */
+  private suspend fun advanceManualLiveStop(trackId: Long, isFinal: Boolean): ManualLiveStop? {
+    val live = manualLiveStops[trackId] ?: return null
+    val latest = gpsPointDao.getLatestPoint(trackId)
+    val inside = latest != null &&
+      distanceMeters(live.anchorLatitude, live.anchorLongitude, latest.latitude, latest.longitude) <= StopDetector.RADIUS_METERS
+    // 外に出たら、出た時刻を覚える。中に戻れば忘れる（屋内の GPS の飛びで 1 点だけ外れても確定しない）。
+    val updated = when {
+      latest == null -> live
+
+      inside -> live.copy(
+        lastInsideTime = if (latest.timestamp.after(live.lastInsideTime)) latest.timestamp else live.lastInsideTime,
+        outsideSince = null,
+      )
+
+      else -> live.copy(outsideSince = live.outsideSince ?: latest.timestamp)
+    }
+    val left = updated.outsideSince?.let { since ->
+      latest != null && latest.timestamp.time - since.time >= LIVE_STOP_LEAVE_CONFIRM_MILLIS
+    } ?: false
+    if (!isFinal && !left) {
+      manualLiveStops[trackId] = updated
+      return null
+    }
+    manualLiveStops.remove(trackId)
+    // やめた立ち寄り中は保存しない（同じ滞在を検出が保存しないよう、区間は返す）。
+    if (updated.dismissed) return updated
+    // 場所が消えていたら（まとめ・削除）確定しない。
+    if (placeDao.getById(updated.placeId) == null) return null
+    stopDao.insert(
+      StopEntity(
+        placeId = updated.placeId,
+        trackId = trackId,
+        arrivalTime = updated.arrivalTime,
+        departureTime = updated.lastInsideTime,
+        note = updated.note,
+      ),
+    )
+    logger.i("Persisted live stop (place ${updated.placeId}) for track $trackId")
+    return updated
+  }
+
+  /** 「今ここを立ち寄り」で手で始めた立ち寄り中（→ [startLiveStop]）。離れるか記録を止めると確定する。 */
+  private data class ManualLiveStop(
+    val placeId: Long,
+    val arrivalTime: Date,
+    val anchorLatitude: Double,
+    val anchorLongitude: Double,
+    /** 最後に押した地点の半径の中にいた時刻（確定したときの出発）。 */
+    val lastInsideTime: Date,
+    /** この立ち寄り中のために場所を新しく作ったか（選び直したときに片付ける）。 */
+    val createdPlace: Boolean = false,
+    /** 半径の外に出た時刻（中に戻ると null）。外にいるのが [LIVE_STOP_LEAVE_CONFIRM_MILLIS] 続いたら確定する。 */
+    val outsideSince: Date? = null,
+    /** 立ち寄り中に付けたメモ（確定した立ち寄りに入る）。 */
+    val note: String? = null,
+    /** やめた（誤検知の取り消し）。表示も保存もしないが、離れるまで同じ滞在を検出に立ち寄りにさせない。 */
+    val dismissed: Boolean = false,
+  )
 
   override suspend fun addManualStopForPlace(
     trackId: Long,
@@ -425,7 +578,8 @@ class PlaceRepositoryImpl @Inject constructor(
     val snapshot = placeMergeDao.merge(fromPlaceId, intoPlaceId, Date()) ?: return@withLock false
     // 滞在中に覚えていたのがまとめられた側なら、残る方に差し替える（消えた id で立ち寄りを作らない）。
     // 取り消したときに戻せるよう、差し替えた経路を覚えておく。
-    lastMergeLiveTracks = liveStopPlaces.filterValues { it.placeId == fromPlaceId }.keys.toSet()
+    lastMergeLiveTracks = liveStopPlaces.filterValues { it.placeId == fromPlaceId }.keys +
+      manualLiveStops.filterValues { it.placeId == fromPlaceId }.keys
     repointLiveStopPlace(fromPlaceId, intoPlaceId)
     // 付け替えた立ち寄りが、残る方の行きたいを「行った」にすることがある（→ adr/0036）。
     fulfillReachedWishes()
@@ -441,9 +595,11 @@ class PlaceRepositoryImpl @Inject constructor(
     placeMergeDao.restore(snapshot)
     // まとめたときに差し替えた滞在中の place を、元の場所へ戻す。
     for (trackId in lastMergeLiveTracks) {
-      val live = liveStopPlaces[trackId] ?: continue
-      if (live.placeId == snapshot.into.place.id) {
+      liveStopPlaces[trackId]?.takeIf { it.placeId == snapshot.into.place.id }?.let { live ->
         liveStopPlaces[trackId] = LiveStopPlace(live.arrivalMillis, snapshot.from.place.id)
+      }
+      manualLiveStops[trackId]?.takeIf { it.placeId == snapshot.into.place.id }?.let { live ->
+        manualLiveStops[trackId] = live.copy(placeId = snapshot.from.place.id)
       }
     }
     lastMergeLiveTracks = emptySet()
@@ -459,6 +615,53 @@ class PlaceRepositoryImpl @Inject constructor(
 
   override suspend fun updatePlaceName(placeId: Long, name: String) {
     placeDao.updateName(placeId, name.trim().ifBlank { null }, Date())
+    // 立ち寄り中の場所なら、次の位置の更新を待たずに表示を変える。
+    mutex.withLock {
+      val current = _currentStop.value ?: return@withLock
+      if (current.place.id != placeId) return@withLock
+      placeDao.getById(placeId)?.let { _currentStop.value = current.copy(place = it.toPlace(googlePlaceDao.getWithCategoryByPlace(placeId))) }
+    }
+  }
+
+  override suspend fun updateLiveStopNote(trackId: Long, note: String?) = mutex.withLock {
+    val live = takeOverLiveStop(trackId) ?: return@withLock
+    manualLiveStops[trackId] = live.copy(note = note?.trim()?.ifBlank { null })
+    _currentStop.value = manualLiveStopOf(trackId, manualLiveStops.getValue(trackId))
+  }
+
+  override suspend fun updateLiveStopArrival(trackId: Long, arrivalTime: Date) = mutex.withLock {
+    val live = takeOverLiveStop(trackId) ?: return@withLock
+    manualLiveStops[trackId] = live.copy(
+      arrivalTime = arrivalTime,
+      lastInsideTime = if (arrivalTime.after(live.lastInsideTime)) arrivalTime else live.lastInsideTime,
+    )
+    _currentStop.value = manualLiveStopOf(trackId, manualLiveStops.getValue(trackId))
+  }
+
+  override suspend fun dismissLiveStop(trackId: Long) = mutex.withLock {
+    val live = takeOverLiveStop(trackId) ?: return@withLock
+    manualLiveStops[trackId] = live.copy(dismissed = true)
+    // この立ち寄り中のために作った場所は、誰も使っていなければ片付ける。
+    if (live.createdPlace) removeIfUnused(live.placeId) else recycleIfOrphanedDetected(live.placeId)
+    _currentStop.value = null
+    logger.i("Dismissed live stop for track $trackId")
+  }
+
+  /**
+   * いまの立ち寄り中を、手で始めたもの（[manualLiveStops]）として受け取る。検出の立ち寄り中なら、その到着・場所のまま
+   * 手で始めたものに切り替える（直した内容を、確定まで持っておくため）。立ち寄り中でなければ null。呼び出しは [mutex] の下。
+   */
+  private fun takeOverLiveStop(trackId: Long): ManualLiveStop? {
+    manualLiveStops[trackId]?.let { return it.takeUnless { live -> live.dismissed } }
+    val detected = _currentStop.value?.takeIf { it.trackId == trackId } ?: return null
+    liveStopPlaces.remove(trackId)
+    return ManualLiveStop(
+      placeId = detected.place.id,
+      arrivalTime = detected.arrivalTime,
+      anchorLatitude = detected.place.latitude,
+      anchorLongitude = detected.place.longitude,
+      lastInsideTime = detected.departureTime,
+    ).also { manualLiveStops[trackId] = it }
   }
 
   override suspend fun updateStopNote(stopId: Long, note: String?) {
@@ -572,6 +775,15 @@ class PlaceRepositoryImpl @Inject constructor(
    * ユーザーが記録中に削除した立ち寄りを検出が再挿入して復活させない。
    */
   private suspend fun detectAndPersist(trackId: Long, isFinal: Boolean) {
+    // 「今ここを立ち寄り」で手で始めた立ち寄り中を先に進める（離れた・記録を止めたなら確定して保存する）。
+    // 手で始めたものがある（またはこのティックで確定した）時間帯は、検出した立ち寄りより手の方を採る。
+    val manualFinished = advanceManualLiveStop(trackId, isFinal)
+    val manualActive = manualLiveStops[trackId]
+    val manualStart = (manualActive ?: manualFinished)?.arrivalTime?.time
+    val manualEnd = if (manualActive != null) Long.MAX_VALUE else manualFinished?.lastInsideTime?.time
+    fun overlapsManual(d: DetectedStop): Boolean = manualStart != null && manualEnd != null &&
+      d.arrivalTime.time <= manualEnd && d.departureTime.time >= manualStart
+
     // 境界（ミリ秒）。セッション中はメモリで単調増加させ、削除では下げない。未設定なら
     // 保存済み立ち寄りの最終 departure で種をまく（プロセス再起動後の再開に対応）。
     val boundaryMillis = detectionHighWaterMillis[trackId]
@@ -592,8 +804,18 @@ class PlaceRepositoryImpl @Inject constructor(
     val finalized = if (provisional != null) detected.dropLast(1) else detected
 
     // スライスは境界より後なので、確定クラスタはすべて未保存＝新規。順に追記して境界を進める。
-    var highWaterMillis = boundaryMillis
+    var highWaterMillis = maxOf(boundaryMillis, manualFinished?.lastInsideTime?.time ?: Long.MIN_VALUE)
+    var persistedCount = 0
     for (d in finalized) {
+      if (overlapsManual(d)) {
+        // 手で始めた立ち寄りと同じ滞在。保存せず、先行確保した place が置き去りなら回収する。
+        liveStopPlaceId(trackId, d)?.let { pid ->
+          liveStopPlaces.remove(trackId)
+          recycleIfOrphanedDetected(pid)
+        }
+        if (d.departureTime.time > highWaterMillis) highWaterMillis = d.departureTime.time
+        continue
+      }
       // 滞在中に先行確定した place があればそれを使う（ひとつの滞在につき確保は1回）。
       // ここで確保し直すと、クラスタが伸びて重心が動いた分だけ別の place ができ、
       // 先行確定した方は誰からも参照されない置き去りになる（→ adr/0023）。
@@ -607,10 +829,11 @@ class PlaceRepositoryImpl @Inject constructor(
         ),
       )
       if (d.departureTime.time > highWaterMillis) highWaterMillis = d.departureTime.time
+      persistedCount++
     }
     detectionHighWaterMillis[trackId] = highWaterMillis
-    if (finalized.isNotEmpty()) {
-      logger.i("Persisted ${finalized.size} stops for track $trackId (incremental)")
+    if (persistedCount > 0) {
+      logger.i("Persisted $persistedCount stops for track $trackId (incremental)")
     }
     // 滞在が終わった（暫定クラスタが無い）なら、覚えていた place を捨てる。
     if (provisional == null) liveStopPlaces.remove(trackId)
@@ -627,13 +850,21 @@ class PlaceRepositoryImpl @Inject constructor(
     }
     // 立ち寄りを確定したか、解決で同じ施設の場所へ寄せた（立ち寄りが付け替わった）ときだけ見る。
     // このメソッドは位置のバッチごとに呼ばれるので、何も変わらないティックでは問い合わせない。
-    if (finalized.isNotEmpty() || unresolved.isNotEmpty()) fulfillReachedWishes()
+    if (persistedCount > 0 || manualFinished != null || unresolved.isNotEmpty()) fulfillReachedWishes()
+
+    // 手で始めた立ち寄り中があれば、そちらを出す（検出の立ち寄り中は出さず、place も確保しない）。
+    if (manualActive != null) {
+      _currentStop.value = manualLiveStopOf(trackId, manualActive) // やめたものなら null
+      return
+    }
 
     // 「立ち寄り中」: place を先行確定＋命名し、メモリで公開する。ただし表示は、生の現在地が
     // その立ち寄りの中心の半径内にある間だけ出す。補正の確定ラグ（末尾の未確定分）や、50m を
     // 抜けきるまでクラスタが末尾を吸収し続ける分を待たず、離脱したら即座に消すため。
     // これは表示（currentStop）だけの判定で、実際に保存する立ち寄りには影響しない。
     val liveProvisional = provisional?.takeIf { d ->
+      // 手で始めた立ち寄りがこのティックで確定した滞在は、検出の立ち寄り中として出し直さない。
+      if (overlapsManual(d)) return@takeIf false
       val latest = gpsPointDao.getLatestPoint(trackId)
       latest == null ||
         distanceMeters(d.latitude, d.longitude, latest.latitude, latest.longitude) <= StopDetector.RADIUS_METERS
@@ -768,6 +999,9 @@ class PlaceRepositoryImpl @Inject constructor(
     for ((trackId, live) in liveStopPlaces.toList()) {
       if (live.placeId == fromPlaceId) liveStopPlaces[trackId] = LiveStopPlace(live.arrivalMillis, intoPlaceId)
     }
+    for ((trackId, live) in manualLiveStops.toList()) {
+      if (live.placeId == fromPlaceId) manualLiveStops[trackId] = live.copy(placeId = intoPlaceId)
+    }
   }
 
   /**
@@ -878,5 +1112,8 @@ class PlaceRepositoryImpl @Inject constructor(
   companion object {
     /** 同一場所とみなす距離（重複排除）。 */
     private const val DEDUPE_RADIUS_METERS = 30.0
+
+    /** 手で始めた立ち寄り中を「離れた」とみなすまで、半径の外にいる時間。屋内の GPS の飛びで早く確定しないため。 */
+    private const val LIVE_STOP_LEAVE_CONFIRM_MILLIS = 60_000L
   }
 }

@@ -11,6 +11,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.Dp
 import com.google.android.gms.maps.model.LatLng
+import com.pathly.domain.model.GpsPoint
 import com.pathly.domain.model.GpsTrack
 import com.pathly.domain.model.Stop
 import com.pathly.domain.model.StopCandidate
@@ -47,8 +48,10 @@ internal fun TrackDetailMapLayer(
   onStopSelected: (Stop) -> Unit,
   showMyLocation: Boolean = false,
   modifier: Modifier = Modifier,
+  // 手動追加・期間の編集で区間を選んでいる軌跡の点（シートと同じもの。記録中は選び始めた時点で固定している）。
+  editPoints: List<GpsPoint> = track.smoothedPoints,
 ) {
-  val manualPoints = track.smoothedPoints
+  val manualPoints = editPoints
   val tuningMode = state.tuningMode
   val manualMode = state.manualMode
   val candidateMode = candidates.isNotEmpty()

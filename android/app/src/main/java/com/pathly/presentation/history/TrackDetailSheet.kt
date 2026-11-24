@@ -47,6 +47,8 @@ import com.pathly.domain.model.WishlistFlag
 import com.pathly.presentation.common.SheetContentHorizontalPadding
 import com.pathly.presentation.common.WishlistFlagButton
 import com.pathly.presentation.stops.AddStopActions
+import com.pathly.presentation.stops.CurrentStopListBadge
+import com.pathly.presentation.stops.LiveStopActions
 import com.pathly.presentation.stops.StopNumberBadge
 import com.pathly.ui.theme.PathlySpacing
 import com.pathly.util.DateFormatters
@@ -88,6 +90,9 @@ internal fun TrackDetailSheet(
   // 場所 id ごとの行きたいの旗の見た目。立ち寄りの行の旗に使う（無ければ輪郭の旗）。
   wishlistFlags: Map<Long, WishlistFlag> = emptyMap(),
   onToggleWishlist: (Stop) -> Unit = {},
+  // 記録中の経路の立ち寄り中（まだ保存していない）。一覧は古い順なので最後に出す。⋮ は保存前でもできることだけ。
+  liveStop: Stop? = null,
+  liveActions: LiveStopActions = LiveStopActions(),
 ) {
   val listState = rememberLazyListState()
   // 地図のピン／行タップで選ばれた立ち寄りを、一覧の見える位置へ寄せる（地図↔一覧の連動）。
@@ -154,8 +159,52 @@ internal fun TrackDetailSheet(
           onToggleWishlist = { onToggleWishlist(stop) },
         )
       }
+      // 選んでまとめて消す間は、まだ保存していない立ち寄り中は出さない（選べないため）。
+      if (liveStop != null && !selectionMode) {
+        item(key = "live") {
+          LiveStopRow(
+            stop = liveStop,
+            actions = liveActions,
+            onFocus = { onFocusStop(liveStop) },
+            canEditArrival = canEditDuration,
+            wishlistFlag = wishlistFlags[liveStop.place.id] ?: WishlistFlag.NONE,
+            onToggleWishlist = { onToggleWishlist(liveStop) },
+          )
+        }
+      }
     }
   }
+}
+
+/** 立ち寄り中の行（[StopRow] の立ち寄り中の形。記録画面のシートと経路詳細で共通）。 */
+@Composable
+internal fun LiveStopRow(
+  stop: Stop,
+  actions: LiveStopActions,
+  onFocus: () -> Unit,
+  canEditArrival: Boolean,
+  wishlistFlag: WishlistFlag,
+  onToggleWishlist: () -> Unit,
+) {
+  StopRow(
+    stop = stop,
+    number = 0,
+    highlighted = false,
+    selectionMode = false,
+    selected = false,
+    onFocus = onFocus,
+    onEdit = { actions.onEditName(stop) },
+    onEditNote = { actions.onEditNote(stop) },
+    onEditDuration = { actions.onEditArrival(stop) },
+    canEditDuration = canEditArrival,
+    onReassign = { actions.onReassign(stop) },
+    onDelete = { actions.onDismiss(stop) },
+    onToggleSelect = {},
+    onEnterSelection = {},
+    wishlistFlag = wishlistFlag,
+    onToggleWishlist = onToggleWishlist,
+    live = true,
+  )
 }
 
 /**
@@ -252,7 +301,7 @@ internal fun TrackSummaryHeader(
 
 /** シートの中の「やること」の帯。出ているときだけ出し、押すとその操作を始める（右端に ›）。 */
 @Composable
-private fun SheetTodoBanner(text: String, onClick: () -> Unit) {
+internal fun SheetTodoBanner(text: String, onClick: () -> Unit) {
   Surface(
     onClick = onClick,
     modifier = Modifier
@@ -340,6 +389,9 @@ internal fun StopRow(
   onEnterSelection: () -> Unit,
   wishlistFlag: WishlistFlag = WishlistFlag.NONE,
   onToggleWishlist: () -> Unit = {},
+  // 立ち寄り中（まだ保存していない）の行。頭はティールの丸、時刻は「滞在中」、長押しの選択は無し。⋮ は保存前でもできることだけ
+  // （到着時刻を編集・立ち寄り中をやめる。[onEditDuration] が到着時刻の編集、[onDelete] がやめる）。
+  live: Boolean = false,
 ) {
   val title = stop.place.displayName
   val note = stop.note?.takeIf { it.isNotBlank() }
@@ -354,12 +406,14 @@ internal fun StopRow(
       )
       .combinedClickable(
         onClick = { if (selectionMode) onToggleSelect() else onFocus() },
-        onLongClick = { if (!selectionMode) onEnterSelection() },
+        onLongClick = { if (!selectionMode && !live) onEnterSelection() },
       )
       .padding(horizontal = PathlySpacing.xs, vertical = PathlySpacing.xs),
     verticalAlignment = Alignment.CenterVertically,
   ) {
-    if (selectionMode) {
+    if (live) {
+      CurrentStopListBadge(modifier = Modifier.padding(end = PathlySpacing.md))
+    } else if (selectionMode) {
       Checkbox(checked = selected, onCheckedChange = { onToggleSelect() })
     } else {
       // 訪問順の番号バッジ（地図のピン番号と対応）。
@@ -376,9 +430,13 @@ internal fun StopRow(
         fontWeight = FontWeight.Medium,
       )
       Text(
-        text = "${DateFormatters.shortTime(stop.arrivalTime)}" +
-          " – ${DateFormatters.shortTime(stop.departureTime)}" +
-          " ・ 滞在${stop.durationMinutes}分",
+        text = if (live) {
+          "${DateFormatters.shortTime(stop.arrivalTime)} – 滞在中 ・ ${stop.durationMinutes}分"
+        } else {
+          "${DateFormatters.shortTime(stop.arrivalTime)}" +
+            " – ${DateFormatters.shortTime(stop.departureTime)}" +
+            " ・ 滞在${stop.durationMinutes}分"
+        },
         style = MaterialTheme.typography.bodyMedium,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
       )
@@ -425,7 +483,7 @@ internal fun StopRow(
           // 区切り方が実態とずれたとき用（信号待ちで切れる・屋内で座標が固まる）。
           if (canEditDuration) {
             DropdownMenuItem(
-              text = { Text("滞在時間を編集") },
+              text = { Text(if (live) "到着時刻を編集" else "滞在時間を編集") },
               onClick = {
                 menuOpen = false
                 onEditDuration()
@@ -441,7 +499,7 @@ internal fun StopRow(
             },
           )
           DropdownMenuItem(
-            text = { Text("削除", color = MaterialTheme.colorScheme.error) },
+            text = { Text(if (live) "立ち寄り中をやめる" else "削除", color = MaterialTheme.colorScheme.error) },
             onClick = {
               menuOpen = false
               onDelete()

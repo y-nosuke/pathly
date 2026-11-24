@@ -1,6 +1,6 @@
 # 0042. 地図の画面の主役はシートと一緒に動き、シートを畳めば隠れる。シートはタップでも開け閉めする
 
-- Status: Accepted
+- Status: Accepted（記録画面の開始・停止の置き場所は [0044](0044-record-start-stop-inside-sheet.md) で置き換え）
 - Date: 2026-11-18
 
 関連: 置き換える決定は [0038](0038-screen-layouts-four-corners-and-tool-row.md) の「主役はいつも見える」。
