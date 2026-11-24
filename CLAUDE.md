@@ -46,13 +46,14 @@ Claude Code がこのリポジトリで作業するときの前提と約束。**
 ### 進め方
 
 - 作業は **Issue** から。「#12 をやって」と言われたら `gh issue view 12` で読み、[Project](https://github.com/users/y-nosuke/projects/3) で In Progress に移してから着手する。やる順番は Project の並び順。未決の案は Claude のメモリに置かず Issue にする（[development/issues-and-adr.md](docs/development/issues-and-adr.md)）。
+- **Claude Desktop では、Issue の作業を頼まれたセッションでは始めず、Issue ごとに子のセッション（worktree）を立てて進める**。ユーザーはコードの確認・承認を子のチャットで直接出す（`start-issue` の 2）。
 - ブランチ名は `<種類>/<英語のケバブケース>`、コミットと PR タイトルは `<種類>(<範囲>): <日本語の要約>`。PR 本文に `Closes #12`。PR タイトルはリリースノートになる（[development/branch-and-pr.md](docs/development/branch-and-pr.md)）。
 - 設計の判断（なぜ・没案）は ADR、今の姿は specs / designs に書く。終わった作業の記録は設計書に残さない（[docs/README.md](docs/README.md) の運用ルール）。
 - **GitHub の操作は `gh` コマンドで行う**（GitHub MCP は使わない）。Project の操作は `gh` にしかなく、入口を 1 つにすると許可の設定も揃う。本文は `--body-file` で渡す。
 - **Issue を並行して進めるとき**は、セッションごとに worktree を切り、実装だけを並行にして確認（build・instrumented test・画面・スマホ）は 1 つずつ回す。2 本まで・DB を変える Issue は同時に 1 つだけ（[development/parallel.md](docs/development/parallel.md)）。
 - 繰り返す手順はスキル（`.claude/skills/`）にある: `start-issue`（Issue の着手〜PR）・`emulator-check`（エミュレータでのテスト・確認）・`phone-check`（スマホに開発版を入れて動作確認してもらう）・`release`（リリースとスマホの更新）。
-- 実装の後は、**ユーザーにコードを確認してもらう → OK ならコミット → スマホに開発版を入れて動作確認の手順を示す → ユーザーが確かめてから push・PR** の順（`start-issue` の 7・8）。
-- **commit・push・タグ・マージ・GitHub の設定変更は、ユーザーの確認を取ってから**行う。自動マージは push・PR の確認で一緒に取り、Issue の完了の条件が全部付いたときだけ有効にする（`start-issue` の 8）。
+- 実装の後は、**ユーザーにコードを確認してもらう → OK ならコミット → スマホに開発版を入れて動作確認の手順を示す → ユーザーが確かめてから push・PR** の順（`start-issue` の 8・9）。
+- **commit・push・タグ・マージ・GitHub の設定変更は、ユーザーの確認を取ってから**行う。自動マージは push・PR の確認で一緒に取り、Issue の完了の条件が全部付いたときだけ有効にする（`start-issue` の 9）。
 - ユーザーへの返答は**日本語**で書く（途中経過の一言も）。
 
 ## 確かめ方
@@ -60,7 +61,7 @@ Claude Code がこのリポジトリで作業するときの前提と約束。**
 | いつ                     | 何をする                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
 | ------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | push 前                  | `./gradlew build`（見張り付きなら `.claude/skills/emulator-check/run-build.sh`。spotless・lint・ユニットテスト・assemble をまとめて見る。部分タスクだけでは見逃す）。Kotlin を触ったら `spotlessCheck --rerun-tasks`（増分ビルドで検査が飛ばされることがある）                                                                                                                                                                                                 |
-| UI・DB を変えたとき      | `.claude/skills/emulator-check/run-instrumented.sh`（見張り付きの `ANDROID_SERIAL=emulator-5554 ./gradlew connectedDebugAndroidTest`。固まったら止めて知らせる。Wi-Fi でつないだスマホを巻き込まない。AVD は `Pixel_10_API36`）。途中は変えた画面のクラスだけ、全部は push 前に 1 回（`start-issue` の 5）。UI はスマホに入れる前にエミュレータで画面も見る。どちらのスクリプトも別の worktree で走っていれば終わるまで待つ（`emulator-check` の「順番待ち」） |
+| UI・DB を変えたとき      | `.claude/skills/emulator-check/run-instrumented.sh`（見張り付きの `ANDROID_SERIAL=emulator-5554 ./gradlew connectedDebugAndroidTest`。固まったら止めて知らせる。Wi-Fi でつないだスマホを巻き込まない。AVD は `Pixel_10_API36`）。途中は変えた画面のクラスだけ、全部は push 前に 1 回（`start-issue` の 6）。UI はスマホに入れる前にエミュレータで画面も見る。どちらのスクリプトも別の worktree で走っていれば終わるまで待つ（`emulator-check` の「順番待ち」） |
 | PR を出す前              | コードを変えたら `code-review` スキルで自分の変更をレビューし、指摘を直す（ドキュメントだけなら省く）                                                                                                                                                                                                                                                                                                                                                          |
 | PR を出した後            | Claude Desktop では CI を自分でポーリングしない。アプリの CI 監視（Auto-fix）を有効にし、失敗したら起こしてもらう。通っても知らせは来ないので、ユーザーに声をかけてもらう                                                                                                                                                                                                                                                                                      |
 | マージ前                 | CI の `build` と `instrumented-test`（どちらも必須）。マージはマージコミットのみ                                                                                                                                                                                                                                                                                                                                                                               |

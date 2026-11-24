@@ -38,12 +38,13 @@
 
 ## worktree
 
-- Claude Desktop のセッションを worktree で始める（または `EnterWorktree`）。worktree は `.claude/worktrees/` に作られる
-  （`.git/info/exclude` で git の対象外）。
+- Claude Desktop では、Issue を頼まれたセッション（親）が Issue ごとに**子のセッションを worktree 付きで立て**、子が作業する
+  （[start-issue](../../.claude/skills/start-issue/SKILL.md) の 2）。親は受付、作業・確認・承認は子のチャットで行う。
+  worktree は `.claude/worktrees/` に作られる（`.git/info/exclude` で git の対象外）。
 - 始めたら **`.claude/skills/start-issue/setup-worktree.sh`** を 1 回。git に入らない `android/local.properties`
   （Google Maps のキー）を本体からコピーする。無いとビルドは通るが、開発版の地図が出ない。
 - main は本体で checkout されているので、worktree では `git checkout main` できない。ブランチは `origin/main` から切る
-  （[start-issue](../../.claude/skills/start-issue/SKILL.md) の 4）。
+  （[start-issue](../../.claude/skills/start-issue/SKILL.md) の 5）。
 - gradle のビルド結果（`android/build`・`android/app/build`）は worktree ごとに別。最初のビルドは時間がかかる。
 
 ## 開発版の入れ替え（スマホ・エミュレータ）
