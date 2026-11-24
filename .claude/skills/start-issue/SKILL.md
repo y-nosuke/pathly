@@ -111,6 +111,7 @@ git checkout -b <種類>/<英語のケバブケース>
 - `feat` の Issue で、もとの要望が `docs/requirements.md` に無ければ、同じ PR で該当セクションの末尾に足す
   （`（YYYY-MM-DD 追加・#Issue番号）`。日付は Issue を作った日）。既にある行と同じ要望ならその行に番号を添える。
   要望ではない（画面の作り・実現方法・制約）なら `no-requirement` ラベルを付ける（[issues-and-adr.md](../../../docs/development/issues-and-adr.md) の「要望書との突き合わせ」）。
+  この PR で要望が叶ったら、その行を `- [x]` にする。一部だけなら `- [ ]` のまま `（〜はまだ）` を添える（同じ節の「叶ったかのチェック」）。
 
 **並行のとき**:
 
