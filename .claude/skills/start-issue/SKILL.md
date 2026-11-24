@@ -149,7 +149,7 @@ PR を出す前に、ユーザーにコードと実機の動きを見てもら�
   - CI がもう通っていてマージできる状態（clean）だと、GitHub は自動マージを受け付けない。そのときはユーザーに確かめてから
     `gh pr merge <PR> --merge` でマージする。
   - CI が落ちて直す push をしても、自動マージの予約は残る。
-  - **並行のとき**: main の保護は「最新の main と合わせてから」を求めていない（strict でない）。PR の CI が通った後に
+  - **並行のとき**: main の ruleset の必須チェックは「最新の main と合わせてから」を求めていない（strict でない）。PR の CI が通った後に
     別の PR がマージされると、合わせた姿は CI を通らないままマージされる。自動マージを有効にする前・手でマージする前に、
     PR の CI の後に main が進んでいないか見る（`gh pr view <PR> --json mergeStateStatus` が `BEHIND`、または
     `git fetch && git log HEAD..origin/main`）。進んでいれば `gh pr update-branch <PR>` で main を取り込み、CI を回し直す。
