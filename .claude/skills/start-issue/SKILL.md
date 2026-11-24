@@ -1,6 +1,6 @@
 ---
 name: start-issue
-description: GitHub Issue を読んで着手し、実装・コード確認・コミット・スマホでの動作確認を経て PR で閉じるまでの手順。「#12 をやって」「Issue 12 に着手」「Project の次をやって」「着手できるもののいちばん上をやって」と頼まれたときに使う。
+description: GitHub Issue を読んで着手し、実装・コード確認・コミット・スマホでの動作確認を経て PR で閉じるまでの手順。Claude Desktop では Issue ごとに子のセッションを立てて、そこで進める。「#12 をやって」「Issue 12 に着手」「Project の次をやって」「着手できるもののいちばん上をやって」と頼まれたときに使う。
 ---
 
 # Issue に着手して PR で閉じる
@@ -8,7 +8,9 @@ description: GitHub Issue を読んで着手し、実装・コード確認・コ
 運用ルールの正は `docs/development/issues-and-adr.md` と `docs/development/branch-and-pr.md`。ここはその手順書。
 ほかの Issue と並行して（worktree で）進めるときの決まりは `docs/development/parallel.md`。手順の違いは各段に「並行のとき」と書く。
 ユーザーへの返答は日本語。**commit・push・マージ・タグ・GitHub の設定変更は、ユーザーの確認を取ってから**
-（自動マージは 8 の push の確認で一緒に取る）。
+（自動マージは 9 の push の確認で一緒に取る）。
+
+Claude Desktop では、**頼まれたセッション（親）は 1・2 だけをして、3 から先は子のセッションが進める**。
 
 ## 1. どの Issue をやるか決める
 
@@ -28,7 +30,22 @@ gh project item-list 3 --owner y-nosuke --format json --limit 100 \
 - In Progress の Issue と同じ画面・層を触りそう。
 - DB のスキーマを変えそうで、In Progress にも DB を変えるものがある。
 
-## 2. 読む
+## 2. 子のセッションを立てる（Claude Desktop）
+
+Issue の作業は、頼まれたセッション（親）では始めない。**Issue ごとに子のセッションを立て、そこで 3 から先を進める**。
+親のチャットは受付にして、Issue ごとの作業・確認・承認の流れを子に分けるため（並行のときに混ざらない）。
+
+- `start_session` で立てる: `initiation: "user_asked"`・`use_worktree: true`・`context: "fresh"`。タイトルは `#<番号> <Issue の要約>`。
+- 依頼文は短く: 「#<番号> をやって。`start-issue` スキルの 3 から進める。あなたは作業をする子のセッションなので、子のセッションは立てない。」
+  親でユーザーと決めた前提（画面の形・やらないことなど）があれば、それも書く（子は親の会話を読めない）。
+- 2 本以上頼まれたら、1 の「並行のとき」で並べられるかを見てから、並べられるものだけ立てる。並べられないものは、立てずにユーザーに伝える。
+- 立てたら、子へのリンクを伝える。**コードの確認・コミット・push の OK は、ユーザーが子のチャットで直接出す**
+  （親が取り次ぐと、ユーザーの言葉かどうかが子に分からない）。
+- 子が止まった（確認待ちなど）・終わった知らせが来たら、親は一言で伝える。親が子の作業を引き取らない。
+- **子のセッションでは 2 を飛ばす**（依頼文に「子のセッション」とある）。孫は立てない。
+- ユーザーが「ここでやって」と言ったときと、Claude Desktop 以外（ターミナルの `claude` など）では、子を立てずにそのセッションで 3 から進める。
+
+## 3. 読む
 
 ```bash
 gh issue view <番号> --repo y-nosuke/pathly --comments
@@ -45,7 +62,7 @@ gh issue view <番号> --repo y-nosuke/pathly --comments
   - **あふれたとき**（数が多い・名前が長い・記録中のピルや案内の帯と並んだとき）にどうなるか。上限で止めるか、まとめるか、送るか
   - いつ出るか・いつ消えるか、まとめて操作するもの（すべて外す・すべて見る など）が要るか
 
-## 3. Project で In Progress に移す
+## 4. Project で In Progress に移す
 
 ```bash
 N=<番号>
@@ -56,16 +73,11 @@ gh project item-edit --project-id PVT_kwHOAqZ51M4BAMaO --id "$ID" \
 
 Status の選択肢 id: Idea `533a6515` / Todo `f75ad846` / In Progress `47fc9ee4` / Done `98236657`（Issue を閉じれば自動で Done になる）。
 
-## 4. ブランチを切る
-
-```bash
-git checkout main && git pull --ff-only
-git checkout -b <種類>/<英語のケバブケース>
-```
+## 5. ブランチを切る
 
 種類は Issue のラベル（`feat` / `fix` / `test` / `docs` / `build` / `ci` / `chore` …）に合わせる。日付・番号は入れない。
 
-**並行のとき（worktree の中）**: main は本体で checkout されているので `git checkout main` できない。
+**子のセッション（worktree の中）**: main は本体で checkout されているので `git checkout main` できない。
 
 ```bash
 .claude/skills/start-issue/setup-worktree.sh   # android/local.properties（Maps のキー）を本体からコピーする
@@ -74,7 +86,14 @@ git switch -c <種類>/<英語のケバブケース> origin/main   # worktree �
                                                      # 代わりに git branch -m <種類>/<英語のケバブケース>（origin/main から作られていれば）
 ```
 
-## 5. 作る・確かめる
+worktree でないとき（Claude Desktop 以外・「ここでやって」）:
+
+```bash
+git checkout main && git pull --ff-only
+git checkout -b <種類>/<英語のケバブケース>
+```
+
+## 6. 作る・確かめる
 
 - CLAUDE.md の「守ること」に従う。DB を変えるなら version を上げてからコンパイル（schemas の上書きの罠）。
 - 確かめ方は CLAUDE.md の「確かめ方」の表。**途中は変えたところだけ、全部は push の前に 1 回**にする
@@ -82,11 +101,11 @@ git switch -c <種類>/<英語のケバブケース> origin/main   # worktree �
   - 直している途中: `./gradlew compileDebugKotlin compileDebugAndroidTestKotlin` と、変えたパッケージのユニットテスト
     （`testDebugUnitTest --tests "com.pathly.xxx.*"`）、変えた画面の instrumented test を 1 クラスだけ
     （`run-instrumented.sh -Pandroid.testInstrumentationRunnerArguments.class=...`）。
-  - 7 のコード確認の前: `run-build.sh`（spotless・lint・全部のユニットテスト。コミットに崩れを入れないため）。
-  - 全部の instrumented test（`run-instrumented.sh`）は 8 の push の前に 1 回。スマホでの確認で直しが入っても、まとめて 1 回でよい
+  - 8 のコード確認の前: `run-build.sh`（spotless・lint・全部のユニットテスト。コミットに崩れを入れないため）。
+  - 全部の instrumented test（`run-instrumented.sh`）は 9 の push の前に 1 回。スマホでの確認で直しが入っても、まとめて 1 回でよい
     （CI でも全部回る）。DB を変えたときは、途中でも全部回す（マイグレーションのテストが別のクラスにあるため）。
 - UI を変えたら、スマホに入れる前に**エミュレータで自分で画面を触って見る**（`emulator-check` の「APK を入れて触る」）。
-  あふれたとき（数を多く・名前を長く）・記録中・シートを畳んだときなど、2 で決めた形どおりかをスクリーンショットで確かめる。
+  あふれたとき（数を多く・名前を長く）・記録中・シートを畳んだときなど、3 で決めた形どおりかをスクリーンショットで確かめる。
   押せない・はみ出すといった見た目の問題は、ユーザーの確認の前に見つける。
 - 仕様・設計が変わったら docs も同じ PR で直す。判断の理由が要るなら ADR を書く。
 
@@ -97,7 +116,7 @@ git switch -c <種類>/<英語のケバブケース> origin/main   # worktree �
 - エミュレータで画面を触る間は `hold-check-lock.sh` でロックを持つ（`emulator-check` の「APK を入れて触る」）。
 - エミュレータに別のブランチの開発版が入っていたら、アンインストールしてから入れる（`emulator-check` の「APK を入れて触る」）。
 
-## 6. 自分の変更をレビューする
+## 7. 自分の変更をレビューする
 
 コードを変えたら、PR を出す前に組み込みの `code-review` スキル（`/code-review`）を変更にかける。
 書いた本人とは別の目で、不具合・取りこぼし・無駄を探すため。
@@ -106,7 +125,7 @@ git switch -c <種類>/<英語のケバブケース> origin/main   # worktree �
 - ドキュメントだけの変更なら省いてよい。
 - レビューで見つからないもの（実機の挙動・見た目）は、確かめ方の表のとおり別に確かめる。
 
-## 7. コードを確認してもらい、コミットしてスマホで確かめてもらう
+## 8. コードを確認してもらい、コミットしてスマホで確かめてもらう
 
 PR を出す前に、ユーザーにコードと実機の動きを見てもらう。PR を出してから直すと、CI とレビューをやり直すことになるため。
 
@@ -118,11 +137,11 @@ PR を出す前に、ユーザーにコードと実機の動きを見てもら�
    - アプリの動きが変わらない変更（ドキュメント・ビルド・CI・スキルだけ）は 3 を省く。
    - **気づいたこと（不具合も、足したい・変えたいことも）は、手順を最後まで試してからまとめて送ってもらう**よう頼む。
      1 つずつ直して入れ直すと、確認の往復が増える。
-   - 問題があれば直してコミットし、3 をやり直す。直しが仕様の変更なら、作る前に 2 と同じく形を見せて決める。
+   - 問題があれば直してコミットし、3 をやり直す。直しが仕様の変更なら、作る前に 3（読む）と同じく形を見せて決める。
    - **並行のとき**: スマホには 1 つずつ入れる。別のブランチの開発版が入っていればアンインストールしてから入れ、
      リリース版の書き出しを読み込んでもらう（`phone-check` の 2）。別のセッションの確認がまだ終わっていなければ、終わるまで待つ。
 
-## 8. push して PR・完了の条件のチェック・自動マージ（ユーザーの確認を取ってから）
+## 9. push して PR・完了の条件のチェック・自動マージ（ユーザーの確認を取ってから）
 
 確認は「push して PR を出し、完了の条件が全部満たせていれば自動マージにしてよいか」を 1 回で聞く。
 この確認の OK が、自動マージを有効にする OK を兼ねる。
@@ -145,7 +164,7 @@ PR を出す前に、ユーザーにコードと実機の動きを見てもら�
 - **チェックが全部付いたら、自動マージ（マージコミット）を有効にする**。必須チェック（`build` と `instrumented-test`）が
   通ると GitHub がマージする。Claude Desktop では `ccd_pr` の `set_auto_merge`（`merge_method: "merge"`）、
   それ以外では `gh pr merge <PR> --auto --merge`。
-  - **1 つでも `- [ ]` が残るなら自動マージにしない**。残った項目と理由をユーザーに伝え、9 の手でのマージに回す。
+  - **1 つでも `- [ ]` が残るなら自動マージにしない**。残った項目と理由をユーザーに伝え、10 の手でのマージに回す。
   - CI がもう通っていてマージできる状態（clean）だと、GitHub は自動マージを受け付けない。そのときはユーザーに確かめてから
     `gh pr merge <PR> --merge` でマージする。
   - CI が落ちて直す push をしても、自動マージの予約は残る。
@@ -154,7 +173,7 @@ PR を出す前に、ユーザーにコードと実機の動きを見てもら�
     PR の CI の後に main が進んでいないか見る（`gh pr view <PR> --json mergeStateStatus` が `BEHIND`、または
     `git fetch && git log HEAD..origin/main`）。進んでいれば `gh pr update-branch <PR>` で main を取り込み、CI を回し直す。
 
-## 9. マージの後（自動マージにしなかったときは、マージもユーザーの確認を取ってから）
+## 10. マージの後（自動マージにしなかったときは、マージもユーザーの確認を取ってから）
 
 - 自動マージにしなかった PR: 必須チェック（`build` と `instrumented-test`）が通り、残った項目の扱いをユーザーと決めてから
   `gh pr merge <PR> --merge`（マージコミットのみ）。
