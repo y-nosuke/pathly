@@ -129,6 +129,7 @@ internal fun StopTrackingConfirmDialog(
  * その下（上の下）に、今の状態（[status]）を積む。
  *
  * @param overlayEnabled 立ち寄りの追加中は、そちらのシートが優先なので「この範囲の経路」を押せなくする。
+ * @param registerEnabled 立ち寄りの追加中は登録できないので、検索の入口を「地域を検索」にする（窓も地域だけを出す）。
  */
 @Composable
 internal fun TrackingTopBar(
@@ -139,6 +140,7 @@ internal fun TrackingTopBar(
   onMapPlaceFilterChange: (MapPlaceFilter) -> Unit,
   overlayActive: Boolean,
   overlayEnabled: Boolean,
+  registerEnabled: Boolean,
   onToggleOverlay: () -> Unit,
   onSearch: () -> Unit,
   modifier: Modifier = Modifier,
@@ -147,7 +149,7 @@ internal fun TrackingTopBar(
   MapTopBar(
     modifier = modifier,
     leading = {
-      TrackingSearchEntry(onSearch = onSearch, modifier = Modifier.weight(1f))
+      TrackingSearchEntry(label = mapSearchLabel(registerEnabled), onSearch = onSearch, modifier = Modifier.weight(1f))
     },
     actions = {
       MapLayersButton(
@@ -183,6 +185,7 @@ internal fun TrackingTopBar(
 /** 上のバーの検索の入口（施設の登録と地域への移動を 1 つの窓で → ADR 0039）。押すと地図の上端に検索窓を重ねる。 */
 @Composable
 private fun TrackingSearchEntry(
+  label: String,
   onSearch: () -> Unit,
   modifier: Modifier = Modifier,
 ) {
@@ -196,7 +199,7 @@ private fun TrackingSearchEntry(
       modifier = Modifier
         .fillMaxHeight()
         .clickable(role = Role.Button, onClick = onSearch)
-        .semantics(mergeDescendants = true) { contentDescription = "場所・地域を検索" }
+        .semantics(mergeDescendants = true) { contentDescription = label }
         .padding(horizontal = PathlySpacing.lg),
       verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -208,7 +211,7 @@ private fun TrackingSearchEntry(
       )
       Spacer(modifier = Modifier.width(PathlySpacing.sm))
       Text(
-        text = "場所・地域を検索",
+        text = label,
         style = MaterialTheme.typography.bodyLarge,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
         maxLines = 1,
@@ -217,6 +220,9 @@ private fun TrackingSearchEntry(
     }
   }
 }
+
+/** 記録画面の検索の入口と窓の文言。立ち寄りの追加中（[registerEnabled] が false）は地域だけを探すので「地域を検索」。 */
+internal fun mapSearchLabel(registerEnabled: Boolean): String = if (registerEnabled) "場所・地域を検索" else "地域を検索"
 
 /** 場所を登録した直後の一時メッセージ（上の下）。2 秒で [onShown] を呼んで消す。 */
 @Composable

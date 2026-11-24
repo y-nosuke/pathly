@@ -362,6 +362,7 @@ fun TrackingScreen(
         overlayActive = overlayState.isSheetOpen,
         // 立ち寄りの追加中は経路の一覧を出せない（追加のシートが優先）ので押せなくする。検索窓は地域への移動だけになる。
         overlayEnabled = manualTarget == null,
+        registerEnabled = manualTarget == null,
         onToggleOverlay = {
           // もう一度押すと閉じる（登録済みの場所のトグルと同じ）。閉じると重ねた線も消える。
           if (overlayState.isSheetOpen) {
@@ -648,7 +649,7 @@ private fun TrackingMapSearch(
   modifier: Modifier = Modifier,
 ) {
   TrackingPlaceSearchBar(
-    placeholder = if (registerEnabled) "場所・地域を検索" else "地域を検索",
+    placeholder = mapSearchLabel(registerEnabled),
     registerEnabled = registerEnabled,
     // 施設と地域を 1 回の Autocomplete で取る（2 回に分けると、選ばずに閉じたときの料金が倍になる）。
     onSearchPredictions = { query -> if (registerEnabled) onPredictPlaces(query, bias) else onPredictRegions(query, bias) },
