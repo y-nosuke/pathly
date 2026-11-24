@@ -12,6 +12,7 @@ import com.pathly.domain.model.RegionKey
 import com.pathly.domain.model.categoryFacetCounts
 import com.pathly.domain.model.matchesAnyOf
 import com.pathly.domain.model.regionCounts
+import com.pathly.presentation.common.ListGroupRow
 import com.pathly.presentation.common.ListMapMode
 import com.pathly.presentation.common.StatsBarItem
 import com.pathly.presentation.common.StatsTileTone
@@ -189,11 +190,11 @@ data class PlacesState(
    * 名前の検索中は、当たった場所が見えるよう（残ったまとまりはどれも当たった場所を含む）すべて開いて見せる。
    * 覚えている開閉（[openGroups]）は変えないので、検索語を消すと元に戻る。
    */
-  val listRows: List<PlacesListRow>
+  val listRows: List<ListGroupRow<PlaceListItem>>
     get() {
       val items = visibleItems
-      if (grouping == PlaceGrouping.NONE) return items.map { PlacesListRow.Item(it, depth = 0) }
-      return flattenGroups(groupPlaces(items, grouping), openGroups, expandAll = nameQuery.isNotBlank())
+      if (grouping == PlaceGrouping.NONE) return items.map { ListGroupRow.Item(it, depth = 0, key = it.place.id) }
+      return flattenPlaceGroups(groupPlaces(items, grouping), openGroups, expandAll = nameQuery.isNotBlank())
     }
 
   /** 一覧の先頭の統計。一覧と同じく、絞り込み・名前の検索の後に残った場所で数える。 */

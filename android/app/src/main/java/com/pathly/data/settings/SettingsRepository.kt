@@ -2,9 +2,11 @@ package com.pathly.data.settings
 
 import android.content.Context
 import androidx.core.content.edit
+import com.pathly.domain.model.GroupOpenState
 import com.pathly.domain.model.MapPlaceFilter
 import com.pathly.domain.model.PlaceCategoryFacet
 import com.pathly.domain.model.PlaceGrouping
+import com.pathly.domain.model.TrackGrouping
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -120,9 +122,7 @@ class SettingsRepository @Inject constructor(
   // 場所一覧で開いているまとまり。分け方ごとに覚える（地域と業種を切り替えても、それぞれの開閉が残る）。
   private val openPlaceGroupsFlows: Map<PlaceGrouping, MutableStateFlow<Set<String>>> =
     PlaceGrouping.entries.associateWith { grouping ->
-      MutableStateFlow(
-        prefs.getString(keyOpenPlaceGroups(grouping), null).orEmpty().split(GROUP_KEY_SEPARATOR).filter { it.isNotEmpty() }.toSet(),
-      )
+      MutableStateFlow(readGroupKeys(keyOpenPlaceGroups(grouping)))
     }
 
   /** その分け方で開いているまとまりのキー。UI が購読する。既定はすべて閉じる（空）。 */
@@ -132,6 +132,35 @@ class SettingsRepository @Inject constructor(
     // 書き出し（BackupArchive）が StringSet を扱わないので、改行でつないだ文字列で持つ（地域の名前にカンマが入り得る）。
     prefs.edit { putString(keyOpenPlaceGroups(grouping), keys.sorted().joinToString(GROUP_KEY_SEPARATOR)) }
     openPlaceGroupsFlows.getValue(grouping).value = keys
+  }
+
+  // 履歴一覧の分け方。アプリを閉じても残す。知らない値は分けない扱い。
+  private val _historyGrouping = MutableStateFlow(
+    TrackGrouping.entries.firstOrNull { it.name == prefs.getString(KEY_HISTORY_GROUPING, null) } ?: TrackGrouping.NONE,
+  )
+
+  /** 履歴一覧の分け方。UI が購読する。既定は分けない。 */
+  val historyGrouping: StateFlow<TrackGrouping> = _historyGrouping.asStateFlow()
+
+  fun setHistoryGrouping(grouping: TrackGrouping) {
+    prefs.edit { putString(KEY_HISTORY_GROUPING, grouping.name) }
+    _historyGrouping.value = grouping
+  }
+
+  // 履歴一覧で押して開いた・閉じたまとまり（年月）。どちらにも無いものは既定（いちばん新しい年と月だけ開く）に従う。
+  private val _historyGroupOpenState = MutableStateFlow(
+    GroupOpenState(opened = readGroupKeys(KEY_HISTORY_OPENED_GROUPS), closed = readGroupKeys(KEY_HISTORY_CLOSED_GROUPS)),
+  )
+
+  /** 履歴一覧で押して変えた開閉。UI が購読する。既定は何も押していない（空）。 */
+  val historyGroupOpenState: StateFlow<GroupOpenState> = _historyGroupOpenState.asStateFlow()
+
+  fun setHistoryGroupOpenState(state: GroupOpenState) {
+    prefs.edit {
+      putString(KEY_HISTORY_OPENED_GROUPS, state.opened.sorted().joinToString(GROUP_KEY_SEPARATOR))
+      putString(KEY_HISTORY_CLOSED_GROUPS, state.closed.sorted().joinToString(GROUP_KEY_SEPARATOR))
+    }
+    _historyGroupOpenState.value = state
   }
 
   // 一覧の統計の帯を、統計のカードに広げているか。一覧（履歴・場所）ごとに覚え、アプリを閉じても残す。
@@ -145,6 +174,9 @@ class SettingsRepository @Inject constructor(
     prefs.edit { putBoolean(keyStatsExpanded(list), expanded) }
     statsExpandedFlows.getValue(list).value = expanded
   }
+
+  // まとまりのキーの集まり（改行でつないだ文字列）を読む。
+  private fun readGroupKeys(prefKey: String): Set<String> = prefs.getString(prefKey, null).orEmpty().split(GROUP_KEY_SEPARATOR).filter { it.isNotEmpty() }.toSet()
 
   // 知らない値（版が変わって名前が無くなった業種など）は読み飛ばし、指定なしとして扱う。
   private fun readMapPlaceFilter(surface: MapSurface): MapPlaceFilter {
@@ -167,6 +199,9 @@ class SettingsRepository @Inject constructor(
     private const val KEY_GPS_INTERVAL = "gps_interval_seconds"
     private const val KEY_LOCATION_ACCURACY = "location_accuracy"
     private const val KEY_PLACE_GROUPING = "places_list_grouping"
+    private const val KEY_HISTORY_GROUPING = "history_list_grouping"
+    private const val KEY_HISTORY_OPENED_GROUPS = "history_list_opened_groups"
+    private const val KEY_HISTORY_CLOSED_GROUPS = "history_list_closed_groups"
     private const val KEY_USE_DYNAMIC_COLOR = "use_dynamic_color"
     private const val KEY_THEME_MODE = "theme_mode"
     private const val GROUP_KEY_SEPARATOR = "\n"
