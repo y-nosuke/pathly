@@ -394,15 +394,15 @@ class TrackingViewModel @Inject constructor(
     _uiState.update { it.copy(isIgnoringBatteryOptimizations = trackingController.isIgnoringBatteryOptimizations()) }
   }
 
-  /** 地図の上の「検索して登録」を開いたとき: 検索のセッションを始める（候補〜確定を 1 セッションにまとめて課金を抑える）。 */
+  /** 地図の上の検索窓を開いたとき: 検索のセッションを始める（候補〜確定を 1 セッションにまとめて課金を抑える）。 */
   fun startPlaceSearch() {
     placesTextSearcher.startSession()
   }
 
-  /** 地図の上の「検索して登録」: キーワード候補を返す。開いたときに地図に映っていた範囲 [bias] の中を優先する。 */
+  /** 地図の上の検索窓: 施設と地域の候補を 1 回で返す。開いたときに地図に映っていた範囲 [bias] の中を優先する。 */
   suspend fun predictPlacesNear(query: String, bias: GeoBounds?): List<PlacePrediction> = placesTextSearcher.predict(query, bias)
 
-  /** 地域へ移動: 地名の候補（地域だけに絞る）。[bias] の範囲の中を優先する。 */
+  /** 地図の上の検索窓（立ち寄りの追加中）: 地名の候補（地域だけに絞る）。[bias] の範囲の中を優先する。 */
   suspend fun predictRegions(query: String, bias: GeoBounds?): List<PlacePrediction> = placesTextSearcher.predict(query, bias, regionsOnly = true)
 
   /** 地域へ移動: 選んだ地名の範囲と中心。取れなければ null。 */

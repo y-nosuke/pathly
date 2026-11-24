@@ -146,8 +146,8 @@ fun TrackingScreen(
   val durationPoints = remember(durationEditStop) { uiState.currentTrack?.smoothedPoints.orEmpty() }
   // 「立ち寄りを追加」モード（記録中のみ）。ONの間は地図タップ＝立ち寄り追加、OFF＝場所登録。
   var manualMode by remember { mutableStateOf(false) }
-  // 地図の上の検索窓（「検索して登録」か「地域へ移動」）。null なら閉じている。
-  var mapSearch by remember { mutableStateOf<MapSearchMode?>(null) }
+  // 地図の上の検索窓（施設の登録と地域への移動を 1 つの窓で）を開いているか。
+  var mapSearchOpen by remember { mutableStateOf(false) }
   // 検索窓を開いたときに地図に映っていた範囲。候補はこの中を優先する（範囲の外も出る）。
   var mapSearchBias by remember { mutableStateOf<GeoBounds?>(null) }
   // シートの開き具合。地図の下パディングを合わせて、選んだ地点がシートの裏に来ないようにする。
@@ -261,8 +261,8 @@ fun TrackingScreen(
    * （[focusInNormal] なら、その地点へも寄せる）。
    */
   fun onMapTap(manual: ManualStopTarget, focusInNormal: Boolean = true, onNormal: () -> Unit) {
-    if (mapSearch != null) {
-      mapSearch = null
+    if (mapSearchOpen) {
+      mapSearchOpen = false
       return
     }
     val adding = uiState.isTracking && manualMode
@@ -352,7 +352,7 @@ fun TrackingScreen(
     }
 
     // 上の区画（検索の入口・レイヤー）と上の下（今の状態・1 行の帯）。検索窓を開いている間は窓と重なるので隠す。
-    if (mapSearch == null) {
+    if (!mapSearchOpen) {
       TrackingTopBar(
         showRegisteredPlaces = uiState.showRegisteredPlaces,
         registeredPlaces = uiState.registeredPlaces,
@@ -360,8 +360,9 @@ fun TrackingScreen(
         onToggleRegisteredPlaces = viewModel::toggleShowRegisteredPlaces,
         onMapPlaceFilterChange = viewModel::setMapPlaceFilter,
         overlayActive = overlayState.isSheetOpen,
-        // 立ち寄りの追加中は一覧・検索を出せない（追加のシートが優先）ので押せなくする。
-        searchEnabled = manualTarget == null,
+        // 立ち寄りの追加中は経路の一覧を出せない（追加のシートが優先）ので押せなくする。検索窓は地域への移動だけになる。
+        overlayEnabled = manualTarget == null,
+        registerEnabled = manualTarget == null,
         onToggleOverlay = {
           // もう一度押すと閉じる（登録済みの場所のトグルと同じ）。閉じると重ねた線も消える。
           if (overlayState.isSheetOpen) {
@@ -374,16 +375,10 @@ fun TrackingScreen(
             }
           }
         },
-        onSearchPlace = {
-          placeSheetTarget = null
+        onSearch = {
           mapSearchBias = mapCameraState.visibleGeoBounds()
           viewModel.startPlaceSearch()
-          mapSearch = MapSearchMode.Place
-        },
-        onSearchRegion = {
-          mapSearchBias = mapCameraState.visibleGeoBounds()
-          viewModel.startPlaceSearch()
-          mapSearch = MapSearchMode.Region
+          mapSearchOpen = true
         },
         modifier = Modifier.align(Alignment.TopCenter),
       ) {
@@ -571,28 +566,28 @@ fun TrackingScreen(
     )
 
     // 地図はそのままに上端へ検索窓を重ねる。
-    mapSearch?.let { mode ->
+    if (mapSearchOpen) {
       TrackingMapSearch(
-        mode = mode,
+        registerEnabled = manualTarget == null,
         bias = mapSearchBias,
         onPredictPlaces = viewModel::predictPlacesNear,
         onFetchPlace = viewModel.placeEdit::fetchPlaceResult,
         onPredictRegions = viewModel::predictRegions,
         onFetchRegion = viewModel::fetchRegion,
         regionMarkers = regionMarkers,
-        // 検索して登録: 候補を選んだら閉じて、その場所へ地図を寄せ、場所シートで登録する。
+        // 登録: 候補を選んだら閉じて、その場所へ地図を寄せ、場所シートで登録する。
         onPlaceSelected = { result ->
-          mapSearch = null
+          mapSearchOpen = false
           placeSheetTarget = PlaceSheetTarget.NewSearchResult(result)
           focusOn(LatLng(result.latitude, result.longitude))
         },
         // 地域へ移動: 地名を選んだら閉じて、目印を足し、その地域の範囲が収まるように地図を移す（現在地の追従は止まる）。
         onRegionSelected = { region ->
-          mapSearch = null
+          mapSearchOpen = false
           viewModel.regionMarkers.show(region)
           fitTo(region.bounds.toLatLngBounds())
         },
-        onClose = { mapSearch = null },
+        onClose = { mapSearchOpen = false },
         modifier = Modifier.align(Alignment.TopCenter),
       )
     }
@@ -634,10 +629,14 @@ fun TrackingScreen(
   )
 }
 
-/** 地図の上端に重ねる検索窓（[MapSearchMode] ごとに、候補の探し方と選んだあとの動きが違う）。 */
+/**
+ * 地図の上端に重ねる検索窓。施設と地域の候補を一緒に出し、選んだ行の動き（[MapSearchAction]）で分ける:
+ * 登録 → 場所の詳細を引いて場所シート、地域へ移動 → 範囲を引いて目印。
+ * [registerEnabled] が false（立ち寄りの追加中）なら、候補を地域に絞って地域へ移動だけにする。
+ */
 @Composable
 private fun TrackingMapSearch(
-  mode: MapSearchMode,
+  registerEnabled: Boolean,
   bias: GeoBounds?,
   onPredictPlaces: suspend (query: String, bias: GeoBounds?) -> List<PlacePrediction>,
   onFetchPlace: suspend (placeId: String) -> PlaceSearchResult?,
@@ -649,39 +648,47 @@ private fun TrackingMapSearch(
   onClose: () -> Unit,
   modifier: Modifier = Modifier,
 ) {
-  when (mode) {
-    MapSearchMode.Place -> TrackingPlaceSearchBar(
-      placeholder = "店名・場所名で検索",
-      fetchFailedText = "場所の取得に失敗しました（オフライン等）",
-      onSearchPredictions = { query -> onPredictPlaces(query, bias) },
-      onFetchPrediction = { prediction -> onFetchPlace(prediction.placeId) },
-      onSelected = onPlaceSelected,
-      onClose = onClose,
-      modifier = modifier,
-    )
+  TrackingPlaceSearchBar(
+    placeholder = mapSearchLabel(registerEnabled),
+    registerEnabled = registerEnabled,
+    // 施設と地域を 1 回の Autocomplete で取る（2 回に分けると、選ばずに閉じたときの料金が倍になる）。
+    onSearchPredictions = { query -> if (registerEnabled) onPredictPlaces(query, bias) else onPredictRegions(query, bias) },
+    onFetchCandidate = { candidate ->
+      val prediction = candidate.prediction
+      when (candidate.action) {
+        MapSearchAction.Register -> onFetchPlace(prediction.placeId)?.let(MapSearchSelection::Place)
 
-    MapSearchMode.Region -> TrackingPlaceSearchBar(
-      placeholder = "地名で探して移動",
-      fetchFailedText = "地域の取得に失敗しました（オフライン等）",
-      onSearchPredictions = { query -> onPredictRegions(query, bias) },
-      // もう出している地域は、引き直さずに覚えている範囲へ移す。
-      // 目印の名前は候補の文字を使う（Places から名前を引くと料金の区分が上がるため）。
-      onFetchPrediction = { prediction ->
-        regionMarkers.find(prediction.placeId) ?: onFetchRegion(prediction.placeId)?.let { region ->
-          RegionMarker(
-            placeId = prediction.placeId,
-            name = prediction.primaryText,
-            latitude = region.latitude,
-            longitude = region.longitude,
-            bounds = region.bounds,
-          )
-        }
-      },
-      onSelected = onRegionSelected,
-      onClose = onClose,
-      modifier = modifier,
-    )
-  }
+        // もう出している地域は、引き直さずに覚えている範囲へ移す。
+        // 目印の名前は候補の文字を使う（Places から名前を引くと料金の区分が上がるため）。
+        MapSearchAction.MoveToRegion -> (
+          regionMarkers.find(prediction.placeId) ?: onFetchRegion(prediction.placeId)?.let { region ->
+            RegionMarker(
+              placeId = prediction.placeId,
+              name = prediction.primaryText,
+              latitude = region.latitude,
+              longitude = region.longitude,
+              bounds = region.bounds,
+            )
+          }
+          )?.let(MapSearchSelection::Region)
+      }
+    },
+    onSelected = { selection ->
+      when (selection) {
+        is MapSearchSelection.Place -> onPlaceSelected(selection.result)
+        is MapSearchSelection.Region -> onRegionSelected(selection.marker)
+      }
+    },
+    onClose = onClose,
+    modifier = modifier,
+  )
+}
+
+/** 検索窓で選んだもの（引いた結果）。 */
+private sealed interface MapSearchSelection {
+  data class Place(val result: PlaceSearchResult) : MapSearchSelection
+
+  data class Region(val marker: RegionMarker) : MapSearchSelection
 }
 
 /** 記録のシートの立ち寄りの行・経路の名前から開くダイアログ（経路詳細と同じもの）。 */
@@ -733,15 +740,6 @@ private fun TrackingStopDialogs(
       },
     )
   }
-}
-
-/** 記録画面の地図に重ねる検索窓の種類。 */
-private enum class MapSearchMode {
-  /** 検索して登録（施設を探して場所シートで登録する）。 */
-  Place,
-
-  /** 地域へ移動（地名を探して地図を移す）。 */
-  Region,
 }
 
 /** 記録中でまだ立ち寄りが無いときの記録のシートの高さ（つまみ・経路の名前・情報の段と停止・脇役の操作の段・「まだ立ち寄りはありません」）。 */

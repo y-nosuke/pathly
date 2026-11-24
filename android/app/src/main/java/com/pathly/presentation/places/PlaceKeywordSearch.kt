@@ -3,11 +3,13 @@ package com.pathly.presentation.places
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.CircularProgressIndicator
@@ -72,6 +74,30 @@ internal fun PlaceSearchPredictions(
   onSelectPrediction: (placeId: String) -> Unit,
   modifier: Modifier = Modifier,
 ) {
+  PlaceSearchCandidates(
+    query = query,
+    candidates = predictions,
+    isSearching = isSearching,
+    key = { it.placeId },
+    modifier = modifier,
+  ) { prediction ->
+    PredictionRow(prediction = prediction, onClick = { onSelectPrediction(prediction.placeId) })
+  }
+}
+
+/**
+ * 候補の一覧の枠（検索中・候補なしの表示と、区切り線つきの行の並び）。行の描き方は [row] に任せる
+ * （記録画面の検索窓は、1 つの候補を「地域へ移動」と「場所として登録」の 2 行に分けて出す）。
+ */
+@Composable
+internal fun <T : Any> PlaceSearchCandidates(
+  query: String,
+  candidates: List<T>,
+  isSearching: Boolean,
+  key: (T) -> Any,
+  modifier: Modifier = Modifier,
+  row: @Composable (T) -> Unit,
+) {
   when {
     isSearching -> {
       Box(modifier = modifier.padding(vertical = PathlySpacing.lg), contentAlignment = Alignment.Center) {
@@ -79,7 +105,7 @@ internal fun PlaceSearchPredictions(
       }
     }
 
-    query.isNotBlank() && predictions.isEmpty() -> {
+    query.isNotBlank() && candidates.isEmpty() -> {
       Box(modifier = modifier.padding(vertical = PathlySpacing.lg), contentAlignment = Alignment.Center) {
         Text(
           text = "候補がありません\n（オンライン・キーワードを確認）",
@@ -92,8 +118,8 @@ internal fun PlaceSearchPredictions(
 
     else -> {
       LazyColumn(modifier = modifier) {
-        items(predictions, key = { it.placeId }) { prediction ->
-          PredictionRow(prediction = prediction, onClick = { onSelectPrediction(prediction.placeId) })
+        items(candidates, key = key) { candidate ->
+          row(candidate)
           HorizontalDivider()
         }
       }
@@ -101,31 +127,52 @@ internal fun PlaceSearchPredictions(
   }
 }
 
+/**
+ * 候補の 1 行（名前と住所）。[leadingIcon] があれば頭に印を、[actionLabel] があれば右端に選ぶと何が起きるか（「登録」など）を出す。
+ */
 @Composable
-private fun PredictionRow(
+internal fun PredictionRow(
   prediction: PlacePrediction,
   onClick: () -> Unit,
   modifier: Modifier = Modifier,
+  leadingIcon: (@Composable () -> Unit)? = null,
+  actionLabel: String? = null,
 ) {
-  Column(
+  Row(
     modifier = modifier
       .fillMaxWidth()
       .clickable(onClick = onClick)
       .padding(vertical = PathlySpacing.md),
+    verticalAlignment = Alignment.CenterVertically,
   ) {
-    Text(
-      text = prediction.primaryText,
-      style = MaterialTheme.typography.bodyLarge,
-      maxLines = 1,
-      overflow = TextOverflow.Ellipsis,
-    )
-    if (prediction.secondaryText.isNotBlank()) {
+    if (leadingIcon != null) {
+      leadingIcon()
+      Spacer(modifier = Modifier.width(PathlySpacing.md))
+    }
+    Column(modifier = Modifier.weight(1f)) {
       Text(
-        text = prediction.secondaryText,
-        style = MaterialTheme.typography.bodySmall,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        text = prediction.primaryText,
+        style = MaterialTheme.typography.bodyLarge,
         maxLines = 1,
         overflow = TextOverflow.Ellipsis,
+      )
+      if (prediction.secondaryText.isNotBlank()) {
+        Text(
+          text = prediction.secondaryText,
+          style = MaterialTheme.typography.bodySmall,
+          color = MaterialTheme.colorScheme.onSurfaceVariant,
+          maxLines = 1,
+          overflow = TextOverflow.Ellipsis,
+        )
+      }
+    }
+    if (actionLabel != null) {
+      Spacer(modifier = Modifier.width(PathlySpacing.sm))
+      Text(
+        text = actionLabel,
+        style = MaterialTheme.typography.labelLarge,
+        color = MaterialTheme.colorScheme.primary,
+        maxLines = 1,
       )
     }
   }
