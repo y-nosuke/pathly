@@ -9,6 +9,7 @@ import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isPopup
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithContentDescription
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
@@ -18,6 +19,7 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.pathly.domain.model.GpsPoint
 import com.pathly.domain.model.GpsTrack
 import com.pathly.domain.model.MapPlaceFilter
+import com.pathly.domain.model.TrackGrouping
 import com.pathly.presentation.common.ListMapMode
 import com.pathly.presentation.tracking.OverlayTrack
 import com.pathly.ui.theme.PathlyAndroidTheme
@@ -28,6 +30,8 @@ import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
+import java.time.LocalDateTime
+import java.time.ZoneId
 import java.util.Date
 
 @RunWith(AndroidJUnit4::class)
@@ -525,6 +529,78 @@ class HistoryScreenTest {
     verify { mockViewModel.setSortDescending(false) }
   }
 
+  // 表示のメニューの「分け方」で年月を選べ、分けているときはボタンに「・ 年月」が付く。
+  @Test
+  fun historyScreen_displayMenu_selectsGrouping() {
+    uiStateFlow.value = HistoryState(tracks = listOf(createSampleTrack(id = 1L)))
+
+    composeTestRule.setContent {
+      PathlyAndroidTheme {
+        HistoryScreen(viewModel = mockViewModel, onTrackClick = mockOnTrackClick)
+      }
+    }
+
+    composeTestRule.onNodeWithTag("listDisplayMenuButton").performClick()
+    composeTestRule.onNodeWithText("年月で分ける").performClick()
+    verify { mockViewModel.setGrouping(TrackGrouping.MONTH) }
+
+    uiStateFlow.value = uiStateFlow.value.copy(grouping = TrackGrouping.MONTH)
+    composeTestRule.onNodeWithText("日付 ・ 新しい順 ・ 年月").assertIsDisplayed()
+  }
+
+  // 年月で分けると、年 → 月の見出し（件数と距離）が並び、いちばん新しい年と月だけが開いている。見出しを押すと開閉する。
+  @Test
+  fun historyScreen_groupedByMonth_showsHeadersAndToggles() {
+    val nov = createSampleTrack(id = 1L, start = LocalDateTime.of(2026, 11, 20, 10, 0), name = "秋の鎌倉さんぽ")
+    val oct = createSampleTrack(id = 2L, start = LocalDateTime.of(2026, 10, 3, 10, 0), name = "高尾山")
+    uiStateFlow.value = HistoryState(tracks = listOf(nov, oct), grouping = TrackGrouping.MONTH)
+    io.mockk.every { mockViewModel.toggleGroup(any()) } answers {
+      val key = firstArg<String>()
+      uiStateFlow.value = uiStateFlow.value.let { it.copy(groupOpenState = it.groupOpenState.toggled(key, it.isGroupOpen(key))) }
+    }
+
+    composeTestRule.setContent {
+      PathlyAndroidTheme {
+        HistoryScreen(viewModel = mockViewModel, onTrackClick = mockOnTrackClick)
+      }
+    }
+
+    composeTestRule.onNodeWithTag("trackGroup:year:2026").assertIsDisplayed()
+    composeTestRule.onNodeWithText("2 回 ・ ${formatTotalKm(nov.totalDistanceMeters + oct.totalDistanceMeters)}").assertIsDisplayed()
+    composeTestRule.onNodeWithText("秋の鎌倉さんぽ").assertIsDisplayed()
+    composeTestRule.onAllNodesWithText("高尾山").assertCountEquals(0)
+
+    // 閉じている 10 月を開くと、中の経路が出る。
+    composeTestRule.onNodeWithTag("trackGroup:month:2026-10").performClick()
+    verify { mockViewModel.toggleGroup("month:2026-10") }
+    composeTestRule.onNodeWithText("高尾山").assertIsDisplayed()
+
+    // 年を閉じると、中の月も経路も隠れる。
+    composeTestRule.onNodeWithTag("trackGroup:year:2026").performClick()
+    composeTestRule.onAllNodesWithText("秋の鎌倉さんぽ").assertCountEquals(0)
+    composeTestRule.onAllNodesWithText("11月").assertCountEquals(0)
+  }
+
+  // 名前の検索中は、当たった経路のまとまりを開いて見せ、見出しを押しても開閉しない。
+  @Test
+  fun historyScreen_groupedByMonth_opensMatchesWhileSearching() {
+    val nov = createSampleTrack(id = 1L, start = LocalDateTime.of(2026, 11, 20, 10, 0), name = "秋の鎌倉さんぽ")
+    val oct = createSampleTrack(id = 2L, start = LocalDateTime.of(2026, 10, 3, 10, 0), name = "高尾山")
+    uiStateFlow.value = HistoryState(tracks = listOf(nov, oct), grouping = TrackGrouping.MONTH, nameQuery = "高尾")
+
+    composeTestRule.setContent {
+      PathlyAndroidTheme {
+        HistoryScreen(viewModel = mockViewModel, onTrackClick = mockOnTrackClick)
+      }
+    }
+
+    composeTestRule.onNodeWithTag("trackGroup:month:2026-10").assertIsDisplayed()
+    composeTestRule.onNodeWithText("高尾山").assertIsDisplayed()
+    composeTestRule.onAllNodesWithText("秋の鎌倉さんぽ").assertCountEquals(0)
+    composeTestRule.onNodeWithTag("trackGroup:month:2026-10").performClick()
+    verify(exactly = 0) { mockViewModel.toggleGroup(any()) }
+  }
+
   @Test
   fun historyScreen_nameQueryWithNoMatch_showsNoMatchMessage() {
     uiStateFlow.value = HistoryState(
@@ -758,11 +834,14 @@ class HistoryScreenTest {
     id: Long = 1L,
     pointsCount: Int = 2,
     stopCount: Int = 0,
+    start: LocalDateTime? = null,
+    name: String? = null,
   ): GpsTrack = GpsTrack(
     id = id,
-    startTime = Date(System.currentTimeMillis() - 3600000),
-    endTime = Date(),
+    startTime = start?.let { Date.from(it.atZone(ZoneId.systemDefault()).toInstant()) } ?: Date(System.currentTimeMillis() - 3600000),
+    endTime = start?.let { Date.from(it.plusHours(1).atZone(ZoneId.systemDefault()).toInstant()) } ?: Date(),
     isActive = false,
+    name = name,
     stopCount = stopCount,
     points = createSamplePoints(pointsCount, trackId = id),
     createdAt = Date(),

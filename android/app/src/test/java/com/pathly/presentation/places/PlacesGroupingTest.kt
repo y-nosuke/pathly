@@ -5,6 +5,7 @@ import com.pathly.domain.model.PlaceCategory
 import com.pathly.domain.model.PlaceGrouping
 import com.pathly.domain.model.PlaceListItem
 import com.pathly.domain.model.PlaceRegion
+import com.pathly.presentation.common.ListGroupRow
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -85,14 +86,14 @@ class PlacesGroupingTest {
     val state = PlacesState(items = items, grouping = PlaceGrouping.NONE)
 
     assertTrue(groupPlaces(items, PlaceGrouping.NONE).isEmpty())
-    assertEquals(state.visibleItems.map { it.place.id }, state.listRows.map { (it as PlacesListRow.Item).item.place.id })
+    assertEquals(state.visibleItems.map { it.place.id }, state.listRows.map { (it as ListGroupRow.Item).item.place.id })
   }
 
   @Test
   fun rows_showOnlyHeadersWhenAllClosed() {
     val rows = PlacesState(items = items, grouping = PlaceGrouping.REGION).listRows
 
-    assertTrue(rows.all { it is PlacesListRow.Header && !it.expanded && it.depth == 0 })
+    assertTrue(rows.all { it is ListGroupRow.Header && !it.expanded && it.depth == 0 })
     assertEquals(4, rows.size)
   }
 
@@ -104,8 +105,8 @@ class PlacesGroupingTest {
 
     val described = rows.map { row ->
       when (row) {
-        is PlacesListRow.Header -> "${row.depth}:${row.group.label}"
-        is PlacesListRow.Item -> "${row.depth}:#${row.item.place.id}"
+        is ListGroupRow.Header -> "${row.depth}:${row.group.label}"
+        is ListGroupRow.Item -> "${row.depth}:#${row.item.place.id}"
       }
     }
     // 既定の並べ替え（登録の新しい順）で、府中市の中は 3 → 1。
@@ -119,7 +120,7 @@ class PlacesGroupingTest {
   fun rows_countOnlyPlacesLeftByFiltersAndDropEmptyGroups() {
     val state = PlacesState(items = items, grouping = PlaceGrouping.REGION, wishlistFilter = WishlistFilter.WISHLISTED)
 
-    val headers = state.listRows.filterIsInstance<PlacesListRow.Header>()
+    val headers = state.listRows.filterIsInstance<ListGroupRow.Header<PlaceListItem>>()
     assertEquals(listOf("東京都" to 1), headers.map { it.group.label to it.group.count })
   }
 
@@ -129,13 +130,13 @@ class PlacesGroupingTest {
 
     val described = searching.listRows.map { row ->
       when (row) {
-        is PlacesListRow.Header -> "${row.group.label}:${row.expanded}"
-        is PlacesListRow.Item -> "#${row.item.place.id}"
+        is ListGroupRow.Header -> "${row.group.label}:${row.expanded}"
+        is ListGroupRow.Item -> "#${row.item.place.id}"
       }
     }
     assertEquals(listOf("東京都:true", "府中市:true", "#3"), described)
     // 検索語を消すと、覚えている開閉（ここでは全部閉じている）に戻る。
-    assertTrue(searching.copy(nameQuery = "").listRows.all { it is PlacesListRow.Header && !it.expanded })
+    assertTrue(searching.copy(nameQuery = "").listRows.all { it is ListGroupRow.Header && !it.expanded })
   }
 
   @Test

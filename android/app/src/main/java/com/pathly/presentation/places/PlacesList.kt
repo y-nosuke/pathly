@@ -40,15 +40,11 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.semantics.stateDescription
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
@@ -76,6 +72,9 @@ import com.pathly.presentation.common.FilterPanelButton
 import com.pathly.presentation.common.FilterPanelCloseButton
 import com.pathly.presentation.common.ListDisplayMenuButton
 import com.pathly.presentation.common.ListFilterPanel
+import com.pathly.presentation.common.ListGroupHeader
+import com.pathly.presentation.common.ListGroupIndent
+import com.pathly.presentation.common.ListGroupRow
 import com.pathly.presentation.common.ListHeader
 import com.pathly.presentation.common.ListMapCamera
 import com.pathly.presentation.common.ListMapLayout
@@ -128,7 +127,7 @@ internal fun PlacesListContent(
   onSortChange: (PlaceSort) -> Unit,
   onSortDescendingChange: (Boolean) -> Unit,
   onGroupingChange: (PlaceGrouping) -> Unit,
-  // まとまりの見出しを押したとき（[PlaceGroup.key]）。開く／閉じる。
+  // まとまりの見出しを押したとき（[ListGroup.key]）。開く／閉じる。
   onToggleGroup: (String) -> Unit,
   onViewModeChange: (ListMapMode) -> Unit,
   // 地図表示で、地図に重ねた見出し・ツール行をたたむ（true）／ひろげる（false）。
@@ -401,15 +400,19 @@ private fun PlacesLazyList(
         key = { it.listKey },
         contentType = { it::class },
       ) { row ->
-        val indent = GroupIndent * row.depth
+        val indent = ListGroupIndent * row.depth
         when (row) {
-          is PlacesListRow.Header -> PlaceGroupHeader(
-            header = row,
+          is ListGroupRow.Header -> ListGroupHeader(
+            label = row.group.label,
+            trailing = "${row.group.count}",
+            depth = row.depth,
+            expanded = row.expanded,
             indent = indent,
+            testTag = "placeGroup:${row.group.key}",
             onClick = groupToggle?.let { toggle -> { toggle(row.group.key) } },
           )
 
-          is PlacesListRow.Item -> PlaceItemRow(
+          is ListGroupRow.Item -> PlaceItemRow(
             item = row.item,
             sort = state.sort,
             indent = indent,
@@ -428,9 +431,6 @@ private fun PlacesLazyList(
     )
   }
 }
-
-/** まとまりの段ごとの字下げ。 */
-private val GroupIndent = PathlySpacing.lg
 
 /** 右下の追加の丸の大きさ。 */
 private val PlaceAddButtonSize = 56.dp
@@ -578,51 +578,6 @@ private val PlaceGrouping.shortLabel: String?
     PlaceGrouping.REGION -> "地域"
     PlaceGrouping.CATEGORY -> "業種"
   }
-
-/** まとまりの見出し（開閉の印・名前・件数）。[onClick] が null なら（名前の検索中）押しても開閉しない。 */
-@Composable
-private fun PlaceGroupHeader(header: PlacesListRow.Header, indent: Dp, onClick: (() -> Unit)?) {
-  val group = header.group
-  Column(modifier = Modifier.fillMaxWidth()) {
-    Row(
-      modifier = Modifier
-        .fillMaxWidth()
-        .testTag("placeGroup:${group.key}")
-        .then(
-          if (onClick != null) {
-            Modifier.clickable(onClickLabel = if (header.expanded) "閉じる" else "開く", onClick = onClick)
-          } else {
-            Modifier
-          },
-        )
-        .semantics { stateDescription = if (header.expanded) "開いている" else "閉じている" }
-        .padding(start = PathlySpacing.screenEdge + indent, end = PathlySpacing.screenEdge, top = PathlySpacing.md, bottom = PathlySpacing.md),
-      verticalAlignment = Alignment.CenterVertically,
-    ) {
-      // 開いていれば ⌄、閉じていれば ›（同じ絵を回す）。
-      Icon(
-        painter = painterResource(R.drawable.ic_expand_more),
-        contentDescription = null,
-        modifier = Modifier.rotate(if (header.expanded) 0f else -90f),
-      )
-      Spacer(modifier = Modifier.width(PathlySpacing.sm))
-      Text(
-        text = group.label,
-        style = if (header.depth == 0) MaterialTheme.typography.titleMedium else MaterialTheme.typography.titleSmall,
-        fontWeight = FontWeight.Bold,
-        maxLines = 1,
-        overflow = TextOverflow.Ellipsis,
-        modifier = Modifier.weight(1f),
-      )
-      Text(
-        text = "${group.count}",
-        style = MaterialTheme.typography.bodyMedium,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-      )
-    }
-    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-  }
-}
 
 /**
  * 場所の 1 行（影の無い平らな行。下に区切り線。履歴の行と同じ形）。名前 → 業種 → バッジ → 住所 → 並びの日付。
