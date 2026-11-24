@@ -11,6 +11,7 @@ import com.pathly.domain.model.MapPlaceFilter
 import com.pathly.domain.model.PlaceCategoryFacet
 import com.pathly.domain.model.RegionKey
 import com.pathly.domain.model.RegisteredPlace
+import com.pathly.domain.model.TrackGrouping
 import com.pathly.domain.repository.GpsTrackRepository
 import com.pathly.domain.repository.PlaceRepository
 import com.pathly.presentation.common.ListMapMode
@@ -39,7 +40,13 @@ class HistoryViewModel @Inject constructor(
 ) : ViewModel() {
 
   // 絞り込み・並べ替えはアプリが裏で落とされても戻せるよう savedStateHandle から始める。
-  private val _uiState = MutableStateFlow(HistoryState().withListOptionsFrom(savedStateHandle))
+  // 分け方・開閉は設定から（開いた直後から分けた見た目で出す）。
+  private val _uiState = MutableStateFlow(
+    HistoryState(
+      grouping = settingsRepository.historyGrouping.value,
+      groupOpenState = settingsRepository.historyGroupOpenState.value,
+    ).withListOptionsFrom(savedStateHandle),
+  )
   val uiState: StateFlow<HistoryState> = _uiState.asStateFlow()
 
   // 線の点を読む計算を主スレッドから外す。テストでは差し替える。
@@ -61,6 +68,27 @@ class HistoryViewModel @Inject constructor(
   init {
     loadTracks()
     observeActiveTrack()
+    observeGrouping()
+  }
+
+  /** 一覧の分け方と、押して変えた開閉（設定に保存・アプリを閉じても残る）。 */
+  private fun observeGrouping() {
+    viewModelScope.launch {
+      combine(settingsRepository.historyGrouping, settingsRepository.historyGroupOpenState, ::Pair)
+        .collect { (grouping, open) -> _uiState.update { it.copy(grouping = grouping, groupOpenState = open) } }
+    }
+  }
+
+  /** 一覧の分け方（分けない／年月）を変える。 */
+  fun setGrouping(grouping: TrackGrouping) {
+    settingsRepository.setHistoryGrouping(grouping)
+  }
+
+  /** まとまりの見出しを押して開く／閉じる（押して決めた開閉として覚える）。名前の検索中は開閉しない。 */
+  fun toggleGroup(key: String) {
+    val state = _uiState.value
+    if (state.grouping == TrackGrouping.NONE || state.nameQuery.isNotBlank()) return
+    settingsRepository.setHistoryGroupOpenState(state.groupOpenState.toggled(key, currentlyOpen = state.isGroupOpen(key)))
   }
 
   private fun loadTracks() {

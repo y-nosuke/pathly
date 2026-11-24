@@ -6,36 +6,12 @@ import com.pathly.domain.model.PlaceListItem
 import com.pathly.domain.model.RegionKey
 import com.pathly.domain.model.japaneseCollator
 import com.pathly.domain.model.regionTopKeyOrder
+import com.pathly.presentation.common.ListGroup
+import com.pathly.presentation.common.ListGroupRow
+import com.pathly.presentation.common.flattenGroups
 
-/**
- * 場所一覧のまとまり 1 つ（→ specs/screens.md「5. 場所画面」）。
- *
- * [key] は開閉を覚えるための名前（分け方の中で一意・アプリを閉じても変わらない）。[count] は中の場所すべて
- * （[children] の中も含む）の数。[items] はこのまとまりの直下に置く場所（地域なら市区町村が分からない場所）。
- */
-data class PlaceGroup(
-  val key: String,
-  val label: String,
-  val count: Int,
-  val children: List<PlaceGroup> = emptyList(),
-  val items: List<PlaceListItem> = emptyList(),
-)
-
-/** 分けた一覧の 1 行（見出しか場所）。[depth] は字下げの段（いちばん外の見出しが 0）。 */
-sealed interface PlacesListRow {
-  val depth: Int
-
-  /** 一覧（LazyColumn）での行の名前。場所は id、見出しはまとまりの [PlaceGroup.key]。 */
-  val listKey: Any
-    get() = when (this) {
-      is Header -> "group:${group.key}"
-      is Item -> item.place.id
-    }
-
-  data class Header(val group: PlaceGroup, override val depth: Int, val expanded: Boolean) : PlacesListRow
-
-  data class Item(val item: PlaceListItem, override val depth: Int) : PlacesListRow
-}
+/** 場所一覧のまとまり 1 つ（→ specs/screens.md「5. 場所画面」）。 */
+typealias PlaceGroup = ListGroup<PlaceListItem>
 
 /**
  * [items]（絞り込み・並べ替えの後の並び）を [grouping] で分ける。まとまりの中は [items] の並びのまま。
@@ -79,19 +55,5 @@ private fun groupByCategory(items: List<PlaceListItem>): List<PlaceGroup> = item
 
 private fun regionGroupKey(key: RegionKey): String = "region:" + listOf(key.countryCode, key.prefecture, key.city).joinToString("|") { it.orEmpty() }
 
-/**
- * まとまりを、一覧に並べる行にする。閉じたまとまりは見出しだけ。[expandAll] なら（名前の検索中）すべて開いて見せる。
- * 開いたまとまりの中は、下の段のまとまり → 直下の場所の順。
- */
-fun flattenGroups(groups: List<PlaceGroup>, openKeys: Set<String>, expandAll: Boolean): List<PlacesListRow> {
-  val rows = mutableListOf<PlacesListRow>()
-  fun add(group: PlaceGroup, depth: Int) {
-    val expanded = expandAll || group.key in openKeys
-    rows += PlacesListRow.Header(group, depth, expanded)
-    if (!expanded) return
-    group.children.forEach { add(it, depth + 1) }
-    group.items.forEach { rows += PlacesListRow.Item(it, depth + 1) }
-  }
-  groups.forEach { add(it, 0) }
-  return rows
-}
+/** 場所のまとまりを、一覧に並べる行にする（→ [flattenGroups]）。開いているのは [openKeys] に入ったまとまり。 */
+fun flattenPlaceGroups(groups: List<PlaceGroup>, openKeys: Set<String>, expandAll: Boolean): List<ListGroupRow<PlaceListItem>> = flattenGroups(groups, itemKey = { it.place.id }, expandAll = expandAll) { it.key in openKeys }

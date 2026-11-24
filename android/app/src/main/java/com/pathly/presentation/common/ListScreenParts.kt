@@ -1,6 +1,8 @@
 package com.pathly.presentation.common
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
@@ -9,6 +11,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
@@ -32,17 +35,22 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.pathly.R
 import com.pathly.ui.theme.PathlyShapes
@@ -237,6 +245,67 @@ fun ListMenuChoice(text: String, selected: Boolean, onClick: () -> Unit) {
     onClick = onClick,
   )
 }
+
+/**
+ * 分けた一覧のまとまりの見出し（開閉の印・名前・[trailing]）。押すと開閉する。[onClick] が null なら（名前の検索中）
+ * 押しても開閉しない。いちばん外の段（[depth] が 0）は字を大きくする。下に区切り線を引く。
+ *
+ * @param trailing 右端に出す件数など（場所なら「12」、履歴なら「5 回 ・ 32.1 km」）。
+ */
+@Composable
+fun ListGroupHeader(
+  label: String,
+  trailing: String,
+  depth: Int,
+  expanded: Boolean,
+  indent: Dp,
+  testTag: String,
+  onClick: (() -> Unit)?,
+) {
+  Column(modifier = Modifier.fillMaxWidth()) {
+    Row(
+      modifier = Modifier
+        .fillMaxWidth()
+        .testTag(testTag)
+        .then(
+          if (onClick != null) {
+            Modifier.clickable(onClickLabel = if (expanded) "閉じる" else "開く", onClick = onClick)
+          } else {
+            Modifier
+          },
+        )
+        .semantics { stateDescription = if (expanded) "開いている" else "閉じている" }
+        .padding(start = PathlySpacing.screenEdge + indent, end = PathlySpacing.screenEdge, top = PathlySpacing.md, bottom = PathlySpacing.md),
+      verticalAlignment = Alignment.CenterVertically,
+    ) {
+      // 開いていれば ⌄、閉じていれば ›（同じ絵を回す）。
+      Icon(
+        painter = painterResource(R.drawable.ic_expand_more),
+        contentDescription = null,
+        modifier = Modifier.rotate(if (expanded) 0f else -90f),
+      )
+      Spacer(modifier = Modifier.width(PathlySpacing.sm))
+      Text(
+        text = label,
+        style = if (depth == 0) MaterialTheme.typography.titleMedium else MaterialTheme.typography.titleSmall,
+        fontWeight = FontWeight.Bold,
+        maxLines = 1,
+        overflow = TextOverflow.Ellipsis,
+        modifier = Modifier.weight(1f),
+      )
+      Text(
+        text = trailing,
+        style = MaterialTheme.typography.bodyMedium,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        maxLines = 1,
+      )
+    }
+    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+  }
+}
+
+/** 分けた一覧の、まとまりの段ごとの字下げ。 */
+val ListGroupIndent = PathlySpacing.lg
 
 /** [text] の中の数字（「3,815」「4.3」など）だけに [numberStyle] をかける。 */
 internal fun emphasizeNumbers(text: String, numberStyle: SpanStyle): AnnotatedString = buildAnnotatedString {

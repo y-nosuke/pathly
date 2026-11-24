@@ -4,9 +4,12 @@ import androidx.arch.core.executor.testing.InstantTaskExecutorRule
 import androidx.lifecycle.SavedStateHandle
 import com.pathly.data.settings.SettingsRepository
 import com.pathly.domain.model.GpsTrack
+import com.pathly.domain.model.GroupOpenState
 import com.pathly.domain.model.PlaceCategoryFacet
+import com.pathly.domain.model.TrackGrouping
 import com.pathly.domain.repository.GpsTrackRepository
 import com.pathly.domain.repository.PlaceRepository
+import com.pathly.presentation.common.ListGroupRow
 import com.pathly.presentation.common.ListMapMode
 import com.pathly.util.DateFormatters
 import io.mockk.coEvery
@@ -15,6 +18,7 @@ import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestScope
@@ -43,11 +47,41 @@ class HistoryViewModelTest {
   private val mockSettings = mockk<SettingsRepository>(relaxed = true)
   private val deletionQueue = TrackDeletionQueue(mockRepository).also { it.scope = TestScope(testDispatcher) }
   private lateinit var viewModel: HistoryViewModel
+  private val groupingFlow = MutableStateFlow(TrackGrouping.NONE)
+  private val groupOpenFlow = MutableStateFlow(GroupOpenState())
 
   @Before
   fun setup() {
     Dispatchers.setMain(testDispatcher)
     every { mockPlaceRepository.observeRegisteredPlaces() } returns flowOf(emptyList())
+    every { mockSettings.historyGrouping } returns groupingFlow
+    every { mockSettings.historyGroupOpenState } returns groupOpenFlow
+    every { mockSettings.setHistoryGrouping(any()) } answers { groupingFlow.value = firstArg() }
+    every { mockSettings.setHistoryGroupOpenState(any()) } answers { groupOpenFlow.value = firstArg() }
+  }
+
+  // 年月で分けたとき、見出しを押すと開閉が入れ替わり、設定に覚える（既定で開いている最新の月は閉じる）。
+  @Test
+  fun `年月で分けると見出しの開閉を設定に覚える`() = runTest {
+    val nov = createTrack(id = 1, startTime = Date(1_763_600_000_000L), endTime = Date(1_763_603_600_000L))
+    coEvery { mockRepository.getAllTracks() } returns flowOf(listOf(nov))
+    coEvery { mockRepository.getActiveTrackRealtime() } returns flowOf(null)
+    viewModel = HistoryViewModel(mockRepository, mockPlaceRepository, mockSettings, deletionQueue, SavedStateHandle())
+    viewModel.setGrouping(TrackGrouping.MONTH)
+    testDispatcher.scheduler.advanceUntilIdle()
+
+    val header = viewModel.uiState.value.listRows.filterIsInstance<ListGroupRow.Header<GpsTrack>>().last()
+    assertTrue(header.expanded)
+    viewModel.toggleGroup(header.group.key)
+    testDispatcher.scheduler.advanceUntilIdle()
+
+    assertEquals(setOf(header.group.key), groupOpenFlow.value.closed)
+    assertFalse(viewModel.uiState.value.isGroupOpen(header.group.key))
+
+    // 名前の検索中は押しても開閉しない（すべて開いて見せている）。
+    viewModel.setNameQuery("2025")
+    viewModel.toggleGroup(header.group.key)
+    assertEquals(setOf(header.group.key), groupOpenFlow.value.closed)
   }
 
   @After

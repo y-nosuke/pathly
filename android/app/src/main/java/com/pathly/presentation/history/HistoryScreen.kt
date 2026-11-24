@@ -46,11 +46,13 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.pathly.R
 import com.pathly.domain.model.GpsTrack
+import com.pathly.domain.model.TrackGrouping
 import com.pathly.presentation.common.ActiveFilter
 import com.pathly.presentation.common.ActiveFilterChips
 import com.pathly.presentation.common.CategoryFilterSection
@@ -60,6 +62,10 @@ import com.pathly.presentation.common.FilterPanelButton
 import com.pathly.presentation.common.FilterPanelCloseButton
 import com.pathly.presentation.common.ListDisplayMenuButton
 import com.pathly.presentation.common.ListFilterPanel
+import com.pathly.presentation.common.ListGroup
+import com.pathly.presentation.common.ListGroupHeader
+import com.pathly.presentation.common.ListGroupIndent
+import com.pathly.presentation.common.ListGroupRow
 import com.pathly.presentation.common.ListHeader
 import com.pathly.presentation.common.ListMapLayout
 import com.pathly.presentation.common.ListMapMode
@@ -252,8 +258,17 @@ private fun HistoryListContent(
       }
 
       else -> {
-        val visibleTracks = uiState.visibleTracks
+        // 絞り込み・並べ替え・まとめを状態が変わったときだけ計算し直す（描き直しのたびにやらない）。
+        val visibleTracks = remember(uiState) { uiState.visibleTracks }
+        val rows = remember(visibleTracks, uiState) { uiState.listRowsOf(visibleTracks) }
         val listState = rememberLazyListState()
+        // 分け方を変えたら先頭へ戻す（見出しの並びに変わるので、見ていた位置に意味が無くなる）。開閉では動かさない。
+        // 詳細から戻って一覧を出し直したときは動かさないよう、最後に見た分け方を画面の状態として取っておく。
+        var scrolledForGrouping by rememberSaveable { mutableStateOf(uiState.grouping) }
+        LaunchedEffect(uiState.grouping) {
+          if (scrolledForGrouping != uiState.grouping) listState.scrollToItem(0)
+          scrolledForGrouping = uiState.grouping
+        }
         // 絞り込みの欄を開いたら、欄が見えるよう先頭へ寄せる。開いたまま組み直したとき（画面の回転・詳細から戻る）は
         // 動かさない（見ていた位置のまま）。
         var scrolledForOpen by remember { mutableStateOf(panelVisible) }
@@ -327,13 +342,36 @@ private fun HistoryListContent(
               item { HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant) }
             }
 
-            items(visibleTracks, key = { it.id }) { track ->
-              TrackRow(
-                track = track,
-                onClick = { onTrackClick(track) },
-                onToggleFavorite = { viewModel.toggleFavorite(track) },
-                onRenameClick = { onRenameClick(track) },
-              )
+            // 分けているときは、年月の見出しと開いたまとまりの中の経路（段ごとに字下げ）。
+            // 名前の検索中はまとまりをすべて開いて見せるので、見出しを押しても開閉しない。
+            val searching = uiState.nameQuery.isNotBlank()
+            items(rows, key = { it.listKey }, contentType = { it::class }) { row ->
+              val indent = ListGroupIndent * row.depth
+              when (row) {
+                is ListGroupRow.Header -> {
+                  val summary = remember(row.group) { trackGroupSummary(row.group) }
+                  ListGroupHeader(
+                    label = row.group.label,
+                    trailing = summary,
+                    depth = row.depth,
+                    expanded = row.expanded,
+                    indent = indent,
+                    testTag = "trackGroup:${row.group.key}",
+                    onClick = if (searching) null else ({ viewModel.toggleGroup(row.group.key) }),
+                  )
+                }
+
+                is ListGroupRow.Item -> {
+                  val track = row.item
+                  TrackRow(
+                    track = track,
+                    indent = indent,
+                    onClick = { onTrackClick(track) },
+                    onToggleFavorite = { viewModel.toggleFavorite(track) },
+                    onRenameClick = { onRenameClick(track) },
+                  )
+                }
+              }
             }
           }
           ScrollToTopButton(
@@ -411,10 +449,17 @@ private fun HistoryListControls(
   }
 }
 
-/** ツール行の右の表示のメニュー: 並べ替えの軸と向き。ボタンには今の見せ方（「日付 ・ 新しい順」）を出す。 */
+/**
+ * ツール行の右の表示のメニュー: 並べ替えの軸と向き・分け方。ボタンには今の見せ方（「日付 ・ 新しい順」、
+ * 分けているときは「… ・ 年月」）を出す。
+ */
 @Composable
 private fun HistoryDisplayMenu(state: HistoryState, viewModel: HistoryViewModel) {
-  ListDisplayMenuButton(label = "${state.sort.label} ・ ${state.sort.directionLabel(state.sortDescending)}") { close ->
+  val label = buildString {
+    append("${state.sort.label} ・ ${state.sort.directionLabel(state.sortDescending)}")
+    if (state.grouping == TrackGrouping.MONTH) append(" ・ 年月")
+  }
+  ListDisplayMenuButton(label = label) { close ->
     ListMenuSectionTitle("並べ替え")
     TrackSort.entries.forEach { sort ->
       ListMenuChoice(
@@ -435,6 +480,17 @@ private fun HistoryDisplayMenu(state: HistoryState, viewModel: HistoryViewModel)
         onClick = {
           close()
           viewModel.setSortDescending(descending)
+        },
+      )
+    }
+    ListMenuSectionTitle("分け方", divider = true)
+    TrackGrouping.entries.forEach { grouping ->
+      ListMenuChoice(
+        text = grouping.label,
+        selected = grouping == state.grouping,
+        onClick = {
+          close()
+          viewModel.setGrouping(grouping)
         },
       )
     }
@@ -563,13 +619,14 @@ private fun TrackRow(
   onToggleFavorite: () -> Unit,
   onRenameClick: () -> Unit,
   modifier: Modifier = Modifier,
+  indent: Dp = 0.dp,
 ) {
   Column(modifier = modifier.fillMaxWidth()) {
     Row(
       modifier = Modifier
         .fillMaxWidth()
         .clickable(role = Role.Button, onClick = onClick)
-        .padding(start = PathlySpacing.screenEdge, end = PathlySpacing.xs, top = PathlySpacing.sm, bottom = PathlySpacing.sm),
+        .padding(start = PathlySpacing.screenEdge + indent, end = PathlySpacing.xs, top = PathlySpacing.sm, bottom = PathlySpacing.sm),
       verticalAlignment = Alignment.CenterVertically,
     ) {
       Column(modifier = Modifier.weight(1f)) {
@@ -650,6 +707,9 @@ internal fun historyStatsBarItems(tracks: List<GpsTrack>, totalCount: Int, isFil
     StatsBarItem(icon = R.drawable.ic_schedule, value = formatDuration(minutes), label = "時間", tone = StatsTileTone.TERTIARY),
   )
 }
+
+/** 年月のまとまりの見出しの右に出す件数と距離（「5 回 ・ 32.1 km」）。距離の書き方は統計の総距離と同じ。 */
+internal fun trackGroupSummary(group: ListGroup<GpsTrack>): String = "${group.count} 回 ・ ${formatTotalKm(group.allItems().sumOf { it.totalDistanceMeters })}"
 
 /** 合計の距離。100 km 以上は小数を落として 3 桁区切り（「3,815 km」）、それより短ければ小数 1 桁（「4.3 km」）。 */
 internal fun formatTotalKm(meters: Double): String {

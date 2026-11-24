@@ -180,6 +180,8 @@ DB に持たないのは、`R.drawable` の ID を DB に入れられず結局�
 - **一覧の画面の型の部品は `ListScreenParts.kt`**: 見出し `ListHeader`（検索のアイコンを押すと見出しの位置が検索の窓になる。
   語がある間は窓のまま）、ツール行 `ListToolRow`（左に絞り込み・右に表示のメニュー／地図表示ではレイヤー）、表示のメニュー
   `ListDisplayMenuButton`（中身は `ListMenuSectionTitle`・`ListMenuChoice`）。履歴と場所の一覧で使う。
+  分けた一覧（場所の地域・業種、履歴の年月）のまとまりの見出しは `ListGroupHeader`。まとまりの組み立てと行への展開は
+  `ListGrouping.kt`（`ListGroup`・`ListGroupRow`・`flattenGroups`）で、分け方ごとの振り分けは各画面（`PlacesGrouping.kt`・`HistoryGrouping.kt`）が持つ。
   統計の帯とカードは `ListStatsCard.kt`（`ExpandableListStats` に帯のタイル `StatsBarItem` とカードの中身を渡す）。
 - **カメラは `ListMapCamera`**（`MapCamera.kt`。地図表示の外で持ち、一覧に切り替えても・詳細から戻っても範囲を保つ）。
   同じファイルに、既定の位置 `DefaultMapLocation`、`GeoBounds` と `LatLngBounds` の変換、現在地を一度だけ取る

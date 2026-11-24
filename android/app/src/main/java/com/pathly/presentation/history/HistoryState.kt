@@ -2,14 +2,18 @@ package com.pathly.presentation.history
 
 import androidx.lifecycle.SavedStateHandle
 import com.pathly.domain.model.GpsTrack
+import com.pathly.domain.model.GroupOpenState
 import com.pathly.domain.model.PlaceCategoryFacet
 import com.pathly.domain.model.PlaceRegion
 import com.pathly.domain.model.RegionCount
 import com.pathly.domain.model.RegionKey
+import com.pathly.domain.model.TrackGrouping
 import com.pathly.domain.model.categoryFacetCounts
 import com.pathly.domain.model.matchesAnyOf
 import com.pathly.domain.model.regionCounts
+import com.pathly.presentation.common.ListGroupRow
 import com.pathly.presentation.common.ListMapMode
+import com.pathly.presentation.common.flattenGroups
 import com.pathly.presentation.common.getEnum
 import com.pathly.presentation.common.getEnumSet
 import com.pathly.presentation.common.getRegionSet
@@ -80,6 +84,10 @@ data class HistoryState(
   val nameQuery: String = "",
   val sort: TrackSort = TrackSort.DATE,
   val sortDescending: Boolean = TrackSort.DATE.defaultDescending,
+  // 一覧の分け方と、押して変えた開閉（年月のまとまり）。絞り込みとは独立した見せ方の設定で、アプリを閉じても残す
+  // （設定に保存する。「初期状態に戻す」では変えない）。
+  val grouping: TrackGrouping = TrackGrouping.NONE,
+  val groupOpenState: GroupOpenState = GroupOpenState(),
   val isLoading: Boolean = false,
   val errorMessage: String? = null,
   // 一覧で見るか地図で見るか。絞り込みは両方で共有する。
@@ -150,6 +158,28 @@ data class HistoryState(
       }
       return filtered.sortedWith(if (sortDescending) ascending.reversed() else ascending)
     }
+
+  /**
+   * 一覧に並べる行。分けないなら経路だけ、分けるなら年月の見出しと、開いたまとまりの中の経路。
+   * 年月の並びは、日付で並べているときは向きに合わせ、ほかの軸のときは新しい順。まとまりの中は今の並べ替えのまま。
+   * 名前の検索中は、当たった経路が見えるよう（残ったまとまりはどれも当たった経路を含む）すべて開いて見せる。
+   * 覚えている開閉（[groupOpenState]）は変えないので、検索語を消すと元に戻る。
+   */
+  val listRows: List<ListGroupRow<GpsTrack>>
+    get() = listRowsOf(visibleTracks)
+
+  /** [listRows] を、もう求めてある [visibleTracks]（[tracks]）から作る（絞り込み・並べ替えを 2 度やらないため）。 */
+  fun listRowsOf(tracks: List<GpsTrack>): List<ListGroupRow<GpsTrack>> {
+    if (grouping == TrackGrouping.NONE) return tracks.map { ListGroupRow.Item(it, depth = 0, key = it.id) }
+    val newestFirst = sort != TrackSort.DATE || sortDescending
+    val defaultOpen = defaultOpenMonthKeys(tracks)
+    return flattenGroups(groupTracksByMonth(tracks, newestFirst), itemKey = { it.id }, expandAll = nameQuery.isNotBlank()) {
+      groupOpenState.isOpen(it.key, openByDefault = it.key in defaultOpen)
+    }
+  }
+
+  /** [key] のまとまりがいま開いているか（押して変えていなければ、いちばん新しい年と月だけ開いている）。 */
+  fun isGroupOpen(key: String): Boolean = groupOpenState.isOpen(key, openByDefault = key in defaultOpenMonthKeys(visibleTracks))
 
   private fun categoryOk(track: GpsTrack): Boolean = categoryFilter.isEmpty() || track.stopCategories.any { it in categoryFilter }
 
