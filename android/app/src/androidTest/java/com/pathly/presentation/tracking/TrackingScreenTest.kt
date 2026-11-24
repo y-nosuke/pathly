@@ -4,6 +4,7 @@ import android.Manifest
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertHasClickAction
 import androidx.compose.ui.test.assertIsDisplayed
@@ -397,18 +398,20 @@ class TrackingScreenTest {
       }
     }
 
-    // 地図の上のボタンで検索窓を開く（検索のセッションを始める）。窓と重なる上端のボタンは隠れる。
-    composeTestRule.onNodeWithContentDescription("検索して場所を登録").performClick()
+    // 地図の上の入口で検索窓を開く（検索のセッションを始める）。窓と重なる上端の入口は隠れる。
+    composeTestRule.onNodeWithContentDescription(SEARCH_ENTRY).performClick()
     composeTestRule.onNodeWithTag("trackingPlaceSearch").assertIsDisplayed()
-    composeTestRule.onNodeWithContentDescription("検索して場所を登録").assertDoesNotExist()
+    composeTestRule.onNodeWithContentDescription(SEARCH_ENTRY).assertDoesNotExist()
     verify { mockViewModel.startPlaceSearch() }
 
-    // 候補を選ぶと、検索窓を閉じて場所シートで登録へ進む。
+    // 施設の候補は「登録」の 1 行だけ（地域へ移動は出ない）。選ぶと、検索窓を閉じて場所シートで登録へ進む。
     composeTestRule.onNodeWithTag("trackingPlaceSearchField").performTextInput("テスト")
     composeTestRule.waitUntil(timeoutMillis = 5_000) {
       composeTestRule.onAllNodesWithText("東京都千代田区").fetchSemanticsNodes().isNotEmpty()
     }
-    composeTestRule.onNodeWithText("東京都千代田区").performClick()
+    composeTestRule.onNodeWithTag(MOVE_ROW).assertDoesNotExist()
+    composeTestRule.onNodeWithTag(REGISTER_ROW).assertIsDisplayed().assert(hasText("登録"))
+    composeTestRule.onNodeWithTag(REGISTER_ROW).performClick()
     composeTestRule.waitUntil(timeoutMillis = 5_000) {
       composeTestRule.onAllNodesWithTag("trackingPlaceSearch").fetchSemanticsNodes().isEmpty()
     }
@@ -429,10 +432,10 @@ class TrackingScreenTest {
       }
     }
 
-    composeTestRule.onNodeWithContentDescription("検索して場所を登録").performClick()
+    composeTestRule.onNodeWithContentDescription(SEARCH_ENTRY).performClick()
     composeTestRule.onNodeWithContentDescription("検索を閉じる").performClick()
     composeTestRule.onNodeWithTag("trackingPlaceSearch").assertDoesNotExist()
-    composeTestRule.onNodeWithContentDescription("検索して場所を登録").assertIsDisplayed()
+    composeTestRule.onNodeWithContentDescription(SEARCH_ENTRY).assertIsDisplayed()
     composeTestRule.onNodeWithContentDescription("記録開始").assertIsDisplayed()
   }
 
@@ -441,18 +444,17 @@ class TrackingScreenTest {
     stubRegions()
     setTrackingContent()
 
-    // 地図の上のボタンで地名の検索窓を開く。窓と重なる上端のボタンは隠れる。
-    composeTestRule.onNodeWithContentDescription("地域へ移動").performClick()
+    // 検索窓を開く（施設と地域の共通の窓）。
+    composeTestRule.onNodeWithContentDescription(SEARCH_ENTRY).performClick()
     composeTestRule.onNodeWithTag("trackingPlaceSearch").assertIsDisplayed()
-    composeTestRule.onNodeWithText("地名で探して移動").assertIsDisplayed()
-    composeTestRule.onNodeWithContentDescription("地域へ移動").assertDoesNotExist()
     verify { mockViewModel.startPlaceSearch() }
 
-    // 地名を選ぶと、その範囲を引いて窓を閉じる（場所シートは出さない＝登録はしない）。
-    selectRegion(query = "札幌", secondaryText = "北海道", openSearch = false)
+    // 「地域へ移動」の行を選ぶと、その範囲を引いて窓を閉じる（場所シートは出さない＝登録はしない）。
+    selectRegion(query = "札幌", openSearch = false)
     coVerify { mockViewModel.fetchRegion("r1") }
+    coVerify(exactly = 0) { placeEdit.fetchPlaceResult(any()) }
     composeTestRule.onNodeWithText("登録").assertDoesNotExist()
-    composeTestRule.onNodeWithContentDescription("地域へ移動").assertIsDisplayed()
+    composeTestRule.onNodeWithContentDescription(SEARCH_ENTRY).assertIsDisplayed()
 
     // 目印がある間は地名のチップを出す。地名を押しても目印は残る（地図を寄せ直すだけ）。
     composeTestRule.onNodeWithTag("regionMarkerChip").assertIsDisplayed()
@@ -460,7 +462,7 @@ class TrackingScreenTest {
     composeTestRule.onNodeWithTag("regionMarkerChip").assertIsDisplayed()
 
     // 検索窓を開いている間は、ほかの上端の操作と同じく隠す。
-    composeTestRule.onNodeWithContentDescription("地域へ移動").performClick()
+    composeTestRule.onNodeWithContentDescription(SEARCH_ENTRY).performClick()
     composeTestRule.onNodeWithTag("regionMarkerChip").assertDoesNotExist()
     composeTestRule.onNodeWithContentDescription("検索を閉じる").performClick()
     composeTestRule.onNodeWithTag("regionMarkerChip").assertIsDisplayed()
@@ -476,14 +478,49 @@ class TrackingScreenTest {
   }
 
   @Test
+  fun trackingScreen_search_regionCandidateOffersMoveAndRegister() {
+    stubRegions()
+    coEvery { placeEdit.fetchPlaceResult("r2") } returns
+      PlaceSearchResult(
+        googlePlaceId = "r2",
+        name = "北九州市",
+        address = "福岡県北九州市",
+        category = null,
+        latitude = 33.88,
+        longitude = 130.88,
+      )
+    setTrackingContent()
+
+    // 地域の候補は「地域へ移動」と「場所として登録」の 2 行になる。
+    composeTestRule.onNodeWithContentDescription(SEARCH_ENTRY).performClick()
+    composeTestRule.onNodeWithTag("trackingPlaceSearchField").performTextInput("北九州")
+    composeTestRule.waitUntil(timeoutMillis = 5_000) {
+      composeTestRule.onAllNodesWithTag(MOVE_ROW).fetchSemanticsNodes().isNotEmpty()
+    }
+    composeTestRule.onAllNodesWithText("北九州市").assertCountEquals(2)
+    composeTestRule.onNodeWithTag(MOVE_ROW).assert(hasText("地域へ移動"))
+    composeTestRule.onNodeWithTag(REGISTER_ROW).assert(hasText("場所として登録"))
+
+    // 「場所として登録」を選ぶと、地域へは移さずに場所シートで登録へ進む。
+    composeTestRule.onNodeWithTag(REGISTER_ROW).performClick()
+    composeTestRule.waitUntil(timeoutMillis = 5_000) {
+      composeTestRule.onAllNodesWithTag("trackingPlaceSearch").fetchSemanticsNodes().isEmpty()
+    }
+    coVerify { placeEdit.fetchPlaceResult("r2") }
+    coVerify(exactly = 0) { mockViewModel.fetchRegion(any()) }
+    composeTestRule.onNodeWithTag("regionMarkerChip").assertDoesNotExist()
+    composeTestRule.onNodeWithText("登録").assertExists()
+  }
+
+  @Test
   fun trackingScreen_jumpToRegion_multipleChipsSwitchAndRemoveOneByOne() {
     stubRegions()
     setTrackingContent()
 
     // 2 つ目の地域を選ぶとチップが増え、最後に移した地域のチップが選ばれた見た目になる。2 つ以上で「すべて外す」が出る。
-    selectRegion(query = "札幌", secondaryText = "北海道")
+    selectRegion(query = "札幌")
     composeTestRule.onNodeWithText("すべて外す").assertDoesNotExist()
-    selectRegion(query = "北九州", secondaryText = "福岡県")
+    selectRegion(query = "北九州")
     composeTestRule.onAllNodesWithTag("regionMarkerChip").assertCountEquals(2)
     composeTestRule.onNodeWithText("すべて外す").assertIsDisplayed()
     chip("北九州市").assertIsSelected()
@@ -495,7 +532,7 @@ class TrackingScreenTest {
     chip("北九州市").assertIsNotSelected()
 
     // 出している地域を選び直しても増えず、範囲も引き直さない（その地域へ移るだけ）。
-    selectRegion(query = "北九州", secondaryText = "福岡県")
+    selectRegion(query = "北九州")
     composeTestRule.onAllNodesWithTag("regionMarkerChip").assertCountEquals(2)
     chip("北九州市").assertIsSelected()
     coVerify(exactly = 1) { mockViewModel.fetchRegion("r2") }
@@ -519,7 +556,7 @@ class TrackingScreenTest {
     composeTestRule.onNodeWithTag("regionMarkerFoldedChip").assertDoesNotExist()
 
     // 6 つ目を選ぶと、縦のチップは増えず「他 1 件」にまとまる。今見ている地域がその中なので、まとめを塗りつぶす。
-    selectRegion(query = "札幌", secondaryText = "北海道")
+    selectRegion(query = "札幌")
     assertEquals(VISIBLE_REGION_CHIPS + 1, regionMarkers.state.value.markers.size)
     composeTestRule.onAllNodesWithTag("regionMarkerChip").assertCountEquals(VISIBLE_REGION_CHIPS)
     composeTestRule.onNodeWithTag("regionMarkerFoldedChip").assertIsDisplayed().assertIsSelected()
@@ -547,16 +584,17 @@ class TrackingScreenTest {
     composeTestRule.onNodeWithText("すべて外す").assertDoesNotExist()
   }
 
-  /** 地名の候補（札幌・北九州）と、その範囲を返すようにする。 */
+  /** 地名の候補（札幌・北九州。地域）と、その範囲を返すようにする。 */
   private fun stubRegions() {
-    coEvery { mockViewModel.predictRegions(any(), any()) } answers {
-      val query = firstArg<String>()
+    val regionPredictions: (String) -> List<PlacePrediction> = { query ->
       when {
-        query.startsWith("札幌") -> listOf(PlacePrediction(placeId = "r1", primaryText = "札幌市", secondaryText = "北海道"))
-        query.startsWith("北九州") -> listOf(PlacePrediction(placeId = "r2", primaryText = "北九州市", secondaryText = "福岡県"))
+        query.startsWith("札幌") -> listOf(PlacePrediction(placeId = "r1", primaryText = "札幌市", secondaryText = "北海道", isRegion = true))
+        query.startsWith("北九州") -> listOf(PlacePrediction(placeId = "r2", primaryText = "北九州市", secondaryText = "福岡県", isRegion = true))
         else -> emptyList()
       }
     }
+    coEvery { mockViewModel.predictPlacesNear(any(), any()) } answers { regionPredictions(firstArg()) }
+    coEvery { mockViewModel.predictRegions(any(), any()) } answers { regionPredictions(firstArg()) }
     coEvery { mockViewModel.fetchRegion("r1") } returns
       MapRegion(bounds = GeoBounds(42.9, 141.2, 43.2, 141.5), latitude = 43.06, longitude = 141.35)
     coEvery { mockViewModel.fetchRegion("r2") } returns
@@ -576,14 +614,14 @@ class TrackingScreenTest {
     }
   }
 
-  /** 地名の検索窓で [query] を打ち、候補（[secondaryText] で見分ける）を選んで窓が閉じるまで待つ。 */
-  private fun selectRegion(query: String, secondaryText: String, openSearch: Boolean = true) {
-    if (openSearch) composeTestRule.onNodeWithContentDescription("地域へ移動").performClick()
+  /** 検索窓で [query] を打ち、地域の候補の「地域へ移動」の行を選んで窓が閉じるまで待つ。 */
+  private fun selectRegion(query: String, openSearch: Boolean = true) {
+    if (openSearch) composeTestRule.onNodeWithContentDescription(SEARCH_ENTRY).performClick()
     composeTestRule.onNodeWithTag("trackingPlaceSearchField").performTextInput(query)
     composeTestRule.waitUntil(timeoutMillis = 5_000) {
-      composeTestRule.onAllNodesWithText(secondaryText).fetchSemanticsNodes().isNotEmpty()
+      composeTestRule.onAllNodesWithTag(MOVE_ROW).fetchSemanticsNodes().isNotEmpty()
     }
-    composeTestRule.onNodeWithText(secondaryText).performClick()
+    composeTestRule.onNodeWithTag(MOVE_ROW).performClick()
     composeTestRule.waitUntil(timeoutMillis = 5_000) {
       composeTestRule.onAllNodesWithTag("trackingPlaceSearch").fetchSemanticsNodes().isEmpty()
     }
@@ -868,3 +906,12 @@ class TrackingScreenTest {
     verify { onOpenSettings() }
   }
 }
+
+/** 記録画面の上の検索の入口（施設と地域の共通の窓を開く）。 */
+private const val SEARCH_ENTRY = "場所・地域を検索"
+
+/** 検索窓の候補の「地域へ移動」の行。 */
+private const val MOVE_ROW = "mapSearchCandidate_MoveToRegion"
+
+/** 検索窓の候補の「登録」「場所として登録」の行。 */
+private const val REGISTER_ROW = "mapSearchCandidate_Register"

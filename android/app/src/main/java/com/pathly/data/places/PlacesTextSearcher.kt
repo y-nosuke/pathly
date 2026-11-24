@@ -63,7 +63,8 @@ class PlacesTextSearcher @Inject constructor(
   /**
    * キーワードの候補（Autocomplete）を返す。オフライン・未初期化・失敗時は空リスト。
    * [locationBias] を渡すと、その範囲の中の候補を優先する（範囲の外も出る。料金は変わらない）。
-   * [regionsOnly] なら地域（国・都道府県・市区町村・郵便番号など）だけに絞る（記録画面の「地域へ移動」）。
+   * 種類では絞らず、施設と地域を 1 回で取る（候補ごとの [PlacePrediction.isRegion] で見分ける）。
+   * [regionsOnly] なら地域（国・都道府県・市区町村・郵便番号など）だけに絞る（立ち寄りの追加中の記録画面の検索窓）。
    */
   suspend fun predict(
     query: String,
@@ -89,6 +90,7 @@ class PlacesTextSearcher @Inject constructor(
           placeId = it.placeId,
           primaryText = it.getPrimaryText(null).toString(),
           secondaryText = it.getSecondaryText(null).toString(),
+          isRegion = regionsOnly || isRegionPlaceTypes(it.types),
         )
       }
     } catch (e: Exception) {
@@ -169,6 +171,31 @@ class PlacesTextSearcher @Inject constructor(
       caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)
   }
 }
+
+/**
+ * Autocomplete の候補の種類（`types`）が地域か。`establishment` が付いていれば施設、
+ * 地域の種類（`(regions)` で絞ったときに出るもの）が付いていれば地域、どちらでもなければ施設とみなす。
+ */
+internal fun isRegionPlaceTypes(types: Collection<String>): Boolean = PlaceTypes.ESTABLISHMENT !in types && types.any { it in REGION_PLACE_TYPES }
+
+private val REGION_PLACE_TYPES = setOf(
+  PlaceTypes.COUNTRY,
+  PlaceTypes.ADMINISTRATIVE_AREA_LEVEL_1,
+  PlaceTypes.ADMINISTRATIVE_AREA_LEVEL_2,
+  PlaceTypes.ADMINISTRATIVE_AREA_LEVEL_3,
+  PlaceTypes.ADMINISTRATIVE_AREA_LEVEL_4,
+  PlaceTypes.ADMINISTRATIVE_AREA_LEVEL_5,
+  PlaceTypes.LOCALITY,
+  PlaceTypes.SUBLOCALITY,
+  PlaceTypes.SUBLOCALITY_LEVEL_1,
+  PlaceTypes.SUBLOCALITY_LEVEL_2,
+  PlaceTypes.SUBLOCALITY_LEVEL_3,
+  PlaceTypes.SUBLOCALITY_LEVEL_4,
+  PlaceTypes.SUBLOCALITY_LEVEL_5,
+  PlaceTypes.POSTAL_CODE,
+  PlaceTypes.POSTAL_TOWN,
+  PlaceTypes.COLLOQUIAL_AREA,
+)
 
 private val REGION_FIELDS = listOf(Place.Field.ID, Place.Field.LOCATION, Place.Field.VIEWPORT)
 

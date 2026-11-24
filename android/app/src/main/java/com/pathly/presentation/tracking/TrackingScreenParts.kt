@@ -128,7 +128,7 @@ internal fun StopTrackingConfirmDialog(
  * 記録画面の上の区画。左は検索の入口、右端はレイヤー［≋］（登録済みの場所の表示・絞り込み、この範囲の経路）。
  * その下（上の下）に、今の状態（[status]）を積む。
  *
- * @param searchEnabled 立ち寄りの追加中は、そちらのシートが優先なので「検索して登録」とこの範囲の経路を押せなくする。
+ * @param overlayEnabled 立ち寄りの追加中は、そちらのシートが優先なので「この範囲の経路」を押せなくする。
  */
 @Composable
 internal fun TrackingTopBar(
@@ -138,22 +138,16 @@ internal fun TrackingTopBar(
   onToggleRegisteredPlaces: () -> Unit,
   onMapPlaceFilterChange: (MapPlaceFilter) -> Unit,
   overlayActive: Boolean,
-  searchEnabled: Boolean,
+  overlayEnabled: Boolean,
   onToggleOverlay: () -> Unit,
-  onSearchPlace: () -> Unit,
-  onSearchRegion: () -> Unit,
+  onSearch: () -> Unit,
   modifier: Modifier = Modifier,
   status: @Composable () -> Unit = {},
 ) {
   MapTopBar(
     modifier = modifier,
     leading = {
-      TrackingSearchEntry(
-        placeEnabled = searchEnabled,
-        onSearchPlace = onSearchPlace,
-        onSearchRegion = onSearchRegion,
-        modifier = Modifier.weight(1f),
-      )
+      TrackingSearchEntry(onSearch = onSearch, modifier = Modifier.weight(1f))
     },
     actions = {
       MapLayersButton(
@@ -174,7 +168,7 @@ internal fun TrackingTopBar(
           title = "この範囲の経路",
           supporting = if (overlayActive) "表示中（押すと閉じる）" else "いま見えている範囲で前に通った道",
           selected = overlayActive,
-          enabled = searchEnabled,
+          enabled = overlayEnabled,
           onClick = {
             close()
             onToggleOverlay()
@@ -186,15 +180,10 @@ internal fun TrackingTopBar(
   )
 }
 
-/**
- * 上のバーの検索の入口。窓の形の部分で「検索して登録」（施設を探して登録）、右端の地球で「地域へ移動」。
- * #192 で検索窓を 1 つにするときは、この Composable の中身を差し替える。
- */
+/** 上のバーの検索の入口（施設の登録と地域への移動を 1 つの窓で → ADR 0039）。押すと地図の上端に検索窓を重ねる。 */
 @Composable
 private fun TrackingSearchEntry(
-  placeEnabled: Boolean,
-  onSearchPlace: () -> Unit,
-  onSearchRegion: () -> Unit,
+  onSearch: () -> Unit,
   modifier: Modifier = Modifier,
 ) {
   Surface(
@@ -203,35 +192,28 @@ private fun TrackingSearchEntry(
     color = MaterialTheme.colorScheme.surfaceContainerLowest,
     shadowElevation = PathlyElevation.floating,
   ) {
-    Row(verticalAlignment = Alignment.CenterVertically) {
-      Row(
-        modifier = Modifier
-          .weight(1f)
-          .fillMaxHeight()
-          .clickable(enabled = placeEnabled, role = Role.Button, onClick = onSearchPlace)
-          .semantics(mergeDescendants = true) { contentDescription = "検索して場所を登録" }
-          .padding(start = PathlySpacing.lg, end = PathlySpacing.sm),
-        verticalAlignment = Alignment.CenterVertically,
-      ) {
-        Icon(
-          painter = painterResource(R.drawable.ic_search),
-          contentDescription = null,
-          tint = MaterialTheme.colorScheme.onSurfaceVariant,
-          modifier = Modifier.size(20.dp),
-        )
-        Spacer(modifier = Modifier.width(PathlySpacing.sm))
-        Text(
-          text = "店名・場所名で検索",
-          style = MaterialTheme.typography.bodyLarge,
-          color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = if (placeEnabled) 1f else 0.38f),
-          maxLines = 1,
-          overflow = TextOverflow.Ellipsis,
-        )
-      }
-      VerticalDivider(modifier = Modifier.height(24.dp))
-      IconButton(onClick = onSearchRegion) {
-        Icon(painter = painterResource(R.drawable.ic_public), contentDescription = "地域へ移動")
-      }
+    Row(
+      modifier = Modifier
+        .fillMaxHeight()
+        .clickable(role = Role.Button, onClick = onSearch)
+        .semantics(mergeDescendants = true) { contentDescription = "場所・地域を検索" }
+        .padding(horizontal = PathlySpacing.lg),
+      verticalAlignment = Alignment.CenterVertically,
+    ) {
+      Icon(
+        painter = painterResource(R.drawable.ic_search),
+        contentDescription = null,
+        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.size(20.dp),
+      )
+      Spacer(modifier = Modifier.width(PathlySpacing.sm))
+      Text(
+        text = "場所・地域を検索",
+        style = MaterialTheme.typography.bodyLarge,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        maxLines = 1,
+        overflow = TextOverflow.Ellipsis,
+      )
     }
   }
 }
