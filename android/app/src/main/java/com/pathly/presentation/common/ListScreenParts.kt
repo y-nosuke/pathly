@@ -251,6 +251,9 @@ fun ListMenuChoice(text: String, selected: Boolean, onClick: () -> Unit) {
  * 押しても開閉しない。いちばん外の段（[depth] が 0）は字を大きくする。下に区切り線を引く。
  *
  * @param trailing 右端に出す件数など（場所なら「12」、履歴なら「5 回 ・ 32.1 km」）。
+ * @param action [trailing] のさらに右に置く、開閉とは別の操作のボタン（場所一覧の地域の「地図で見る」）。
+ *   押せる広さ（48dp）を見出しの上下の余白に重ねるよう、置くときは上下の余白を詰める（行は 48dp。
+ *   字の大きい 1 段目は置かないときと同じ高さ、2 段目は少し高くなる）。
  */
 @Composable
 fun ListGroupHeader(
@@ -261,6 +264,7 @@ fun ListGroupHeader(
   indent: Dp,
   testTag: String,
   onClick: (() -> Unit)?,
+  action: (@Composable () -> Unit)? = null,
 ) {
   Column(modifier = Modifier.fillMaxWidth()) {
     Row(
@@ -275,7 +279,13 @@ fun ListGroupHeader(
           },
         )
         .semantics { stateDescription = if (expanded) "開いている" else "閉じている" }
-        .padding(start = PathlySpacing.screenEdge + indent, end = PathlySpacing.screenEdge, top = PathlySpacing.md, bottom = PathlySpacing.md),
+        .padding(
+          start = PathlySpacing.screenEdge + indent,
+          // ボタンの絵の右端を画面の端の余白に揃える（ボタンは絵の周りに 12dp の押せる余白を持つ）。
+          end = if (action != null) PathlySpacing.screenEdge - ListGroupActionInset else PathlySpacing.screenEdge,
+          top = if (action != null) 0.dp else PathlySpacing.md,
+          bottom = if (action != null) 0.dp else PathlySpacing.md,
+        ),
       verticalAlignment = Alignment.CenterVertically,
     ) {
       // 開いていれば ⌄、閉じていれば ›（同じ絵を回す）。
@@ -299,10 +309,17 @@ fun ListGroupHeader(
         color = MaterialTheme.colorScheme.onSurfaceVariant,
         maxLines = 1,
       )
+      if (action != null) {
+        Spacer(modifier = Modifier.width(PathlySpacing.xs))
+        action()
+      }
     }
     HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
   }
 }
+
+// 見出しの右端のボタン（48dp）の、絵（24dp）の周りの押せる余白。
+private val ListGroupActionInset = 12.dp
 
 /** 分けた一覧の、まとまりの段ごとの字下げ。 */
 val ListGroupIndent = PathlySpacing.lg

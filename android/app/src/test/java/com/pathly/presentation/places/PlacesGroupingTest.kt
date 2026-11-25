@@ -5,8 +5,10 @@ import com.pathly.domain.model.PlaceCategory
 import com.pathly.domain.model.PlaceGrouping
 import com.pathly.domain.model.PlaceListItem
 import com.pathly.domain.model.PlaceRegion
+import com.pathly.domain.model.RegionKey
 import com.pathly.presentation.common.ListGroupRow
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.util.Date
@@ -154,5 +156,20 @@ class PlacesGroupingTest {
   fun resetIsNotNeededJustForGrouping() {
     // 分け方は見せ方の設定なので「初期状態に戻す」を出す理由にしない。
     assertTrue(PlacesState(items = items, grouping = PlaceGrouping.CATEGORY).isInitialListOptions)
+  }
+
+  @Test
+  fun groupRegionPointsToThePrefectureOrCityAndNotToUnknownOrCategories() {
+    val groups = groupPlaces(items, PlaceGrouping.REGION)
+    val tokyo = groups.single { it.label == "東京都" }
+    val us = groups.single { it.key == "region:US||" }
+
+    // 市区町村が分からない場所（tokyoNoCity）が東京都の直下にあっても、東京都を指す。
+    assertEquals(RegionKey("JP", "東京都"), placeGroupRegion(tokyo))
+    assertEquals(RegionKey("JP", "東京都", "府中市"), placeGroupRegion(tokyo.children.single { it.label == "府中市" }))
+    assertEquals(RegionKey("US"), placeGroupRegion(us))
+    assertEquals(RegionKey("US", city = "ホノルル"), placeGroupRegion(us.children.single()))
+    assertNull(placeGroupRegion(groups.single { it.label == RegionKey.UNKNOWN_LABEL }))
+    assertTrue(groupPlaces(items, PlaceGrouping.CATEGORY).all { placeGroupRegion(it) == null })
   }
 }

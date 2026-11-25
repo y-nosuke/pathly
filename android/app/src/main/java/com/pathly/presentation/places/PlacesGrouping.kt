@@ -53,6 +53,21 @@ private fun groupByCategory(items: List<PlaceListItem>): List<PlaceGroup> = item
   .sortedBy { it.key.ordinal }
   .map { (facet, members) -> PlaceGroup(key = "category:${facet.name}", label = facet.label, count = members.size, items = members) }
 
+/**
+ * 地域で分けたまとまりが指す地域（都道府県・国なら 1 段目、市区町村・都市ならその市区町村）。地図で見るときに使う。
+ * 地域で分けたまとまりでない・地域不明なら null（地名が無いので地図で見る範囲を決められない）。
+ */
+fun placeGroupRegion(group: PlaceGroup): RegionKey? {
+  val region = group.allItems().firstOrNull()?.region ?: return null
+  if (region.isUnknown) return null
+  val top = region.topKey
+  return when (group.key) {
+    regionGroupKey(top) -> top
+    regionGroupKey(top.copy(city = region.city)) -> top.copy(city = region.city)
+    else -> null
+  }
+}
+
 private fun regionGroupKey(key: RegionKey): String = "region:" + listOf(key.countryCode, key.prefecture, key.city).joinToString("|") { it.orEmpty() }
 
 /** 場所のまとまりを、一覧に並べる行にする（→ [flattenGroups]）。開いているのは [openKeys] に入ったまとまり。 */

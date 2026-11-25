@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
@@ -27,11 +28,13 @@ import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.FloatingActionButtonDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -57,6 +60,7 @@ import com.google.maps.android.compose.GoogleMap
 import com.google.maps.android.compose.MapProperties
 import com.google.maps.android.compose.MapUiSettings
 import com.pathly.R
+import com.pathly.domain.model.GeoBounds
 import com.pathly.domain.model.PlaceCategoryFacet
 import com.pathly.domain.model.PlaceGrouping
 import com.pathly.domain.model.PlaceListItem
@@ -105,6 +109,7 @@ import com.pathly.ui.theme.PathlyElevation
 import com.pathly.ui.theme.PathlySpacing
 import com.pathly.ui.theme.PathlyTheme
 import com.pathly.util.DateFormatters
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 
 // 「場所」タブの一覧表示と地図表示。一覧の画面の型（見出し＋ツール行 → docs/designs/ui-direction.md）に載せ、
@@ -139,6 +144,8 @@ internal fun PlacesListContent(
   // 統計の帯を統計のカードに広げているか・広げる／畳む。
   statsExpanded: Boolean,
   onStatsExpandedChange: (Boolean) -> Unit,
+  // 地域の見出しから地図で見るときに、その地域の範囲を引く（Places。2 つ目はその地域の場所が入る範囲）。引けなければ null。
+  onFetchRegionBounds: suspend (RegionKey, GeoBounds?) -> GeoBounds?,
   modifier: Modifier = Modifier,
   // 地図表示の地図スロット。null（既定）は実マップ（GoogleMap）を描画する。
   // テストは空スロット（{}）を渡し、GMS 依存の地図描画を避けて切り替え・文言だけを検証する。
@@ -152,6 +159,33 @@ internal fun PlacesListContent(
   // 地図表示の範囲は、一覧表示に切り替えても捨てない。地図に戻ったら前に見ていた範囲のまま出す
   // （その間に絞り込みの結果が変わっていれば、戻ったときに合わせ直す）。
   val mapCamera = rememberListMapCamera()
+  // 一覧のスクロール位置と、最後に先頭へ戻したときの条件。地図表示の間は一覧を描かないので、ここで持って
+  // 一覧へ戻ったときに同じ位置から出す（地図表示の間に絞り込みを変えていれば、戻ったときに先頭へ戻す）。
+  val listState = rememberLazyListState()
+  val listScrolledFor = rememberSaveable { mutableStateOf<String?>(null) }
+
+  // 地域の見出しから地図で見る: 地図表示に切り替え、その地域の範囲（引けなければその地域の場所が全部入る範囲）へ寄せる。
+  // 絞り込みは変えない。範囲を引く間に別の見出しを押したら、後に押したほうだけを寄せる。
+  val scope = rememberCoroutineScope()
+  var regionFocus by remember { mutableStateOf<PlacesMapFocus?>(null) }
+  val regionFocusJob = remember { mutableStateOf<Job?>(null) }
+  val showGroupOnMap: (PlaceGroup, RegionKey) -> Unit = { group, region ->
+    val places = group.allItems().map { it.toRegisteredPlace() }
+    // 地図を開いたとき・絞り込みの結果が変わったときの「全部入る範囲」への寄せは、この地域へ寄せるので飛ばす。
+    mapCamera.fittedFor = placesFitKey(state.visibleItems)
+    onViewModeChange(ListMapMode.MAP)
+    regionFocusJob.value?.cancel()
+    regionFocusJob.value = scope.launch {
+      regionFocus = PlacesMapFocus(places, onFetchRegionBounds(region, placesBounds(places)))
+    }
+  }
+  // 範囲を引いている間に一覧表示へ戻ったら、寄せるのをやめる（戻った後に絞り込みを変えると、その結果に合わせ直したいので）。
+  LaunchedEffect(isMap) {
+    if (!isMap) {
+      regionFocusJob.value?.cancel()
+      regionFocus = null
+    }
+  }
 
   // 絞り込みの欄を開いているか。一覧表示と地図表示で共有する（切り替えても開いたまま）。
   var filterPanelOpen by rememberSaveable { mutableStateOf(false) }
@@ -224,6 +258,8 @@ internal fun PlacesListContent(
           onViewModeChange = onViewModeChange,
           onControlsCollapsedChange = onControlsCollapsedChange,
           onPlaceClick = onMapPlaceClick,
+          focus = regionFocus,
+          onFocusConsumed = { regionFocus = null },
           mapContent = mapContent,
         )
       },
@@ -264,6 +300,9 @@ internal fun PlacesListContent(
           }
         },
         onToggleGroup = onToggleGroup,
+        onShowGroupOnMap = showGroupOnMap,
+        listState = listState,
+        scrolledForState = listScrolledFor,
         onItemClick = onItemClick,
         onToggleWishlist = onToggleWishlist,
       )
@@ -299,6 +338,9 @@ private fun PlacesListBody(
   filterPanel: @Composable (Modifier) -> Unit,
   stats: @Composable (Modifier) -> Unit,
   onToggleGroup: (String) -> Unit,
+  onShowGroupOnMap: (PlaceGroup, RegionKey) -> Unit,
+  listState: LazyListState,
+  scrolledForState: MutableState<String?>,
   onItemClick: (PlaceListItem) -> Unit,
   onToggleWishlist: (PlaceListItem) -> Unit,
 ) {
@@ -319,6 +361,9 @@ private fun PlacesListBody(
         filterPanel = filterPanel,
         stats = stats,
         onToggleGroup = onToggleGroup,
+        onShowGroupOnMap = onShowGroupOnMap,
+        listState = listState,
+        scrolledForState = scrolledForState,
         onItemClick = onItemClick,
         onToggleWishlist = onToggleWishlist,
       )
@@ -334,17 +379,19 @@ private fun PlacesLazyList(
   filterPanel: @Composable (Modifier) -> Unit,
   stats: @Composable (Modifier) -> Unit,
   onToggleGroup: (String) -> Unit,
+  onShowGroupOnMap: (PlaceGroup, RegionKey) -> Unit,
+  listState: LazyListState,
+  scrolledForState: MutableState<String?>,
   onItemClick: (PlaceListItem) -> Unit,
   onToggleWishlist: (PlaceListItem) -> Unit,
 ) {
-  val listState = rememberLazyListState()
   // 絞り込み・並べ替え・まとめを状態が変わったときだけ計算し直す（描き直しのたびにやらない）。
   val rows = remember(state) { state.listRows }
   // 絞り込み・並べ替えを変えたとき、または先頭が変わったとき（＝追加時）に先頭へ戻す。
   // 詳細から戻って一覧を出し直したときは戻さない（前に見ていた位置のまま）。そのため、最後に
-  // 先頭へ戻したときの条件を画面の状態として取っておき、条件が変わったときだけ動かす。
+  // 先頭へ戻したときの条件を画面の状態として取っておき（[scrolledForState]）、条件が変わったときだけ動かす。
   val scrollKey = state.scrollResetKey
-  var scrolledFor by rememberSaveable { mutableStateOf<String?>(null) }
+  var scrolledFor by scrolledForState
   LaunchedEffect(scrollKey) {
     if (scrolledFor != null && scrolledFor != scrollKey) listState.scrollToItem(0)
     scrolledFor = scrollKey
@@ -410,6 +457,21 @@ private fun PlacesLazyList(
             indent = indent,
             testTag = "placeGroup:${row.group.key}",
             onClick = groupToggle?.let { toggle -> { toggle(row.group.key) } },
+            // 地域のまとまり（地域不明を除く）は、右端の地図のボタンでその地域を地図で見られる（開閉とは別）。
+            action = placeGroupRegion(row.group)?.let { region ->
+              {
+                IconButton(
+                  onClick = { onShowGroupOnMap(row.group, region) },
+                  modifier = Modifier.testTag("placeGroupMap:${row.group.key}"),
+                ) {
+                  Icon(
+                    painter = painterResource(R.drawable.ic_map),
+                    contentDescription = "${row.group.label}を地図で見る",
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                  )
+                }
+              }
+            },
           )
 
           is ListGroupRow.Item -> PlaceItemRow(
@@ -801,6 +863,8 @@ private fun PlacesMapLayout(
   onViewModeChange: (ListMapMode) -> Unit,
   onControlsCollapsedChange: (Boolean) -> Unit,
   onPlaceClick: (Long) -> Unit,
+  focus: PlacesMapFocus?,
+  onFocusConsumed: () -> Unit,
   modifier: Modifier = Modifier,
   mapContent: (@Composable () -> Unit)? = null,
 ) {
@@ -826,6 +890,8 @@ private fun PlacesMapLayout(
         visible = visible,
         camera = camera,
         showMyLocation = hasLocationPermission,
+        focus = focus,
+        onFocusConsumed = onFocusConsumed,
         // 下は右下の追加・現在地の丸の分。範囲を合わせたマーカーが丸の下に隠れないように。
         contentPadding = PaddingValues(top = overlayHeight, bottom = PlaceAddButtonClearance),
         mapContent = mapContent,
@@ -896,6 +962,9 @@ private fun PlacesMapView(
   visible: Boolean,
   camera: ListMapCamera,
   showMyLocation: Boolean,
+  // 地域の見出しから地図で見るときの寄せ先。地図の読み込みを待って寄せ、寄せたら [onFocusConsumed]。
+  focus: PlacesMapFocus?,
+  onFocusConsumed: () -> Unit,
   modifier: Modifier = Modifier,
   // 地図に重ねたもの（見出し・ツール行）の分の余白。範囲合わせ・Google のロゴ・0 件の文言がその下に収まる。
   contentPadding: PaddingValues = PaddingValues(),
@@ -912,7 +981,7 @@ private fun PlacesMapView(
 
   // 範囲を合わせるのは、地図を初めて開いたときと絞り込みの結果が変わったときだけ。詳細から戻ったときや、
   // 一覧表示を挟んで地図に戻ったときは前に見ていた範囲のまま（[camera] は地図表示の外で持っている）。
-  val fitKey = remember(places) { places.map { it.placeId }.sorted().joinToString(",") }
+  val fitKey = remember(items) { placesFitKey(items) }
   var fittedFor by camera::fittedFor
   // 範囲（bounds）で合わせるには地図の大きさが決まっている必要があるので、読み込みを待つ。
   var mapLoaded by remember { mutableStateOf(false) }
@@ -932,6 +1001,17 @@ private fun PlacesMapView(
       }
 
       else -> cameraPositionState.animate(placesFitUpdate(places, boundsPaddingPx) ?: return@LaunchedEffect)
+    }
+  }
+  LaunchedEffect(focus, mapLoaded) {
+    if (focus == null || !mapLoaded) return@LaunchedEffect
+    // 寄せた後に絞り込みの結果が変わるまでは、全部入る範囲へ合わせ直さない。
+    fittedFor = fitKey
+    // 寄せている途中で地図を動かされて止まっても片付ける（残ると、同じ地域をもう一度押しても寄らない）。
+    try {
+      regionFocusUpdate(focus, boundsPaddingPx)?.let { cameraPositionState.animate(it) }
+    } finally {
+      onFocusConsumed()
     }
   }
 
@@ -992,6 +1072,35 @@ private fun placesFitUpdate(places: List<RegisteredPlace>, boundsPaddingPx: Int)
     }.build()
     CameraUpdateFactory.newLatLngBounds(bounds, boundsPaddingPx)
   }
+}
+
+/** 地図表示の範囲を最後に合わせたときの印（絞り込んだ場所の id を並べたもの）。 */
+private fun placesFitKey(items: List<PlaceListItem>): String = items.map { it.place.id }.sorted().joinToString(",")
+
+/** 地域の見出しから地図で見るときの寄せ先。[places] はその地域の場所、[region] は Places で引いた地域の範囲（引けなければ null）。 */
+internal data class PlacesMapFocus(val places: List<RegisteredPlace>, val region: GeoBounds?)
+
+/** [places] が全部入る範囲（地域の候補を寄せる先）。0 件なら null。 */
+private fun placesBounds(places: List<RegisteredPlace>): GeoBounds? = if (places.isEmpty()) {
+  null
+} else {
+  GeoBounds(
+    south = places.minOf { it.latitude },
+    west = places.minOf { it.longitude },
+    north = places.maxOf { it.latitude },
+    east = places.maxOf { it.longitude },
+  )
+}
+
+/**
+ * 地域の見出しから地図で見るときのカメラの動き。地域の範囲がまるごと入るように寄せ、はみ出す場所があれば広げて入れる。
+ * 範囲が引けなかったとき・どの場所も範囲に入らない（別の同じ名前の地域を引いた）ときは、その地域の場所が全部入る範囲。
+ */
+private fun regionFocusUpdate(focus: PlacesMapFocus, boundsPaddingPx: Int): CameraUpdate? {
+  val region = focus.region?.let { LatLngBounds(LatLng(it.south, it.west), LatLng(it.north, it.east)) }
+  val points = focus.places.map { LatLng(it.latitude, it.longitude) }
+  if (region == null || points.none(region::contains)) return placesFitUpdate(focus.places, boundsPaddingPx)
+  return CameraUpdateFactory.newLatLngBounds(points.fold(region) { acc, p -> acc.including(p) }, boundsPaddingPx)
 }
 
 // 地図表示で絞り込んだ場所が全部入るよう範囲を合わせるときの、端の余白（マーカーと名前が切れないように）。

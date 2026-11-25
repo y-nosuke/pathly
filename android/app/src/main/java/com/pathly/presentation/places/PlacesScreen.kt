@@ -124,6 +124,7 @@ fun PlacesListRoute(
       onToggleWishlist = viewModel::toggleWishlist,
       statsExpanded = statsExpanded,
       onStatsExpandedChange = viewModel::setStatsExpanded,
+      onFetchRegionBounds = viewModel::findRegionBounds,
     )
     // 右下の追加の丸を隠さないよう、その上に出す。
     SnackbarHost(

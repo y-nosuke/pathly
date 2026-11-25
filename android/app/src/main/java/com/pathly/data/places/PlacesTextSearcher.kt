@@ -138,28 +138,68 @@ class PlacesTextSearcher @Inject constructor(
   suspend fun fetchRegion(placeId: String): MapRegion? = withContext(Dispatchers.IO) {
     if (!isOnline()) return@withContext null
     val placesClient = client ?: return@withContext null
-    val token = sessionToken
     try {
-      val builder = FetchPlaceRequest.builder(placeId, REGION_FIELDS)
-      if (token != null) builder.setSessionToken(token)
-      val place = Tasks.await(placesClient.fetchPlace(builder.build())).place
-      val viewport = place.viewport
-      val location = place.location ?: viewport?.center ?: return@withContext null
-      val bounds = viewport?.let { v ->
-        GeoBounds(v.southwest.latitude, v.southwest.longitude, v.northeast.latitude, v.northeast.longitude)
-      } ?: GeoBounds(
-        location.latitude - REGION_FALLBACK_HALF_SPAN_DEG,
-        location.longitude - REGION_FALLBACK_HALF_SPAN_DEG,
-        location.latitude + REGION_FALLBACK_HALF_SPAN_DEG,
-        location.longitude + REGION_FALLBACK_HALF_SPAN_DEG,
-      )
-      MapRegion(bounds = bounds, latitude = location.latitude, longitude = location.longitude)
+      fetchRegionOf(placesClient, placeId, sessionToken)
     } catch (e: Exception) {
       logger.w("fetchPlace (region) failed", e)
       null
     } finally {
       sessionToken = null
     }
+  }
+
+  /**
+   * 地名（[RegionKey.searchQuery][com.pathly.domain.model.RegionKey.searchQuery]）から地域の範囲を引く（場所一覧の地域の見出しから地図で見るとき）。
+   * 地域に絞った Autocomplete の候補のうち、[topLevel]（都道府県・国）なら都道府県・国の、そうでなければ（市区町村・都市）
+   * 国でない先頭の候補を、同じセッションのまま [fetchRegion] と同じ項目で確定する（ソウルのように都市が州の段の所もあるので、
+   * 都市では州の段も受ける）
+   * （候補のぶんはセッションにまとまり、料金は Place Details の安い区分 1 回）。[near] の中の候補を優先する
+   * （同じ名前の市を取り違えないように）。引けた地域はアプリを使っている間は覚えて、同じ地名では引き直さない。
+   * 段で選ぶのは、「東京都」で探しても寄せた範囲の中の府中市が先に出ることがあるため。
+   * 検索画面のセッションとは別のトークンを使う。オフライン・段の合う候補が無い・失敗時は null。
+   */
+  suspend fun findRegion(query: String, topLevel: Boolean, near: GeoBounds?): MapRegion? = withContext(Dispatchers.IO) {
+    regionCache[query]?.let { return@withContext it }
+    if (query.isBlank() || !isOnline()) return@withContext null
+    val placesClient = client ?: return@withContext null
+    val token = AutocompleteSessionToken.newInstance()
+    try {
+      val builder = FindAutocompletePredictionsRequest.builder()
+        .setQuery(query)
+        .setSessionToken(token)
+        .setTypesFilter(listOf(PlaceTypes.REGIONS))
+      near?.takeUnless { it.crossesAntimeridian }?.let {
+        builder.setLocationBias(RectangularBounds.newInstance(LatLng(it.south, it.west), LatLng(it.north, it.east)))
+      }
+      val prediction = Tasks.await(placesClient.findAutocompletePredictions(builder.build()))
+        .autocompletePredictions.firstOrNull { matchesRegionLevel(it.types, topLevel) } ?: return@withContext null
+      fetchRegionOf(placesClient, prediction.placeId, token)?.also { regionCache[query] = it }
+    } catch (e: Exception) {
+      // 地名は場所の住所の一部なので出さない（→ designs/logging.md）。
+      logger.w("findRegion failed (query length=${query.length})", e)
+      null
+    }
+  }
+
+  // 地名 → 引けた地域（アプリを使っている間だけ。地域の数は高々数百）。
+  private val regionCache = java.util.concurrent.ConcurrentHashMap<String, MapRegion>()
+
+  /** 地域の範囲（viewport）と中心を引く。範囲が返らなければ位置のまわりの決まった広さ。位置も無ければ null。 */
+  private fun fetchRegionOf(placesClient: PlacesClient, placeId: String, token: AutocompleteSessionToken?): MapRegion? {
+    val builder = FetchPlaceRequest.builder(placeId, REGION_FIELDS)
+    if (token != null) builder.setSessionToken(token)
+    val place = Tasks.await(placesClient.fetchPlace(builder.build())).place
+    val viewport = place.viewport
+    val location = place.location ?: viewport?.center ?: return null
+    val bounds = viewport?.let { v ->
+      GeoBounds(v.southwest.latitude, v.southwest.longitude, v.northeast.latitude, v.northeast.longitude)
+    } ?: GeoBounds(
+      location.latitude - REGION_FALLBACK_HALF_SPAN_DEG,
+      location.longitude - REGION_FALLBACK_HALF_SPAN_DEG,
+      location.latitude + REGION_FALLBACK_HALF_SPAN_DEG,
+      location.longitude + REGION_FALLBACK_HALF_SPAN_DEG,
+    )
+    return MapRegion(bounds = bounds, latitude = location.latitude, longitude = location.longitude)
   }
 
   private fun isOnline(): Boolean {
@@ -177,6 +217,16 @@ class PlacesTextSearcher @Inject constructor(
  * 地域の種類（`(regions)` で絞ったときに出るもの）が付いていれば地域、どちらでもなければ施設とみなす。
  */
 internal fun isRegionPlaceTypes(types: Collection<String>): Boolean = PlaceTypes.ESTABLISHMENT !in types && types.any { it in REGION_PLACE_TYPES }
+
+/**
+ * 地域の候補の種類（`types`）が、探している段に合うか。[topLevel]（都道府県・国）なら国か都道府県（州）の段、
+ * そうでなければ（市区町村・都市）国でないもの。
+ */
+internal fun matchesRegionLevel(types: Collection<String>, topLevel: Boolean): Boolean = if (topLevel) {
+  PlaceTypes.COUNTRY in types || PlaceTypes.ADMINISTRATIVE_AREA_LEVEL_1 in types
+} else {
+  PlaceTypes.COUNTRY !in types
+}
 
 private val REGION_PLACE_TYPES = setOf(
   PlaceTypes.COUNTRY,
