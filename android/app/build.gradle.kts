@@ -71,6 +71,13 @@ android {
       "GOOGLE_MAPS_API_KEY",
       "\"${localProperties.getProperty("GOOGLE_MAPS_API_KEY", "")}\"",
     )
+
+    // 境界を描く地図だけに付けるマップ ID（ADR 0046）。空ならマップ ID の無い地図になり、境界は描かない。
+    buildConfigField(
+      "String",
+      "GOOGLE_MAPS_MAP_ID",
+      "\"${localProperties.getProperty("GOOGLE_MAPS_MAP_ID", "")}\"",
+    )
   }
 
   signingConfigs {

@@ -11,6 +11,7 @@ import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.hasScrollToNodeAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.v2.createComposeRule
+import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
@@ -20,6 +21,7 @@ import androidx.compose.ui.test.performTextInput
 import androidx.test.espresso.Espresso
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.pathly.domain.model.GeoBounds
+import com.pathly.domain.model.MapRegion
 import com.pathly.domain.model.Place
 import com.pathly.domain.model.PlaceGrouping
 import com.pathly.domain.model.PlaceListItem
@@ -53,6 +55,9 @@ class PlacesListContentTest {
 
   // 地域の見出しから地図で見るときに範囲を引いた地域と、候補を寄せる範囲（その地域の場所が入る範囲）。
   private val fetchedRegions = mutableListOf<Pair<RegionKey, GeoBounds?>>()
+
+  // 範囲を引いたときに返す地域（null は引けなかった＝オフラインなど）。
+  private var regionResult: MapRegion? = null
 
   @Test
   fun `切り替えで地図表示になり表示のメニューが消えて戻すと一覧に戻る`() {
@@ -476,6 +481,46 @@ class PlacesListContentTest {
   }
 
   @Test
+  fun `地域の見出しから来ると境界の地域のチップが出て_バツで消える`() {
+    regionResult = MapRegion(placeId = "fuchu", bounds = GeoBounds(35.6, 139.4, 35.7, 139.5), latitude = 35.67, longitude = 139.48)
+    setContent(PlacesState(items = regional, grouping = PlaceGrouping.REGION, openGroups = setOf("region:JP|東京都|")))
+
+    composeTestRule.onNodeWithContentDescription("府中市を地図で見る").performClick()
+
+    composeTestRule.waitUntil { composeTestRule.onAllNodesWithTag("regionMarkerChip").fetchSemanticsNodes().isNotEmpty() }
+    composeTestRule.onNodeWithTag("regionMarkerChip").assertIsDisplayed()
+    composeTestRule.onNodeWithText("府中市").assertIsDisplayed()
+
+    composeTestRule.onNodeWithContentDescription("府中市の境界を外す").performClick()
+
+    composeTestRule.onNodeWithTag("regionMarkerChip").assertDoesNotExist()
+  }
+
+  @Test
+  fun `境界の地域のチップは一覧表示に戻ると消え_地図表示にしても出ない`() {
+    regionResult = MapRegion(placeId = "fuchu", bounds = GeoBounds(35.6, 139.4, 35.7, 139.5), latitude = 35.67, longitude = 139.48)
+    setContent(PlacesState(items = regional, grouping = PlaceGrouping.REGION, openGroups = setOf("region:JP|東京都|")))
+    composeTestRule.onNodeWithContentDescription("府中市を地図で見る").performClick()
+    composeTestRule.waitUntil { composeTestRule.onAllNodesWithTag("regionMarkerChip").fetchSemanticsNodes().isNotEmpty() }
+
+    composeTestRule.onNodeWithContentDescription("一覧で見る").performClick()
+    composeTestRule.onNodeWithContentDescription("地図で見る").performClick()
+
+    composeTestRule.onNodeWithTag("regionMarkerChip").assertDoesNotExist()
+  }
+
+  @Test
+  fun `地域が引けないときは境界の地域のチップを出さない`() {
+    setContent(PlacesState(items = regional, grouping = PlaceGrouping.REGION, openGroups = setOf("region:JP|東京都|")))
+
+    composeTestRule.onNodeWithContentDescription("府中市を地図で見る").performClick()
+
+    composeTestRule.waitUntil { fetchedRegions.isNotEmpty() }
+    composeTestRule.waitForIdle()
+    composeTestRule.onNodeWithTag("regionMarkerChip").assertDoesNotExist()
+  }
+
+  @Test
   fun `地図表示を挟んで一覧に戻ると前に見ていた位置のまま`() {
     setContent(PlacesState(items = (1L..30L).map { item(id = it, wishlisted = false) }))
     // 既定は登録の新しい順なので、場所1 はいちばん下。
@@ -526,12 +571,14 @@ class PlacesListContentTest {
       onToggleWishlist = {},
       statsExpanded = statsExpanded,
       onStatsExpandedChange = { statsExpanded = it },
-      onFetchRegionBounds = { region, near ->
+      onFetchRegion = { region, near ->
         fetchedRegions += region to near
-        null
+        regionResult
       },
       // CI のエミュレータでは GMS の地図が落ちることがあるので、地図は描かない（ほかの画面のテストと同じ）。
       mapContent = {},
+      // 地図を描かないので、境界を描ける端末として扱う（チップの出方を見る）。
+      boundaryAvailableInitially = true,
     )
   }
 

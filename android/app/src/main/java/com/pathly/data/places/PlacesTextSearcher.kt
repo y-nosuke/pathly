@@ -199,7 +199,7 @@ class PlacesTextSearcher @Inject constructor(
       location.latitude + REGION_FALLBACK_HALF_SPAN_DEG,
       location.longitude + REGION_FALLBACK_HALF_SPAN_DEG,
     )
-    return MapRegion(bounds = bounds, latitude = location.latitude, longitude = location.longitude)
+    return MapRegion(placeId = place.id?.takeIf { it.isNotBlank() } ?: placeId, bounds = bounds, latitude = location.latitude, longitude = location.longitude)
   }
 
   private fun isOnline(): Boolean {

@@ -61,6 +61,7 @@ import com.google.maps.android.compose.MapProperties
 import com.google.maps.android.compose.MapUiSettings
 import com.pathly.R
 import com.pathly.domain.model.GeoBounds
+import com.pathly.domain.model.MapRegion
 import com.pathly.domain.model.PlaceCategoryFacet
 import com.pathly.domain.model.PlaceGrouping
 import com.pathly.domain.model.PlaceListItem
@@ -91,11 +92,15 @@ import com.pathly.presentation.common.ListToolRow
 import com.pathly.presentation.common.MapControls
 import com.pathly.presentation.common.MapRoundButton
 import com.pathly.presentation.common.MapRoundButtonSize
+import com.pathly.presentation.common.RegionBoundaries
 import com.pathly.presentation.common.RegionFilterSection
+import com.pathly.presentation.common.RegionMarkerChip
 import com.pathly.presentation.common.RegisteredPlaceMarkers
 import com.pathly.presentation.common.ScrollToTopButton
 import com.pathly.presentation.common.ScrollToTopButtonClearance
 import com.pathly.presentation.common.WishlistFlagButton
+import com.pathly.presentation.common.boundaryMapColorScheme
+import com.pathly.presentation.common.boundaryMapOptions
 import com.pathly.presentation.common.categoryChipLabel
 import com.pathly.presentation.common.choiceLabel
 import com.pathly.presentation.common.flippedChoice
@@ -144,12 +149,15 @@ internal fun PlacesListContent(
   // 統計の帯を統計のカードに広げているか・広げる／畳む。
   statsExpanded: Boolean,
   onStatsExpandedChange: (Boolean) -> Unit,
-  // 地域の見出しから地図で見るときに、その地域の範囲を引く（Places。2 つ目はその地域の場所が入る範囲）。引けなければ null。
-  onFetchRegionBounds: suspend (RegionKey, GeoBounds?) -> GeoBounds?,
+  // 地域の見出しから地図で見るときに、その地域（範囲と境界の Place ID）を引く（Places。2 つ目はその地域の場所が入る範囲）。
+  // 引けなければ null。
+  onFetchRegion: suspend (RegionKey, GeoBounds?) -> MapRegion?,
   modifier: Modifier = Modifier,
   // 地図表示の地図スロット。null（既定）は実マップ（GoogleMap）を描画する。
   // テストは空スロット（{}）を渡し、GMS 依存の地図描画を避けて切り替え・文言だけを検証する。
   mapContent: (@Composable () -> Unit)? = null,
+  // 地図で境界を描けるか（マップ ID・端末の対応）の初めの値。実マップが分かり次第置き換える。テストは地図を描かないので true を渡す。
+  boundaryAvailableInitially: Boolean = false,
 ) {
   val isMap = state.viewMode == ListMapMode.MAP
   // 地図表示はタブの中の一段奥の見方として扱い、システムバックで一覧表示へ戻す（タブは離れない）。
@@ -169,21 +177,31 @@ internal fun PlacesListContent(
   val scope = rememberCoroutineScope()
   var regionFocus by remember { mutableStateOf<PlacesMapFocus?>(null) }
   val regionFocusJob = remember { mutableStateOf<Job?>(null) }
+  // 境界を描いている地域（1 つだけ。別の見出しから来ると置き換わり、一覧表示に戻ると消える → ADR 0046）。
+  var boundary by remember { mutableStateOf<PlacesBoundary?>(null) }
+  var boundaryAvailable by remember { mutableStateOf(boundaryAvailableInitially) }
   val showGroupOnMap: (PlaceGroup, RegionKey) -> Unit = { group, region ->
     val places = group.allItems().map { it.toRegisteredPlace() }
     // 地図を開いたとき・絞り込みの結果が変わったときの「全部入る範囲」への寄せは、この地域へ寄せるので飛ばす。
     mapCamera.fittedFor = placesFitKey(state.visibleItems)
     onViewModeChange(ListMapMode.MAP)
+    // 前の地域の境界は、引いている間も残さない（引けなかったときに別の地域の境界が残らないように）。
+    boundary = null
     regionFocusJob.value?.cancel()
     regionFocusJob.value = scope.launch {
-      regionFocus = PlacesMapFocus(places, onFetchRegionBounds(region, placesBounds(places)))
+      val fetched = onFetchRegion(region, placesBounds(places))
+      val focus = PlacesMapFocus(places, fetched?.bounds)
+      regionFocus = focus
+      boundary = fetched?.let { PlacesBoundary(placeId = it.placeId, name = group.label, focus = focus) }
     }
   }
   // 範囲を引いている間に一覧表示へ戻ったら、寄せるのをやめる（戻った後に絞り込みを変えると、その結果に合わせ直したいので）。
+  // 境界も一覧表示に戻ったら消す。
   LaunchedEffect(isMap) {
     if (!isMap) {
       regionFocusJob.value?.cancel()
       regionFocus = null
+      boundary = null
     }
   }
 
@@ -260,6 +278,11 @@ internal fun PlacesListContent(
           onPlaceClick = onMapPlaceClick,
           focus = regionFocus,
           onFocusConsumed = { regionFocus = null },
+          boundary = boundary?.takeIf { boundaryAvailable },
+          onBoundaryAvailableChange = { boundaryAvailable = it },
+          // 地名を押すと、その地域の範囲へ寄せ直す（見出しから来たときと同じ寄せ方）。
+          onBoundaryRefit = { boundary?.let { regionFocus = it.focus } },
+          onBoundaryClear = { boundary = null },
           mapContent = mapContent,
         )
       },
@@ -865,6 +888,11 @@ private fun PlacesMapLayout(
   onPlaceClick: (Long) -> Unit,
   focus: PlacesMapFocus?,
   onFocusConsumed: () -> Unit,
+  // 境界を描いている地域（描けないときは null）。地図に境界を描き、重ねたものの下に地名のチップを出す。
+  boundary: PlacesBoundary?,
+  onBoundaryAvailableChange: (Boolean) -> Unit,
+  onBoundaryRefit: () -> Unit,
+  onBoundaryClear: () -> Unit,
   modifier: Modifier = Modifier,
   mapContent: (@Composable () -> Unit)? = null,
 ) {
@@ -892,6 +920,8 @@ private fun PlacesMapLayout(
         showMyLocation = hasLocationPermission,
         focus = focus,
         onFocusConsumed = onFocusConsumed,
+        boundaryPlaceId = boundary?.placeId,
+        onBoundaryAvailableChange = onBoundaryAvailableChange,
         // 下は右下の追加・現在地の丸の分。範囲を合わせたマーカーが丸の下に隠れないように。
         contentPadding = PaddingValues(top = overlayHeight, bottom = PlaceAddButtonClearance),
         mapContent = mapContent,
@@ -912,6 +942,20 @@ private fun PlacesMapLayout(
         controls = controls,
         modifier = Modifier.align(Alignment.TopCenter),
       )
+
+      // 境界を描いている地域のチップ。重ねたもの（たたんだときは上端の帯）のすぐ下の左に出す。
+      boundary?.let { b ->
+        RegionMarkerChip(
+          name = b.name,
+          focused = false,
+          onRefit = onBoundaryRefit,
+          onClear = onBoundaryClear,
+          clearDescription = "${b.name}の境界を外す",
+          modifier = Modifier
+            .align(Alignment.TopStart)
+            .padding(top = overlayHeight + PathlySpacing.sm, start = PathlySpacing.screenEdge),
+        )
+      }
 
       // 右下: 地図の操作（絞り込んだ場所をすべて見る・現在地）。下の追加の丸の上に積む。
       MapControls(
@@ -965,6 +1009,9 @@ private fun PlacesMapView(
   // 地域の見出しから地図で見るときの寄せ先。地図の読み込みを待って寄せ、寄せたら [onFocusConsumed]。
   focus: PlacesMapFocus?,
   onFocusConsumed: () -> Unit,
+  // 境界を描く地域の Place ID（無ければ null）と、この地図で境界を描けるかの知らせ。
+  boundaryPlaceId: String?,
+  onBoundaryAvailableChange: (Boolean) -> Unit,
   modifier: Modifier = Modifier,
   // 地図に重ねたもの（見出し・ツール行）の分の余白。範囲合わせ・Google のロゴ・0 件の文言がその下に収まる。
   contentPadding: PaddingValues = PaddingValues(),
@@ -1022,6 +1069,9 @@ private fun PlacesMapView(
       GoogleMap(
         modifier = Modifier.fillMaxSize(),
         cameraPositionState = cameraPositionState,
+        // マップ ID は境界を描くこの地図にだけ付ける。境界は明るい地図にしか描けないので、描いている間は明るくする（→ ADR 0046）。
+        googleMapOptionsFactory = ::boundaryMapOptions,
+        mapColorScheme = boundaryMapColorScheme(boundaryPlaceId != null),
         properties = MapProperties(isMyLocationEnabled = showMyLocation),
         uiSettings = MapUiSettings(
           zoomControlsEnabled = false,
@@ -1031,6 +1081,10 @@ private fun PlacesMapView(
         contentPadding = contentPadding,
         onMapLoaded = { mapLoaded = true },
       ) {
+        RegionBoundaries(
+          placeIds = remember(boundaryPlaceId) { setOfNotNull(boundaryPlaceId) },
+          onAvailableChange = onBoundaryAvailableChange,
+        )
         RegisteredPlaceMarkers(places, infoWindow) { onPlaceClick(it.placeId) }
       }
     }
@@ -1079,6 +1133,9 @@ private fun placesFitKey(items: List<PlaceListItem>): String = items.map { it.pl
 
 /** 地域の見出しから地図で見るときの寄せ先。[places] はその地域の場所、[region] は Places で引いた地域の範囲（引けなければ null）。 */
 internal data class PlacesMapFocus(val places: List<RegisteredPlace>, val region: GeoBounds?)
+
+/** 地図に境界を描いている地域。[name] は見出しの地名、[focus] はチップの地名から寄せ直すときの寄せ先。 */
+internal data class PlacesBoundary(val placeId: String, val name: String, val focus: PlacesMapFocus)
 
 /** [places] が全部入る範囲（地域の候補を寄せる先）。0 件なら null。 */
 private fun placesBounds(places: List<RegisteredPlace>): GeoBounds? = if (places.isEmpty()) {

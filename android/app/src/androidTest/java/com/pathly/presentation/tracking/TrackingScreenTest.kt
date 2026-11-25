@@ -461,9 +461,10 @@ class TrackingScreenTest {
     composeTestRule.onNodeWithText("札幌市").performClick()
     composeTestRule.onNodeWithTag("regionMarkerChip").assertIsDisplayed()
 
-    // 検索窓を開いている間は、ほかの上端の操作と同じく隠す。
+    // 検索窓を開いている間も、どの地域を出しているかが見えるよう同じ位置に残す（入口は窓に替わる）。
     composeTestRule.onNodeWithContentDescription(SEARCH_ENTRY).performClick()
-    composeTestRule.onNodeWithTag("regionMarkerChip").assertDoesNotExist()
+    composeTestRule.onNodeWithContentDescription(SEARCH_ENTRY).assertDoesNotExist()
+    composeTestRule.onNodeWithTag("regionMarkerChip").assertIsDisplayed()
     composeTestRule.onNodeWithContentDescription("検索を閉じる").performClick()
     composeTestRule.onNodeWithTag("regionMarkerChip").assertIsDisplayed()
 
@@ -596,9 +597,9 @@ class TrackingScreenTest {
     coEvery { mockViewModel.predictPlacesNear(any(), any()) } answers { regionPredictions(firstArg()) }
     coEvery { mockViewModel.predictRegions(any(), any()) } answers { regionPredictions(firstArg()) }
     coEvery { mockViewModel.fetchRegion("r1") } returns
-      MapRegion(bounds = GeoBounds(42.9, 141.2, 43.2, 141.5), latitude = 43.06, longitude = 141.35)
+      MapRegion(placeId = "sapporo", bounds = GeoBounds(42.9, 141.2, 43.2, 141.5), latitude = 43.06, longitude = 141.35)
     coEvery { mockViewModel.fetchRegion("r2") } returns
-      MapRegion(bounds = GeoBounds(33.7, 130.6, 34.0, 131.0), latitude = 33.88, longitude = 130.88)
+      MapRegion(placeId = "kitakyushu", bounds = GeoBounds(33.7, 130.6, 34.0, 131.0), latitude = 33.88, longitude = 130.88)
   }
 
   private fun setTrackingContent() {

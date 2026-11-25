@@ -5,7 +5,9 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.SnackbarDuration
@@ -42,6 +44,8 @@ import com.pathly.domain.model.Stop
 import com.pathly.domain.model.WishlistFlag
 import com.pathly.presentation.common.CloseInfoWindowWithSheet
 import com.pathly.presentation.common.DefaultMapLocation
+import com.pathly.presentation.common.MapRoundButtonSize
+import com.pathly.presentation.common.MapTopBar
 import com.pathly.presentation.common.MapTopBarInset
 import com.pathly.presentation.common.SheetDetent
 import com.pathly.presentation.common.SheetRestoreButtonInset
@@ -351,8 +355,32 @@ fun TrackingScreen(
       )
     }
 
+    // 「地域へ移動」で出した目印の地名のチップ（左上に縦に並べ、6 つ目からは 1 つにまとめる）。
+    // 地名でその地域の範囲へ寄せ直し、× でその目印を外す（地図は動かさない）。
+    val regionChips: @Composable () -> Unit = {
+      RegionMarkerChips(
+        markers = regionMarkers.markers,
+        focusedPlaceId = regionMarkers.focusedPlaceId,
+        onRefit = { region -> refitRegion(region) },
+        onClear = { region -> viewModel.regionMarkers.remove(region.placeId) },
+        onClearAll = viewModel.regionMarkers::clear,
+      )
+    }
+
     // 上の区画（検索の入口・レイヤー）と上の下（今の状態・1 行の帯）。検索窓を開いている間は窓と重なるので隠す。
-    if (!mapSearchOpen) {
+    // ただし地名のチップは、どの地域を出しているかを見ながら探せるよう、同じ位置に残す（候補のカードが上に重なる）。
+    if (mapSearchOpen) {
+      MapTopBar(
+        modifier = Modifier.align(Alignment.TopCenter),
+        // 検索の入口の行と同じ高さを空け、チップを閉じているときと同じ位置に出す（入口の行は検索窓が覆う）。
+        leading = { Spacer(modifier = Modifier.height(MapRoundButtonSize)) },
+        status = {
+          // 閉じているときの「今の状態」の行（ピル）の代わり。空でも行の間が空くので、チップの位置が揃う。
+          Spacer(modifier = Modifier.height(0.dp))
+          regionChips()
+        },
+      )
+    } else {
       TrackingTopBar(
         showRegisteredPlaces = uiState.showRegisteredPlaces,
         registeredPlaces = uiState.registeredPlaces,
@@ -390,15 +418,7 @@ fun TrackingScreen(
           if (uiState.isTracking) RecordingStatusPill(startTime = uiState.currentTrack?.startTime)
           if (isLocating) LocatingPill()
         }
-        // 「地域へ移動」で出した目印の地名のチップ（左上に縦に並べ、6 つ目からは 1 つにまとめる）。
-        // 地名でその地域の範囲へ寄せ直し、× でその目印を外す（地図は動かさない）。
-        RegionMarkerChips(
-          markers = regionMarkers.markers,
-          focusedPlaceId = regionMarkers.focusedPlaceId,
-          onRefit = { region -> refitRegion(region) },
-          onClear = { region -> viewModel.regionMarkers.remove(region.placeId) },
-          onClearAll = viewModel.regionMarkers::clear,
-        )
+        regionChips()
         // 場所を登録した直後の一時メッセージ
         uiState.placeRegisteredMessage?.let { msg ->
           PlaceRegisteredToast(message = msg, onShown = viewModel::clearPlaceRegisteredMessage)
