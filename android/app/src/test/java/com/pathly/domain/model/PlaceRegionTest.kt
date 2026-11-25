@@ -141,4 +141,13 @@ class PlaceRegionTest {
       sorted,
     )
   }
+
+  @Test
+  fun searchQueryNamesTheRegionForPlacesLookup() {
+    assertEquals("東京都", RegionKey("JP", "東京都").searchQuery)
+    assertEquals("東京都府中市", RegionKey("JP", "東京都", "府中市").searchQuery)
+    assertEquals("ホノルル アメリカ合衆国", RegionKey("US", city = "ホノルル").searchQuery)
+    assertEquals("アメリカ合衆国", RegionKey("US").searchQuery)
+    assertEquals(null, RegionKey.UNKNOWN.searchQuery)
+  }
 }

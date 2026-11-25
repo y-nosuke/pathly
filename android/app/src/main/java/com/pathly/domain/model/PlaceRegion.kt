@@ -71,6 +71,17 @@ data class RegionKey(val countryCode: String?, val prefecture: String? = null, v
   val fullLabel: String
     get() = if (city != null && countryCode != null) "$topLabel $city" else label
 
+  /**
+   * 地域の範囲を地名の検索で引くときの検索語（日本は「東京都府中市」、海外は「ソウル 韓国」）。
+   * 地域不明は地名が無いので null。
+   */
+  val searchQuery: String?
+    get() = when (countryCode) {
+      null -> null
+      PlaceRegion.JAPAN -> prefecture?.let { it + city.orEmpty() }
+      else -> listOfNotNull(city, countryName(countryCode)).joinToString(" ")
+    }
+
   private val topLabel: String
     get() = prefecture ?: countryCode?.let(::countryName) ?: UNKNOWN_LABEL
 

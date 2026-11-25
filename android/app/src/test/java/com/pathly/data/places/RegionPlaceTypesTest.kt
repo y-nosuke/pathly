@@ -27,4 +27,16 @@ class RegionPlaceTypesTest {
     assertFalse(isRegionPlaceTypes(listOf("route", "geocode")))
     assertFalse(isRegionPlaceTypes(listOf("political")))
   }
+
+  @Test
+  fun regionLevelPicksPrefectureOrCountryForTheTopAndAnythingButCountryForCities() {
+    // 「東京都」で探して先に出た府中市は、都道府県の段には合わない。
+    assertTrue(matchesRegionLevel(listOf("administrative_area_level_1", "political"), topLevel = true))
+    assertTrue(matchesRegionLevel(listOf("country", "political"), topLevel = true))
+    assertFalse(matchesRegionLevel(listOf("locality", "geocode", "political"), topLevel = true))
+    assertTrue(matchesRegionLevel(listOf("locality", "geocode", "political"), topLevel = false))
+    // ソウルのように都市が州の段の所もあるので、都市では州の段も受ける。
+    assertTrue(matchesRegionLevel(listOf("administrative_area_level_1", "political"), topLevel = false))
+    assertFalse(matchesRegionLevel(listOf("country", "political"), topLevel = false))
+  }
 }

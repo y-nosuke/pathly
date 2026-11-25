@@ -8,21 +8,27 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
+import androidx.compose.ui.test.hasScrollToNodeAction
+import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.performTextInput
 import androidx.test.espresso.Espresso
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import com.pathly.domain.model.GeoBounds
 import com.pathly.domain.model.Place
 import com.pathly.domain.model.PlaceGrouping
 import com.pathly.domain.model.PlaceListItem
 import com.pathly.domain.model.PlaceRegion
+import com.pathly.domain.model.RegionKey
 import com.pathly.presentation.common.ListMapMode
 import com.pathly.ui.theme.PathlyAndroidTheme
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -44,6 +50,9 @@ class PlacesListContentTest {
 
   // 追加のメニューで選んだ手段（"search" / "map"）。
   private var addedBy: String? = null
+
+  // 地域の見出しから地図で見るときに範囲を引いた地域と、候補を寄せる範囲（その地域の場所が入る範囲）。
+  private val fetchedRegions = mutableListOf<Pair<RegionKey, GeoBounds?>>()
 
   @Test
   fun `切り替えで地図表示になり表示のメニューが消えて戻すと一覧に戻る`() {
@@ -430,6 +439,56 @@ class PlacesListContentTest {
     composeTestRule.onNodeWithText("北海道").assertDoesNotExist()
   }
 
+  @Test
+  fun `地域の見出しの地図のボタンで地図表示に移り_その地域の範囲を引き_戻ると開閉が保たれる`() {
+    setContent(PlacesState(items = regional, grouping = PlaceGrouping.REGION, openGroups = setOf("region:JP|東京都|")))
+    composeTestRule.onNodeWithText("府中市").assertIsDisplayed()
+
+    composeTestRule.onNodeWithContentDescription("府中市を地図で見る").performClick()
+
+    // 地図表示に移る（表示のメニューが消える）。絞り込みは変えないので、チップも出ない。
+    composeTestRule.onNodeWithTag("listDisplayMenuButton").assertDoesNotExist()
+    composeTestRule.onNodeWithText("初期状態に戻す").assertDoesNotExist()
+    composeTestRule.waitUntil { fetchedRegions.isNotEmpty() }
+    val (region, near) = fetchedRegions.single()
+    assertEquals(RegionKey("JP", "東京都", "府中市"), region)
+    // 候補はその地域の場所のあたりに寄せる（同じ名前の別の府中市を引かないように）。
+    assertTrue(near!!.contains(fuchu.place.latitude, fuchu.place.longitude))
+    assertFalse(near.contains(chofu.place.latitude, chofu.place.longitude))
+
+    // 戻ると一覧。押した見出しは開閉しておらず、東京都は開いたまま。
+    Espresso.pressBack()
+    composeTestRule.onNodeWithText("府中市").assertIsDisplayed()
+    composeTestRule.onNodeWithText("場所11").assertDoesNotExist()
+  }
+
+  @Test
+  fun `都道府県の見出しからも地図で見られ_地域不明の見出しには地図のボタンを出さない`() {
+    val unknown = item(id = 14, wishlisted = false)
+    setContent(PlacesState(items = regional + unknown, grouping = PlaceGrouping.REGION))
+    composeTestRule.onNodeWithText("地域不明").assertIsDisplayed()
+    composeTestRule.onNodeWithContentDescription("地域不明を地図で見る").assertDoesNotExist()
+
+    composeTestRule.onNodeWithContentDescription("東京都を地図で見る").performClick()
+
+    composeTestRule.waitUntil { fetchedRegions.isNotEmpty() }
+    assertEquals(RegionKey("JP", "東京都"), fetchedRegions.single().first)
+  }
+
+  @Test
+  fun `地図表示を挟んで一覧に戻ると前に見ていた位置のまま`() {
+    setContent(PlacesState(items = (1L..30L).map { item(id = it, wishlisted = false) }))
+    // 既定は登録の新しい順なので、場所1 はいちばん下。
+    composeTestRule.onNode(hasScrollToNodeAction()).performScrollToNode(hasText("場所1"))
+    composeTestRule.onNodeWithText("場所30").assertDoesNotExist()
+
+    composeTestRule.onNodeWithContentDescription("地図で見る").performClick()
+    composeTestRule.onNodeWithContentDescription("一覧で見る").performClick()
+
+    composeTestRule.onNodeWithText("場所1").assertIsDisplayed()
+    composeTestRule.onNodeWithText("場所30").assertDoesNotExist()
+  }
+
   // ViewModel の代わりに、状態をこの場で持って操作に応じて書き換える。
   private fun setContent(initial: PlacesState) {
     composeTestRule.setContent {
@@ -467,6 +526,10 @@ class PlacesListContentTest {
       onToggleWishlist = {},
       statsExpanded = statsExpanded,
       onStatsExpandedChange = { statsExpanded = it },
+      onFetchRegionBounds = { region, near ->
+        fetchedRegions += region to near
+        null
+      },
       // CI のエミュレータでは GMS の地図が落ちることがあるので、地図は描かない（ほかの画面のテストと同じ）。
       mapContent = {},
     )
