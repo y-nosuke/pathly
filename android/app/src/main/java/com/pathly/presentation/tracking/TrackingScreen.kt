@@ -650,9 +650,9 @@ fun TrackingScreen(
 }
 
 /**
- * 地図の上端に重ねる検索窓。施設と地域の候補を一緒に出し、選んだ行の動き（[MapSearchAction]）で分ける:
+ * 地図の上端に重ねる検索窓。窓の下の「場所｜地域」で探し方を切り替え（[MapSearchMode]）、選んだ行の動き（[MapSearchAction]）で分ける:
  * 登録 → 場所の詳細を引いて場所シート、地域へ移動 → 範囲を引いて目印。
- * [registerEnabled] が false（立ち寄りの追加中）なら、候補を地域に絞って地域へ移動だけにする。
+ * [registerEnabled] が false（立ち寄りの追加中）なら、切り替えを出さず地域に絞って地域へ移動だけにする。
  */
 @Composable
 private fun TrackingMapSearch(
@@ -669,10 +669,14 @@ private fun TrackingMapSearch(
   modifier: Modifier = Modifier,
 ) {
   TrackingPlaceSearchBar(
-    placeholder = mapSearchLabel(registerEnabled),
     registerEnabled = registerEnabled,
-    // 施設と地域を 1 回の Autocomplete で取る（2 回に分けると、選ばずに閉じたときの料金が倍になる）。
-    onSearchPredictions = { query -> if (registerEnabled) onPredictPlaces(query, bias) else onPredictRegions(query, bias) },
+    // 「場所」は種類で絞らず、「地域」は地域に絞って、どちらも 1 回の Autocomplete で取る（#254）。
+    onSearchPredictions = { query, mode ->
+      when (mode) {
+        MapSearchMode.Place -> onPredictPlaces(query, bias)
+        MapSearchMode.Region -> onPredictRegions(query, bias)
+      }
+    },
     onFetchCandidate = { candidate ->
       val prediction = candidate.prediction
       when (candidate.action) {
