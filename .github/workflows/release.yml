@@ -39,7 +39,9 @@ jobs:
         run: chmod +x gradlew
 
       - name: Create local.properties
-        run: echo "GOOGLE_MAPS_API_KEY=${{ secrets.GOOGLE_MAPS_API_KEY }}" > local.properties
+        run: |
+          echo "GOOGLE_MAPS_API_KEY=${{ secrets.GOOGLE_MAPS_API_KEY }}" > local.properties
+          echo "GOOGLE_MAPS_MAP_ID=${{ secrets.GOOGLE_MAPS_MAP_ID }}" >> local.properties
 
       # 鍵が無いまま未署名の APK を配らないよう、ここで止める
       - name: Decode release keystore

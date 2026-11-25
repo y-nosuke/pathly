@@ -95,9 +95,12 @@ import com.pathly.presentation.common.MapPlaceFilterButton
 import com.pathly.presentation.common.MapRoundButton
 import com.pathly.presentation.common.NearbyConfirmPurpose
 import com.pathly.presentation.common.NearbyPlaceConfirmDialog
+import com.pathly.presentation.common.RegionBoundaries
 import com.pathly.presentation.common.RegisteredPlaceMarkers
 import com.pathly.presentation.common.RouteMapContent
 import com.pathly.presentation.common.SheetDetent
+import com.pathly.presentation.common.boundaryMapColorScheme
+import com.pathly.presentation.common.boundaryMapOptions
 import com.pathly.presentation.common.heightOf
 import com.pathly.presentation.common.rememberFloatingSheetState
 import com.pathly.presentation.common.rememberMapInfoWindowState
@@ -256,11 +259,19 @@ internal fun TrackingMapView(
     }
   }
 
+  // この地図で境界を描けるか（マップ ID・端末の対応・スタイルのレイヤー）。描ける間だけ、目印があるときに地図を明るくする。
+  var boundaryAvailable by remember { mutableStateOf(false) }
+  val regionPlaceIds = remember(regionMarkers) { regionMarkers.map { it.placeId }.toSet() }
+
   Box(modifier = modifier) {
     GoogleMap(
       modifier = Modifier.fillMaxSize(),
       cameraPositionState = cameraPositionState,
       contentPadding = contentPadding,
+      // マップ ID は境界を描くこの地図にだけ付ける（→ ADR 0046）。
+      googleMapOptionsFactory = ::boundaryMapOptions,
+      // 境界は明るい地図にしか描けないので、目印（境界）がある間はダークモードでも明るくする。
+      mapColorScheme = boundaryMapColorScheme(boundaryAvailable && regionPlaceIds.isNotEmpty()),
       properties = MapProperties(
         mapType = MapType.NORMAL,
         isMyLocationEnabled = hasPermission,
@@ -341,7 +352,9 @@ internal fun TrackingMapView(
         onClusterExpand = { followUser = false },
         onRegisteredPlaceClick = onRegisteredPlaceClick,
       )
-      // 地域へ移動の目印: 地域の中心にピンと名前。見ている地図のどこがその地名かを示す（境界は描かない）。
+      // 地域へ移動の境界: 目印を出している地域を全部描く（目印と一緒に消える）。
+      RegionBoundaries(regionPlaceIds, onAvailableChange = { boundaryAvailable = it })
+      // 地域へ移動の目印: 地域の中心にピンと名前。見ている地図のどこがその地名かを示す。
       val regionIcons = rememberMarkerIconCache()
       regionMarkers.forEach { region ->
         key(region.placeId) {

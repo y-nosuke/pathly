@@ -53,6 +53,10 @@ APK に埋まる以上キー自体は秘匿できない。守りは **Cloud Cons
 分ける意味が無いため。リリース版だけ厳しく絞りたくなったら、そのときは**ビルドの種類（開発版／リリース版）ごと**に分ける。
 キーを替えたら、端末に入っているリリース版にも古いキーが埋まっているので、古いキーは次のリリースを入れてから消す。
 
+地図の**マップ ID**（境界を描く地図だけに付ける。→ [ADR 0046](../adr/0046-region-boundaries-by-data-driven-styling.md)）も同じ渡し方で、
+`local.properties` の `GOOGLE_MAPS_MAP_ID` と CI の Secret `GOOGLE_MAPS_MAP_ID` から `BuildConfig` に入れる。秘密ではないが、
+キーと同じ所で管理する。空ならマップ ID の無い地図になり、境界は描かない。
+
 デバッグ用の keystore は**リポジトリに含めている**。パスワードが公知（`android`）で秘密情報ではなく、
 CI とローカルで署名を揃えないと更新インストールできないため。**リリース鍵は含めない**
 （Gradle プロパティ／CI の Secrets で渡す。[release.md](release.md)）。

@@ -9,6 +9,7 @@ import com.pathly.data.settings.SettingsRepository
 import com.pathly.data.settings.StatsList
 import com.pathly.domain.model.GeoBounds
 import com.pathly.domain.model.MapPlaceFilter
+import com.pathly.domain.model.MapRegion
 import com.pathly.domain.model.NearbyRegisterPrompt
 import com.pathly.domain.model.PlaceCategoryFacet
 import com.pathly.domain.model.PlaceGrouping
@@ -295,11 +296,11 @@ class PlacesViewModel @Inject constructor(
   // ---- キーワード検索（追加＞検索して追加） ----
 
   /**
-   * 地域の見出しから地図で見るときの、その地域の範囲（Places で地名から引く）。[near] はその地域の場所が入る範囲で、
-   * 同じ名前の地域を取り違えないよう候補をそこに寄せる。地域不明・オフライン・引けないときは null。
+   * 地域の見出しから地図で見るときの、その地域（範囲と、境界を描く Place ID。Places で地名から引く）。[near] はその地域の場所が
+   * 入る範囲で、同じ名前の地域を取り違えないよう候補をそこに寄せる。地域不明・オフライン・引けないときは null。
    */
-  suspend fun findRegionBounds(region: RegionKey, near: GeoBounds?): GeoBounds? = region.searchQuery?.let {
-    placesTextSearcher.findRegion(it, topLevel = region.city == null, near = near)?.bounds
+  suspend fun findRegion(region: RegionKey, near: GeoBounds?): MapRegion? = region.searchQuery?.let {
+    placesTextSearcher.findRegion(it, topLevel = region.city == null, near = near)
   }
 
   private var predictJob: Job? = null

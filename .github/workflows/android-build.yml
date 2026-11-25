@@ -42,7 +42,9 @@ jobs:
         run: chmod +x gradlew
 
       - name: Create local.properties
-        run: echo "GOOGLE_MAPS_API_KEY=${{ secrets.GOOGLE_MAPS_API_KEY }}" > local.properties
+        run: |
+          echo "GOOGLE_MAPS_API_KEY=${{ secrets.GOOGLE_MAPS_API_KEY }}" > local.properties
+          echo "GOOGLE_MAPS_MAP_ID=${{ secrets.GOOGLE_MAPS_MAP_ID }}" >> local.properties
 
       # buildタスクがtest・lint・assemble(debug/release)をまとめて実行する
       - name: Build, test and lint
@@ -92,6 +94,7 @@ jobs:
         run: |
           chmod +x gradlew
           echo "GOOGLE_MAPS_API_KEY=${{ secrets.GOOGLE_MAPS_API_KEY }}" > local.properties
+          echo "GOOGLE_MAPS_MAP_ID=${{ secrets.GOOGLE_MAPS_MAP_ID }}" >> local.properties
 
       # エミュレータをハードウェア支援（KVM）で動かす。無いと起動もテストも極端に遅い
       - name: Enable KVM

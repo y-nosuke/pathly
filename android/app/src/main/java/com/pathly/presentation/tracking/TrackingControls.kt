@@ -18,7 +18,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
@@ -36,7 +35,6 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -98,6 +96,7 @@ import com.pathly.presentation.common.MapPinMarker
 import com.pathly.presentation.common.MapPlaceFilterButton
 import com.pathly.presentation.common.NearbyConfirmPurpose
 import com.pathly.presentation.common.NearbyPlaceConfirmDialog
+import com.pathly.presentation.common.RegionMarkerChip
 import com.pathly.presentation.common.RegisteredPlaceMarkers
 import com.pathly.presentation.common.RouteMapContent
 import com.pathly.presentation.common.SheetDetent
@@ -482,64 +481,4 @@ private fun RegionChipSurface(
     shadowElevation = PathlyElevation.floating,
     content = content,
   )
-}
-
-/** 地域の目印の地名のチップ。地名の部分で [onRefit]（範囲へ寄せ直す）、× で [onClear]（その目印を外す）。 */
-@Composable
-internal fun RegionMarkerChip(
-  name: String,
-  focused: Boolean,
-  onRefit: () -> Unit,
-  onClear: () -> Unit,
-  modifier: Modifier = Modifier,
-) {
-  Surface(
-    modifier = modifier
-      .testTag("regionMarkerChip")
-      .semantics { selected = focused },
-    shape = PathlyShapes.pill,
-    color = if (focused) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface,
-    contentColor = if (focused) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface,
-    shadowElevation = PathlyElevation.floating,
-  ) {
-    Row(verticalAlignment = Alignment.CenterVertically) {
-      Row(
-        modifier = Modifier
-          .clickable(onClickLabel = "この地域へ地図を寄せる", onClick = onRefit)
-          .padding(start = PathlySpacing.md, top = PathlySpacing.sm, bottom = PathlySpacing.sm, end = PathlySpacing.xs),
-        verticalAlignment = Alignment.CenterVertically,
-      ) {
-        Icon(
-          painter = painterResource(R.drawable.ic_public),
-          contentDescription = null,
-          tint = PathlyMapColors.Region,
-          modifier = Modifier.size(18.dp),
-        )
-        Spacer(modifier = Modifier.width(PathlySpacing.sm))
-        // 横にスクロールする行の中なので、長い地名は幅を決めて省略する。
-        Text(
-          text = name,
-          style = MaterialTheme.typography.labelLarge,
-          fontWeight = FontWeight.Medium,
-          maxLines = 1,
-          overflow = TextOverflow.Ellipsis,
-          modifier = Modifier.widthIn(max = 160.dp),
-        )
-      }
-      // × は小さいので、押せる範囲は 48dp 四方を確保する（隣の地名＝寄せ直しを誤って押さないように）。
-      Box(
-        modifier = Modifier
-          .minimumInteractiveComponentSize()
-          .clickable(onClick = onClear),
-        contentAlignment = Alignment.Center,
-      ) {
-        Icon(
-          painter = painterResource(R.drawable.ic_close),
-          contentDescription = "${name}の目印を外す",
-          tint = MaterialTheme.colorScheme.onSurfaceVariant,
-          modifier = Modifier.size(18.dp),
-        )
-      }
-    }
-  }
 }
