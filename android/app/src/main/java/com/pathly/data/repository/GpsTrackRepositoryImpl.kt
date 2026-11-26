@@ -319,47 +319,6 @@ class GpsTrackRepositoryImpl @Inject constructor(
     sourcePointId = point.id.takeIf { it != 0L },
   )
 
-  /**
-   * ローカルデータベースの健全性チェック
-   */
-  suspend fun performDataIntegrityCheck(): Boolean = try {
-    logger.i("Performing data integrity check")
-
-    val trackCount = gpsTrackDao.getTrackCount()
-    val pointCount = gpsPointDao.getPointCount()
-    val orphanedPoints = gpsPointDao.getOrphanedPointsCount()
-
-    logger.i("Data integrity: $trackCount tracks, $pointCount points, $orphanedPoints orphaned")
-
-    val isHealthy = orphanedPoints == 0
-    if (!isHealthy) {
-      logger.w("Data integrity issues detected: $orphanedPoints orphaned points")
-    }
-
-    isHealthy
-  } catch (e: Exception) {
-    logger.e("Repository operation failed", e)
-    false
-  }
-
-  /**
-   * オフライン専用データクリーンアップ
-   */
-  suspend fun cleanupOldOfflineData(daysToKeep: Int = 30): Int = try {
-    logger.i("Cleaning up offline data older than $daysToKeep days")
-
-    val cutoffTime = System.currentTimeMillis() - (daysToKeep * 24 * 60 * 60 * 1000L)
-    val cutoffDate = java.util.Date(cutoffTime)
-
-    val deletedCount = gpsTrackDao.deleteTracksOlderThan(cutoffDate)
-    logger.i("Cleaned up $deletedCount old tracks")
-
-    deletedCount
-  } catch (e: Exception) {
-    logger.e("Repository operation failed", e)
-    0
-  }
-
   private fun GpsTrackEntity.toGpsTrack(
     points: List<GpsPoint> = emptyList(),
     stopCount: Int = 0,

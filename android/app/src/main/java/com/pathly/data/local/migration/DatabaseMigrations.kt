@@ -14,50 +14,56 @@ object DatabaseMigrations {
   private val logger = Logger("DatabaseMigrations")
 
   /**
+   * 版ごとの移行を、開始・完了・失敗のログで包んで [Migration] にする。
+   * 失敗したときはログを出して例外をそのまま投げ直す（Room に失敗を知らせる）。
+   */
+  private fun loggedMigration(from: Int, to: Int, body: (SupportSQLiteDatabase) -> Unit): Migration = object : Migration(from, to) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+      try {
+        logger.i("Starting migration from version $from to $to")
+        body(db)
+        logger.i("Migration from version $from to $to completed successfully")
+      } catch (e: Exception) {
+        logger.e("Migration from version $from to $to failed", e)
+        throw e
+      }
+    }
+  }
+
+  /**
    * バージョン1から2へのマイグレーション。
    * 立ち寄り場所の永続化のため places / stops テーブルを追加する
    * （docs/designs/places-and-stops.md）。
    *
    * DDL は Room がエンティティから生成するものと一致させること（起動時のスキーマ検証を通すため）。
    */
-  val MIGRATION_1_2 = object : Migration(1, 2) {
-    override fun migrate(db: SupportSQLiteDatabase) {
-      try {
-        logger.i("Starting migration from version 1 to 2")
+  val MIGRATION_1_2 = loggedMigration(1, 2) { db ->
+    // places（場所そのもの・経路と独立）
+    db.execSQL(
+      "CREATE TABLE IF NOT EXISTS `places` (" +
+        "`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+        "`name` TEXT, " +
+        "`latitude` REAL NOT NULL, " +
+        "`longitude` REAL NOT NULL, " +
+        "`address` TEXT, " +
+        "`createdAt` INTEGER NOT NULL, " +
+        "`updatedAt` INTEGER NOT NULL)",
+    )
 
-        // places（場所そのもの・経路と独立）
-        db.execSQL(
-          "CREATE TABLE IF NOT EXISTS `places` (" +
-            "`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
-            "`name` TEXT, " +
-            "`latitude` REAL NOT NULL, " +
-            "`longitude` REAL NOT NULL, " +
-            "`address` TEXT, " +
-            "`createdAt` INTEGER NOT NULL, " +
-            "`updatedAt` INTEGER NOT NULL)",
-        )
-
-        // stops（立ち寄り＝places と gps_tracks の関連）
-        db.execSQL(
-          "CREATE TABLE IF NOT EXISTS `stops` (" +
-            "`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
-            "`placeId` INTEGER NOT NULL, " +
-            "`trackId` INTEGER NOT NULL, " +
-            "`arrivalTime` INTEGER NOT NULL, " +
-            "`departureTime` INTEGER NOT NULL, " +
-            "`createdAt` INTEGER NOT NULL, " +
-            "FOREIGN KEY(`trackId`) REFERENCES `gps_tracks`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE , " +
-            "FOREIGN KEY(`placeId`) REFERENCES `places`(`id`) ON UPDATE NO ACTION ON DELETE NO ACTION )",
-        )
-        db.execSQL("CREATE INDEX IF NOT EXISTS `index_stops_placeId` ON `stops` (`placeId`)")
-        db.execSQL("CREATE INDEX IF NOT EXISTS `index_stops_trackId` ON `stops` (`trackId`)")
-
-        logger.i("Migration from version 1 to 2 completed successfully")
-      } catch (e: Exception) {
-        logger.e("Migration from version 1 to 2 failed", e)
-        throw e
-      }
-    }
+    // stops（立ち寄り＝places と gps_tracks の関連）
+    db.execSQL(
+      "CREATE TABLE IF NOT EXISTS `stops` (" +
+        "`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+        "`placeId` INTEGER NOT NULL, " +
+        "`trackId` INTEGER NOT NULL, " +
+        "`arrivalTime` INTEGER NOT NULL, " +
+        "`departureTime` INTEGER NOT NULL, " +
+        "`createdAt` INTEGER NOT NULL, " +
+        "FOREIGN KEY(`trackId`) REFERENCES `gps_tracks`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE , " +
+        "FOREIGN KEY(`placeId`) REFERENCES `places`(`id`) ON UPDATE NO ACTION ON DELETE NO ACTION )",
+    )
+    db.execSQL("CREATE INDEX IF NOT EXISTS `index_stops_placeId` ON `stops` (`placeId`)")
+    db.execSQL("CREATE INDEX IF NOT EXISTS `index_stops_trackId` ON `stops` (`trackId`)")
   }
 
   /**
@@ -67,34 +73,23 @@ object DatabaseMigrations {
    *
    * DDL は Room がエンティティから生成するものと一致させること（起動時のスキーマ検証を通すため）。
    */
-  val MIGRATION_2_3 = object : Migration(2, 3) {
-    override fun migrate(db: SupportSQLiteDatabase) {
-      try {
-        logger.i("Starting migration from version 2 to 3")
-
-        // smoothed_points（補正後の点列・gps_tracks に従属）
-        db.execSQL(
-          "CREATE TABLE IF NOT EXISTS `smoothed_points` (" +
-            "`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
-            "`trackId` INTEGER NOT NULL, " +
-            "`seq` INTEGER NOT NULL, " +
-            "`latitude` REAL NOT NULL, " +
-            "`longitude` REAL NOT NULL, " +
-            "`timestamp` INTEGER NOT NULL, " +
-            "`sourcePointId` INTEGER, " +
-            "`createdAt` INTEGER NOT NULL, " +
-            "FOREIGN KEY(`trackId`) REFERENCES `gps_tracks`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
-        )
-        db.execSQL(
-          "CREATE INDEX IF NOT EXISTS `index_smoothed_points_trackId` ON `smoothed_points` (`trackId`)",
-        )
-
-        logger.i("Migration from version 2 to 3 completed successfully")
-      } catch (e: Exception) {
-        logger.e("Migration from version 2 to 3 failed", e)
-        throw e
-      }
-    }
+  val MIGRATION_2_3 = loggedMigration(2, 3) { db ->
+    // smoothed_points（補正後の点列・gps_tracks に従属）
+    db.execSQL(
+      "CREATE TABLE IF NOT EXISTS `smoothed_points` (" +
+        "`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+        "`trackId` INTEGER NOT NULL, " +
+        "`seq` INTEGER NOT NULL, " +
+        "`latitude` REAL NOT NULL, " +
+        "`longitude` REAL NOT NULL, " +
+        "`timestamp` INTEGER NOT NULL, " +
+        "`sourcePointId` INTEGER, " +
+        "`createdAt` INTEGER NOT NULL, " +
+        "FOREIGN KEY(`trackId`) REFERENCES `gps_tracks`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+    )
+    db.execSQL(
+      "CREATE INDEX IF NOT EXISTS `index_smoothed_points_trackId` ON `smoothed_points` (`trackId`)",
+    )
   }
 
   /**
@@ -104,26 +99,15 @@ object DatabaseMigrations {
    *
    * DDL は Room がエンティティから生成するものと一致させること（起動時のスキーマ検証を通すため）。
    */
-  val MIGRATION_3_4 = object : Migration(3, 4) {
-    override fun migrate(db: SupportSQLiteDatabase) {
-      try {
-        logger.i("Starting migration from version 3 to 4")
-
-        db.execSQL(
-          "CREATE TABLE IF NOT EXISTS `place_resolutions` (" +
-            "`placeId` INTEGER NOT NULL, " +
-            "`resolvedAt` INTEGER NOT NULL, " +
-            "`googlePlaceId` TEXT, " +
-            "PRIMARY KEY(`placeId`), " +
-            "FOREIGN KEY(`placeId`) REFERENCES `places`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
-        )
-
-        logger.i("Migration from version 3 to 4 completed successfully")
-      } catch (e: Exception) {
-        logger.e("Migration from version 3 to 4 failed", e)
-        throw e
-      }
-    }
+  val MIGRATION_3_4 = loggedMigration(3, 4) { db ->
+    db.execSQL(
+      "CREATE TABLE IF NOT EXISTS `place_resolutions` (" +
+        "`placeId` INTEGER NOT NULL, " +
+        "`resolvedAt` INTEGER NOT NULL, " +
+        "`googlePlaceId` TEXT, " +
+        "PRIMARY KEY(`placeId`), " +
+        "FOREIGN KEY(`placeId`) REFERENCES `places`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+    )
   }
 
   /**
@@ -133,32 +117,21 @@ object DatabaseMigrations {
    *
    * DDL は Room がエンティティから生成するものと一致させること（起動時のスキーマ検証を通すため）。
    */
-  val MIGRATION_4_5 = object : Migration(4, 5) {
-    override fun migrate(db: SupportSQLiteDatabase) {
-      try {
-        logger.i("Starting migration from version 4 to 5")
-
-        db.execSQL(
-          "CREATE TABLE IF NOT EXISTS `wishlist` (" +
-            "`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
-            "`placeId` INTEGER NOT NULL, " +
-            "`priority` INTEGER NOT NULL, " +
-            "`memo` TEXT, " +
-            "`visitedAt` INTEGER, " +
-            "`createdAt` INTEGER NOT NULL, " +
-            "`updatedAt` INTEGER NOT NULL, " +
-            "FOREIGN KEY(`placeId`) REFERENCES `places`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
-        )
-        db.execSQL(
-          "CREATE UNIQUE INDEX IF NOT EXISTS `index_wishlist_placeId` ON `wishlist` (`placeId`)",
-        )
-
-        logger.i("Migration from version 4 to 5 completed successfully")
-      } catch (e: Exception) {
-        logger.e("Migration from version 4 to 5 failed", e)
-        throw e
-      }
-    }
+  val MIGRATION_4_5 = loggedMigration(4, 5) { db ->
+    db.execSQL(
+      "CREATE TABLE IF NOT EXISTS `wishlist` (" +
+        "`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+        "`placeId` INTEGER NOT NULL, " +
+        "`priority` INTEGER NOT NULL, " +
+        "`memo` TEXT, " +
+        "`visitedAt` INTEGER, " +
+        "`createdAt` INTEGER NOT NULL, " +
+        "`updatedAt` INTEGER NOT NULL, " +
+        "FOREIGN KEY(`placeId`) REFERENCES `places`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+    )
+    db.execSQL(
+      "CREATE UNIQUE INDEX IF NOT EXISTS `index_wishlist_placeId` ON `wishlist` (`placeId`)",
+    )
   }
 
   /**
@@ -168,19 +141,8 @@ object DatabaseMigrations {
    *
    * DDL は Room がエンティティから生成するものと一致させること（起動時のスキーマ検証を通すため）。
    */
-  val MIGRATION_5_6 = object : Migration(5, 6) {
-    override fun migrate(db: SupportSQLiteDatabase) {
-      try {
-        logger.i("Starting migration from version 5 to 6")
-
-        db.execSQL("ALTER TABLE `stops` ADD COLUMN `note` TEXT")
-
-        logger.i("Migration from version 5 to 6 completed successfully")
-      } catch (e: Exception) {
-        logger.e("Migration from version 5 to 6 failed", e)
-        throw e
-      }
-    }
+  val MIGRATION_5_6 = loggedMigration(5, 6) { db ->
+    db.execSQL("ALTER TABLE `stops` ADD COLUMN `note` TEXT")
   }
 
   /**
@@ -194,49 +156,38 @@ object DatabaseMigrations {
    * minSdk 34（SQLite 3.35+）の `ALTER TABLE ... DROP COLUMN` を使い、列を落とす前に中身を移送する。
    * DDL は Room がエンティティから生成するものと一致させること（起動時のスキーマ検証を通すため）。
    */
-  val MIGRATION_6_7 = object : Migration(6, 7) {
-    override fun migrate(db: SupportSQLiteDatabase) {
-      try {
-        logger.i("Starting migration from version 6 to 7")
+  val MIGRATION_6_7 = loggedMigration(6, 7) { db ->
+    // 1. places に note を追加し、wishlist.memo を移送する（落とす前に読む）。
+    db.execSQL("ALTER TABLE `places` ADD COLUMN `note` TEXT")
+    db.execSQL(
+      "UPDATE `places` SET `note` = " +
+        "(SELECT w.`memo` FROM `wishlist` w WHERE w.`placeId` = `places`.`id`) " +
+        "WHERE EXISTS " +
+        "(SELECT 1 FROM `wishlist` w WHERE w.`placeId` = `places`.`id` AND w.`memo` IS NOT NULL)",
+    )
 
-        // 1. places に note を追加し、wishlist.memo を移送する（落とす前に読む）。
-        db.execSQL("ALTER TABLE `places` ADD COLUMN `note` TEXT")
-        db.execSQL(
-          "UPDATE `places` SET `note` = " +
-            "(SELECT w.`memo` FROM `wishlist` w WHERE w.`placeId` = `places`.`id`) " +
-            "WHERE EXISTS " +
-            "(SELECT 1 FROM `wishlist` w WHERE w.`placeId` = `places`.`id` AND w.`memo` IS NOT NULL)",
-        )
+    // 2. google_places を作り、解決済み（googlePlaceId 非 null）＋places.address を移送する。
+    db.execSQL(
+      "CREATE TABLE IF NOT EXISTS `google_places` (" +
+        "`placeId` INTEGER NOT NULL, " +
+        "`googlePlaceId` TEXT NOT NULL, " +
+        "`name` TEXT, " +
+        "`address` TEXT, " +
+        "`category` TEXT, " +
+        "PRIMARY KEY(`placeId`), " +
+        "FOREIGN KEY(`placeId`) REFERENCES `places`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+    )
+    db.execSQL(
+      "INSERT INTO `google_places` (`placeId`, `googlePlaceId`, `name`, `address`, `category`) " +
+        "SELECT r.`placeId`, r.`googlePlaceId`, NULL, p.`address`, NULL " +
+        "FROM `place_resolutions` r JOIN `places` p ON p.`id` = r.`placeId` " +
+        "WHERE r.`googlePlaceId` IS NOT NULL",
+    )
 
-        // 2. google_places を作り、解決済み（googlePlaceId 非 null）＋places.address を移送する。
-        db.execSQL(
-          "CREATE TABLE IF NOT EXISTS `google_places` (" +
-            "`placeId` INTEGER NOT NULL, " +
-            "`googlePlaceId` TEXT NOT NULL, " +
-            "`name` TEXT, " +
-            "`address` TEXT, " +
-            "`category` TEXT, " +
-            "PRIMARY KEY(`placeId`), " +
-            "FOREIGN KEY(`placeId`) REFERENCES `places`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
-        )
-        db.execSQL(
-          "INSERT INTO `google_places` (`placeId`, `googlePlaceId`, `name`, `address`, `category`) " +
-            "SELECT r.`placeId`, r.`googlePlaceId`, NULL, p.`address`, NULL " +
-            "FROM `place_resolutions` r JOIN `places` p ON p.`id` = r.`placeId` " +
-            "WHERE r.`googlePlaceId` IS NOT NULL",
-        )
-
-        // 3. 移送し終えた不要列を落とす。
-        db.execSQL("ALTER TABLE `places` DROP COLUMN `address`")
-        db.execSQL("ALTER TABLE `wishlist` DROP COLUMN `memo`")
-        db.execSQL("ALTER TABLE `place_resolutions` DROP COLUMN `googlePlaceId`")
-
-        logger.i("Migration from version 6 to 7 completed successfully")
-      } catch (e: Exception) {
-        logger.e("Migration from version 6 to 7 failed", e)
-        throw e
-      }
-    }
+    // 3. 移送し終えた不要列を落とす。
+    db.execSQL("ALTER TABLE `places` DROP COLUMN `address`")
+    db.execSQL("ALTER TABLE `wishlist` DROP COLUMN `memo`")
+    db.execSQL("ALTER TABLE `place_resolutions` DROP COLUMN `googlePlaceId`")
   }
 
   /**
@@ -248,20 +199,9 @@ object DatabaseMigrations {
    *
    * DDL は Room がエンティティから生成するものと一致させること（起動時のスキーマ検証を通すため）。
    */
-  val MIGRATION_7_8 = object : Migration(7, 8) {
-    override fun migrate(db: SupportSQLiteDatabase) {
-      try {
-        logger.i("Starting migration from version 7 to 8")
-
-        db.execSQL("ALTER TABLE `gps_tracks` ADD COLUMN `name` TEXT")
-        db.execSQL("ALTER TABLE `gps_tracks` ADD COLUMN `isFavorite` INTEGER NOT NULL DEFAULT 0")
-
-        logger.i("Migration from version 7 to 8 completed successfully")
-      } catch (e: Exception) {
-        logger.e("Migration from version 7 to 8 failed", e)
-        throw e
-      }
-    }
+  val MIGRATION_7_8 = loggedMigration(7, 8) { db ->
+    db.execSQL("ALTER TABLE `gps_tracks` ADD COLUMN `name` TEXT")
+    db.execSQL("ALTER TABLE `gps_tracks` ADD COLUMN `isFavorite` INTEGER NOT NULL DEFAULT 0")
   }
 
   /**
@@ -270,30 +210,19 @@ object DatabaseMigrations {
    *
    * すべて追加列（既存行は NULL / 0）。DDL は Room がエンティティから生成するものと一致させること。
    */
-  val MIGRATION_8_9 = object : Migration(8, 9) {
-    override fun migrate(db: SupportSQLiteDatabase) {
-      try {
-        logger.i("Starting migration from version 8 to 9")
-
-        db.execSQL("ALTER TABLE `gps_points` ADD COLUMN `provider` TEXT")
-        db.execSQL("ALTER TABLE `gps_points` ADD COLUMN `verticalAccuracyMeters` REAL")
-        db.execSQL("ALTER TABLE `gps_points` ADD COLUMN `speedAccuracyMetersPerSecond` REAL")
-        db.execSQL("ALTER TABLE `gps_points` ADD COLUMN `bearingAccuracyDegrees` REAL")
-        db.execSQL("ALTER TABLE `gps_points` ADD COLUMN `mslAltitudeMeters` REAL")
-        db.execSQL("ALTER TABLE `gps_points` ADD COLUMN `mslAltitudeAccuracyMeters` REAL")
-        db.execSQL(
-          "ALTER TABLE `gps_points` ADD COLUMN `elapsedRealtimeNanos` INTEGER NOT NULL DEFAULT 0",
-        )
-        db.execSQL("ALTER TABLE `gps_points` ADD COLUMN `isMock` INTEGER NOT NULL DEFAULT 0")
-        // extras（Bundle）を JSON 文字列化して保存する列（バイナリではなくテキスト）。
-        db.execSQL("ALTER TABLE `gps_points` ADD COLUMN `extrasJson` TEXT")
-
-        logger.i("Migration from version 8 to 9 completed successfully")
-      } catch (e: Exception) {
-        logger.e("Migration from version 8 to 9 failed", e)
-        throw e
-      }
-    }
+  val MIGRATION_8_9 = loggedMigration(8, 9) { db ->
+    db.execSQL("ALTER TABLE `gps_points` ADD COLUMN `provider` TEXT")
+    db.execSQL("ALTER TABLE `gps_points` ADD COLUMN `verticalAccuracyMeters` REAL")
+    db.execSQL("ALTER TABLE `gps_points` ADD COLUMN `speedAccuracyMetersPerSecond` REAL")
+    db.execSQL("ALTER TABLE `gps_points` ADD COLUMN `bearingAccuracyDegrees` REAL")
+    db.execSQL("ALTER TABLE `gps_points` ADD COLUMN `mslAltitudeMeters` REAL")
+    db.execSQL("ALTER TABLE `gps_points` ADD COLUMN `mslAltitudeAccuracyMeters` REAL")
+    db.execSQL(
+      "ALTER TABLE `gps_points` ADD COLUMN `elapsedRealtimeNanos` INTEGER NOT NULL DEFAULT 0",
+    )
+    db.execSQL("ALTER TABLE `gps_points` ADD COLUMN `isMock` INTEGER NOT NULL DEFAULT 0")
+    // extras（Bundle）を JSON 文字列化して保存する列（バイナリではなくテキスト）。
+    db.execSQL("ALTER TABLE `gps_points` ADD COLUMN `extrasJson` TEXT")
   }
 
   /**
@@ -303,19 +232,8 @@ object DatabaseMigrations {
    * 既存行は安全側の 'USER'（自動では消さない）でバックフィルする。以後、自動検出が作る場所は
    * 'DETECTED'、ユーザーが作る場所は 'USER' を明示的に入れる。DDL は Room の生成物と一致させること。
    */
-  val MIGRATION_9_10 = object : Migration(9, 10) {
-    override fun migrate(db: SupportSQLiteDatabase) {
-      try {
-        logger.i("Starting migration from version 9 to 10")
-
-        db.execSQL("ALTER TABLE `places` ADD COLUMN `source` TEXT NOT NULL DEFAULT 'USER'")
-
-        logger.i("Migration from version 9 to 10 completed successfully")
-      } catch (e: Exception) {
-        logger.e("Migration from version 9 to 10 failed", e)
-        throw e
-      }
-    }
+  val MIGRATION_9_10 = loggedMigration(9, 10) { db ->
+    db.execSQL("ALTER TABLE `places` ADD COLUMN `source` TEXT NOT NULL DEFAULT 'USER'")
   }
 
   /**
@@ -325,19 +243,8 @@ object DatabaseMigrations {
    * 平滑化し直していたのをやめ、確定時に計算した値を持つ。既存の経路は NULL
    * （未計算）で入り、初回起動時のバックフィルで埋める。
    */
-  val MIGRATION_10_11 = object : Migration(10, 11) {
-    override fun migrate(db: SupportSQLiteDatabase) {
-      try {
-        logger.i("Starting migration from version 10 to 11")
-
-        db.execSQL("ALTER TABLE `gps_tracks` ADD COLUMN `totalDistanceMeters` REAL")
-
-        logger.i("Migration from version 10 to 11 completed successfully")
-      } catch (e: Exception) {
-        logger.e("Migration from version 10 to 11 failed", e)
-        throw e
-      }
-    }
+  val MIGRATION_10_11 = loggedMigration(10, 11) { db ->
+    db.execSQL("ALTER TABLE `gps_tracks` ADD COLUMN `totalDistanceMeters` REAL")
   }
 
   /**
@@ -347,19 +254,8 @@ object DatabaseMigrations {
    * 滞在中は毎回引かれるため、場所が増えるほど重くなる。索引名は Room が生成する規約
    * （index_<テーブル>_<列>...）に合わせること。ずれるとスキーマ検証で落ちる。
    */
-  val MIGRATION_11_12 = object : Migration(11, 12) {
-    override fun migrate(db: SupportSQLiteDatabase) {
-      try {
-        logger.i("Starting migration from version 11 to 12")
-
-        db.execSQL("CREATE INDEX IF NOT EXISTS `index_places_latitude_longitude` ON `places` (`latitude`, `longitude`)")
-
-        logger.i("Migration from version 11 to 12 completed successfully")
-      } catch (e: Exception) {
-        logger.e("Migration from version 11 to 12 failed", e)
-        throw e
-      }
-    }
+  val MIGRATION_11_12 = loggedMigration(11, 12) { db ->
+    db.execSQL("CREATE INDEX IF NOT EXISTS `index_places_latitude_longitude` ON `places` (`latitude`, `longitude`)")
   }
 
   /**
@@ -377,51 +273,40 @@ object DatabaseMigrations {
    * 外部キーを増やすので `google_places` は作り直す。DDL は Room がエンティティから生成するものと
    * 一致させること（起動時のスキーマ検証を通すため）。
    */
-  val MIGRATION_12_13 = object : Migration(12, 13) {
-    override fun migrate(db: SupportSQLiteDatabase) {
-      try {
-        logger.i("Starting migration from version 12 to 13")
+  val MIGRATION_12_13 = loggedMigration(12, 13) { db ->
+    // 1. 業種のマスタ。id はサロゲートで、業種の同一性は code の UNIQUE 索引が担保する。
+    db.execSQL(
+      "CREATE TABLE IF NOT EXISTS `google_place_categories` (" +
+        "`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+        "`code` TEXT NOT NULL, " +
+        "`displayName` TEXT)",
+    )
+    db.execSQL(
+      "CREATE UNIQUE INDEX IF NOT EXISTS `index_google_place_categories_code` " +
+        "ON `google_place_categories` (`code`)",
+    )
 
-        // 1. 業種のマスタ。id はサロゲートで、業種の同一性は code の UNIQUE 索引が担保する。
-        db.execSQL(
-          "CREATE TABLE IF NOT EXISTS `google_place_categories` (" +
-            "`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
-            "`code` TEXT NOT NULL, " +
-            "`displayName` TEXT)",
-        )
-        db.execSQL(
-          "CREATE UNIQUE INDEX IF NOT EXISTS `index_google_place_categories_code` " +
-            "ON `google_place_categories` (`code`)",
-        )
-
-        // 2. google_places を作り直す（category を落とし、categoryId の外部キーを足す）。
-        db.execSQL(
-          "CREATE TABLE IF NOT EXISTS `google_places_new` (" +
-            "`placeId` INTEGER NOT NULL, " +
-            "`googlePlaceId` TEXT NOT NULL, " +
-            "`name` TEXT, " +
-            "`address` TEXT, " +
-            "`categoryId` INTEGER, " +
-            "PRIMARY KEY(`placeId`), " +
-            "FOREIGN KEY(`placeId`) REFERENCES `places`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE , " +
-            "FOREIGN KEY(`categoryId`) REFERENCES `google_place_categories`(`id`) " +
-            "ON UPDATE NO ACTION ON DELETE NO ACTION )",
-        )
-        // 業種は引き直すので categoryId は NULL で入れる（旧 category は捨てる）。
-        db.execSQL(
-          "INSERT INTO `google_places_new` (`placeId`, `googlePlaceId`, `name`, `address`, `categoryId`) " +
-            "SELECT `placeId`, `googlePlaceId`, `name`, `address`, NULL FROM `google_places`",
-        )
-        db.execSQL("DROP TABLE `google_places`")
-        db.execSQL("ALTER TABLE `google_places_new` RENAME TO `google_places`")
-        db.execSQL("CREATE INDEX IF NOT EXISTS `index_google_places_categoryId` ON `google_places` (`categoryId`)")
-
-        logger.i("Migration from version 12 to 13 completed successfully")
-      } catch (e: Exception) {
-        logger.e("Migration from version 12 to 13 failed", e)
-        throw e
-      }
-    }
+    // 2. google_places を作り直す（category を落とし、categoryId の外部キーを足す）。
+    db.execSQL(
+      "CREATE TABLE IF NOT EXISTS `google_places_new` (" +
+        "`placeId` INTEGER NOT NULL, " +
+        "`googlePlaceId` TEXT NOT NULL, " +
+        "`name` TEXT, " +
+        "`address` TEXT, " +
+        "`categoryId` INTEGER, " +
+        "PRIMARY KEY(`placeId`), " +
+        "FOREIGN KEY(`placeId`) REFERENCES `places`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE , " +
+        "FOREIGN KEY(`categoryId`) REFERENCES `google_place_categories`(`id`) " +
+        "ON UPDATE NO ACTION ON DELETE NO ACTION )",
+    )
+    // 業種は引き直すので categoryId は NULL で入れる（旧 category は捨てる）。
+    db.execSQL(
+      "INSERT INTO `google_places_new` (`placeId`, `googlePlaceId`, `name`, `address`, `categoryId`) " +
+        "SELECT `placeId`, `googlePlaceId`, `name`, `address`, NULL FROM `google_places`",
+    )
+    db.execSQL("DROP TABLE `google_places`")
+    db.execSQL("ALTER TABLE `google_places_new` RENAME TO `google_places`")
+    db.execSQL("CREATE INDEX IF NOT EXISTS `index_google_places_categoryId` ON `google_places` (`categoryId`)")
   }
 
   /**
@@ -436,51 +321,40 @@ object DatabaseMigrations {
    *
    * DDL は Room がエンティティから生成するものと一致させること（起動時のスキーマ検証を通すため）。
    */
-  val MIGRATION_13_14 = object : Migration(13, 14) {
-    override fun migrate(db: SupportSQLiteDatabase) {
-      try {
-        logger.i("Starting migration from version 13 to 14")
+  val MIGRATION_13_14 = loggedMigration(13, 14) { db ->
+    db.execSQL(
+      "CREATE TABLE IF NOT EXISTS `visited_places` (" +
+        "`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+        "`placeId` INTEGER NOT NULL, " +
+        "`markedAt` INTEGER NOT NULL, " +
+        "FOREIGN KEY(`placeId`) REFERENCES `places`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+    )
+    db.execSQL(
+      "CREATE UNIQUE INDEX IF NOT EXISTS `index_visited_places_placeId` ON `visited_places` (`placeId`)",
+    )
+    // 既にある手動の印だけを移す（visitedAt が NULL の行は未訪問なので作らない）。
+    db.execSQL(
+      "INSERT INTO `visited_places` (`placeId`, `markedAt`) " +
+        "SELECT `placeId`, `visitedAt` FROM `wishlist` WHERE `visitedAt` IS NOT NULL",
+    )
 
-        db.execSQL(
-          "CREATE TABLE IF NOT EXISTS `visited_places` (" +
-            "`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
-            "`placeId` INTEGER NOT NULL, " +
-            "`markedAt` INTEGER NOT NULL, " +
-            "FOREIGN KEY(`placeId`) REFERENCES `places`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
-        )
-        db.execSQL(
-          "CREATE UNIQUE INDEX IF NOT EXISTS `index_visited_places_placeId` ON `visited_places` (`placeId`)",
-        )
-        // 既にある手動の印だけを移す（visitedAt が NULL の行は未訪問なので作らない）。
-        db.execSQL(
-          "INSERT INTO `visited_places` (`placeId`, `markedAt`) " +
-            "SELECT `placeId`, `visitedAt` FROM `wishlist` WHERE `visitedAt` IS NOT NULL",
-        )
-
-        // wishlist から visitedAt を落とす（SQLite は列削除ができないので作り直す）。
-        db.execSQL(
-          "CREATE TABLE IF NOT EXISTS `wishlist_new` (" +
-            "`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
-            "`placeId` INTEGER NOT NULL, " +
-            "`priority` INTEGER NOT NULL, " +
-            "`createdAt` INTEGER NOT NULL, " +
-            "`updatedAt` INTEGER NOT NULL, " +
-            "FOREIGN KEY(`placeId`) REFERENCES `places`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
-        )
-        db.execSQL(
-          "INSERT INTO `wishlist_new` (`id`, `placeId`, `priority`, `createdAt`, `updatedAt`) " +
-            "SELECT `id`, `placeId`, `priority`, `createdAt`, `updatedAt` FROM `wishlist`",
-        )
-        db.execSQL("DROP TABLE `wishlist`")
-        db.execSQL("ALTER TABLE `wishlist_new` RENAME TO `wishlist`")
-        db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS `index_wishlist_placeId` ON `wishlist` (`placeId`)")
-
-        logger.i("Migration from version 13 to 14 completed successfully")
-      } catch (e: Exception) {
-        logger.e("Migration from version 13 to 14 failed", e)
-        throw e
-      }
-    }
+    // wishlist から visitedAt を落とす（SQLite は列削除ができないので作り直す）。
+    db.execSQL(
+      "CREATE TABLE IF NOT EXISTS `wishlist_new` (" +
+        "`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+        "`placeId` INTEGER NOT NULL, " +
+        "`priority` INTEGER NOT NULL, " +
+        "`createdAt` INTEGER NOT NULL, " +
+        "`updatedAt` INTEGER NOT NULL, " +
+        "FOREIGN KEY(`placeId`) REFERENCES `places`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+    )
+    db.execSQL(
+      "INSERT INTO `wishlist_new` (`id`, `placeId`, `priority`, `createdAt`, `updatedAt`) " +
+        "SELECT `id`, `placeId`, `priority`, `createdAt`, `updatedAt` FROM `wishlist`",
+    )
+    db.execSQL("DROP TABLE `wishlist`")
+    db.execSQL("ALTER TABLE `wishlist_new` RENAME TO `wishlist`")
+    db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS `index_wishlist_placeId` ON `wishlist` (`placeId`)")
   }
 
   /**
@@ -497,29 +371,18 @@ object DatabaseMigrations {
    *
    * DDL は Room がエンティティから生成するものと一致させること（起動時のスキーマ検証を通すため）。
    */
-  val MIGRATION_14_15 = object : Migration(14, 15) {
-    override fun migrate(db: SupportSQLiteDatabase) {
-      try {
-        logger.i("Starting migration from version 14 to 15")
+  val MIGRATION_14_15 = loggedMigration(14, 15) { db ->
+    db.execSQL("ALTER TABLE `google_places` ADD COLUMN `latitude` REAL")
+    db.execSQL("ALTER TABLE `google_places` ADD COLUMN `longitude` REAL")
 
-        db.execSQL("ALTER TABLE `google_places` ADD COLUMN `latitude` REAL")
-        db.execSQL("ALTER TABLE `google_places` ADD COLUMN `longitude` REAL")
+    // 表示位置を変えないため、いまの places の座標を表示座標として引き継ぐ。
+    db.execSQL(
+      "UPDATE `google_places` SET " +
+        "`latitude` = (SELECT `latitude` FROM `places` WHERE `places`.`id` = `google_places`.`placeId`), " +
+        "`longitude` = (SELECT `longitude` FROM `places` WHERE `places`.`id` = `google_places`.`placeId`)",
+    )
 
-        // 表示位置を変えないため、いまの places の座標を表示座標として引き継ぐ。
-        db.execSQL(
-          "UPDATE `google_places` SET " +
-            "`latitude` = (SELECT `latitude` FROM `places` WHERE `places`.`id` = `google_places`.`placeId`), " +
-            "`longitude` = (SELECT `longitude` FROM `places` WHERE `places`.`id` = `google_places`.`placeId`)",
-        )
-
-        mergeDuplicatePlaces(db)
-
-        logger.i("Migration from version 14 to 15 completed successfully")
-      } catch (e: Exception) {
-        logger.e("Migration from version 14 to 15 failed", e)
-        throw e
-      }
-    }
+    mergeDuplicatePlaces(db)
   }
 
   /**
@@ -581,141 +444,86 @@ object DatabaseMigrations {
   /**
    * 現在利用可能な全てのマイグレーション
    */
-  val MIGRATION_15_16 = object : Migration(15, 16) {
-    override fun migrate(db: SupportSQLiteDatabase) {
-      try {
-        logger.i("Starting migration from version 15 to 16")
+  val MIGRATION_15_16 = loggedMigration(15, 16) { db ->
+    // 同じ施設の行が 2 つ以上あれば、**最も古い 1 件だけ**を残して他は消す。
+    // v15 で「触られていない検出由来」は place ごと寄せたので、ここに残っているのは
+    // 触られた place が 2 つ以上ある施設。place そのものは消さない（名前・メモ・行きたいを
+    // 守る）。施設情報だけ落とし、以後は先にある場所が施設を持ち続ける（→ adr/0025）。
+    db.execSQL(
+      "DELETE FROM `google_places` WHERE `placeId` NOT IN (" +
+        "SELECT MIN(`placeId`) FROM `google_places` GROUP BY `googlePlaceId`)",
+    )
+    // 解決記録は消さない。消すと自動命名がまた同じ施設を引いて、また断られるだけになる。
 
-        // 同じ施設の行が 2 つ以上あれば、**最も古い 1 件だけ**を残して他は消す。
-        // v15 で「触られていない検出由来」は place ごと寄せたので、ここに残っているのは
-        // 触られた place が 2 つ以上ある施設。place そのものは消さない（名前・メモ・行きたいを
-        // 守る）。施設情報だけ落とし、以後は先にある場所が施設を持ち続ける（→ adr/0025）。
-        db.execSQL(
-          "DELETE FROM `google_places` WHERE `placeId` NOT IN (" +
-            "SELECT MIN(`placeId`) FROM `google_places` GROUP BY `googlePlaceId`)",
-        )
-        // 解決記録は消さない。消すと自動命名がまた同じ施設を引いて、また断られるだけになる。
-
-        db.execSQL(
-          "CREATE UNIQUE INDEX IF NOT EXISTS `index_google_places_googlePlaceId` " +
-            "ON `google_places` (`googlePlaceId`)",
-        )
-
-        logger.i("Migration from version 15 to 16 completed successfully")
-      } catch (e: Exception) {
-        logger.e("Migration from version 15 to 16 failed", e)
-        throw e
-      }
-    }
+    db.execSQL(
+      "CREATE UNIQUE INDEX IF NOT EXISTS `index_google_places_googlePlaceId` " +
+        "ON `google_places` (`googlePlaceId`)",
+    )
   }
 
-  val MIGRATION_16_17 = object : Migration(16, 17) {
-    override fun migrate(db: SupportSQLiteDatabase) {
-      try {
-        logger.i("Starting migration from version 16 to 17")
-
-        // 地図に映っている範囲に入る経路を探す（記録画面の「経路」）ため、記録の点に緯度・経度の索引を張る。
-        // 表の中身は変えない。
-        db.execSQL(
-          "CREATE INDEX IF NOT EXISTS `index_gps_points_latitude_longitude` " +
-            "ON `gps_points` (`latitude`, `longitude`)",
-        )
-
-        logger.i("Migration from version 16 to 17 completed successfully")
-      } catch (e: Exception) {
-        logger.e("Migration from version 16 to 17 failed", e)
-        throw e
-      }
-    }
+  val MIGRATION_16_17 = loggedMigration(16, 17) { db ->
+    // 地図に映っている範囲に入る経路を探す（記録画面の「経路」）ため、記録の点に緯度・経度の索引を張る。
+    // 表の中身は変えない。
+    db.execSQL(
+      "CREATE INDEX IF NOT EXISTS `index_gps_points_latitude_longitude` " +
+        "ON `gps_points` (`latitude`, `longitude`)",
+    )
   }
 
-  val MIGRATION_17_18 = object : Migration(17, 18) {
-    override fun migrate(db: SupportSQLiteDatabase) {
-      try {
-        logger.i("Starting migration from version 17 to 18")
-
-        // 場所の地域（都道府県・市区町村）。場所の座標から Geocoder で引いて書き足す（→ adr/0029）。
-        // 既存の場所は regionResolvedAt が null ＝まだ引いていない扱いで、裏のキャッチアップが埋める。
-        db.execSQL("ALTER TABLE `places` ADD COLUMN `prefecture` TEXT")
-        db.execSQL("ALTER TABLE `places` ADD COLUMN `city` TEXT")
-        db.execSQL("ALTER TABLE `places` ADD COLUMN `regionResolvedAt` INTEGER")
-
-        logger.i("Migration from version 17 to 18 completed successfully")
-      } catch (e: Exception) {
-        logger.e("Migration from version 17 to 18 failed", e)
-        throw e
-      }
-    }
+  val MIGRATION_17_18 = loggedMigration(17, 18) { db ->
+    // 場所の地域（都道府県・市区町村）。場所の座標から Geocoder で引いて書き足す（→ adr/0029）。
+    // 既存の場所は regionResolvedAt が null ＝まだ引いていない扱いで、裏のキャッチアップが埋める。
+    db.execSQL("ALTER TABLE `places` ADD COLUMN `prefecture` TEXT")
+    db.execSQL("ALTER TABLE `places` ADD COLUMN `city` TEXT")
+    db.execSQL("ALTER TABLE `places` ADD COLUMN `regionResolvedAt` INTEGER")
   }
 
-  val MIGRATION_18_19 = object : Migration(18, 19) {
-    override fun migrate(db: SupportSQLiteDatabase) {
-      try {
-        logger.i("Starting migration from version 18 to 19")
-
-        // 場所の地域に国を足す（海外は国 → 都市で絞る → adr/0029）。
-        db.execSQL("ALTER TABLE `places` ADD COLUMN `countryCode` TEXT")
-        // 日本の都道府県が入っている場所は日本。
-        val placeholders = JAPANESE_PREFECTURES.joinToString(",") { "?" }
-        db.execSQL(
-          "UPDATE `places` SET `countryCode` = 'JP' WHERE `prefecture` IN ($placeholders)",
-          JAPANESE_PREFECTURES.toTypedArray(),
-        )
-        // それ以外で引き済みの場所（海外の州が都道府県に入った・分からなかった）は、国を取るために引き直す。
-        db.execSQL(
-          "UPDATE `places` SET `prefecture` = NULL, `city` = NULL, `regionResolvedAt` = NULL " +
-            "WHERE `regionResolvedAt` IS NOT NULL AND `countryCode` IS NULL",
-        )
-
-        logger.i("Migration from version 18 to 19 completed successfully")
-      } catch (e: Exception) {
-        logger.e("Migration from version 18 to 19 failed", e)
-        throw e
-      }
-    }
+  val MIGRATION_18_19 = loggedMigration(18, 19) { db ->
+    // 場所の地域に国を足す（海外は国 → 都市で絞る → adr/0029）。
+    db.execSQL("ALTER TABLE `places` ADD COLUMN `countryCode` TEXT")
+    // 日本の都道府県が入っている場所は日本。
+    val placeholders = JAPANESE_PREFECTURES.joinToString(",") { "?" }
+    db.execSQL(
+      "UPDATE `places` SET `countryCode` = 'JP' WHERE `prefecture` IN ($placeholders)",
+      JAPANESE_PREFECTURES.toTypedArray(),
+    )
+    // それ以外で引き済みの場所（海外の州が都道府県に入った・分からなかった）は、国を取るために引き直す。
+    db.execSQL(
+      "UPDATE `places` SET `prefecture` = NULL, `city` = NULL, `regionResolvedAt` = NULL " +
+        "WHERE `regionResolvedAt` IS NOT NULL AND `countryCode` IS NULL",
+    )
   }
 
   /**
    * 行きたいの履歴（行きたいに入れて実際に行った記録）を足す（→ adr/0036）。
    * 既存の行きたいはさかのぼって終わらせず、そのまま残す。
    */
-  val MIGRATION_19_20 = object : Migration(19, 20) {
-    override fun migrate(db: SupportSQLiteDatabase) {
-      try {
-        logger.i("Starting migration from version 19 to 20")
-
-        db.execSQL(
-          "CREATE TABLE IF NOT EXISTS `wishlist_fulfillments` (" +
-            "`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
-            "`placeId` INTEGER NOT NULL, " +
-            "`priority` INTEGER NOT NULL, " +
-            "`wishedAt` INTEGER NOT NULL, " +
-            "`fulfilledAt` INTEGER NOT NULL, " +
-            "FOREIGN KEY(`placeId`) REFERENCES `places`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
-        )
-        db.execSQL(
-          "CREATE INDEX IF NOT EXISTS `index_wishlist_fulfillments_placeId` ON `wishlist_fulfillments` (`placeId`)",
-        )
-        // 入れた後にすでに行っていた行きたいは、ここで終わらせて履歴に 1 回として移す（→ adr/0036）。
-        // 判定と移し方は WishlistFulfillmentDao.fulfillReachedWishes と同じ（fulfilledAt は入れた後の最初の到着）。
-        // また行きたい場所は、旗を押して入れ直す。
-        val reached = "EXISTS (SELECT 1 FROM `stops` s WHERE s.`placeId` = w.`placeId` " +
-          "AND s.`arrivalTime` >= w.`createdAt`)"
-        db.execSQL(
-          "INSERT INTO `wishlist_fulfillments` (`placeId`, `priority`, `wishedAt`, `fulfilledAt`) " +
-            "SELECT w.`placeId`, w.`priority`, w.`createdAt`, " +
-            "(SELECT MIN(s.`arrivalTime`) FROM `stops` s WHERE s.`placeId` = w.`placeId` " +
-            "AND s.`arrivalTime` >= w.`createdAt`) " +
-            "FROM `wishlist` w WHERE $reached",
-        )
-        db.execSQL("DELETE FROM `wishlist` WHERE `id` IN (SELECT w.`id` FROM `wishlist` w WHERE $reached)")
-
-        logger.i("Migration from version 19 to 20 completed successfully")
-      } catch (e: Exception) {
-        logger.e("Migration from version 19 to 20 failed", e)
-        throw e
-      }
-    }
+  val MIGRATION_19_20 = loggedMigration(19, 20) { db ->
+    db.execSQL(
+      "CREATE TABLE IF NOT EXISTS `wishlist_fulfillments` (" +
+        "`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+        "`placeId` INTEGER NOT NULL, " +
+        "`priority` INTEGER NOT NULL, " +
+        "`wishedAt` INTEGER NOT NULL, " +
+        "`fulfilledAt` INTEGER NOT NULL, " +
+        "FOREIGN KEY(`placeId`) REFERENCES `places`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+    )
+    db.execSQL(
+      "CREATE INDEX IF NOT EXISTS `index_wishlist_fulfillments_placeId` ON `wishlist_fulfillments` (`placeId`)",
+    )
+    // 入れた後にすでに行っていた行きたいは、ここで終わらせて履歴に 1 回として移す（→ adr/0036）。
+    // 判定と移し方は WishlistFulfillmentDao.fulfillReachedWishes と同じ（fulfilledAt は入れた後の最初の到着）。
+    // また行きたい場所は、旗を押して入れ直す。
+    val reached = "EXISTS (SELECT 1 FROM `stops` s WHERE s.`placeId` = w.`placeId` " +
+      "AND s.`arrivalTime` >= w.`createdAt`)"
+    db.execSQL(
+      "INSERT INTO `wishlist_fulfillments` (`placeId`, `priority`, `wishedAt`, `fulfilledAt`) " +
+        "SELECT w.`placeId`, w.`priority`, w.`createdAt`, " +
+        "(SELECT MIN(s.`arrivalTime`) FROM `stops` s WHERE s.`placeId` = w.`placeId` " +
+        "AND s.`arrivalTime` >= w.`createdAt`) " +
+        "FROM `wishlist` w WHERE $reached",
+    )
+    db.execSQL("DELETE FROM `wishlist` WHERE `id` IN (SELECT w.`id` FROM `wishlist` w WHERE $reached)")
   }
 
   /**
@@ -728,18 +536,9 @@ object DatabaseMigrations {
    * どの施設とぶつかったかを持っていないので埋められない。「未取得」に数えられたままなので、
    * 経路詳細の「場所を取得」を押すと問い合わせ直し、そこで選択肢が出る。
    */
-  val MIGRATION_20_21 = object : Migration(20, 21) {
-    override fun migrate(db: SupportSQLiteDatabase) {
-      try {
-        logger.i("Starting migration from version 20 to 21")
-        db.execSQL("ALTER TABLE `place_resolutions` ADD COLUMN `sameFacilityGooglePlaceId` TEXT")
-        db.execSQL("ALTER TABLE `place_resolutions` ADD COLUMN `keptSeparate` INTEGER NOT NULL DEFAULT 0")
-        logger.i("Migration from version 20 to 21 completed successfully")
-      } catch (e: Exception) {
-        logger.e("Migration from version 20 to 21 failed", e)
-        throw e
-      }
-    }
+  val MIGRATION_20_21 = loggedMigration(20, 21) { db ->
+    db.execSQL("ALTER TABLE `place_resolutions` ADD COLUMN `sameFacilityGooglePlaceId` TEXT")
+    db.execSQL("ALTER TABLE `place_resolutions` ADD COLUMN `keptSeparate` INTEGER NOT NULL DEFAULT 0")
   }
 
   val ALL_MIGRATIONS = arrayOf(
@@ -765,42 +564,4 @@ object DatabaseMigrations {
     MIGRATION_20_21,
     // 将来のマイグレーションをここに追加
   )
-
-  /**
-   * マイグレーション履歴をログに記録
-   */
-  fun logMigrationHistory() {
-    logger.i("Available database migrations:")
-    ALL_MIGRATIONS.forEach { migration ->
-      logger.i("- Migration ${migration.startVersion} -> ${migration.endVersion}")
-    }
-  }
-
-  /**
-   * データベースバージョン確認
-   */
-  fun validateDatabaseVersion(currentVersion: Int, expectedVersion: Int): Boolean {
-    val isValid = currentVersion == expectedVersion
-    logger.i("Database version validation: current=$currentVersion, expected=$expectedVersion, valid=$isValid")
-    return isValid
-  }
-
-  /**
-   * マイグレーション失敗時の復旧処理
-   */
-  fun handleMigrationFailure(fromVersion: Int, toVersion: Int, error: Throwable) {
-    logger.e("Migration failed from version $fromVersion to $toVersion", error)
-
-    // マイグレーション失敗時の追加処理をここに実装
-    // 例：エラー報告、バックアップ復元など
-  }
-
-  /**
-   * 開発用：データベーススキーマの破壊的再構築
-   * 本番環境では使用禁止
-   */
-  fun performDestructiveMigration() {
-    logger.w("DESTRUCTIVE MIGRATION - This will delete all data!")
-    // この機能は fallbackToDestructiveMigration() で自動的に処理される
-  }
 }

@@ -42,10 +42,4 @@ object PermissionUtils {
 
   /** アプリで必要なすべての権限をチェック (FINE_LOCATION + COARSE_LOCATION + POST_NOTIFICATIONS) */
   fun hasAllRequiredPermissions(context: Context): Boolean = hasAllPermissions(context, PermissionGroups.ALL_REQUIRED_PERMISSIONS)
-
-  /** 欠けている権限のリストを取得 */
-  fun getMissingPermissions(context: Context, permissions: Array<String>): List<String> = permissions.filter { permission -> !hasPermission(context, permission) }
-
-  /** 欠けている権限のリストを取得（すべての必須権限対象） */
-  fun getMissingRequiredPermissions(context: Context): List<String> = getMissingPermissions(context, PermissionGroups.ALL_REQUIRED_PERMISSIONS)
 }
