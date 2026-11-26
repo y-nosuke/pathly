@@ -46,6 +46,8 @@ data class PlaceWithWishlist(
   val regionCountryCode: String? = null,
   val regionPrefecture: String? = null,
   val regionCity: String? = null,
+  // この場所を使っている計画の数（→ adr/0050）。
+  val planCount: Int = 0,
 ) {
   val category: PlaceCategory? get() = categoryCode?.let { PlaceCategory(it, categoryDisplayName) }
 }

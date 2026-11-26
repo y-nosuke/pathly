@@ -365,6 +365,13 @@ internal fun ColumnScope.PlaceEditorMenuItems(
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
           )
+        } else if (item.planCount > 0) {
+          // 消すと計画の行も消える（取り消しで戻る → adr/0050）。
+          Text(
+            text = "${item.planCount} 件の計画から外れます",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+          )
         }
       }
     },

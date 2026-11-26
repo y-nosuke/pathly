@@ -620,6 +620,41 @@ class MigrationTest {
     db.close()
   }
 
+  @Test
+  fun migrate21To22_addsPlanTables_keepingExistingPlaces() {
+    helper.createDatabase(TEST_DB, 21).apply {
+      execSQL(
+        "INSERT INTO places (id, name, latitude, longitude, note, source, createdAt, updatedAt) VALUES " +
+          "(1, '神社', 35.68, 139.76, NULL, 'USER', 0, 0)",
+      )
+      close()
+    }
+
+    // 足した表の DDL（外部キー・索引を含む）が Room の生成物とずれていればここで失敗する。
+    val db = helper.runMigrationsAndValidate(TEST_DB, 22, true, DatabaseMigrations.MIGRATION_21_22)
+
+    db.query("SELECT COUNT(*) FROM places").use {
+      assertTrue(it.moveToFirst())
+      assertEquals(1, it.getInt(0))
+    }
+    db.query("SELECT COUNT(*) FROM plans").use {
+      assertTrue(it.moveToFirst())
+      assertEquals(0, it.getInt(0))
+    }
+    // 計画と行が入り、場所を消すと行も消える（CASCADE）。
+    db.execSQL("PRAGMA foreign_keys = ON")
+    db.execSQL("INSERT INTO plans (id, title, note, startDate, dayCount, createdAt, updatedAt) VALUES (1, '鎌倉', NULL, NULL, 1, 0, 0)")
+    db.execSQL("INSERT INTO plan_items (planId, dayIndex, position, placeId) VALUES (1, 1, 0, 1)")
+    db.execSQL("INSERT INTO plan_items (planId, dayIndex, position, title) VALUES (1, 1, 1, '昼食')")
+    db.execSQL("DELETE FROM places WHERE id = 1")
+    db.query("SELECT title FROM plan_items").use { cursor ->
+      assertTrue(cursor.moveToNext())
+      assertEquals("メモの行は残る", "昼食", cursor.getString(0))
+      assertFalse(cursor.moveToNext())
+    }
+    db.close()
+  }
+
   companion object {
     private const val TEST_DB = "migration-test"
   }

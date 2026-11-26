@@ -52,6 +52,10 @@ import com.pathly.presentation.places.PlaceDetailRoute
 import com.pathly.presentation.places.PlacesListRoute
 import com.pathly.presentation.places.PlacesViewModel
 import com.pathly.presentation.places.SearchAddRoute
+import com.pathly.presentation.plans.PlanDetailRoute
+import com.pathly.presentation.plans.PlanDetailViewModel
+import com.pathly.presentation.plans.PlansRoute
+import com.pathly.presentation.plans.PlansViewModel
 import com.pathly.presentation.settings.SettingsScreen
 import com.pathly.presentation.tracking.TrackingScreen
 import com.pathly.presentation.tracking.TrackingViewModel
@@ -71,6 +75,13 @@ object Routes {
 
   const val TRACK_DETAIL = "track_detail/{trackId}"
 
+  // 「計画」タブはネストグラフ（一覧と詳細。詳細でもタブを選んだままにする）。
+  const val PLANS_GRAPH = "plans"
+  const val PLANS_LIST = "plans_list"
+  const val PLAN_DETAIL = "plan_detail/{planId}"
+
+  fun planDetail(planId: Long) = "plan_detail/$planId"
+
   fun placeDetail(placeId: Long) = "place_detail/$placeId"
   fun trackDetail(trackId: Long) = "track_detail/$trackId"
 }
@@ -84,6 +95,7 @@ enum class BottomNavItem(
   TRACKING("記録", R.drawable.ic_location_on, Routes.TRACKING),
   HISTORY("履歴", R.drawable.ic_list, Routes.HISTORY),
   PLACES("場所", R.drawable.ic_place, Routes.PLACES_GRAPH),
+  PLANS("計画", R.drawable.ic_event_note, Routes.PLANS_GRAPH),
   SETTINGS("設定", R.drawable.ic_settings, Routes.SETTINGS),
 }
 
@@ -158,6 +170,8 @@ fun PathlyNavHost(
 
       placesGraph(navController)
 
+      plansGraph(navController)
+
       composable(
         route = Routes.TRACK_DETAIL,
         arguments = listOf(navArgument("trackId") { type = NavType.LongType }),
@@ -214,6 +228,40 @@ private fun NavGraphBuilder.placesGraph(navController: NavController) {
     }
   }
 }
+
+/** 「計画」タブのネストグラフ（→ docs/specs/plans.md）。 */
+private fun NavGraphBuilder.plansGraph(navController: NavController) {
+  navigation(startDestination = Routes.PLANS_LIST, route = Routes.PLANS_GRAPH) {
+    composable(Routes.PLANS_LIST) { entry ->
+      BackToStartTab(navController)
+      // 詳細で消して戻ってきた計画の名前（取り消しのスナックバーを出す）。
+      val deletedTitle by entry.savedStateHandle.getStateFlow<String?>(DELETED_PLAN_KEY, null).collectAsStateWithLifecycle()
+      PlansRoute(
+        viewModel = hiltViewModel<PlansViewModel>(),
+        onOpenPlan = { planId -> navController.navigate(Routes.planDetail(planId)) },
+        deletedPlanTitle = deletedTitle,
+        onDeletedShown = { entry.savedStateHandle[DELETED_PLAN_KEY] = null },
+      )
+    }
+
+    composable(
+      route = Routes.PLAN_DETAIL,
+      arguments = listOf(navArgument(PlanDetailViewModel.ARG_PLAN_ID) { type = NavType.LongType }),
+    ) {
+      PlanDetailRoute(
+        viewModel = hiltViewModel<PlanDetailViewModel>(),
+        onBack = { navController.popBackStack() },
+        onDeleted = { title ->
+          navController.previousBackStackEntry?.savedStateHandle?.set(DELETED_PLAN_KEY, title)
+          navController.popBackStack()
+        },
+        onOpenPlace = { placeId -> navController.navigate(Routes.placeDetail(placeId)) },
+      )
+    }
+  }
+}
+
+private const val DELETED_PLAN_KEY = "deletedPlanTitle"
 
 /**
  * 下のタブへ移る。タブごとに状態を保存・復元し、バックスタックを起点（記録タブ）まで畳む。

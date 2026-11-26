@@ -313,10 +313,10 @@ class StopRepositoryImpl @Inject constructor(
     var placesDeleted = 0
     var placesKept = 0
     for (placeId in affectedPlaceIds) {
-      // 他の訪問が残る（他の履歴など）か、行きたい登録・行きたいの履歴がある場所は保持する。
-      // どちらも place を消すと CASCADE で消えるため、ここで巻き込まないよう明示的に守る。
+      // 他の訪問が残る（他の履歴など）か、行きたい登録・行きたいの履歴がある・計画に入っている場所は保持する。
+      // どれも place を消すと CASCADE で消えるため、ここで巻き込まないよう明示的に守る。
       val place = placeDao.getById(placeId)
-      val stillReferenced = stopDao.countByPlace(placeId) > 0 || places.hasWishes(placeId)
+      val stillReferenced = stopDao.countByPlace(placeId) > 0 || places.hasWishes(placeId) || places.isInPlan(placeId)
       // ユーザーが明示的に作った場所（USER）は、参照ゼロでも自動では消さない（意図的な登録を守る）。
       // 自動回収するのは検出が作った使い捨て（DETECTED）だけ。
       val autoDisposable = place != null && place.source == PlaceSource.DETECTED.name

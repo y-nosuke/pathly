@@ -19,8 +19,8 @@
 | 施設（Google）   | google place        | Google 由来の情報（施設名・住所・カテゴリ）。place に 1:0..1                                 | `google_places`（`Place.googleName` など）                       |
 | 立ち寄り（訪問） | stop                | どの経路でどの場所にいつ居たか（place × track）                                              | `Stop` / `stops`                                                 |
 | 解決記録         | resolution (record) | 場所名を Google に問い合わせた記録（叩いたか・結果）                                         | `PlaceResolution` / `place_resolutions`                          |
-| 計画             | plan                | これからのお出掛けの予定。日付は任意で、日数と、日ごとに並ぶ行を持つ（[plans.md](plans.md)） | `plans`（#271 で作る）                                           |
-| 計画の行         | plan item           | 計画に並ぶ 1 行。**場所の行**（place を参照）か**メモの行**（文言だけ・地図に出ない）        | `plan_items`（#271 で作る）                                      |
+| 計画             | plan                | これからのお出掛けの予定。日付は任意で、日数と、日ごとに並ぶ行を持つ（[plans.md](plans.md)） | `Plan` / `plans`                                                 |
+| 計画の行         | plan item           | 計画に並ぶ 1 行。**場所の行**（place を参照）か**メモの行**（文言だけ・地図に出ない）        | `PlanItem` / `plan_items`                                        |
 | 結び付いた経路   | linked track        | 計画の実績として見る経路。日付で自動（保存しない）＋手で結び付けたもの                       | `plan_tracks`（手の分。#273 で作る）                             |
 
 データの流れ:

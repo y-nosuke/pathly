@@ -10,6 +10,7 @@ import com.pathly.data.local.entity.GooglePlaceEntity
 import com.pathly.data.local.entity.GpsTrackEntity
 import com.pathly.data.local.entity.PlaceEntity
 import com.pathly.data.local.entity.PlaceResolutionEntity
+import com.pathly.data.local.entity.PlanEntity
 import com.pathly.data.local.entity.StopEntity
 import com.pathly.data.local.entity.VisitedPlaceEntity
 import com.pathly.data.local.entity.WishlistEntity
@@ -73,6 +74,7 @@ class StopAndPlaceChangeIntegrationTest {
       database.wishlistDao(),
       database.visitedPlaceDao(),
       database.wishlistFulfillmentDao(),
+      database.planDao(),
       resolver,
       session,
     )
@@ -103,6 +105,7 @@ class StopAndPlaceChangeIntegrationTest {
       database.googlePlaceDao(),
       database.googlePlaceCategoryDao(),
       database.stopDao(),
+      database.planDao(),
       placeRepository,
       PlacesTextSearcher(context),
     )
@@ -276,6 +279,49 @@ class StopAndPlaceChangeIntegrationTest {
     // 場所を 1 つも消していなくても、取り消しで立ち寄りは元の ID・中身で戻る。
     assertTrue(stopRepository.undoLastStopChange())
     assertEquals(stopsBefore, database.stopDao().getByTrack(trackId).sortedBy { it.id })
+  }
+
+  // ---- 計画で使っている場所（→ adr/0050） ----
+
+  @Test
+  fun deleteStops_keepsDetectedPlaceUsedByPlan() = runTest {
+    val planned = insertPlace(PlaceSource.DETECTED)
+    val planId = plan(planned)
+    val stopId = insertStop(planned, arrival = BASE, departure = BASE + MINUTE)
+
+    val result = stopRepository.deleteStops(listOf(stopId))
+
+    assertEquals(0, result.placesDeleted)
+    assertNotNull("計画の場所は自動では消えない", database.placeDao().getById(planned))
+    assertEquals(1, database.planDao().getItems(planId).size)
+  }
+
+  @Test
+  fun mergePlaces_repointsPlanRows_andUndoBringsThemBack() = runTest {
+    val holder = insertPlace(PlaceSource.USER, name = "残る方")
+    val dup = insertPlace(PlaceSource.USER, latitude = LAT + 0.001)
+    val planId = plan(dup)
+
+    assertTrue(placeRepository.mergePlaces(dup, holder))
+    assertEquals("計画の行は残る方へ付け替わる", holder, database.planDao().getItems(planId).single().placeId)
+
+    assertTrue(placeRepository.undoLastPlaceMerge())
+    assertEquals(dup, database.planDao().getItems(planId).single().placeId)
+  }
+
+  @Test
+  fun deletePlace_removesItsPlanRows_andUndoRestoresThem() = runTest {
+    val placeId = insertPlace(PlaceSource.USER, name = "消す場所")
+    val planId = plan(placeId)
+    val rowsBefore = database.planDao().getItems(planId)
+    assertEquals("消す前に「N 件の計画」を数えられる", 1, wishlistRepository.getPlace(placeId)!!.planCount)
+
+    wishlistRepository.deletePlace(placeId)
+    assertTrue("場所の行は CASCADE で消える", database.planDao().getItems(planId).isEmpty())
+    assertNotNull("計画は残る", database.planDao().getPlan(planId))
+
+    assertTrue(wishlistRepository.undoLastPlaceDeletion())
+    assertEquals(rowsBefore, database.planDao().getItems(planId))
   }
 
   // ---- 行きたいの終わり（→ adr/0036） ----
@@ -668,6 +714,13 @@ class StopAndPlaceChangeIntegrationTest {
 
   private suspend fun wish(placeId: Long, at: Long, priority: Int = 1) {
     database.wishlistDao().insert(WishlistEntity(placeId = placeId, priority = priority, createdAt = Date(at), updatedAt = Date(at)))
+  }
+
+  /** [placeId] を 1 日目に入れた計画を作る。 */
+  private suspend fun plan(placeId: Long): Long {
+    val planId = database.planDao().insertPlan(PlanEntity(title = "計画", createdAt = Date(BASE), updatedAt = Date(BASE)))
+    database.planDao().appendPlaces(planId, 1, listOf(placeId), Date(BASE))
+    return planId
   }
 
   private suspend fun stopOf(stopId: Long): StopEntity = database.stopDao().getByIds(listOf(stopId)).single()

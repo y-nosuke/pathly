@@ -4,6 +4,7 @@ import com.pathly.data.local.dao.GooglePlaceCategoryDao
 import com.pathly.data.local.dao.GooglePlaceDao
 import com.pathly.data.local.dao.PlaceDao
 import com.pathly.data.local.dao.PlaceResolutionDao
+import com.pathly.data.local.dao.PlanDao
 import com.pathly.data.local.dao.StopDao
 import com.pathly.data.local.dao.VisitedPlaceDao
 import com.pathly.data.local.dao.WishlistDao
@@ -35,6 +36,7 @@ class WishlistRepositoryImplTest {
   private val googlePlaceDao = mockk<GooglePlaceDao>(relaxed = true)
   private val googlePlaceCategoryDao = mockk<GooglePlaceCategoryDao>(relaxed = true)
   private val stopDao = mockk<StopDao>(relaxed = true)
+  private val planDao = mockk<PlanDao>(relaxed = true)
   private val placeRepository = mockk<PlaceRepository>(relaxed = true)
   private val placeSearchRepository = mockk<PlaceSearchRepository>(relaxed = true)
   private val repository = WishlistRepositoryImpl(
@@ -46,6 +48,7 @@ class WishlistRepositoryImplTest {
     googlePlaceDao,
     googlePlaceCategoryDao,
     stopDao,
+    planDao,
     placeRepository,
     placeSearchRepository,
   )

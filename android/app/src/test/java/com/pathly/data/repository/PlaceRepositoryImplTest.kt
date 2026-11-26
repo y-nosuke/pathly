@@ -186,6 +186,26 @@ class PlaceRepositoryImplTest : PlaceStopRepositoryTestBase() {
   }
 
   @Test
+  fun resolve_whenEmptyPlaceIsInPlan_doesNotMerge() = runTest {
+    // 計画に入れた場所は、中身が空でも自動ではまとめない（計画の行が付け替わってしまうため → adr/0050）。
+    coEvery { placeDao.getUnresolvedPlaces() } returns listOf(
+      PlaceEntity(id = 32L, latitude = 35.0, longitude = 139.0, source = PlaceSource.DETECTED.name),
+    )
+    coEvery { resolver.resolve(any(), any()) } returns
+      PlacesNameResolver.Outcome.Found("神社", "住所", null, "gp-same", 35.7, 139.7)
+    coEvery { googlePlaceDao.getPlaceIdByGoogleId("gp-same") } returns 7L
+    coEvery { wishlistDao.countByPlace(32L) } returns 0
+    coEvery { wishlistFulfillmentDao.countByPlace(32L) } returns 0
+    coEvery { visitedPlaceDao.countByPlace(32L) } returns 0
+    coEvery { planDao.countPlansUsingPlace(32L) } returns 1
+
+    places.resolveAllUnresolvedNames()
+
+    coVerify(exactly = 0) { stopDao.repointPlace(any(), any()) }
+    coVerify(exactly = 0) { placeDao.deleteById(any()) }
+  }
+
+  @Test
   fun resolve_whenPlaceWasTouchedByUser_doesNotMerge() = runTest {
     // 自分で名前を付けた place は、同じ施設に解決されても吸収しない（誤解決で融合させない）。
     coEvery { placeDao.getUnresolvedPlaces() } returns listOf(
