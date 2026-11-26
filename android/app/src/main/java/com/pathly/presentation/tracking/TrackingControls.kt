@@ -450,6 +450,11 @@ internal fun RegionMarkerChips(
         LaunchedEffect(arriving) {
           if (arriving) rise.animateTo(1f, tween(ARRIVING_CHIP_MILLIS))
         }
+        // 「他 N 件」に重ねている間は、下の「他 N 件」（太い枠）が透けて見えるよう、小さく半透明にする。
+        val overFolded by animateFloatAsState(
+          targetValue = if (lifted && drag.overFolded()) 1f else 0f,
+          label = "regionChipOverFolded",
+        )
         RegionMarkerChip(
           name = marker.name,
           focused = marker.placeId == focusedPlaceId,
@@ -466,10 +471,11 @@ internal fun RegionMarkerChips(
                 // 掴んでいる間は少し大きく浮かせ、まとめに入れるときは縮みながら「他 N 件」へ寄って消える。
                 val progress = drag.foldProgress
                 translationY = drag.offset + drag.foldDistance() * progress
-                val scale = LIFTED_CHIP_SCALE + (FOLDED_CHIP_SCALE - LIFTED_CHIP_SCALE) * progress
+                val baseScale = LIFTED_CHIP_SCALE + (OVER_FOLDED_CHIP_SCALE - LIFTED_CHIP_SCALE) * overFolded
+                val scale = baseScale + (FOLDED_CHIP_SCALE - baseScale) * progress
                 scaleX = scale
                 scaleY = scale
-                alpha = 1f - progress
+                alpha = (1f - (1f - OVER_FOLDED_CHIP_ALPHA) * overFolded) * (1f - progress)
               } else {
                 translationY = shift + (1f - rise.value) * riseDistance
                 alpha = rise.value
@@ -521,6 +527,8 @@ internal fun RegionMarkerChips(
         markers = folded,
         focusedPlaceId = focusedPlaceId,
         dropTarget = dragging && drag.overFolded(),
+        // 入れ替わった後は、せり上がったチップと同じ間だけ枠を太くする（指や吸い込まれるチップで弾むのを見逃しても分かるように）。
+        highlighted = arrivedPlaceId != null,
         bounce = foldedBounce,
         onRefit = onRefit,
         onClear = onClear,
@@ -542,6 +550,10 @@ private const val LIFTED_CHIP_SCALE = 1.05f
 
 /** まとめに吸い込まれ終わるときのチップの大きさ。 */
 private const val FOLDED_CHIP_SCALE = 0.3f
+
+/** 「他 N 件」に重ねている間の、掴んだチップの大きさと濃さ（下の「他 N 件」を透かす）。 */
+private const val OVER_FOLDED_CHIP_SCALE = 0.8f
+private const val OVER_FOLDED_CHIP_ALPHA = 0.5f
 
 /** まとめから出てきたチップがせり上がる距離と長さ。 */
 private val ARRIVING_CHIP_RISE = 40.dp
@@ -584,19 +596,20 @@ private fun Modifier.regionChipReorderGesture(
 internal const val VISIBLE_REGION_CHIPS = 5
 
 /** 入れ替わったときに「他 N 件」を弾ませる大きさと長さ。 */
-private const val FOLDED_BOUNCE_SCALE = 1.15f
-private const val FOLDED_BOUNCE_MILLIS = 120
+private const val FOLDED_BOUNCE_SCALE = 1.3f
+private const val FOLDED_BOUNCE_MILLIS = 150
 
 /**
  * 6 つ目からの地域をまとめたチップ。押すとメニューで地名を出し、行でその地域へ寄せ直し、↑ で 5 つ目に出し
  * （[onBringUp]）、× で外す。[dropTarget] は掴んだチップを重ねている間（離すとまとめに入る）で、枠を太くする。
- * [bounce] が増えると弾む（まとめと入れ替わったとき）。
+ * [bounce] が増えると弾み、[highlighted] の間は枠を太くする（まとめと入れ替わったとき）。
  */
 @Composable
 private fun FoldedRegionChip(
   markers: List<RegionMarker>,
   focusedPlaceId: String?,
   dropTarget: Boolean,
+  highlighted: Boolean,
   bounce: Int,
   onRefit: (RegionMarker) -> Unit,
   onClear: (RegionMarker) -> Unit,
@@ -621,7 +634,7 @@ private fun FoldedRegionChip(
     RegionChipSurface(
       focused = markers.any { it.placeId == focusedPlaceId },
       onClick = { menuOpen = true },
-      outlined = dropTarget,
+      outlined = dropTarget || highlighted,
       modifier = Modifier.testTag("regionMarkerFoldedChip"),
     ) {
       Row(
