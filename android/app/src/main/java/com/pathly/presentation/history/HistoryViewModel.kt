@@ -14,6 +14,7 @@ import com.pathly.domain.model.TrackGrouping
 import com.pathly.domain.repository.GpsTrackRepository
 import com.pathly.domain.repository.PlaceRepository
 import com.pathly.domain.repository.SettingsRepository
+import com.pathly.domain.repository.StopRepository
 import com.pathly.presentation.common.ListMapMode
 import com.pathly.presentation.common.toggled
 import com.pathly.presentation.tracking.TrackOverlaySelection
@@ -34,6 +35,7 @@ import javax.inject.Inject
 class HistoryViewModel @Inject constructor(
   private val gpsTrackRepository: GpsTrackRepository,
   private val placeRepository: PlaceRepository,
+  private val stopRepository: StopRepository,
   private val settingsRepository: SettingsRepository,
   private val trackDeletionQueue: TrackDeletionQueue,
   private val savedStateHandle: SavedStateHandle,
@@ -60,7 +62,7 @@ class HistoryViewModel @Inject constructor(
     withSelected = { s, selected -> s.copy(selected = selected) },
     withFocus = { s, focus -> s.copy(focusRequest = focus) },
     gpsTrackRepository = gpsTrackRepository,
-    placeRepository = placeRepository,
+    stopRepository = stopRepository,
     scope = viewModelScope,
     computeDispatcher = { computeDispatcher },
   )

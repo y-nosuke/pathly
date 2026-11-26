@@ -48,6 +48,7 @@ class StopAndPlaceChangeIntegrationTest {
 
   private lateinit var database: PathlyDatabase
   private lateinit var placeRepository: PlaceRepositoryImpl
+  private lateinit var stopRepository: StopRepositoryImpl
   private lateinit var wishlistRepository: WishlistRepositoryImpl
 
   private var trackId = 0L
@@ -60,19 +61,38 @@ class StopAndPlaceChangeIntegrationTest {
       .allowMainThreadQueries()
       .build()
 
-    placeRepository = PlaceRepositoryImpl(
+    // 本番と同じく、窓口どうしで 1 つのロックと状態を共有する（→ adr/0049）。
+    val session = PlaceStopSession()
+    val resolver = PlacesNameResolver(context)
+    val placeOperations = PlaceOperations(
       database.placeDao(),
       database.stopDao(),
-      database.smoothedPointDao(),
-      database.gpsPointDao(),
       database.placeResolutionDao(),
       database.googlePlaceDao(),
       database.googlePlaceCategoryDao(),
       database.wishlistDao(),
       database.visitedPlaceDao(),
       database.wishlistFulfillmentDao(),
+      resolver,
+      session,
+    )
+    placeRepository = PlaceRepositoryImpl(
+      database.placeDao(),
+      database.placeResolutionDao(),
       database.placeMergeDao(),
-      PlacesNameResolver(context),
+      resolver,
+      placeOperations,
+      session,
+    )
+    stopRepository = StopRepositoryImpl(
+      database.placeDao(),
+      database.stopDao(),
+      database.smoothedPointDao(),
+      database.placeResolutionDao(),
+      database.googlePlaceDao(),
+      resolver,
+      placeOperations,
+      session,
     )
     wishlistRepository = WishlistRepositoryImpl(
       database.wishlistDao(),
@@ -113,7 +133,7 @@ class StopAndPlaceChangeIntegrationTest {
     val third = insertStop(placeId, arrival = BASE + 40 * MINUTE, departure = BASE + 50 * MINUTE, note = "  後半  ")
 
     // 渡す順は到着順でなくてよい（残すのは到着が最も早い 1 件）。
-    val result = placeRepository.mergeStops(listOf(third, first, second))
+    val result = stopRepository.mergeStops(listOf(third, first, second))
 
     assertNotNull(result)
     assertEquals(first, result!!.survivingStopId)
@@ -137,12 +157,12 @@ class StopAndPlaceChangeIntegrationTest {
     val second = insertStop(placeId, arrival = BASE + 15 * MINUTE, departure = BASE + 30 * MINUTE, note = "後半")
     val before = database.stopDao().getByTrack(trackId).sortedBy { it.id }
 
-    placeRepository.mergeStops(listOf(first, second))
-    assertTrue(placeRepository.undoLastStopChange())
+    stopRepository.mergeStops(listOf(first, second))
+    assertTrue(stopRepository.undoLastStopChange())
 
     val after = database.stopDao().getByTrack(trackId).sortedBy { it.id }
     assertEquals("統合前と行ごとに一致する（ID・期間・メモ・作成日時）", before, after)
-    assertFalse("取り消しは 1 回だけ", placeRepository.undoLastStopChange())
+    assertFalse("取り消しは 1 回だけ", stopRepository.undoLastStopChange())
   }
 
   @Test
@@ -153,7 +173,7 @@ class StopAndPlaceChangeIntegrationTest {
     val b = insertStop(placeB, arrival = BASE + 20 * MINUTE, departure = BASE + 30 * MINUTE)
     val before = database.stopDao().getByTrack(trackId).sortedBy { it.id }
 
-    assertNull(placeRepository.mergeStops(listOf(a, b)))
+    assertNull(stopRepository.mergeStops(listOf(a, b)))
 
     assertEquals(before, database.stopDao().getByTrack(trackId).sortedBy { it.id })
   }
@@ -173,7 +193,7 @@ class StopAndPlaceChangeIntegrationTest {
     val a = insertStop(placeId, arrival = BASE, departure = BASE + 10 * MINUTE)
     val b = insertStop(placeId, arrival = BASE + 4 * HOUR, departure = BASE + 4 * HOUR + 10 * MINUTE, track = otherTrackId)
 
-    assertNull(placeRepository.mergeStops(listOf(a, b)))
+    assertNull(stopRepository.mergeStops(listOf(a, b)))
 
     assertEquals("どちらの経路の立ち寄りも残る", listOf(a), database.stopDao().getByTrack(trackId).map { it.id })
     assertEquals(listOf(b), database.stopDao().getByTrack(otherTrackId).map { it.id })
@@ -186,15 +206,15 @@ class StopAndPlaceChangeIntegrationTest {
     val placeId = insertPlace(PlaceSource.DETECTED)
     val stopId = insertStop(placeId, arrival = BASE, departure = BASE + 10 * MINUTE)
 
-    placeRepository.updateStopDuration(stopId, Date(BASE + 5 * MINUTE), Date(BASE + 25 * MINUTE))
+    stopRepository.updateStopDuration(stopId, Date(BASE + 5 * MINUTE), Date(BASE + 25 * MINUTE))
     stopOf(stopId).let {
       assertEquals(BASE + 5 * MINUTE, it.arrivalTime.time)
       assertEquals(BASE + 25 * MINUTE, it.departureTime.time)
     }
 
     // 逆転・0 分の滞在は書かない（直前の正しい期間のまま）。
-    placeRepository.updateStopDuration(stopId, Date(BASE + 30 * MINUTE), Date(BASE + 20 * MINUTE))
-    placeRepository.updateStopDuration(stopId, Date(BASE + 30 * MINUTE), Date(BASE + 30 * MINUTE))
+    stopRepository.updateStopDuration(stopId, Date(BASE + 30 * MINUTE), Date(BASE + 20 * MINUTE))
+    stopRepository.updateStopDuration(stopId, Date(BASE + 30 * MINUTE), Date(BASE + 30 * MINUTE))
     stopOf(stopId).let {
       assertEquals(BASE + 5 * MINUTE, it.arrivalTime.time)
       assertEquals(BASE + 25 * MINUTE, it.departureTime.time)
@@ -214,7 +234,7 @@ class StopAndPlaceChangeIntegrationTest {
     val resolutionBefore = database.placeResolutionDao().getByPlace(detected)
     val stopBefore = stopOf(stopId)
 
-    val result = placeRepository.deleteStops(listOf(stopId))
+    val result = stopRepository.deleteStops(listOf(stopId))
 
     assertEquals(1, result.stopsDeleted)
     assertEquals(1, result.placesDeleted)
@@ -223,7 +243,7 @@ class StopAndPlaceChangeIntegrationTest {
     assertNull("Google 情報は CASCADE で消える", database.googlePlaceDao().getByPlace(detected))
     assertNull("解決記録は CASCADE で消える", database.placeResolutionDao().getByPlace(detected))
 
-    assertTrue(placeRepository.undoLastStopChange())
+    assertTrue(stopRepository.undoLastStopChange())
 
     assertEquals("場所は元の ID・中身で戻る", placeBefore, database.placeDao().getById(detected))
     assertEquals(googleBefore, database.googlePlaceDao().getByPlace(detected))
@@ -243,7 +263,7 @@ class StopAndPlaceChangeIntegrationTest {
     val s3 = insertStop(wished, arrival = BASE + 6 * MINUTE, departure = BASE + 7 * MINUTE)
     val stopsBefore = database.stopDao().getByTrack(trackId).sortedBy { it.id }
 
-    val result = placeRepository.deleteStops(listOf(s1, s2, s3))
+    val result = stopRepository.deleteStops(listOf(s1, s2, s3))
 
     assertEquals(3, result.stopsDeleted)
     assertEquals(0, result.placesDeleted)
@@ -254,7 +274,7 @@ class StopAndPlaceChangeIntegrationTest {
     assertNotNull("行きたいは巻き込まれない", database.wishlistDao().getByPlaceId(wished))
 
     // 場所を 1 つも消していなくても、取り消しで立ち寄りは元の ID・中身で戻る。
-    assertTrue(placeRepository.undoLastStopChange())
+    assertTrue(stopRepository.undoLastStopChange())
     assertEquals(stopsBefore, database.stopDao().getByTrack(trackId).sortedBy { it.id })
   }
 
@@ -265,7 +285,7 @@ class StopAndPlaceChangeIntegrationTest {
     val placeId = insertPlace(PlaceSource.USER)
     wish(placeId, at = BASE, priority = 2)
 
-    placeRepository.addManualStopForPlace(trackId, placeId, Date(BASE + HOUR), Date(BASE + 2 * HOUR))
+    stopRepository.addManualStopForPlace(trackId, placeId, Date(BASE + HOUR), Date(BASE + 2 * HOUR))
 
     assertNull("行ったら行きたいは終わる", database.wishlistDao().getByPlaceId(placeId))
     val history = database.wishlistFulfillmentDao().getByPlaceId(placeId).single()
@@ -284,7 +304,7 @@ class StopAndPlaceChangeIntegrationTest {
     // 過去の経路の立ち寄りから行きたいに入れた（入れた日時の方が後）。
     wish(placeId, at = BASE + 3 * HOUR)
 
-    placeRepository.addManualStopForPlace(trackId, placeId, Date(BASE + HOUR), Date(BASE + 2 * HOUR))
+    stopRepository.addManualStopForPlace(trackId, placeId, Date(BASE + HOUR), Date(BASE + 2 * HOUR))
 
     assertNotNull("入れる前の立ち寄りでは終わらない", database.wishlistDao().getByPlaceId(placeId))
     assertEquals(0, database.wishlistFulfillmentDao().countByPlace(placeId))
@@ -295,10 +315,10 @@ class StopAndPlaceChangeIntegrationTest {
   fun wishAgainAfterVisit_countsEachFulfilledWish() = runTest {
     val placeId = insertPlace(PlaceSource.USER)
     wish(placeId, at = BASE)
-    placeRepository.addManualStopForPlace(trackId, placeId, Date(BASE + HOUR), Date(BASE + 2 * HOUR))
+    stopRepository.addManualStopForPlace(trackId, placeId, Date(BASE + HOUR), Date(BASE + 2 * HOUR))
     // 行った後に入れ直して、また行く。
     wish(placeId, at = BASE + 5 * HOUR)
-    placeRepository.addManualStopForPlace(trackId, placeId, Date(BASE + 6 * HOUR), Date(BASE + 7 * HOUR))
+    stopRepository.addManualStopForPlace(trackId, placeId, Date(BASE + 6 * HOUR), Date(BASE + 7 * HOUR))
 
     val item = wishlistRepository.getPlace(placeId)!!
     assertEquals(2, item.fulfilledWishCount)
@@ -315,7 +335,7 @@ class StopAndPlaceChangeIntegrationTest {
     wish(wished, at = BASE)
     val stopId = insertStop(detected, arrival = BASE + HOUR, departure = BASE + 2 * HOUR)
 
-    placeRepository.reassignStopPlace(stopId, PlaceSearchResult("g-wished", "本屋", null, null, LAT + 0.001, LNG), customName = null)
+    stopRepository.reassignStopPlace(stopId, PlaceSearchResult("g-wished", "本屋", null, null, LAT + 0.001, LNG), customName = null)
 
     assertNull("付け替えた先の行きたいは、入れた後の立ち寄りになったので終わる", database.wishlistDao().getByPlaceId(wished))
     assertEquals(1, database.wishlistFulfillmentDao().countByPlace(wished))
@@ -327,7 +347,7 @@ class StopAndPlaceChangeIntegrationTest {
     val stopId = insertStop(placeId, arrival = BASE, departure = BASE + 2 * HOUR)
     wish(placeId, at = BASE + HOUR)
 
-    placeRepository.updateStopDuration(stopId, Date(BASE + HOUR + MINUTE), Date(BASE + 2 * HOUR))
+    stopRepository.updateStopDuration(stopId, Date(BASE + HOUR + MINUTE), Date(BASE + 2 * HOUR))
 
     assertNull("到着を入れた後へずらすと終わる", database.wishlistDao().getByPlaceId(placeId))
     assertEquals(BASE + HOUR + MINUTE, database.wishlistFulfillmentDao().getByPlaceId(placeId).single().fulfilledAt.time)
@@ -337,10 +357,10 @@ class StopAndPlaceChangeIntegrationTest {
   fun deleteStops_keepsDetectedPlaceWithWishHistory_andHistoryStays() = runTest {
     val placeId = insertPlace(PlaceSource.DETECTED)
     wish(placeId, at = BASE)
-    placeRepository.addManualStopForPlace(trackId, placeId, Date(BASE + HOUR), Date(BASE + 2 * HOUR))
+    stopRepository.addManualStopForPlace(trackId, placeId, Date(BASE + HOUR), Date(BASE + 2 * HOUR))
     val stopId = database.stopDao().getByTrack(trackId).single().id
 
-    val result = placeRepository.deleteStops(listOf(stopId))
+    val result = stopRepository.deleteStops(listOf(stopId))
 
     assertEquals("行きたいと思ったことがある場所は自動では消さない", 0, result.placesDeleted)
     assertNotNull(database.placeDao().getById(placeId))
@@ -421,7 +441,7 @@ class StopAndPlaceChangeIntegrationTest {
     database.googlePlaceDao().upsert(GooglePlaceEntity(target, "g-target", "本屋"))
     val stopId = insertStop(detected, arrival = BASE, departure = BASE + 10 * MINUTE)
 
-    placeRepository.reassignStopPlace(
+    stopRepository.reassignStopPlace(
       stopId,
       PlaceSearchResult("g-target", "本屋", null, null, LAT + 0.001, LNG),
       customName = null,
@@ -442,7 +462,7 @@ class StopAndPlaceChangeIntegrationTest {
     val oldUser = insertPlace(PlaceSource.USER)
     val stopId = insertStop(oldUser, arrival = BASE, departure = BASE + 10 * MINUTE)
 
-    placeRepository.reassignStopPlace(stopId, chosen = null, customName = "  友人の家  ")
+    stopRepository.reassignStopPlace(stopId, chosen = null, customName = "  友人の家  ")
 
     val newPlaceId = stopOf(stopId).placeId
     val newPlace = database.placeDao().getById(newPlaceId)!!

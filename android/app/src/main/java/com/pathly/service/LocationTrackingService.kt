@@ -27,7 +27,7 @@ import com.pathly.data.local.entity.GpsPointEntity
 import com.pathly.data.local.entity.GpsTrackEntity
 import com.pathly.domain.model.LocationAccuracy
 import com.pathly.domain.repository.GpsTrackRepository
-import com.pathly.domain.repository.PlaceRepository
+import com.pathly.domain.repository.LiveStopRepository
 import com.pathly.domain.repository.SettingsRepository
 import com.pathly.util.Logger
 import com.pathly.util.PermissionUtils
@@ -95,7 +95,7 @@ class LocationTrackingService : Service() {
   lateinit var gpsTrackRepository: GpsTrackRepository
 
   @Inject
-  lateinit var placeRepository: PlaceRepository
+  lateinit var liveStopRepository: LiveStopRepository
 
   private val logger = Logger("LocationService")
 
@@ -258,7 +258,7 @@ class LocationTrackingService : Service() {
   /** 生点から補正後点列を進め、そこから立ち寄りを検出・保存する（記録中は末尾を暫定のまま残す）。 */
   private suspend fun advance(trackId: Long, isFinal: Boolean) {
     gpsTrackRepository.updateSmoothedForTrack(trackId, isFinal)
-    placeRepository.updateStopsForTrack(trackId, isFinal)
+    liveStopRepository.updateStopsForTrack(trackId, isFinal)
   }
 
   /**

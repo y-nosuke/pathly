@@ -30,6 +30,10 @@ DAO をモックして JVM で回す。守りたいのは SQL ではなく**書�
 「Google の名前を `places.name` に書いていないか」「取得済みの施設情報があるとき Places を叩き直さないか」
 といった、間違えても動いてしまう種類のバグを狙う。
 
+場所と立ち寄りの 3 つの窓口（`LiveStopRepositoryImpl`・`StopRepositoryImpl`・`PlaceRepositoryImpl`）は、テストも窓口ごとに分け、
+組み立ては `PlaceStopRepositoryTestBase` で共有する。本番と同じく 3 つが 1 つのロックと状態を共有するので、
+窓口をまたぐ操作（記録中の立ち寄りの場所の名前を変える など）もそのまま確かめられる（→ [ADR-0049](../adr/0049-split-place-repository-by-responsibility.md)）。
+
 **例外は「取り消しのある変更」**（立ち寄りの統合・削除・付け替え、場所の削除）。変更前の行を控えて消し、
 子は CASCADE に任せ、取り消しでは外部キーの順に元の ID で入れ直す、という作りなので、
 モックでは外部キー・CASCADE・再挿入の挙動が見えない。これらは Repository をインメモリの実 DB で組み立てて

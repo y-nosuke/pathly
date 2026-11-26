@@ -25,7 +25,7 @@ Google 由来データを別テーブルにした判断は [ADR-0001](../adr/000
 - `wishlist(placeId)` は **UNIQUE**（重複登録の防止と find-or-add に使う）。`places` に従属し CASCADE。
   行がある＝**いま**行きたい。
 - **`wishlist_fulfillments` は行きたいの履歴**（行った 1 回ごとに 1 行・作るだけ）。行きたいを終わらせるのは
-  `PlaceRepositoryImpl` で、立ち寄りを足す・付け替える・期間を変える・戻すたびに `WishlistFulfillmentDao.fulfillReachedWishes()` を呼ぶ。
+  場所と立ち寄りの Repository（共通の処理は `PlaceOperations`）で、立ち寄りを足す・付け替える・期間を変える・戻すたびに `WishlistFulfillmentDao.fulfillReachedWishes()` を呼ぶ。
   どの場所が変わったかは追わず、入れた後（到着が `wishlist.createdAt` 以降）の立ち寄りがある行きたいを**全部まとめて**
   1 トランザクションで移す（行きたいは少なく、立ち寄りは placeId で引けるので軽い。呼び忘れの経路を作らないため）。
   手動の訪問済みの印では終わらせない（→ [ADR-0036](../adr/0036-wishlist-ends-on-visit-and-keeps-history.md)）。
@@ -213,5 +213,5 @@ Intent で Google アプリ／Web に切り替える（API 呼び出しではな
 | UseCase         | `domain/usecase/PlaceEditUseCase.kt`（登録・近接確認・紐付け・編集の差分適用を 3 画面で共有）               |
 | 編集の部品      | `presentation/places/PlaceEditActions.kt`（確認待ち・結果の一言・削除の取り消しまで含めて 3 画面で共有）    |
 | 編集の UI       | `presentation/places/PlaceEditHost.kt`（`PlaceEditUi`・場所シートと近接確認・削除の取り消しのつなぎ込み）   |
-| リポジトリ      | `domain/repository/PlaceRepository.kt` / `WishlistRepository.kt` と各実装                                   |
+| リポジトリ      | `domain/repository/` の Place・Stop・LiveStop・Wishlist と各実装（ADR-0049）                                |
 | 画面            | `presentation/places/`（`PlacesScreen` / `PlaceActionSheet` / `PlacesViewModel` / `PlacesState`）           |

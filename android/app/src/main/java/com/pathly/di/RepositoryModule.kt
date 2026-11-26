@@ -4,13 +4,17 @@ import com.pathly.data.crash.AndroidExitReasonSource
 import com.pathly.data.crash.ExitReasonSource
 import com.pathly.data.places.PlacesTextSearcher
 import com.pathly.data.repository.GpsTrackRepositoryImpl
+import com.pathly.data.repository.LiveStopRepositoryImpl
 import com.pathly.data.repository.PlaceRepositoryImpl
+import com.pathly.data.repository.StopRepositoryImpl
 import com.pathly.data.repository.WishlistRepositoryImpl
 import com.pathly.data.settings.SettingsRepositoryImpl
 import com.pathly.domain.repository.GpsTrackRepository
+import com.pathly.domain.repository.LiveStopRepository
 import com.pathly.domain.repository.PlaceRepository
 import com.pathly.domain.repository.PlaceSearchRepository
 import com.pathly.domain.repository.SettingsRepository
+import com.pathly.domain.repository.StopRepository
 import com.pathly.domain.repository.WishlistRepository
 import dagger.Binds
 import dagger.Module
@@ -33,6 +37,18 @@ abstract class RepositoryModule {
   abstract fun bindPlaceRepository(
     placeRepositoryImpl: PlaceRepositoryImpl,
   ): PlaceRepository
+
+  @Binds
+  @Singleton
+  abstract fun bindStopRepository(
+    stopRepositoryImpl: StopRepositoryImpl,
+  ): StopRepository
+
+  @Binds
+  @Singleton
+  abstract fun bindLiveStopRepository(
+    liveStopRepositoryImpl: LiveStopRepositoryImpl,
+  ): LiveStopRepository
 
   @Binds
   @Singleton

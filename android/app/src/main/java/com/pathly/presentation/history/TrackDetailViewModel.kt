@@ -20,9 +20,11 @@ import com.pathly.domain.model.SameFacilityPlace
 import com.pathly.domain.model.Stop
 import com.pathly.domain.model.StopCandidate
 import com.pathly.domain.repository.GpsTrackRepository
+import com.pathly.domain.repository.LiveStopRepository
 import com.pathly.domain.repository.PlaceRepository
 import com.pathly.domain.repository.PlaceSearchRepository
 import com.pathly.domain.repository.SettingsRepository
+import com.pathly.domain.repository.StopRepository
 import com.pathly.domain.repository.WishlistRepository
 import com.pathly.domain.usecase.AddManualStopUseCase
 import com.pathly.domain.usecase.PlaceEditUseCase
@@ -59,6 +61,8 @@ import javax.inject.Inject
 @HiltViewModel
 class TrackDetailViewModel @Inject constructor(
   private val placeRepository: PlaceRepository,
+  private val stopRepository: StopRepository,
+  private val liveStopRepository: LiveStopRepository,
   private val gpsTrackRepository: GpsTrackRepository,
   private val wishlistRepository: WishlistRepository,
   private val settingsRepository: SettingsRepository,
@@ -121,7 +125,7 @@ class TrackDetailViewModel @Inject constructor(
    * 記録中に開いたときの「立ち寄り中（ライブ）」。表示中のトラックが記録中の当該トラックのときだけ流す
    * （他トラックを開いていれば null）。地図にだけ出す（一覧・保存には出さない）。
    */
-  val currentStop: StateFlow<Stop?> = combine(placeRepository.currentStop, loadedTrackId) { stop, id ->
+  val currentStop: StateFlow<Stop?> = combine(liveStopRepository.currentStop, loadedTrackId) { stop, id ->
     stop?.takeIf { it.trackId == id }
   }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
@@ -153,7 +157,8 @@ class TrackDetailViewModel @Inject constructor(
   val manualStop = ManualStopActions(
     scope = viewModelScope,
     addManualStopUseCase = addManualStopUseCase,
-    placeRepository = placeRepository,
+    stopRepository = stopRepository,
+    liveStopRepository = liveStopRepository,
     trackId = { loadedTrackId.value },
     shownOnMap = ::shownOnMap,
     onMessage = { _message.value = it },
@@ -164,6 +169,8 @@ class TrackDetailViewModel @Inject constructor(
   val stopEdit = StopEditActions(
     scope = viewModelScope,
     placeRepository = placeRepository,
+    stopRepository = stopRepository,
+    liveStopRepository = liveStopRepository,
     placeEditUseCase = placeEditUseCase,
     trackId = loadedTrackId,
     placeEdit = placeEdit,
@@ -194,7 +201,7 @@ class TrackDetailViewModel @Inject constructor(
 
     collectJob?.cancel()
     collectJob = viewModelScope.launch {
-      placeRepository.getStopsForTrack(trackId).collect { _stops.value = it }
+      stopRepository.getStopsForTrack(trackId).collect { _stops.value = it }
     }
   }
 
@@ -250,7 +257,7 @@ class TrackDetailViewModel @Inject constructor(
   fun reanalyze() {
     val trackId = loadedTrackId.value ?: return
     viewModelScope.launch {
-      _reanalyzeCandidates.value = placeRepository.detectMissingStops(trackId)
+      _reanalyzeCandidates.value = stopRepository.detectMissingStops(trackId)
     }
   }
 
@@ -259,7 +266,7 @@ class TrackDetailViewModel @Inject constructor(
     val trackId = loadedTrackId.value ?: return
     _reanalyzeCandidates.value = null
     if (candidates.isEmpty()) return
-    viewModelScope.launch { placeRepository.addStops(trackId, candidates) }
+    viewModelScope.launch { stopRepository.addStops(trackId, candidates) }
   }
 
   /** 再解析の候補表示を閉じる（追加しない）。 */
