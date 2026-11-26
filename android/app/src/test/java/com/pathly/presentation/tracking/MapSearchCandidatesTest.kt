@@ -10,24 +10,19 @@ class MapSearchCandidatesTest {
   private val city = PlacePrediction("r1", "北九州市", "福岡県", isRegion = true)
 
   @Test
-  fun facilityIsRegisterOnly_regionIsMoveThenRegister_inRelevanceOrder() {
-    val rows = listOf(city, cafe).toMapSearchCandidates(registerEnabled = true)
+  fun placeMode_everyCandidateIsOneRegisterRow_inRelevanceOrder() {
+    // 「場所」で探すと、地域の候補も「場所として登録」の 1 行だけ（地域へ移動は「地域」で探す）。
+    val rows = listOf(city, cafe).toMapSearchCandidates(MapSearchMode.Place)
 
     assertEquals(
-      listOf(
-        "r1" to MapSearchAction.MoveToRegion,
-        "r1" to MapSearchAction.Register,
-        "p1" to MapSearchAction.Register,
-      ),
+      listOf("r1" to MapSearchAction.Register, "p1" to MapSearchAction.Register),
       rows.map { it.prediction.placeId to it.action },
     )
-    // 同じ候補の 2 行でもキーは重ならない（一覧のキーに使う）。
-    assertEquals(rows.size, rows.map { it.key }.toSet().size)
   }
 
   @Test
-  fun registerDisabled_leavesOnlyMoveRows() {
-    val rows = listOf(city, cafe).toMapSearchCandidates(registerEnabled = false)
+  fun regionMode_everyCandidateIsOneMoveRow() {
+    val rows = listOf(city).toMapSearchCandidates(MapSearchMode.Region)
 
     assertEquals(listOf("r1" to MapSearchAction.MoveToRegion), rows.map { it.prediction.placeId to it.action })
   }

@@ -404,6 +404,10 @@ class TrackingScreenTest {
     composeTestRule.onNodeWithContentDescription(SEARCH_ENTRY).assertDoesNotExist()
     verify { mockViewModel.startPlaceSearch() }
 
+    // 窓を開くと「場所」で探す（窓の下の切り替えは「場所」が選ばれている）。
+    composeTestRule.onNodeWithTag(MODE_PLACE).assertIsSelected()
+    composeTestRule.onNodeWithTag(MODE_REGION).assertIsNotSelected()
+
     // 施設の候補は「登録」の 1 行だけ（地域へ移動は出ない）。選ぶと、検索窓を閉じて場所シートで登録へ進む。
     composeTestRule.onNodeWithTag("trackingPlaceSearchField").performTextInput("テスト")
     composeTestRule.waitUntil(timeoutMillis = 5_000) {
@@ -479,7 +483,7 @@ class TrackingScreenTest {
   }
 
   @Test
-  fun trackingScreen_search_regionCandidateOffersMoveAndRegister() {
+  fun trackingScreen_search_switchingModeResearchesWithTheSameWords() {
     stubRegions()
     coEvery { placeEdit.fetchPlaceResult("r2") } returns
       PlaceSearchResult(
@@ -492,17 +496,33 @@ class TrackingScreenTest {
       )
     setTrackingContent()
 
-    // 地域の候補は「地域へ移動」と「場所として登録」の 2 行になる。
+    // 「場所」で探すと、地域の候補も「場所として登録」の 1 行だけ（地域へ移動は出ない）。
     composeTestRule.onNodeWithContentDescription(SEARCH_ENTRY).performClick()
     composeTestRule.onNodeWithTag("trackingPlaceSearchField").performTextInput("北九州")
     composeTestRule.waitUntil(timeoutMillis = 5_000) {
+      composeTestRule.onAllNodesWithTag(REGISTER_ROW).fetchSemanticsNodes().isNotEmpty()
+    }
+    composeTestRule.onAllNodesWithText("北九州市").assertCountEquals(1)
+    composeTestRule.onNodeWithTag(REGISTER_ROW).assert(hasText("場所として登録"))
+    composeTestRule.onNodeWithTag(MOVE_ROW).assertDoesNotExist()
+    coVerify(exactly = 0) { mockViewModel.predictRegions(any(), any()) }
+
+    // 「地域」に切り替えると、打ってある言葉のまま地域に絞って探し直し、「地域へ移動」の 1 行になる。窓の文言も替わる。
+    composeTestRule.onNodeWithTag(MODE_REGION).performClick()
+    composeTestRule.waitUntil(timeoutMillis = 5_000) {
       composeTestRule.onAllNodesWithTag(MOVE_ROW).fetchSemanticsNodes().isNotEmpty()
     }
-    composeTestRule.onAllNodesWithText("北九州市").assertCountEquals(2)
+    composeTestRule.onNodeWithTag(MODE_REGION).assertIsSelected()
+    coVerify { mockViewModel.predictRegions("北九州", any()) }
+    composeTestRule.onAllNodesWithText("北九州市").assertCountEquals(1)
     composeTestRule.onNodeWithTag(MOVE_ROW).assert(hasText("地域へ移動"))
-    composeTestRule.onNodeWithTag(REGISTER_ROW).assert(hasText("場所として登録"))
+    composeTestRule.onNodeWithTag(REGISTER_ROW).assertDoesNotExist()
 
-    // 「場所として登録」を選ぶと、地域へは移さずに場所シートで登録へ進む。
+    // 「場所」に戻して「場所として登録」を選ぶと、地域へは移さずに場所シートで登録へ進む。
+    composeTestRule.onNodeWithTag(MODE_PLACE).performClick()
+    composeTestRule.waitUntil(timeoutMillis = 5_000) {
+      composeTestRule.onAllNodesWithTag(REGISTER_ROW).fetchSemanticsNodes().isNotEmpty()
+    }
     composeTestRule.onNodeWithTag(REGISTER_ROW).performClick()
     composeTestRule.waitUntil(timeoutMillis = 5_000) {
       composeTestRule.onAllNodesWithTag("trackingPlaceSearch").fetchSemanticsNodes().isEmpty()
@@ -615,9 +635,12 @@ class TrackingScreenTest {
     }
   }
 
-  /** 検索窓で [query] を打ち、地域の候補の「地域へ移動」の行を選んで窓が閉じるまで待つ。 */
+  /** 検索窓を「地域」に切り替えて [query] を打ち、「地域へ移動」の行を選んで窓が閉じるまで待つ。 */
   private fun selectRegion(query: String, openSearch: Boolean = true) {
     if (openSearch) composeTestRule.onNodeWithContentDescription(SEARCH_ENTRY).performClick()
+    // 窓は開くたびに「場所」から始まる。
+    composeTestRule.onNodeWithTag(MODE_PLACE).assertIsSelected()
+    composeTestRule.onNodeWithTag(MODE_REGION).performClick()
     composeTestRule.onNodeWithTag("trackingPlaceSearchField").performTextInput(query)
     composeTestRule.waitUntil(timeoutMillis = 5_000) {
       composeTestRule.onAllNodesWithTag(MOVE_ROW).fetchSemanticsNodes().isNotEmpty()
@@ -916,3 +939,9 @@ private const val MOVE_ROW = "mapSearchCandidate_MoveToRegion"
 
 /** 検索窓の候補の「登録」「場所として登録」の行。 */
 private const val REGISTER_ROW = "mapSearchCandidate_Register"
+
+/** 検索窓の下の切り替えの「場所」。 */
+private const val MODE_PLACE = "mapSearchMode_Place"
+
+/** 検索窓の下の切り替えの「地域」。 */
+private const val MODE_REGION = "mapSearchMode_Region"
