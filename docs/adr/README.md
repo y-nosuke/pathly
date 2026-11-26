@@ -62,4 +62,4 @@
 | [0044](0044-record-start-stop-inside-sheet.md)              | 記録画面の開始・停止は記録のシートの中に置き、地図の上には出さない（0042 の一部を置き換え）                                | Accepted |
 | [0045](0045-region-header-map-fits-whole-region.md)         | 場所一覧の地域の見出しから地図で見るときは、絞り込みを変えずに地域全域へ寄せ、範囲は Places で引く                         | Accepted |
 | [0046](0046-region-boundaries-by-data-driven-styling.md)    | 選んだ地域の境界は Maps SDK の境界のスタイルで描き、マップ ID は境界を描く地図だけに付け、描いている間だけ地図を明るくする | Accepted |
-| [0047](0047-reorder-region-chips-by-long-press.md)          | 地名のチップは長押しで掴んで並べ替え、「他 N 件」とも出し入れできる。並べた順も保存しない                                  | Accepted |
+| [0047](0047-reorder-region-chips-by-drag.md)                | 地名のチップは縦のドラッグで並べ替え、「他 N 件」とも出し入れできる。並べた順も保存しない                                  | Accepted |

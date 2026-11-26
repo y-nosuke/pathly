@@ -29,6 +29,7 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.swipeRight
 import androidx.test.espresso.Espresso
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
@@ -610,7 +611,7 @@ class TrackingScreenTest {
   }
 
   @Test
-  fun trackingScreen_jumpToRegion_longPressReordersChipsAndMovesInAndOutOfTheFolded() {
+  fun trackingScreen_jumpToRegion_dragReordersChipsAndMovesInAndOutOfTheFolded() {
     repeat(VISIBLE_REGION_CHIPS + 2) { i ->
       regionMarkers.show(RegionMarker("p$i", "地域$i", 35.0, 139.0, GeoBounds(34.9, 138.9, 35.1, 139.1)))
     }
@@ -618,22 +619,25 @@ class TrackingScreenTest {
     fun order() = regionMarkers.state.value.markers.map { it.placeId }
     val pitch = chip("地域1").fetchSemanticsNode().boundsInRoot.top - chip("地域0").fetchSemanticsNode().boundsInRoot.top
 
-    // 長押しで掴んで、2 つ下のチップの中心を越えて離すと、そこへ移る。離しても寄せ直しにはならない（塗りつぶしはそのまま）。
-    chip("地域0").longPressAndDragBy(pitch * 2.3f)
+    // 縦にドラッグして（長押しは要らない）、2 つ下のチップの中心を越えて離すと、そこへ移る。離しても寄せ直しにはならない（塗りつぶしはそのまま）。
+    chip("地域0").dragBy(pitch * 2.3f)
     assertEquals(listOf("p1", "p2", "p0", "p3", "p4", "p5", "p6"), order())
     assertEquals("p6", regionMarkers.state.value.focusedPlaceId)
 
-    // 長押しして動かさずに離しても、並びも塗りつぶしも変わらない（地名のタップにならない）。
-    chip("地域3").longPressAndDragBy(0f)
+    // 横に動かしても並びは変わらない。
+    chip("地域3").performTouchInput { swipeRight(startX = centerX, endX = centerX + 200f) }
     assertEquals(listOf("p1", "p2", "p0", "p3", "p4", "p5", "p6"), order())
-    assertEquals("p6", regionMarkers.state.value.focusedPlaceId)
+    // 軽いタップは今までどおり寄せ直し（並びは変わらない）。
+    composeTestRule.onNodeWithText("地域3").performClick()
+    assertEquals(listOf("p1", "p2", "p0", "p3", "p4", "p5", "p6"), order())
+    assertEquals("p3", regionMarkers.state.value.focusedPlaceId)
 
     // 「すべて外す」の上へは行かない（いちばん上に止まる）。
-    chip("地域3").longPressAndDragBy(-pitch * 10)
+    chip("地域3").dragBy(-pitch * 10)
     assertEquals(listOf("p3", "p1", "p2", "p0", "p4", "p5", "p6"), order())
 
     // 「他 N 件」に重ねて離すと、まとめの先頭に入り、まとめの先頭（地域5）が 5 つ目に上がる。
-    chip("地域1").longPressAndDragBy(pitch * 10)
+    chip("地域1").dragBy(pitch * 10)
     assertEquals(listOf("p3", "p2", "p0", "p4", "p5", "p1", "p6"), order())
     chip("地域5").assertIsDisplayed()
     composeTestRule.onNodeWithText("他 2 件").assertIsDisplayed()
@@ -658,11 +662,10 @@ class TrackingScreenTest {
     composeTestRule.runOnIdle { action.action() }
   }
 
-  /** 長押しで掴み、少しずつ [dy]（px）だけ縦に動かして離す。 */
-  private fun SemanticsNodeInteraction.longPressAndDragBy(dy: Float) {
+  /** 触れてすぐ、少しずつ [dy]（px）だけ縦に動かして離す。 */
+  private fun SemanticsNodeInteraction.dragBy(dy: Float) {
     performTouchInput {
       down(center)
-      advanceEventTime(viewConfiguration.longPressTimeoutMillis + 200)
       val steps = 20
       repeat(steps) { moveBy(Offset(0f, dy / steps)) }
       up()

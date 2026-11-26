@@ -6,7 +6,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 
 /**
- * 地名のチップを長押しで掴んで並べ替える間の状態（→ ADR 0047）。チップの位置（縦の並びの中の上端と高さ）を覚えておき、
+ * 地名のチップをドラッグで掴んで並べ替える間の状態（→ ADR 0047）。チップの位置（縦の並びの中の上端と高さ）を覚えておき、
  * 掴んだチップを指に付けて動かす量（[offset]）から、離したときの行き先とほかのチップのよけ方を出す。
  * 並びは画面のものだけで、決まった順は [RegionMarkerActions.move] に渡す。
  */

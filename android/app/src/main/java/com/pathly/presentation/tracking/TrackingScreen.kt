@@ -5,9 +5,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.SnackbarDuration
@@ -44,8 +42,6 @@ import com.pathly.domain.model.Stop
 import com.pathly.domain.model.WishlistFlag
 import com.pathly.presentation.common.CloseInfoWindowWithSheet
 import com.pathly.presentation.common.DefaultMapLocation
-import com.pathly.presentation.common.MapRoundButtonSize
-import com.pathly.presentation.common.MapTopBar
 import com.pathly.presentation.common.MapTopBarInset
 import com.pathly.presentation.common.SheetDetent
 import com.pathly.presentation.common.SheetRestoreButtonInset
@@ -355,7 +351,7 @@ fun TrackingScreen(
       )
     }
 
-    // 「地域へ移動」で出した目印の地名のチップ（左上に縦に並べ、6 つ目からは 1 つにまとめる。長押しで並べ替える）。
+    // 「地域へ移動」で出した目印の地名のチップ（左上に縦に並べ、6 つ目からは 1 つにまとめる。縦にドラッグして並べ替える）。
     // 地名でその地域の範囲へ寄せ直し、× でその目印を外す（地図は動かさない）。
     val regionChips: @Composable () -> Unit = {
       RegionMarkerChips(
@@ -369,19 +365,8 @@ fun TrackingScreen(
     }
 
     // 上の区画（検索の入口・レイヤー）と上の下（今の状態・1 行の帯）。検索窓を開いている間は窓と重なるので隠す。
-    // ただし地名のチップは、どの地域を出しているかを見ながら探せるよう、同じ位置に残す（候補のカードが上に重なる）。
-    if (mapSearchOpen) {
-      MapTopBar(
-        modifier = Modifier.align(Alignment.TopCenter),
-        // 検索の入口の行と同じ高さを空け、チップを閉じているときと同じ位置に出す（入口の行は検索窓が覆う）。
-        leading = { Spacer(modifier = Modifier.height(MapRoundButtonSize)) },
-        status = {
-          // 閉じているときの「今の状態」の行（ピル）の代わり。空でも行の間が空くので、チップの位置が揃う。
-          Spacer(modifier = Modifier.height(0.dp))
-          regionChips()
-        },
-      )
-    } else {
+    // ただし地名のチップは、どの地域を出しているかを見ながら探せるよう、検索窓の「場所｜地域」の下に出す（候補のカードが上に重なる）。
+    if (!mapSearchOpen) {
       TrackingTopBar(
         showRegisteredPlaces = uiState.showRegisteredPlaces,
         registeredPlaces = uiState.registeredPlaces,
@@ -610,6 +595,7 @@ fun TrackingScreen(
         },
         onClose = { mapSearchOpen = false },
         modifier = Modifier.align(Alignment.TopCenter),
+        belowModes = regionChips,
       )
     }
   }
@@ -668,6 +654,7 @@ private fun TrackingMapSearch(
   onRegionSelected: (RegionMarker) -> Unit,
   onClose: () -> Unit,
   modifier: Modifier = Modifier,
+  belowModes: @Composable () -> Unit = {},
 ) {
   TrackingPlaceSearchBar(
     registerEnabled = registerEnabled,
@@ -706,6 +693,7 @@ private fun TrackingMapSearch(
     },
     onClose = onClose,
     modifier = modifier,
+    belowModes = belowModes,
   )
 }
 

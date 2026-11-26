@@ -2,6 +2,7 @@ package com.pathly.presentation.tracking
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -107,6 +108,7 @@ internal fun List<PlacePrediction>.toMapSearchCandidates(mode: MapSearchMode): L
  * 選んだ行を [onFetchCandidate] で確定し、取れたら [onSelected] で返す（取れなければ取得に失敗した旨を出す）。
  * 候補の一覧の枠は場所タブの「検索して追加」と共有する（[PlaceSearchCandidates]）。
  * 地図をタップしたとき・戻る・× で閉じる（閉じる処理は呼び出し側の [onClose]）。
+ * [belowModes] は切り替えの下に出すもの（記録画面の地名のチップ）。候補のカードはその上に重ねる。
  */
 @Composable
 internal fun <T : Any> TrackingPlaceSearchBar(
@@ -116,6 +118,7 @@ internal fun <T : Any> TrackingPlaceSearchBar(
   onSelected: (T) -> Unit,
   onClose: () -> Unit,
   modifier: Modifier = Modifier,
+  belowModes: @Composable () -> Unit = {},
 ) {
   var query by remember { mutableStateOf("") }
   var selectedMode by remember { mutableStateOf(MapSearchMode.Place) }
@@ -214,51 +217,55 @@ internal fun <T : Any> TrackingPlaceSearchBar(
       )
     }
 
-    // 何か打ってから候補のカードを出す（空のうちは地図を隠さない）。
-    if (query.isNotBlank() || fetchFailed != null) {
-      Surface(
-        shape = MaterialTheme.shapes.medium,
-        color = MaterialTheme.colorScheme.surface,
-        shadowElevation = PathlyElevation.floating,
-        modifier = Modifier
-          .padding(top = PathlySpacing.sm)
-          .fillMaxWidth()
-          .heightIn(max = maxCardHeight),
-      ) {
-        Column(modifier = Modifier.padding(horizontal = PathlySpacing.lg)) {
-          fetchFailed?.let { action ->
-            Text(
-              text = fetchFailedText(action),
-              style = MaterialTheme.typography.bodySmall,
-              color = MaterialTheme.colorScheme.error,
-              modifier = Modifier.padding(top = PathlySpacing.sm),
-            )
-          }
-          PlaceSearchCandidates(
-            query = query,
-            candidates = candidates,
-            isSearching = isSearching || isFetching,
-            key = { it.key },
-            modifier = Modifier.fillMaxWidth(),
-          ) { candidate ->
-            MapSearchCandidateRow(
-              candidate = candidate,
-              onClick = {
-                if (!isFetching) {
-                  scope.launch {
-                    isFetching = true
-                    val result = onFetchCandidate(candidate)
-                    isFetching = false
-                    if (result != null) {
-                      keyboard?.hide()
-                      onSelected(result)
-                    } else {
-                      fetchFailed = candidate.action
+    // 切り替えの下に地名のチップを出し、候補のカードはその上に重ねる。
+    Box {
+      Box(modifier = Modifier.padding(top = PathlySpacing.sm)) { belowModes() }
+      // 何か打ってから候補のカードを出す（空のうちは地図を隠さない）。
+      if (query.isNotBlank() || fetchFailed != null) {
+        Surface(
+          shape = MaterialTheme.shapes.medium,
+          color = MaterialTheme.colorScheme.surface,
+          shadowElevation = PathlyElevation.floating,
+          modifier = Modifier
+            .padding(top = PathlySpacing.sm)
+            .fillMaxWidth()
+            .heightIn(max = maxCardHeight),
+        ) {
+          Column(modifier = Modifier.padding(horizontal = PathlySpacing.lg)) {
+            fetchFailed?.let { action ->
+              Text(
+                text = fetchFailedText(action),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.error,
+                modifier = Modifier.padding(top = PathlySpacing.sm),
+              )
+            }
+            PlaceSearchCandidates(
+              query = query,
+              candidates = candidates,
+              isSearching = isSearching || isFetching,
+              key = { it.key },
+              modifier = Modifier.fillMaxWidth(),
+            ) { candidate ->
+              MapSearchCandidateRow(
+                candidate = candidate,
+                onClick = {
+                  if (!isFetching) {
+                    scope.launch {
+                      isFetching = true
+                      val result = onFetchCandidate(candidate)
+                      isFetching = false
+                      if (result != null) {
+                        keyboard?.hide()
+                        onSelected(result)
+                      } else {
+                        fetchFailed = candidate.action
+                      }
                     }
                   }
-                }
-              },
-            )
+                },
+              )
+            }
           }
         }
       }

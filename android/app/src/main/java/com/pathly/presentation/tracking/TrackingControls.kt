@@ -8,7 +8,7 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -59,8 +59,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
-import androidx.compose.ui.input.pointer.PointerEventPass
-import androidx.compose.ui.input.pointer.changedToUp
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onPlaced
 import androidx.compose.ui.layout.positionInParent
@@ -360,7 +358,7 @@ private fun formatElapsed(millis: Long): String {
  * 縦に出す数を決めて残りはまとめのメニューから選ぶ。最後に地図を移した地域（[focusedPlaceId]）のチップは塗りつぶし、
  * それがまとめの中なら、まとめのチップを塗りつぶす。
  *
- * 地名のチップは長押しで掴んで並べ替え、「他 N 件」に重ねて離すとまとめの先頭に入れる（[onMove] に地域と移した後の位置
+ * 地名のチップは縦にドラッグして並べ替え、「他 N 件」に重ねて離すとまとめの先頭に入れる（[onMove] に地域と移した後の位置
  * を渡す → ADR 0047）。
  */
 @Composable
@@ -426,7 +424,7 @@ internal fun RegionMarkerChips(
             .regionChipReorderGesture(
               placeId = marker.placeId,
               drag = drag,
-              onStart = { haptic.performHapticFeedback(HapticFeedbackType.LongPress) },
+              onStart = { haptic.performHapticFeedback(HapticFeedbackType.GestureThresholdActivate) },
               onDrop = { placeId, to ->
                 currentMarkers.firstOrNull { it.placeId == placeId }?.let { currentOnMove(it, to) }
               },
@@ -479,44 +477,34 @@ internal fun RegionMarkerChips(
 private const val LIFTED_CHIP_SCALE = 1.05f
 
 /**
- * 長押しで掴んで縦に動かし、離した所で [onDrop]（地域・移した後の位置）を呼ぶ。掴んでいる間に指を離したときは、
- * 子の地名（寄せ直し）・× のタップにしない（離す指を子より先に受けて消費する）。地図には指が行かない。
+ * 縦にドラッグして掴み（長押しは要らない）、離した所で [onDrop]（地域・移した後の位置）を呼ぶ。動かし始めると子の地名
+ * （寄せ直し）・× のタップは取り消され、軽いタップは今までどおり子に届く。横に動かしても何もしない。地図には指が行かない。
  */
 private fun Modifier.regionChipReorderGesture(
   placeId: String,
   drag: RegionChipDragState,
   onStart: () -> Unit,
   onDrop: (String, Int) -> Unit,
-): Modifier = this
-  .pointerInput(drag) {
-    awaitPointerEventScope {
-      while (true) {
-        val event = awaitPointerEvent(PointerEventPass.Initial)
-        if (drag.placeId == placeId) event.changes.forEach { if (it.changedToUp()) it.consume() }
-      }
-    }
+): Modifier = pointerInput(placeId, drag) {
+  // 2 本目の指で別のチップを動かしたときは掴まず、その指の動きでは何もしない。
+  var holding = false
+  val finish = {
+    if (holding) drag.drop()?.let { (id, to) -> onDrop(id, to) }
+    holding = false
   }
-  .pointerInput(placeId, drag) {
-    // 離す指は上で消費するので、終わりは取り消しとして届く。どちらも離した所で決める。
-    // 2 本目の指で別のチップを長押ししたときは掴まず、その指の動きでは何もしない。
-    var holding = false
-    val finish = {
-      if (holding) drag.drop()?.let { (id, to) -> onDrop(id, to) }
-      holding = false
-    }
-    detectDragGesturesAfterLongPress(
-      onDragStart = {
-        holding = drag.start(placeId)
-        if (holding) onStart()
-      },
-      onDrag = { change, amount ->
-        change.consume()
-        if (holding) drag.dragBy(amount.y)
-      },
-      onDragEnd = { finish() },
-      onDragCancel = { finish() },
-    )
-  }
+  detectVerticalDragGestures(
+    onDragStart = {
+      holding = drag.start(placeId)
+      if (holding) onStart()
+    },
+    onVerticalDrag = { change, amount ->
+      change.consume()
+      if (holding) drag.dragBy(amount)
+    },
+    onDragEnd = { finish() },
+    onDragCancel = { finish() },
+  )
+}
 
 /** 縦に出す地域のチップの数。これより後に選んだ地域は「他 N 件」にまとめる。 */
 internal const val VISIBLE_REGION_CHIPS = 5
@@ -611,7 +599,10 @@ private fun FoldedRegionChip(
   }
 }
 
-/** 地域のチップの外枠（地図に浮かぶピル）。[focused] なら塗りつぶし、[outlined] なら枠を出す。 */
+/**
+ * 地域のチップの外枠（地図に浮かぶピル。「すべて外す」「他 N 件」）。白地に藍の枠と藍の字にし、[focused] なら藍で塗りつぶし、
+ * [outlined]（掴んだチップを重ねている間）なら枠を太くして薄く塗る。
+ */
 @Composable
 private fun RegionChipSurface(
   focused: Boolean,
@@ -624,10 +615,14 @@ private fun RegionChipSurface(
     onClick = onClick,
     modifier = modifier.semantics { selected = focused },
     shape = PathlyShapes.pill,
-    color = if (focused) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface,
-    contentColor = if (focused) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface,
+    color = when {
+      focused -> PathlyMapColors.Region
+      outlined -> PathlyMapColors.RegionContainer
+      else -> Color.White
+    },
+    contentColor = if (focused) PathlyMapColors.OnMarker else PathlyMapColors.Region,
     shadowElevation = PathlyElevation.floating,
-    border = if (outlined) BorderStroke(2.dp, MaterialTheme.colorScheme.primary) else null,
+    border = BorderStroke(if (outlined) 3.dp else 1.dp, PathlyMapColors.Region),
     content = content,
   )
 }

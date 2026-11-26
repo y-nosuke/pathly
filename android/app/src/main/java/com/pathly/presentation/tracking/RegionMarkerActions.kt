@@ -67,7 +67,7 @@ class RegionMarkerActions {
   }
 
   /**
-   * その地域を並びの [toIndex] 番目へ移す（チップの長押しの並べ替え・まとめの「上に出す」→ ADR 0047）。
+   * その地域を並びの [toIndex] 番目へ移す（チップのドラッグの並べ替え・まとめの「上に出す」→ ADR 0047）。
    * 先に抜いてから入れるので、[toIndex] は移した後の位置。範囲の外は端に寄せる。塗りつぶしは変えない。
    */
   fun move(placeId: String, toIndex: Int) {
