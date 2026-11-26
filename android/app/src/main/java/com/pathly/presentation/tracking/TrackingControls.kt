@@ -617,10 +617,12 @@ private fun FoldedRegionChip(
   modifier: Modifier = Modifier,
 ) {
   var menuOpen by remember { mutableStateOf(false) }
-  // まとめと入れ替わったら、少し弾ませる（[bounce] が増えるたび）。
+  // まとめと入れ替わったら、少し弾ませる（[bounce] が増えるたび）。出てきたとき（まとめが空から戻ったとき）の数では
+  // 弾ませない（前の入れ替えで増えた数が残っているため）。
   val bounceScale = remember { Animatable(1f) }
+  val bounceAtEnter = remember { bounce }
   LaunchedEffect(bounce) {
-    if (bounce > 0) {
+    if (bounce != bounceAtEnter) {
       bounceScale.animateTo(FOLDED_BOUNCE_SCALE, tween(FOLDED_BOUNCE_MILLIS))
       bounceScale.animateTo(1f, spring(dampingRatio = Spring.DampingRatioMediumBouncy))
     }
