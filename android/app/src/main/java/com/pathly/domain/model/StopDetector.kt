@@ -6,7 +6,8 @@ package com.pathly.domain.model
  * 連続する点が [radiusMeters] の範囲にとどまり続け、その滞在時間が
  * [minDurationMs] 以上になったら1つの立ち寄りとみなす。ノイズの影響を減らすため、
  * 補正後の点列（[GpsTrack.smoothedPoints]）に対して適用することを想定している。
- * 検出結果の永続化・命名は PlaceRepository が担う（docs/designs/places-and-stops.md）。
+ * 検出結果の永続化は LiveStopRepository（記録中）・StopRepository（再解析）、命名は PlaceRepository が担う
+ * （docs/designs/places-and-stops.md）。
  *
  * しきい値は実データを見ながら調整する。
  */

@@ -63,3 +63,4 @@
 | [0045](0045-region-header-map-fits-whole-region.md)         | 場所一覧の地域の見出しから地図で見るときは、絞り込みを変えずに地域全域へ寄せ、範囲は Places で引く                         | Accepted |
 | [0046](0046-region-boundaries-by-data-driven-styling.md)    | 選んだ地域の境界は Maps SDK の境界のスタイルで描き、マップ ID は境界を描く地図だけに付け、描いている間だけ地図を明るくする | Accepted |
 | [0047](0047-reorder-region-chips-by-drag.md)                | 地名のチップは縦のドラッグで並べ替え、「他 N 件」とも出し入れできる。並べた順も保存しない                                  | Accepted |
+| [0048](0048-split-place-repository-by-responsibility.md)    | 場所と立ち寄りの Repository は窓口ごと 3 つに分け、ロックと状態は 1 つを共有する                                           | Accepted |

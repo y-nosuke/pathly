@@ -2,6 +2,7 @@ package com.pathly.domain.usecase
 
 import com.pathly.domain.model.RegisteredPlace
 import com.pathly.domain.repository.PlaceRepository
+import com.pathly.domain.repository.StopRepository
 import java.util.Date
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -16,6 +17,7 @@ import javax.inject.Singleton
 @Singleton
 class AddManualStopUseCase @Inject constructor(
   private val placeRepository: PlaceRepository,
+  private val stopRepository: StopRepository,
 ) {
 
   /** 追加の結果。 */
@@ -61,7 +63,7 @@ class AddManualStopUseCase @Inject constructor(
         .firstOrNull { !isShownOnMap(it) }
         ?.let { return AddResult.NearbyFound(it) }
     }
-    val stopId = placeRepository.addManualStop(
+    val stopId = stopRepository.addManualStop(
       trackId,
       latitude,
       longitude,
@@ -85,7 +87,7 @@ class AddManualStopUseCase @Inject constructor(
     departureTime: Date,
     name: String?,
   ): AddResult.Added = AddResult.Added(
-    placeRepository.addManualStop(
+    stopRepository.addManualStop(
       trackId,
       latitude,
       longitude,
@@ -106,5 +108,5 @@ class AddManualStopUseCase @Inject constructor(
     placeId: Long,
     arrivalTime: Date,
     departureTime: Date,
-  ): AddResult.Added = AddResult.Added(placeRepository.addManualStopForPlace(trackId, placeId, arrivalTime, departureTime))
+  ): AddResult.Added = AddResult.Added(stopRepository.addManualStopForPlace(trackId, placeId, arrivalTime, departureTime))
 }

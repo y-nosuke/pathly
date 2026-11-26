@@ -5,7 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.pathly.domain.model.GeoBounds
 import com.pathly.domain.model.GpsTrack
 import com.pathly.domain.repository.GpsTrackRepository
-import com.pathly.domain.repository.PlaceRepository
+import com.pathly.domain.repository.StopRepository
 import com.pathly.util.Logger
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.CancellationException
@@ -29,7 +29,7 @@ import javax.inject.Inject
 @HiltViewModel
 class TrackOverlayViewModel @Inject constructor(
   private val gpsTrackRepository: GpsTrackRepository,
-  private val placeRepository: PlaceRepository,
+  private val stopRepository: StopRepository,
 ) : ViewModel() {
 
   private val logger = Logger("TrackOverlayViewModel")
@@ -50,7 +50,7 @@ class TrackOverlayViewModel @Inject constructor(
     withSelected = { s, selected -> s.copy(selected = selected) },
     withFocus = { s, focus -> s.copy(focusRequest = focus) },
     gpsTrackRepository = gpsTrackRepository,
-    placeRepository = placeRepository,
+    stopRepository = stopRepository,
     scope = viewModelScope,
     computeDispatcher = { computeDispatcher },
   )

@@ -2,7 +2,7 @@ package com.pathly.presentation.tracking
 
 import com.pathly.domain.model.GpsTrack
 import com.pathly.domain.repository.GpsTrackRepository
-import com.pathly.domain.repository.PlaceRepository
+import com.pathly.domain.repository.StopRepository
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -24,7 +24,7 @@ internal class TrackOverlaySelection<S>(
   private val withSelected: (S, List<OverlayTrack>) -> S,
   private val withFocus: (S, TrackFocusRequest?) -> S,
   private val gpsTrackRepository: GpsTrackRepository,
-  private val placeRepository: PlaceRepository,
+  private val stopRepository: StopRepository,
   private val scope: CoroutineScope,
   // 線の点を読んで区間に分ける計算（補正点が無い古い経路では平滑化も走る）を主スレッドから外す。テストでは差し替える。
   private val computeDispatcher: () -> CoroutineDispatcher,
@@ -58,7 +58,7 @@ internal class TrackOverlaySelection<S>(
         return@launch
       }
       val segments = loaded.filter { it.size >= 2 }
-      val stops = placeRepository.getStopsForTrack(trackId).first()
+      val stops = stopRepository.getStopsForTrack(trackId).first()
       updateSelected { list ->
         list.map { if (it.track.id == trackId) it.copy(segments = segments, stops = stops, isLoaded = true) else it }
       }

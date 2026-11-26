@@ -2,7 +2,9 @@ package com.pathly.presentation.stops
 
 import com.pathly.domain.model.SameFacilityPending
 import com.pathly.domain.model.Stop
+import com.pathly.domain.repository.LiveStopRepository
 import com.pathly.domain.repository.PlaceRepository
+import com.pathly.domain.repository.StopRepository
 import com.pathly.domain.usecase.PlaceEditUseCase
 import com.pathly.presentation.history.SameFacilityReview
 import com.pathly.presentation.history.TrackStopActions
@@ -35,6 +37,8 @@ import java.util.Date
 class StopEditActions internal constructor(
   private val scope: CoroutineScope,
   private val placeRepository: PlaceRepository,
+  private val stopRepository: StopRepository,
+  private val liveStopRepository: LiveStopRepository,
   private val placeEditUseCase: PlaceEditUseCase,
   trackId: Flow<Long?>,
   private val placeEdit: PlaceEditActions,
@@ -97,7 +101,7 @@ class StopEditActions internal constructor(
 
   /** 立ち寄り（訪問）のメモを更新する（stop 単位。空文字なら消す）。 */
   fun updateStopNote(stopId: Long, note: String?) {
-    scope.launch { placeRepository.updateStopNote(stopId, note) }
+    scope.launch { stopRepository.updateStopNote(stopId, note) }
   }
 
   /**
@@ -120,7 +124,7 @@ class StopEditActions internal constructor(
    * 他の立ち寄りと期間が重なっても（入れ子でも）そのまま保存する。
    */
   fun updateStopDuration(stopId: Long, arrivalTime: Date, departureTime: Date) {
-    scope.launch { placeRepository.updateStopDuration(stopId, arrivalTime, departureTime) }
+    scope.launch { stopRepository.updateStopDuration(stopId, arrivalTime, departureTime) }
   }
 
   /**
@@ -130,7 +134,7 @@ class StopEditActions internal constructor(
    */
   fun deleteStops(stopIds: List<Long>) {
     if (stopIds.isEmpty()) return
-    scope.launch { placeRepository.deleteStops(stopIds) }
+    scope.launch { stopRepository.deleteStops(stopIds) }
   }
 
   /**
@@ -141,14 +145,14 @@ class StopEditActions internal constructor(
   fun mergeStops(stopIds: List<Long>) {
     if (stopIds.size < 2) return
     scope.launch {
-      val result = placeRepository.mergeStops(stopIds)
+      val result = stopRepository.mergeStops(stopIds)
       if (result == null) onError("同じ場所への立ち寄りだけまとめられます")
     }
   }
 
   /** 直近の削除・統合を取り消して元に戻す（スナックバーの「取り消す」）。 */
   fun undoStopChange() {
-    scope.launch { placeRepository.undoLastStopChange() }
+    scope.launch { stopRepository.undoLastStopChange() }
   }
 
   /**
@@ -177,19 +181,19 @@ class StopEditActions internal constructor(
   /** 立ち寄り中のメモ（確定した立ち寄りに入る。空なら消す）。 */
   fun updateLiveStopNote(note: String?) {
     val id = trackId.value ?: return
-    scope.launch { placeRepository.updateLiveStopNote(id, note) }
+    scope.launch { liveStopRepository.updateLiveStopNote(id, note) }
   }
 
   /** 立ち寄り中の到着時刻を直す（出発は離れたときに決まる）。 */
   fun updateLiveStopArrival(arrivalTime: Date) {
     val id = trackId.value ?: return
-    scope.launch { placeRepository.updateLiveStopArrival(id, arrivalTime) }
+    scope.launch { liveStopRepository.updateLiveStopArrival(id, arrivalTime) }
   }
 
   /** 立ち寄り中をやめる（誤検知の取り消し。離れるまで同じ滞在を立ち寄りにしない）。 */
   fun dismissLiveStop() {
     val id = trackId.value ?: return
-    scope.launch { placeRepository.dismissLiveStop(id) }
+    scope.launch { liveStopRepository.dismissLiveStop(id) }
   }
 
   /** 同じ施設の確認待ちを聞くダイアログを開く（「確認待ち」の帯）。 */
@@ -211,7 +215,7 @@ class StopEditActions internal constructor(
   }
 }
 
-/** 立ち寄り中（まだ保存していない）の行か。保存していない立ち寄りは id が 0（→ PlaceRepository.currentStop）。 */
+/** 立ち寄り中（まだ保存していない）の行か。保存していない立ち寄りは id が 0（→ LiveStopRepository.currentStop）。 */
 internal val Stop.isLive: Boolean get() = id == 0L
 
 /**

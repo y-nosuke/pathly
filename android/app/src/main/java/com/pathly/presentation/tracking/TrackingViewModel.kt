@@ -20,7 +20,9 @@ import com.pathly.domain.model.Priority
 import com.pathly.domain.model.RegisteredPlace
 import com.pathly.domain.model.SameFacilityPlace
 import com.pathly.domain.repository.GpsTrackRepository
+import com.pathly.domain.repository.LiveStopRepository
 import com.pathly.domain.repository.PlaceRepository
+import com.pathly.domain.repository.StopRepository
 import com.pathly.domain.repository.WishlistRepository
 import com.pathly.domain.usecase.AddManualStopUseCase
 import com.pathly.domain.usecase.PlaceEditUseCase
@@ -51,6 +53,8 @@ class TrackingViewModel @Inject constructor(
   private val trackingController: TrackingController,
   private val gpsTrackRepository: GpsTrackRepository,
   private val placeRepository: PlaceRepository,
+  private val stopRepository: StopRepository,
+  private val liveStopRepository: LiveStopRepository,
   private val wishlistRepository: WishlistRepository,
   private val settingsRepository: SettingsRepository,
   private val placeEditUseCase: PlaceEditUseCase,
@@ -174,7 +178,8 @@ class TrackingViewModel @Inject constructor(
   val manualStop = ManualStopActions(
     scope = viewModelScope,
     addManualStopUseCase = addManualStopUseCase,
-    placeRepository = placeRepository,
+    stopRepository = stopRepository,
+    liveStopRepository = liveStopRepository,
     trackId = { _uiState.value.currentTrackId },
     shownOnMap = ::shownOnMap,
     onMessage = ::showMessage,
@@ -185,6 +190,8 @@ class TrackingViewModel @Inject constructor(
   val stopEdit = StopEditActions(
     scope = viewModelScope,
     placeRepository = placeRepository,
+    stopRepository = stopRepository,
+    liveStopRepository = liveStopRepository,
     placeEditUseCase = placeEditUseCase,
     trackId = _uiState.map { it.currentTrackId },
     placeEdit = placeEdit,
@@ -217,7 +224,7 @@ class TrackingViewModel @Inject constructor(
 
   private fun observeCurrentStop() {
     viewModelScope.launch {
-      placeRepository.currentStop.collect { stop ->
+      liveStopRepository.currentStop.collect { stop ->
         _uiState.update { it.copy(currentStop = stop) }
       }
     }
@@ -229,7 +236,7 @@ class TrackingViewModel @Inject constructor(
       _uiState.map { it.currentTrackId }
         .distinctUntilChanged()
         .flatMapLatest { id ->
-          if (id == null) flowOf(emptyList()) else placeRepository.getStopsForTrack(id)
+          if (id == null) flowOf(emptyList()) else stopRepository.getStopsForTrack(id)
         }
         .collect { stops ->
           _uiState.update { it.copy(stops = stops) }
@@ -371,7 +378,7 @@ class TrackingViewModel @Inject constructor(
       _uiState.update { it.copy(isFinalizing = true, interruptedTrack = null) }
       try {
         gpsTrackRepository.updateSmoothedForTrack(interrupted.id, isFinal = true)
-        placeRepository.updateStopsForTrack(interrupted.id, isFinal = true)
+        liveStopRepository.updateStopsForTrack(interrupted.id, isFinal = true)
         val endTime = interrupted.points.lastOrNull()?.timestamp ?: java.util.Date()
         gpsTrackRepository.finishTrack(interrupted.id, endTime)
       } finally {

@@ -3,7 +3,8 @@ package com.pathly.presentation.stops
 import com.pathly.domain.model.NearbyStopPrompt
 import com.pathly.domain.model.PlaceSearchResult
 import com.pathly.domain.model.RegisteredPlace
-import com.pathly.domain.repository.PlaceRepository
+import com.pathly.domain.repository.LiveStopRepository
+import com.pathly.domain.repository.StopRepository
 import com.pathly.domain.usecase.AddManualStopUseCase
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -24,7 +25,8 @@ import java.util.Date
 class ManualStopActions internal constructor(
   private val scope: CoroutineScope,
   private val addManualStopUseCase: AddManualStopUseCase,
-  private val placeRepository: PlaceRepository,
+  private val stopRepository: StopRepository,
+  private val liveStopRepository: LiveStopRepository,
   private val trackId: () -> Long?,
   private val shownOnMap: () -> (RegisteredPlace) -> Boolean,
   private val onMessage: (String) -> Unit,
@@ -123,7 +125,7 @@ class ManualStopActions internal constructor(
     val id = trackId() ?: return
     scope.launch {
       try {
-        placeRepository.startLiveStop(
+        liveStopRepository.startLiveStop(
           trackId = id,
           anchorLatitude = anchorLatitude,
           anchorLongitude = anchorLongitude,
@@ -144,7 +146,7 @@ class ManualStopActions internal constructor(
   override fun reassignStop(stopId: Long, chosen: PlaceSearchResult?, customName: String?) {
     scope.launch {
       try {
-        placeRepository.reassignStopPlace(stopId, chosen, customName)
+        stopRepository.reassignStopPlace(stopId, chosen, customName)
       } catch (e: Exception) {
         onError("場所の選び直しに失敗しました: ${e.message}")
       }

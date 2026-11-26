@@ -8,7 +8,9 @@ import com.pathly.domain.model.MapPlaceFilter
 import com.pathly.domain.model.Priority
 import com.pathly.domain.model.RegisteredPlace
 import com.pathly.domain.repository.GpsTrackRepository
+import com.pathly.domain.repository.LiveStopRepository
 import com.pathly.domain.repository.PlaceRepository
+import com.pathly.domain.repository.StopRepository
 import com.pathly.domain.repository.WishlistRepository
 import com.pathly.domain.usecase.AddManualStopUseCase
 import com.pathly.domain.usecase.PlaceEditUseCase
@@ -47,8 +49,11 @@ class TrackingViewModelTest {
 
   private val mockRepository = mockk<GpsTrackRepository>(relaxed = true)
   private val mockPlaceRepository = mockk<PlaceRepository>(relaxed = true).also {
-    every { it.currentStop } returns MutableStateFlow(null)
     every { it.observeRegisteredPlaces() } returns MutableStateFlow(emptyList())
+  }
+  private val mockStopRepository = mockk<StopRepository>(relaxed = true)
+  private val mockLiveStopRepository = mockk<LiveStopRepository>(relaxed = true).also {
+    every { it.currentStop } returns MutableStateFlow(null)
   }
   private val mockWishlistRepository = mockk<WishlistRepository>(relaxed = true)
   private val mockPlaceEditUseCase = mockk<PlaceEditUseCase>(relaxed = true)
@@ -88,6 +93,8 @@ class TrackingViewModelTest {
     mockController,
     mockRepository,
     mockPlaceRepository,
+    mockStopRepository,
+    mockLiveStopRepository,
     mockWishlistRepository,
     mockSettingsRepository,
     mockPlaceEditUseCase,
@@ -350,7 +357,7 @@ class TrackingViewModelTest {
 
     // 素通しで閉じると、確定できていない経路が確定済みの顔で履歴に並ぶ。
     coVerify { mockRepository.updateSmoothedForTrack(9L, true) }
-    coVerify { mockPlaceRepository.updateStopsForTrack(9L, true) }
+    coVerify { mockLiveStopRepository.updateStopsForTrack(9L, true) }
     coVerify { mockRepository.finishTrack(9L, any()) }
     val state = viewModel.uiState.value
     assertNull("中断ダイアログは閉じる", state.interruptedTrack)

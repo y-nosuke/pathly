@@ -2,6 +2,7 @@ package com.pathly.domain.usecase
 
 import com.pathly.domain.model.RegisteredPlace
 import com.pathly.domain.repository.PlaceRepository
+import com.pathly.domain.repository.StopRepository
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.mockk
@@ -20,7 +21,8 @@ import java.util.Date
 class AddManualStopUseCaseTest {
 
   private val placeRepository = mockk<PlaceRepository>(relaxed = true)
-  private val useCase = AddManualStopUseCase(placeRepository)
+  private val stopRepository = mockk<StopRepository>(relaxed = true)
+  private val useCase = AddManualStopUseCase(placeRepository, stopRepository)
 
   private val arrival = Date(1_000L)
   private val departure = Date(2_000L)
@@ -28,9 +30,9 @@ class AddManualStopUseCaseTest {
   @Before
   fun setup() {
     coEvery {
-      placeRepository.addManualStop(any(), any(), any(), any(), any(), any(), any(), any())
+      stopRepository.addManualStop(any(), any(), any(), any(), any(), any(), any(), any())
     } returns 55L
-    coEvery { placeRepository.addManualStopForPlace(any(), any(), any(), any()) } returns 66L
+    coEvery { stopRepository.addManualStopForPlace(any(), any(), any(), any()) } returns 66L
   }
 
   @Test
@@ -48,7 +50,7 @@ class AddManualStopUseCaseTest {
 
     assertEquals(AddManualStopUseCase.AddResult.Added(55L), result)
     coVerify(exactly = 0) { placeRepository.findNearbyPlaces(any(), any()) }
-    coVerify { placeRepository.addManualStop(1L, 35.0, 139.0, arrival, departure, "カフェ", "gp-1", false) }
+    coVerify { stopRepository.addManualStop(1L, 35.0, 139.0, arrival, departure, "カフェ", "gp-1", false) }
   }
 
   @Test
@@ -89,7 +91,7 @@ class AddManualStopUseCaseTest {
     )
 
     assertEquals(AddManualStopUseCase.AddResult.Added(55L), result)
-    coVerify { placeRepository.addManualStop(1L, 35.0001, 139.0, arrival, departure, null, null, true) }
+    coVerify { stopRepository.addManualStop(1L, 35.0001, 139.0, arrival, departure, null, null, true) }
   }
 
   @Test
@@ -109,7 +111,7 @@ class AddManualStopUseCaseTest {
       pointedOnMap = false,
     )
 
-    coVerify { placeRepository.addManualStop(1L, 35.0, 139.0, arrival, departure, null, null, false) }
+    coVerify { stopRepository.addManualStop(1L, 35.0, 139.0, arrival, departure, null, null, false) }
   }
 
   @Test
@@ -126,7 +128,7 @@ class AddManualStopUseCaseTest {
       pointedOnMap = true,
     )
 
-    coVerify { placeRepository.addManualStop(1L, 35.0, 139.0, arrival, departure, "カフェ", "gp-1", false) }
+    coVerify { stopRepository.addManualStop(1L, 35.0, 139.0, arrival, departure, "カフェ", "gp-1", false) }
   }
 
   @Test
@@ -168,7 +170,7 @@ class AddManualStopUseCaseTest {
 
     assertEquals(AddManualStopUseCase.AddResult.NearbyFound(nearby), result)
     // ユーザーが選ぶまで追加しない。
-    coVerify(exactly = 0) { placeRepository.addManualStop(any(), any(), any(), any(), any(), any(), any(), any()) }
+    coVerify(exactly = 0) { stopRepository.addManualStop(any(), any(), any(), any(), any(), any(), any(), any()) }
   }
 
   @Test
@@ -188,14 +190,14 @@ class AddManualStopUseCaseTest {
 
     assertEquals(AddManualStopUseCase.AddResult.Added(55L), result)
     // 座標同定に任せる（近くに何も無いので相乗りする相手もいない）。
-    coVerify { placeRepository.addManualStop(1L, 35.0, 139.0, arrival, departure, "名無し", null, false) }
+    coVerify { stopRepository.addManualStop(1L, 35.0, 139.0, arrival, departure, "名無し", null, false) }
   }
 
   @Test
   fun `新規で追加を選んだら座標同定せず必ず新しい場所を作る`() = runTest {
     useCase.addAsNew(1L, 35.0, 139.0, arrival, departure, "新しい場所")
 
-    coVerify { placeRepository.addManualStop(1L, 35.0, 139.0, arrival, departure, "新しい場所", null, true) }
+    coVerify { stopRepository.addManualStop(1L, 35.0, 139.0, arrival, departure, "新しい場所", null, true) }
   }
 
   @Test
@@ -203,8 +205,8 @@ class AddManualStopUseCaseTest {
     val result = useCase.addForExistingPlace(1L, placeId = 9L, arrivalTime = arrival, departureTime = departure)
 
     assertEquals(AddManualStopUseCase.AddResult.Added(66L), result)
-    coVerify { placeRepository.addManualStopForPlace(1L, 9L, arrival, departure) }
+    coVerify { stopRepository.addManualStopForPlace(1L, 9L, arrival, departure) }
     // 新しい場所は作らない。
-    coVerify(exactly = 0) { placeRepository.addManualStop(any(), any(), any(), any(), any(), any(), any(), any()) }
+    coVerify(exactly = 0) { stopRepository.addManualStop(any(), any(), any(), any(), any(), any(), any(), any()) }
   }
 }

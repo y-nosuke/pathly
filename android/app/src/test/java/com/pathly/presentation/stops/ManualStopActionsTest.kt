@@ -1,7 +1,8 @@
 package com.pathly.presentation.stops
 
 import com.pathly.domain.model.RegisteredPlace
-import com.pathly.domain.repository.PlaceRepository
+import com.pathly.domain.repository.LiveStopRepository
+import com.pathly.domain.repository.StopRepository
 import com.pathly.domain.usecase.AddManualStopUseCase
 import io.mockk.coEvery
 import io.mockk.coVerify
@@ -21,7 +22,8 @@ import java.util.Date
 class ManualStopActionsTest {
 
   private val useCase = mockk<AddManualStopUseCase>(relaxed = true)
-  private val placeRepository = mockk<PlaceRepository>(relaxed = true)
+  private val stopRepository = mockk<StopRepository>(relaxed = true)
+  private val liveStopRepository = mockk<LiveStopRepository>(relaxed = true)
 
   private val messages = mutableListOf<String>()
   private val errors = mutableListOf<String>()
@@ -33,7 +35,8 @@ class ManualStopActionsTest {
   private fun TestScope.actions(trackId: Long? = 7L) = ManualStopActions(
     scope = this,
     addManualStopUseCase = useCase,
-    placeRepository = placeRepository,
+    stopRepository = stopRepository,
+    liveStopRepository = liveStopRepository,
     trackId = { trackId },
     shownOnMap = { { false } },
     onMessage = { messages += it },
@@ -132,12 +135,12 @@ class ManualStopActionsTest {
 
   @Test
   fun `付け直しに失敗したら知らせる`() = runTest {
-    coEvery { placeRepository.reassignStopPlace(any(), any(), any()) } throws IllegalStateException("boom")
+    coEvery { stopRepository.reassignStopPlace(any(), any(), any()) } throws IllegalStateException("boom")
 
     actions().reassignStop(1L, null, "手入力")
     advanceUntilIdle()
 
-    coVerify { placeRepository.reassignStopPlace(1L, null, "手入力") }
+    coVerify { stopRepository.reassignStopPlace(1L, null, "手入力") }
     assertEquals(listOf("場所の選び直しに失敗しました: boom"), errors)
   }
 }
