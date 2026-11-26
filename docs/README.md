@@ -27,6 +27,7 @@
 | [specs/stops.md](specs/stops.md)                 | 立ち寄り（判定・手直し・削除）               |
 | [specs/places.md](specs/places.md)               | 場所（名前・登録・行きたい・一覧・削除）     |
 | [specs/tracks.md](specs/tracks.md)               | 経路（名前・お気に入り・絞り込み・並べ替え） |
+| [specs/plans.md](specs/plans.md)                 | 計画（日ごとの行・日付・実績・地図に重ねる） |
 | [specs/map.md](specs/map.md)                     | 地図タップ（画面 × モード × 表示）           |
 | [specs/security.md](specs/security.md)           | データの扱いとプライバシー                   |
 | [specs/backup.md](specs/backup.md)               | データの書き出し・読み込み                   |
