@@ -5,7 +5,6 @@ import androidx.room.Insert
 import androidx.room.Query
 import androidx.room.Transaction
 import com.pathly.data.local.entity.SmoothedPointEntity
-import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface SmoothedPointDao {
@@ -25,9 +24,6 @@ interface SmoothedPointDao {
    */
   @Query("SELECT * FROM smoothed_points WHERE trackId = :trackId AND timestamp > :afterMillis ORDER BY seq ASC")
   suspend fun getByTrackAfter(trackId: Long, afterMillis: Long): List<SmoothedPointEntity>
-
-  @Query("SELECT * FROM smoothed_points WHERE trackId = :trackId ORDER BY seq ASC")
-  fun getByTrackFlow(trackId: Long): Flow<List<SmoothedPointEntity>>
 
   @Query("SELECT COUNT(*) FROM smoothed_points WHERE trackId = :trackId")
   suspend fun countByTrack(trackId: Long): Int

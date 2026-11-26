@@ -321,7 +321,7 @@ class DataPersistenceTest {
     assertEquals("大容量軌跡データが保持されていない", 100, restoredTracks.size)
 
     // GPS座標データの総数確認
-    val totalRestoredPoints = database.gpsPointDao().getTotalPointsCount()
+    val totalRestoredPoints = database.gpsPointDao().getPointCount()
     assertEquals("大容量GPS座標データが保持されていない", totalPoints, totalRestoredPoints)
 
     // データベースファイルサイズ確認（適切にデータが保存されている）
