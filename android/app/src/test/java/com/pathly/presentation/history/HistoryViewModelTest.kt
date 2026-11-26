@@ -2,13 +2,13 @@ package com.pathly.presentation.history
 
 import androidx.arch.core.executor.testing.InstantTaskExecutorRule
 import androidx.lifecycle.SavedStateHandle
-import com.pathly.data.settings.SettingsRepository
 import com.pathly.domain.model.GpsTrack
 import com.pathly.domain.model.GroupOpenState
 import com.pathly.domain.model.PlaceCategoryFacet
 import com.pathly.domain.model.TrackGrouping
 import com.pathly.domain.repository.GpsTrackRepository
 import com.pathly.domain.repository.PlaceRepository
+import com.pathly.domain.repository.SettingsRepository
 import com.pathly.presentation.common.ListGroupRow
 import com.pathly.presentation.common.ListMapMode
 import com.pathly.util.DateFormatters

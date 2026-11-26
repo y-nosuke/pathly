@@ -30,14 +30,23 @@ presentation ──▶ domain ◀── data
 - **presentation（プレゼンテーション）**: Compose 画面 + ViewModel。UI 状態を `StateFlow` で持ち、画面は購読するだけ。
   画面別のパッケージに加え、画面をまたぐ部品を `common/`（`FloatingSheet`・地図描画・確認ダイアログ）と
   `stops/`（立ち寄りの追加・付け替え UI）に置く。
-- **domain（ドメイン）**: ドメインモデル、**Repository インターフェース**、複数画面で共有する UseCase。
-  他レイヤーに依存しない中心。
+- **domain（ドメイン）**: ドメインモデル、**Repository インターフェース**（設定の `SettingsRepository`・場所の検索の
+  `PlaceSearchRepository` も）、複数画面で共有する UseCase。他レイヤーに依存しない中心。
 - **data（データ）**: Repository の実装、Room（DAO/Entity/マイグレーション）、Places 連携、設定の保存に加え、
-  記録サービスの制御（`tracking/`）とバックグラウンドジョブ（`work/`）。
+  記録サービスの制御（`tracking/`）・書き出し（`backup/`）・異常終了の記録（`crash/`）とバックグラウンドジョブ（`work/`）。
 - **service（サービス）**: バックグラウンド GPS 追跡。UI からは切り離され、Repository と DAO で永続化する。
 
-**依存はすべて domain に向く**（presentation も data も domain の抽象に依存し、domain は誰にも依存しない）。
+**依存は domain に向く**（presentation も data も domain の抽象に依存し、domain は誰にも依存しない）。
 これにより data 層の差し替え（例: 将来のクラウド同期）が presentation に波及しない。
+
+例外として、presentation が data を直接使ってよいのは次の 3 つだけ（→ [ADR-0048](../adr/0048-screens-use-domain-except-device-features.md)）。
+どれも Android の都合（サービス・`Uri`・ファイル）にじかに結びつき、差し替える先が考えにくい端末の機能。
+
+- `data/tracking/TrackingController` … 記録サービスの起動・バインドと端末の状態（下の「Service の Android 依存は data 層へ寄せる」）
+- `data/backup` … データの書き出し・読み込み（設定画面）
+- `data/crash` … 異常終了の記録（設定画面）
+
+ほかに data のものが画面から要るようになったら、まず domain にインターフェースを置き、`di/RepositoryModule` の `@Binds` で実装を差す。
 
 ---
 

@@ -154,7 +154,7 @@ weight_j = 1 / (accuracy_j² + 1)
 
 ## GPS間隔との連動
 
-記録間隔は設定で変更可（`data/settings/SettingsRepository.kt`、既定10秒／5・10・30・60秒）。間隔は点密度を決め、補正の効き方（特に窓）に影響する。
+記録間隔は設定で変更可（`domain/repository/SettingsRepository.kt`、既定10秒／5・10・30・60秒）。間隔は点密度を決め、補正の効き方（特に窓）に影響する。
 
 ## 実装マップ
 
@@ -164,7 +164,7 @@ weight_j = 1 / (accuracy_j² + 1)
 | トラックの補正後点・距離         | `domain/model/GpsTrack.kt`（`smoothedPoints` / `totalDistanceMeters`）                                                     |
 | 詳細画面の描画・調整UI           | `presentation/history/TrackDetailMapLayer.kt`・`TrackDetailMap.kt`                                                         |
 | 記録画面のライブ描画             | `presentation/tracking/TrackingMap.kt`                                                                                     |
-| 記録間隔の設定                   | `data/settings/SettingsRepository.kt` / 設定画面                                                                           |
+| 記録間隔の設定                   | `domain/repository/SettingsRepository.kt`（実装は `data/settings/SettingsRepositoryImpl.kt`）/ 設定画面                    |
 | 記録中の増分補正・保存           | `service/LocationTrackingService.kt` → `GpsTrackRepository.updateSmoothedForTrack`（`persistSmoothed` で確定ぶんのみ追記） |
 | 補正後の永続化                   | `data/local/entity/SmoothedPointEntity.kt` / `data/local/dao/SmoothedPointDao.kt`                                          |
 | 補正調整（デバッグ・プレビュー） | 詳細画面の `ic_tune`（スライダーで補正を試すのみ。永続化はしない）                                                         |

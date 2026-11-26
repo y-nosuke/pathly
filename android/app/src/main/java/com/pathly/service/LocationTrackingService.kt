@@ -25,10 +25,10 @@ import com.pathly.data.local.dao.GpsPointDao
 import com.pathly.data.local.dao.GpsTrackDao
 import com.pathly.data.local.entity.GpsPointEntity
 import com.pathly.data.local.entity.GpsTrackEntity
-import com.pathly.data.settings.LocationAccuracy
-import com.pathly.data.settings.SettingsRepository
+import com.pathly.domain.model.LocationAccuracy
 import com.pathly.domain.repository.GpsTrackRepository
 import com.pathly.domain.repository.PlaceRepository
+import com.pathly.domain.repository.SettingsRepository
 import com.pathly.util.Logger
 import com.pathly.util.PermissionUtils
 import dagger.hilt.android.AndroidEntryPoint

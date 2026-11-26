@@ -12,10 +12,10 @@ import com.pathly.data.local.entity.GooglePlaceEntity
 import com.pathly.data.local.entity.PlaceEntity
 import com.pathly.data.local.entity.PlaceResolutionEntity
 import com.pathly.data.local.entity.WishlistEntity
-import com.pathly.data.places.PlacesTextSearcher
 import com.pathly.domain.model.PlaceCategory
 import com.pathly.domain.model.PlaceSearchResult
 import com.pathly.domain.repository.PlaceRepository
+import com.pathly.domain.repository.PlaceSearchRepository
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.mockk
@@ -36,7 +36,7 @@ class WishlistRepositoryImplTest {
   private val googlePlaceCategoryDao = mockk<GooglePlaceCategoryDao>(relaxed = true)
   private val stopDao = mockk<StopDao>(relaxed = true)
   private val placeRepository = mockk<PlaceRepository>(relaxed = true)
-  private val placesTextSearcher = mockk<PlacesTextSearcher>(relaxed = true)
+  private val placeSearchRepository = mockk<PlaceSearchRepository>(relaxed = true)
   private val repository = WishlistRepositoryImpl(
     wishlistDao,
     visitedPlaceDao,
@@ -47,7 +47,7 @@ class WishlistRepositoryImplTest {
     googlePlaceCategoryDao,
     stopDao,
     placeRepository,
-    placesTextSearcher,
+    placeSearchRepository,
   )
 
   @Test
@@ -181,7 +181,7 @@ class WishlistRepositoryImplTest {
     repository.registerPlace(35.65, 139.9, name = null, googlePlaceId = "gp-42", knownDetails = known)
 
     // 取得済みなので Google を引き直さない（オフラインでも施設情報が欠けない）。
-    coVerify(exactly = 0) { placesTextSearcher.fetch(any()) }
+    coVerify(exactly = 0) { placeSearchRepository.fetch(any()) }
     coVerify {
       googlePlaceDao.upsert(
         match { it.placeId == 7L && it.name == "清瀧神社" && it.categoryId == 5L },
@@ -195,7 +195,7 @@ class WishlistRepositoryImplTest {
     coEvery { placeRepository.findOrCreateByGooglePlaceId("gp-9", any(), any(), any()) } returns (7L to false)
     coEvery { googlePlaceDao.getByPlace(7L) } returns null
     // オフライン等で施設情報が取れない。
-    coEvery { placesTextSearcher.fetch("gp-9") } returns null
+    coEvery { placeSearchRepository.fetch("gp-9") } returns null
 
     repository.registerPlace(35.0, 139.0, name = null, googlePlaceId = "gp-9", googleName = "スタバ")
 
@@ -221,6 +221,6 @@ class WishlistRepositoryImplTest {
     repository.registerPlace(35.65, 139.9, name = null, googlePlaceId = "gp-42", knownDetails = other)
 
     // 別施設の情報を取り違えて焼き込まない。
-    coVerify { placesTextSearcher.fetch("gp-42") }
+    coVerify { placeSearchRepository.fetch("gp-42") }
   }
 }

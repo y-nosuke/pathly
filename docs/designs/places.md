@@ -136,7 +136,7 @@ API キー（地図と共用）を**そのまま安全に**使えるため。
   （`resolvedAt` の行を残す）、例外＝「未実施」（行を作らない）。
 - 最寄り 1 件は隣の別施設に化けやすいので、**ユーザーが選ぶ場面では候補を複数返す**
   （`searchNearbyCandidates` / `nearbyPois`）。自動命名だけが 1 件で妥協している。
-- キーワード検索は別系統（`data/places/PlacesTextSearcher`）。Autocomplete は**セッショントークン**で
+- キーワード検索は別系統（`domain/repository/PlaceSearchRepository`。実装は `data/places/PlacesTextSearcher`）。Autocomplete は**セッショントークン**で
   まとめ、確定した 1 件だけ `fetchPlace` する。取得済みの情報は `knownDetails` として登録時に渡し、
   **Google を引き直さない**。
 - **Autocomplete の候補の名前は、日本語以外で出ることがある**（Autocomplete の仕様。アプリでは直さない）。

@@ -20,23 +20,23 @@ class SettingsRepositoryPlaceGroupingTest {
 
   @Before
   fun setUp() {
-    val repository = SettingsRepository(context)
+    val repository = SettingsRepositoryImpl(context)
     savedGrouping = repository.placeGrouping.value
     savedOpen = PlaceGrouping.entries.associateWith { repository.openPlaceGroups(it).value }
   }
 
   @After
   fun tearDown() {
-    val repository = SettingsRepository(context)
+    val repository = SettingsRepositoryImpl(context)
     repository.setPlaceGrouping(savedGrouping)
     savedOpen.forEach { (grouping, keys) -> repository.setOpenPlaceGroups(grouping, keys) }
   }
 
   @Test
   fun `分け方を保存して作り直しても戻る`() {
-    SettingsRepository(context).setPlaceGrouping(PlaceGrouping.CATEGORY)
+    SettingsRepositoryImpl(context).setPlaceGrouping(PlaceGrouping.CATEGORY)
 
-    assertEquals(PlaceGrouping.CATEGORY, SettingsRepository(context).placeGrouping.value)
+    assertEquals(PlaceGrouping.CATEGORY, SettingsRepositoryImpl(context).placeGrouping.value)
   }
 
   @Test
@@ -44,20 +44,20 @@ class SettingsRepositoryPlaceGroupingTest {
     // 地域の名前にはカンマなどが入り得るので、そのまま戻ることも確かめる。
     val region = setOf("region:JP|東京都|", "region:JP|東京都|府中市", "region:US||Washington, D.C.")
     val category = setOf("category:CAFE")
-    val repository = SettingsRepository(context)
+    val repository = SettingsRepositoryImpl(context)
     repository.setOpenPlaceGroups(PlaceGrouping.REGION, region)
     repository.setOpenPlaceGroups(PlaceGrouping.CATEGORY, category)
 
-    val reopened = SettingsRepository(context)
+    val reopened = SettingsRepositoryImpl(context)
     assertEquals(region, reopened.openPlaceGroups(PlaceGrouping.REGION).value)
     assertEquals(category, reopened.openPlaceGroups(PlaceGrouping.CATEGORY).value)
   }
 
   @Test
   fun `すべて閉じたことも保存して戻る`() {
-    SettingsRepository(context).setOpenPlaceGroups(PlaceGrouping.REGION, setOf("region:JP|北海道|"))
-    SettingsRepository(context).setOpenPlaceGroups(PlaceGrouping.REGION, emptySet())
+    SettingsRepositoryImpl(context).setOpenPlaceGroups(PlaceGrouping.REGION, setOf("region:JP|北海道|"))
+    SettingsRepositoryImpl(context).setOpenPlaceGroups(PlaceGrouping.REGION, emptySet())
 
-    assertEquals(emptySet<String>(), SettingsRepository(context).openPlaceGroups(PlaceGrouping.REGION).value)
+    assertEquals(emptySet<String>(), SettingsRepositoryImpl(context).openPlaceGroups(PlaceGrouping.REGION).value)
   }
 }

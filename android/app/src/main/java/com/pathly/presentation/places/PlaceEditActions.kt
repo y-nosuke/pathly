@@ -1,6 +1,5 @@
 package com.pathly.presentation.places
 
-import com.pathly.data.places.PlacesTextSearcher
 import com.pathly.domain.model.NearbyRegisterPrompt
 import com.pathly.domain.model.PlaceListItem
 import com.pathly.domain.model.PlacePrediction
@@ -10,6 +9,7 @@ import com.pathly.domain.model.PlaceWithDistance
 import com.pathly.domain.model.Priority
 import com.pathly.domain.model.RegisteredPlace
 import com.pathly.domain.model.SameFacilityPlace
+import com.pathly.domain.repository.PlaceSearchRepository
 import com.pathly.domain.repository.WishlistRepository
 import com.pathly.domain.usecase.PlaceEditUseCase
 import kotlinx.coroutines.CoroutineScope
@@ -35,7 +35,7 @@ class PlaceEditActions internal constructor(
   private val scope: CoroutineScope,
   private val placeEditUseCase: PlaceEditUseCase,
   private val wishlistRepository: WishlistRepository,
-  private val placesTextSearcher: PlacesTextSearcher,
+  private val placeSearchRepository: PlaceSearchRepository,
   private val shownOnMap: (mainPlaceId: Long?) -> (RegisteredPlace) -> Boolean,
   private val placeNameOf: (placeId: Long) -> String?,
   private val onMessage: (String) -> Unit,
@@ -175,10 +175,10 @@ class PlaceEditActions internal constructor(
   override suspend fun nearbyPois(latitude: Double, longitude: Double): List<PlaceSearchResult> = wishlistRepository.nearbyPois(latitude, longitude)
 
   /** 「Googleで情報を取得」の名前検索フォールバック: キーワード候補を返す（座標がずれて周辺に出ない施設用）。 */
-  override suspend fun predictPlaces(query: String): List<PlacePrediction> = placesTextSearcher.predict(query)
+  override suspend fun predictPlaces(query: String): List<PlacePrediction> = placeSearchRepository.predict(query)
 
   /** 名前検索で選んだ候補を、座標つきの施設情報に確定する。 */
-  override suspend fun fetchPlaceResult(placeId: String): PlaceSearchResult? = placesTextSearcher.fetch(placeId)
+  override suspend fun fetchPlaceResult(placeId: String): PlaceSearchResult? = placeSearchRepository.fetch(placeId)
 
   // ---- 削除・まとめる ----
 

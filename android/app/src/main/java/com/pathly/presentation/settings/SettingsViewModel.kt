@@ -9,10 +9,10 @@ import com.pathly.data.backup.BackupSummary
 import com.pathly.data.backup.DataBackupManager
 import com.pathly.data.crash.CrashReport
 import com.pathly.data.crash.CrashReportStore
-import com.pathly.data.settings.LocationAccuracy
-import com.pathly.data.settings.SettingsRepository
-import com.pathly.data.settings.ThemeMode
 import com.pathly.data.tracking.TrackingController
+import com.pathly.domain.model.LocationAccuracy
+import com.pathly.domain.model.ThemeMode
+import com.pathly.domain.repository.SettingsRepository
 import com.pathly.util.Logger
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow

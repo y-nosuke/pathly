@@ -1,11 +1,11 @@
 package com.pathly.presentation.places
 
-import com.pathly.data.places.PlacesTextSearcher
 import com.pathly.domain.model.Place
 import com.pathly.domain.model.PlaceListItem
 import com.pathly.domain.model.Priority
 import com.pathly.domain.model.RegisteredPlace
 import com.pathly.domain.model.SameFacilityPlace
+import com.pathly.domain.repository.PlaceSearchRepository
 import com.pathly.domain.repository.WishlistRepository
 import com.pathly.domain.usecase.PlaceEditUseCase
 import io.mockk.coEvery
@@ -29,7 +29,7 @@ class PlaceEditActionsTest {
 
   private val useCase = mockk<PlaceEditUseCase>(relaxed = true)
   private val wishlistRepository = mockk<WishlistRepository>(relaxed = true)
-  private val placesTextSearcher = mockk<PlacesTextSearcher>(relaxed = true)
+  private val placeSearchRepository = mockk<PlaceSearchRepository>(relaxed = true)
 
   private val messages = mutableListOf<String>()
   private val errors = mutableListOf<String>()
@@ -43,7 +43,7 @@ class PlaceEditActionsTest {
     scope = this,
     placeEditUseCase = useCase,
     wishlistRepository = wishlistRepository,
-    placesTextSearcher = placesTextSearcher,
+    placeSearchRepository = placeSearchRepository,
     shownOnMap = shownOnMap,
     placeNameOf = placeNameOf,
     onMessage = { messages += it },

@@ -2,13 +2,11 @@ package com.pathly.presentation.tracking
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.pathly.data.places.PlacesTextSearcher
-import com.pathly.data.settings.MapSurface
-import com.pathly.data.settings.SettingsRepository
 import com.pathly.data.tracking.TrackingController
 import com.pathly.domain.model.GeoBounds
 import com.pathly.domain.model.MapPlaceFilter
 import com.pathly.domain.model.MapRegion
+import com.pathly.domain.model.MapSurface
 import com.pathly.domain.model.NearbyRegisterPrompt
 import com.pathly.domain.model.NearbyStopPrompt
 import com.pathly.domain.model.PlaceListItem
@@ -21,6 +19,8 @@ import com.pathly.domain.model.RegisteredPlace
 import com.pathly.domain.model.SameFacilityPlace
 import com.pathly.domain.repository.GpsTrackRepository
 import com.pathly.domain.repository.PlaceRepository
+import com.pathly.domain.repository.PlaceSearchRepository
+import com.pathly.domain.repository.SettingsRepository
 import com.pathly.domain.repository.WishlistRepository
 import com.pathly.domain.usecase.AddManualStopUseCase
 import com.pathly.domain.usecase.PlaceEditUseCase
@@ -56,7 +56,7 @@ class TrackingViewModel @Inject constructor(
   private val placeEditUseCase: PlaceEditUseCase,
   private val addManualStopUseCase: AddManualStopUseCase,
   // 「Googleで情報を取得」の名前検索フォールバック用（場所詳細と同じ編集機能を出すため）。
-  private val placesTextSearcher: PlacesTextSearcher,
+  private val placeSearchRepository: PlaceSearchRepository,
 ) : ViewModel() {
 
   private val logger = Logger("TrackingViewModel")
@@ -163,7 +163,7 @@ class TrackingViewModel @Inject constructor(
     scope = viewModelScope,
     placeEditUseCase = placeEditUseCase,
     wishlistRepository = wishlistRepository,
-    placesTextSearcher = placesTextSearcher,
+    placeSearchRepository = placeSearchRepository,
     shownOnMap = { shownOnMap() },
     placeNameOf = { placeId -> _uiState.value.registeredPlaces.firstOrNull { it.placeId == placeId }?.displayName },
     onMessage = ::showMessage,
@@ -405,17 +405,17 @@ class TrackingViewModel @Inject constructor(
 
   /** 地図の上の検索窓を開いたとき: 検索のセッションを始める（候補〜確定を 1 セッションにまとめて課金を抑える）。 */
   fun startPlaceSearch() {
-    placesTextSearcher.startSession()
+    placeSearchRepository.startSession()
   }
 
   /** 地図の上の検索窓: 施設と地域の候補を 1 回で返す。開いたときに地図に映っていた範囲 [bias] の中を優先する。 */
-  suspend fun predictPlacesNear(query: String, bias: GeoBounds?): List<PlacePrediction> = placesTextSearcher.predict(query, bias)
+  suspend fun predictPlacesNear(query: String, bias: GeoBounds?): List<PlacePrediction> = placeSearchRepository.predict(query, bias)
 
   /** 地図の上の検索窓（立ち寄りの追加中）: 地名の候補（地域だけに絞る）。[bias] の範囲の中を優先する。 */
-  suspend fun predictRegions(query: String, bias: GeoBounds?): List<PlacePrediction> = placesTextSearcher.predict(query, bias, regionsOnly = true)
+  suspend fun predictRegions(query: String, bias: GeoBounds?): List<PlacePrediction> = placeSearchRepository.predict(query, bias, regionsOnly = true)
 
   /** 地域へ移動: 選んだ地名の範囲と中心。取れなければ null。 */
-  suspend fun fetchRegion(placeId: String): MapRegion? = placesTextSearcher.fetchRegion(placeId)
+  suspend fun fetchRegion(placeId: String): MapRegion? = placeSearchRepository.fetchRegion(placeId)
 
   fun clearPlaceRegisteredMessage() {
     _uiState.update { it.copy(placeRegisteredMessage = null) }

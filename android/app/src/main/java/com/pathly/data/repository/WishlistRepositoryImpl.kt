@@ -16,7 +16,6 @@ import com.pathly.data.local.entity.PlaceWithWishlist
 import com.pathly.data.local.entity.VisitedPlaceEntity
 import com.pathly.data.local.entity.WishlistEntity
 import com.pathly.data.local.entity.WishlistFulfillmentEntity
-import com.pathly.data.places.PlacesTextSearcher
 import com.pathly.domain.model.Place
 import com.pathly.domain.model.PlaceListItem
 import com.pathly.domain.model.PlaceRegion
@@ -28,6 +27,7 @@ import com.pathly.domain.model.Priority
 import com.pathly.domain.model.RegisteredPlace
 import com.pathly.domain.model.SameFacilityPlace
 import com.pathly.domain.repository.PlaceRepository
+import com.pathly.domain.repository.PlaceSearchRepository
 import com.pathly.domain.repository.WishlistRepository
 import com.pathly.util.Logger
 import kotlinx.coroutines.flow.Flow
@@ -47,7 +47,7 @@ class WishlistRepositoryImpl @Inject constructor(
   private val googlePlaceCategoryDao: GooglePlaceCategoryDao,
   private val stopDao: StopDao,
   private val placeRepository: PlaceRepository,
-  private val placesTextSearcher: PlacesTextSearcher,
+  private val placeSearchRepository: PlaceSearchRepository,
 ) : WishlistRepository {
 
   private val logger = Logger("WishlistRepositoryImpl")
@@ -72,7 +72,7 @@ class WishlistRepositoryImpl @Inject constructor(
     }
   }
 
-  override suspend fun fetchPlaceDetails(googlePlaceId: String): PlaceSearchResult? = placesTextSearcher.fetch(googlePlaceId)
+  override suspend fun fetchPlaceDetails(googlePlaceId: String): PlaceSearchResult? = placeSearchRepository.fetch(googlePlaceId)
 
   override suspend fun registerPlace(
     latitude: Double,
@@ -104,7 +104,7 @@ class WishlistRepositoryImpl @Inject constructor(
     // これで詳細にカテゴリが出て、Google マップで施設ページを開ける。
     if (googlePlaceId != null && googlePlaceDao.getByPlace(placeId)?.name == null) {
       // 検索結果のように取得済みならそれを使う（同じ施設のときだけ）。オフラインでも欠落しない。
-      val result = knownDetails?.takeIf { it.googlePlaceId == googlePlaceId } ?: placesTextSearcher.fetch(googlePlaceId)
+      val result = knownDetails?.takeIf { it.googlePlaceId == googlePlaceId } ?: placeSearchRepository.fetch(googlePlaceId)
       googlePlaceDao.upsert(
         if (result != null) {
           GooglePlaceEntity(

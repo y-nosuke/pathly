@@ -21,14 +21,14 @@ class SettingsRepositoryHistoryGroupingTest {
 
   @Before
   fun setUp() {
-    val repository = SettingsRepository(context)
+    val repository = SettingsRepositoryImpl(context)
     savedGrouping = repository.historyGrouping.value
     savedOpen = repository.historyGroupOpenState.value
   }
 
   @After
   fun tearDown() {
-    val repository = SettingsRepository(context)
+    val repository = SettingsRepositoryImpl(context)
     repository.setHistoryGrouping(savedGrouping)
     repository.setHistoryGroupOpenState(savedOpen)
   }
@@ -37,21 +37,21 @@ class SettingsRepositoryHistoryGroupingTest {
   fun groupingAndToggledGroups_surviveRecreation() {
     val open = GroupOpenState(opened = setOf("year:2025", "month:2025-08"), closed = setOf("month:2026-11"))
 
-    SettingsRepository(context).apply {
+    SettingsRepositoryImpl(context).apply {
       setHistoryGrouping(TrackGrouping.MONTH)
       setHistoryGroupOpenState(open)
     }
 
-    val reopened = SettingsRepository(context)
+    val reopened = SettingsRepositoryImpl(context)
     assertEquals(TrackGrouping.MONTH, reopened.historyGrouping.value)
     assertEquals(open, reopened.historyGroupOpenState.value)
   }
 
   @Test
   fun emptyOpenState_survivesRecreation() {
-    SettingsRepository(context).setHistoryGroupOpenState(GroupOpenState(opened = setOf("year:2024")))
-    SettingsRepository(context).setHistoryGroupOpenState(GroupOpenState())
+    SettingsRepositoryImpl(context).setHistoryGroupOpenState(GroupOpenState(opened = setOf("year:2024")))
+    SettingsRepositoryImpl(context).setHistoryGroupOpenState(GroupOpenState())
 
-    assertEquals(GroupOpenState(), SettingsRepository(context).historyGroupOpenState.value)
+    assertEquals(GroupOpenState(), SettingsRepositoryImpl(context).historyGroupOpenState.value)
   }
 }
