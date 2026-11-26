@@ -206,6 +206,15 @@ class TrackingViewModel @Inject constructor(
   /** 「地域へ移動」で出した地域の目印（複数・上限あり）。タブを行き来しても残る。 */
   val regionMarkers = RegionMarkerActions()
 
+  private val selectedMapSearchMode = MutableStateFlow(MapSearchMode.Place)
+
+  /** 検索窓の「場所｜地域」で最後に選んだほう。窓を開き直しても・タブを行き来しても残り、アプリが終わると「場所」に戻る。 */
+  internal val mapSearchMode: StateFlow<MapSearchMode> = selectedMapSearchMode.asStateFlow()
+
+  internal fun setMapSearchMode(mode: MapSearchMode) {
+    selectedMapSearchMode.value = mode
+  }
+
   private fun observeCurrentStop() {
     viewModelScope.launch {
       placeRepository.currentStop.collect { stop ->

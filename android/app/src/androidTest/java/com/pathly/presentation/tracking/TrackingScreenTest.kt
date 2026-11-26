@@ -126,6 +126,10 @@ class TrackingScreenTest {
     // 地域の目印は本物（チップの増減・選び直し・上限を画面で確かめるため）。
     regionMarkers = RegionMarkerActions()
     io.mockk.every { mockViewModel.regionMarkers } returns regionMarkers
+    // 「場所｜地域」の選んだほうは本物の流れで持つ（切り替え・開き直しを画面で確かめるため）。
+    val mapSearchMode = MutableStateFlow(MapSearchMode.Place)
+    io.mockk.every { mockViewModel.mapSearchMode } returns mapSearchMode
+    io.mockk.every { mockViewModel.setMapSearchMode(any()) } answers { mapSearchMode.value = firstArg() }
   }
 
   @Test
@@ -546,6 +550,11 @@ class TrackingScreenTest {
     // 2 つ目の地域を選ぶとチップが増え、最後に移した地域のチップが選ばれた見た目になる。2 つ以上で「すべて外す」が出る。
     selectRegion(query = "札幌")
     composeTestRule.onNodeWithText("すべて外す").assertDoesNotExist()
+    // 開き直すと、前に選んだ「地域」のまま（はじめは「場所」）。
+    assertEquals(MapSearchMode.Region, mockViewModel.mapSearchMode.value)
+    composeTestRule.onNodeWithContentDescription(SEARCH_ENTRY).performClick()
+    composeTestRule.onNodeWithTag(MODE_REGION).assertIsSelected()
+    composeTestRule.onNodeWithContentDescription("検索を閉じる").performClick()
     selectRegion(query = "北九州")
     composeTestRule.onAllNodesWithTag("regionMarkerChip").assertCountEquals(2)
     composeTestRule.onNodeWithText("すべて外す").assertIsDisplayed()
@@ -706,8 +715,7 @@ class TrackingScreenTest {
   /** 検索窓を「地域」に切り替えて [query] を打ち、「地域へ移動」の行を選んで窓が閉じるまで待つ。 */
   private fun selectRegion(query: String, openSearch: Boolean = true) {
     if (openSearch) composeTestRule.onNodeWithContentDescription(SEARCH_ENTRY).performClick()
-    // 窓は開くたびに「場所」から始まる。
-    composeTestRule.onNodeWithTag(MODE_PLACE).assertIsSelected()
+    // 前に「地域」を選んでいれば「地域」で開く（選び直しても変わらない）。
     composeTestRule.onNodeWithTag(MODE_REGION).performClick()
     composeTestRule.onNodeWithTag("trackingPlaceSearchField").performTextInput(query)
     composeTestRule.waitUntil(timeoutMillis = 5_000) {

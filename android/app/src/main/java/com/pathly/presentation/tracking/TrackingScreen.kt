@@ -96,6 +96,7 @@ fun TrackingScreen(
   val mapPlaceFilter by viewModel.mapPlaceFilter.collectAsStateWithLifecycle()
   val overlayState by trackOverlayViewModel.uiState.collectAsStateWithLifecycle()
   val regionMarkers by viewModel.regionMarkers.state.collectAsStateWithLifecycle()
+  val mapSearchMode by viewModel.mapSearchMode.collectAsStateWithLifecycle()
   val unresolvedCount by viewModel.stopEdit.unresolvedCount.collectAsStateWithLifecycle()
   val sameFacilityPending by viewModel.stopEdit.sameFacilityPending.collectAsStateWithLifecycle()
   val sameFacilityDialogOpen by viewModel.stopEdit.sameFacilityDialogOpen.collectAsStateWithLifecycle()
@@ -575,6 +576,9 @@ fun TrackingScreen(
     if (mapSearchOpen) {
       TrackingMapSearch(
         registerEnabled = manualTarget == null,
+        // 「場所｜地域」は前に選んだほうで開く（地域を続けて探すときに選び直さなくてよいように）。
+        selectedMode = mapSearchMode,
+        onSelectMode = viewModel::setMapSearchMode,
         bias = mapSearchBias,
         onPredictPlaces = viewModel::predictPlacesNear,
         onFetchPlace = viewModel.placeEdit::fetchPlaceResult,
@@ -644,6 +648,8 @@ fun TrackingScreen(
 @Composable
 private fun TrackingMapSearch(
   registerEnabled: Boolean,
+  selectedMode: MapSearchMode,
+  onSelectMode: (MapSearchMode) -> Unit,
   bias: GeoBounds?,
   onPredictPlaces: suspend (query: String, bias: GeoBounds?) -> List<PlacePrediction>,
   onFetchPlace: suspend (placeId: String) -> PlaceSearchResult?,
@@ -658,6 +664,8 @@ private fun TrackingMapSearch(
 ) {
   TrackingPlaceSearchBar(
     registerEnabled = registerEnabled,
+    selectedMode = selectedMode,
+    onSelectMode = onSelectMode,
     // 「場所」は種類で絞らず、「地域」は地域に絞って、どちらも 1 回の Autocomplete で取る（#254）。
     onSearchPredictions = { query, mode ->
       when (mode) {

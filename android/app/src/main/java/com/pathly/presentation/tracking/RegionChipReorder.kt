@@ -99,13 +99,17 @@ internal class RegionChipDragState {
 }
 
 /**
- * 掴んだチップ（[from] 番目を [offset] だけ動かした）を今離したときの行き先。チップの中心が、ほかのチップの中心を
- * いくつ越えたかで決める。[foldedTop]（「他 N 件」の上端）より下に中心が来たら、まとめに入れる（並びの数を返す）。
+ * 掴んだチップ（[from] 番目を [offset] だけ動かした）を今離したときの行き先。下へ動かすときはチップの下端が、
+ * 上へ動かすときは上端が、ほかのチップの中心を越えたら入れ替わる（重ねれば入れ替わる。いちばん下のチップに重ねれば
+ * いちばん下へ）。[foldedTop]（「他 N 件」の上端）より下に中心が来たら、まとめに入れる（並びの数を返す）。
  */
 internal fun regionChipDropTarget(tops: List<Float>, heights: List<Float>, from: Int, offset: Float, foldedTop: Float?): Int {
-  val center = tops[from] + offset + heights[from] / 2
-  if (foldedTop != null && center > foldedTop) return tops.size
-  return tops.indices.count { it != from && tops[it] + heights[it] / 2 < center }
+  val top = tops[from] + offset
+  val bottom = top + heights[from]
+  if (foldedTop != null && top + heights[from] / 2 > foldedTop) return tops.size
+  val passedBelow = tops.indices.count { it > from && tops[it] + heights[it] / 2 < bottom }
+  val passedAbove = tops.indices.count { it < from && tops[it] + heights[it] / 2 > top }
+  return from + passedBelow - passedAbove
 }
 
 /**

@@ -13,12 +13,30 @@ class RegionChipReorderTest {
   private val heights = listOf(40f, 40f, 40f)
 
   @Test
-  fun dropTarget_staysUntilTheCenterPassesTheNextCenter() {
+  fun dropTarget_swapsWhenTheEdgePassesTheNextCenter() {
+    // 下へ: 下端（40 + offset）が次の中心（68・116）を越えたら入れ替わる。
     assertEquals(0, regionChipDropTarget(tops, heights, from = 0, offset = 0f, foldedTop = null))
-    assertEquals(0, regionChipDropTarget(tops, heights, from = 0, offset = 47f, foldedTop = null))
-    assertEquals(1, regionChipDropTarget(tops, heights, from = 0, offset = 49f, foldedTop = null))
-    assertEquals(2, regionChipDropTarget(tops, heights, from = 0, offset = 97f, foldedTop = null))
+    assertEquals(0, regionChipDropTarget(tops, heights, from = 0, offset = 27f, foldedTop = null))
+    assertEquals(1, regionChipDropTarget(tops, heights, from = 0, offset = 29f, foldedTop = null))
+    assertEquals(2, regionChipDropTarget(tops, heights, from = 0, offset = 77f, foldedTop = null))
+    // 上へ: 上端（96 + offset）が上の中心（68・20）を越えたら入れ替わる。
+    assertEquals(2, regionChipDropTarget(tops, heights, from = 2, offset = -27f, foldedTop = null))
+    assertEquals(1, regionChipDropTarget(tops, heights, from = 2, offset = -29f, foldedTop = null))
     assertEquals(0, regionChipDropTarget(tops, heights, from = 2, offset = -97f, foldedTop = null))
+  }
+
+  @Test
+  fun dragState_reachesTheLastWhenDroppedOnTheBottomChip() {
+    // まとめが無いとき、いちばん下のチップまで動かす（そこで止まる）と、いちばん下になる。
+    val drag = RegionChipDragState()
+    drag.ids = listOf("a", "b", "c")
+    listOf("a", "b", "c").forEachIndexed { i, id -> drag.place(id, tops[i], heights[i]) }
+    drag.placeFolded(null, 0f)
+
+    drag.start("a")
+    drag.dragBy(500f)
+    assertEquals(96f, drag.offset)
+    assertEquals("a" to 2, drag.drop())
   }
 
   @Test
