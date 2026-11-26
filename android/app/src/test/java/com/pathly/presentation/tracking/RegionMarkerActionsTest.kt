@@ -83,6 +83,46 @@ class RegionMarkerActionsTest {
   }
 
   @Test
+  fun move_insertsAtTheIndexAfterTakingOutAndKeepsFocus() {
+    val actions = RegionMarkerActions()
+    listOf("a", "b", "c", "d").forEach { actions.show(marker(it)) }
+
+    actions.move("a", 2)
+    assertEquals(listOf("b", "c", "a", "d"), actions.state.value.markers.map { it.placeId })
+    actions.move("d", 0)
+    assertEquals(listOf("d", "b", "c", "a"), actions.state.value.markers.map { it.placeId })
+    assertEquals("d", actions.state.value.focusedPlaceId)
+  }
+
+  @Test
+  fun foldAndBringUp_goToTheEndOfTheFolded() {
+    val actions = RegionMarkerActions()
+    (1..7).forEach { actions.show(marker("$it")) }
+
+    // 2 つ目をまとめに入れると、まとめの最後に入り、まとめの先頭だった 6 が 5 つ目に上がる。
+    actions.fold("2")
+    assertEquals(listOf("1", "3", "4", "5", "6", "7", "2"), actions.state.value.markers.map { it.placeId })
+    // まとめの 2 を上に出す（5 つ目）と、5 つ目だった 6 がまとめの最後へ。
+    actions.bringUp("2", VISIBLE_REGION_CHIPS - 1)
+    assertEquals(listOf("1", "3", "4", "5", "2", "7", "6"), actions.state.value.markers.map { it.placeId })
+    // まとめに無い地域は上に出さない。
+    actions.bringUp("1", VISIBLE_REGION_CHIPS - 1)
+    assertEquals(listOf("1", "3", "4", "5", "2", "7", "6"), actions.state.value.markers.map { it.placeId })
+  }
+
+  @Test
+  fun move_clampsAndIgnoresUnknown() {
+    val actions = RegionMarkerActions()
+    listOf("a", "b").forEach { actions.show(marker(it)) }
+    val before = actions.state.value
+
+    actions.move("unknown", 0)
+    assertEquals(before, actions.state.value)
+    actions.move("a", 99)
+    assertEquals(listOf("b", "a"), actions.state.value.markers.map { it.placeId })
+  }
+
+  @Test
   fun clear_removesEverything() {
     val actions = RegionMarkerActions()
     actions.show(marker("a"))

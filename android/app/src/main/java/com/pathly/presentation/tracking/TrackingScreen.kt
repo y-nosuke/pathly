@@ -5,9 +5,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.SnackbarDuration
@@ -44,8 +42,6 @@ import com.pathly.domain.model.Stop
 import com.pathly.domain.model.WishlistFlag
 import com.pathly.presentation.common.CloseInfoWindowWithSheet
 import com.pathly.presentation.common.DefaultMapLocation
-import com.pathly.presentation.common.MapRoundButtonSize
-import com.pathly.presentation.common.MapTopBar
 import com.pathly.presentation.common.MapTopBarInset
 import com.pathly.presentation.common.SheetDetent
 import com.pathly.presentation.common.SheetRestoreButtonInset
@@ -100,6 +96,7 @@ fun TrackingScreen(
   val mapPlaceFilter by viewModel.mapPlaceFilter.collectAsStateWithLifecycle()
   val overlayState by trackOverlayViewModel.uiState.collectAsStateWithLifecycle()
   val regionMarkers by viewModel.regionMarkers.state.collectAsStateWithLifecycle()
+  val mapSearchMode by viewModel.mapSearchMode.collectAsStateWithLifecycle()
   val unresolvedCount by viewModel.stopEdit.unresolvedCount.collectAsStateWithLifecycle()
   val sameFacilityPending by viewModel.stopEdit.sameFacilityPending.collectAsStateWithLifecycle()
   val sameFacilityDialogOpen by viewModel.stopEdit.sameFacilityDialogOpen.collectAsStateWithLifecycle()
@@ -355,7 +352,7 @@ fun TrackingScreen(
       )
     }
 
-    // 「地域へ移動」で出した目印の地名のチップ（左上に縦に並べ、6 つ目からは 1 つにまとめる）。
+    // 「地域へ移動」で出した目印の地名のチップ（左上に縦に並べ、6 つ目からは 1 つにまとめる。縦にドラッグして並べ替える）。
     // 地名でその地域の範囲へ寄せ直し、× でその目印を外す（地図は動かさない）。
     val regionChips: @Composable () -> Unit = {
       RegionMarkerChips(
@@ -364,23 +361,15 @@ fun TrackingScreen(
         onRefit = { region -> refitRegion(region) },
         onClear = { region -> viewModel.regionMarkers.remove(region.placeId) },
         onClearAll = viewModel.regionMarkers::clear,
+        onMove = { region, to -> viewModel.regionMarkers.move(region.placeId, to) },
+        onFold = { region -> viewModel.regionMarkers.fold(region.placeId) },
+        onBringUp = { region -> viewModel.regionMarkers.bringUp(region.placeId, VISIBLE_REGION_CHIPS - 1) },
       )
     }
 
     // 上の区画（検索の入口・レイヤー）と上の下（今の状態・1 行の帯）。検索窓を開いている間は窓と重なるので隠す。
-    // ただし地名のチップは、どの地域を出しているかを見ながら探せるよう、同じ位置に残す（候補のカードが上に重なる）。
-    if (mapSearchOpen) {
-      MapTopBar(
-        modifier = Modifier.align(Alignment.TopCenter),
-        // 検索の入口の行と同じ高さを空け、チップを閉じているときと同じ位置に出す（入口の行は検索窓が覆う）。
-        leading = { Spacer(modifier = Modifier.height(MapRoundButtonSize)) },
-        status = {
-          // 閉じているときの「今の状態」の行（ピル）の代わり。空でも行の間が空くので、チップの位置が揃う。
-          Spacer(modifier = Modifier.height(0.dp))
-          regionChips()
-        },
-      )
-    } else {
+    // ただし地名のチップは、どの地域を出しているかを見ながら探せるよう、検索窓の「場所｜地域」の下に出す（候補のカードが上に重なる）。
+    if (!mapSearchOpen) {
       TrackingTopBar(
         showRegisteredPlaces = uiState.showRegisteredPlaces,
         registeredPlaces = uiState.registeredPlaces,
@@ -589,6 +578,9 @@ fun TrackingScreen(
     if (mapSearchOpen) {
       TrackingMapSearch(
         registerEnabled = manualTarget == null,
+        // 「場所｜地域」は前に選んだほうで開く（地域を続けて探すときに選び直さなくてよいように）。
+        selectedMode = mapSearchMode,
+        onSelectMode = viewModel::setMapSearchMode,
         bias = mapSearchBias,
         onPredictPlaces = viewModel::predictPlacesNear,
         onFetchPlace = viewModel.placeEdit::fetchPlaceResult,
@@ -609,6 +601,7 @@ fun TrackingScreen(
         },
         onClose = { mapSearchOpen = false },
         modifier = Modifier.align(Alignment.TopCenter),
+        belowModes = regionChips,
       )
     }
   }
@@ -657,6 +650,8 @@ fun TrackingScreen(
 @Composable
 private fun TrackingMapSearch(
   registerEnabled: Boolean,
+  selectedMode: MapSearchMode,
+  onSelectMode: (MapSearchMode) -> Unit,
   bias: GeoBounds?,
   onPredictPlaces: suspend (query: String, bias: GeoBounds?) -> List<PlacePrediction>,
   onFetchPlace: suspend (placeId: String) -> PlaceSearchResult?,
@@ -667,9 +662,12 @@ private fun TrackingMapSearch(
   onRegionSelected: (RegionMarker) -> Unit,
   onClose: () -> Unit,
   modifier: Modifier = Modifier,
+  belowModes: @Composable () -> Unit = {},
 ) {
   TrackingPlaceSearchBar(
     registerEnabled = registerEnabled,
+    selectedMode = selectedMode,
+    onSelectMode = onSelectMode,
     // 「場所」は種類で絞らず、「地域」は地域に絞って、どちらも 1 回の Autocomplete で取る（#254）。
     onSearchPredictions = { query, mode ->
       when (mode) {
@@ -705,6 +703,7 @@ private fun TrackingMapSearch(
     },
     onClose = onClose,
     modifier = modifier,
+    belowModes = belowModes,
   )
 }
 

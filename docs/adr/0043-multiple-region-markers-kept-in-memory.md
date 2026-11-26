@@ -5,7 +5,7 @@
 
 関連: 「地域へ移動」と目印は [0032](0032-jump-to-region-by-places-autocomplete.md)、置き場所（上の下）は
 [0038](0038-screen-layouts-four-corners-and-tool-row.md)、Places の内容を保存しない考え方は [0029](0029-place-region-by-geocoder.md)。
-仕様は specs/map.md の「地域へ移動」。
+仕様は specs/map.md の「地域へ移動」。チップの並び順は [0047](0047-reorder-region-chips-by-drag.md) でドラッグの並べ替えに変えた。
 
 ## Context（背景）
 

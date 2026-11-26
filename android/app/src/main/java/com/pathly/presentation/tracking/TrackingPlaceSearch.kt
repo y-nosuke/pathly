@@ -2,6 +2,7 @@ package com.pathly.presentation.tracking
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -67,7 +68,7 @@ internal enum class MapSearchAction {
 }
 
 /**
- * 記録画面の検索窓で何を探すか（窓の下の「場所｜地域」の切り替え）。窓を開くたびに [Place] から始める。
+ * 記録画面の検索窓で何を探すか（窓の下の「場所｜地域」の切り替え）。はじめは [Place]、その後は前に選んだほう（TrackingViewModel が覚える）。
  * 立ち寄りの追加中は登録できないので、切り替えを出さずに [Region] だけ。
  */
 internal enum class MapSearchMode(val label: String, val placeholder: String) {
@@ -102,23 +103,26 @@ internal fun List<PlacePrediction>.toMapSearchCandidates(mode: MapSearchMode): L
 
 /**
  * 記録画面の地図に重ねる検索窓: 地図はそのままに、上端に検索窓を重ね、候補は窓の下のカードに出す。
- * 窓の下の「場所｜地域」で探すものを切り替え（[MapSearchMode]。開くたびに「場所」から）、切り替えたら打ってある言葉で探し直す。
+ * 窓の下の「場所｜地域」で探すものを切り替え（[selectedMode]。前に選んだほうで開く）、切り替えたら打ってある言葉で探し直す。
  * [registerEnabled] が false（立ち寄りの追加中）なら切り替えを出さず「地域」だけ。行ごとに選ぶと何が起きるかを右端に書く。
  * 選んだ行を [onFetchCandidate] で確定し、取れたら [onSelected] で返す（取れなければ取得に失敗した旨を出す）。
  * 候補の一覧の枠は場所タブの「検索して追加」と共有する（[PlaceSearchCandidates]）。
  * 地図をタップしたとき・戻る・× で閉じる（閉じる処理は呼び出し側の [onClose]）。
+ * [belowModes] は切り替えの下に出すもの（記録画面の地名のチップ）。候補のカードはその上に重ねる。
  */
 @Composable
 internal fun <T : Any> TrackingPlaceSearchBar(
   registerEnabled: Boolean,
+  selectedMode: MapSearchMode,
+  onSelectMode: (MapSearchMode) -> Unit,
   onSearchPredictions: suspend (query: String, mode: MapSearchMode) -> List<PlacePrediction>,
   onFetchCandidate: suspend (candidate: MapSearchCandidate) -> T?,
   onSelected: (T) -> Unit,
   onClose: () -> Unit,
   modifier: Modifier = Modifier,
+  belowModes: @Composable () -> Unit = {},
 ) {
   var query by remember { mutableStateOf("") }
-  var selectedMode by remember { mutableStateOf(MapSearchMode.Place) }
   val mode = if (registerEnabled) selectedMode else MapSearchMode.Region
   var predictions by remember { mutableStateOf<List<PlacePrediction>>(emptyList()) }
   // 候補は探したときの探し方で行にする（切り替えた直後に、前の候補を新しい探し方の行で出さないように）。
@@ -209,56 +213,60 @@ internal fun <T : Any> TrackingPlaceSearchBar(
     if (registerEnabled) {
       MapSearchModeChips(
         selected = selectedMode,
-        onSelect = { selectedMode = it },
+        onSelect = onSelectMode,
         modifier = Modifier.padding(top = PathlySpacing.sm),
       )
     }
 
-    // 何か打ってから候補のカードを出す（空のうちは地図を隠さない）。
-    if (query.isNotBlank() || fetchFailed != null) {
-      Surface(
-        shape = MaterialTheme.shapes.medium,
-        color = MaterialTheme.colorScheme.surface,
-        shadowElevation = PathlyElevation.floating,
-        modifier = Modifier
-          .padding(top = PathlySpacing.sm)
-          .fillMaxWidth()
-          .heightIn(max = maxCardHeight),
-      ) {
-        Column(modifier = Modifier.padding(horizontal = PathlySpacing.lg)) {
-          fetchFailed?.let { action ->
-            Text(
-              text = fetchFailedText(action),
-              style = MaterialTheme.typography.bodySmall,
-              color = MaterialTheme.colorScheme.error,
-              modifier = Modifier.padding(top = PathlySpacing.sm),
-            )
-          }
-          PlaceSearchCandidates(
-            query = query,
-            candidates = candidates,
-            isSearching = isSearching || isFetching,
-            key = { it.key },
-            modifier = Modifier.fillMaxWidth(),
-          ) { candidate ->
-            MapSearchCandidateRow(
-              candidate = candidate,
-              onClick = {
-                if (!isFetching) {
-                  scope.launch {
-                    isFetching = true
-                    val result = onFetchCandidate(candidate)
-                    isFetching = false
-                    if (result != null) {
-                      keyboard?.hide()
-                      onSelected(result)
-                    } else {
-                      fetchFailed = candidate.action
+    // 切り替えの下に地名のチップを出し、候補のカードはその上に重ねる。
+    Box {
+      Box(modifier = Modifier.padding(top = PathlySpacing.sm)) { belowModes() }
+      // 何か打ってから候補のカードを出す（空のうちは地図を隠さない）。
+      if (query.isNotBlank() || fetchFailed != null) {
+        Surface(
+          shape = MaterialTheme.shapes.medium,
+          color = MaterialTheme.colorScheme.surface,
+          shadowElevation = PathlyElevation.floating,
+          modifier = Modifier
+            .padding(top = PathlySpacing.sm)
+            .fillMaxWidth()
+            .heightIn(max = maxCardHeight),
+        ) {
+          Column(modifier = Modifier.padding(horizontal = PathlySpacing.lg)) {
+            fetchFailed?.let { action ->
+              Text(
+                text = fetchFailedText(action),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.error,
+                modifier = Modifier.padding(top = PathlySpacing.sm),
+              )
+            }
+            PlaceSearchCandidates(
+              query = query,
+              candidates = candidates,
+              isSearching = isSearching || isFetching,
+              key = { it.key },
+              modifier = Modifier.fillMaxWidth(),
+            ) { candidate ->
+              MapSearchCandidateRow(
+                candidate = candidate,
+                onClick = {
+                  if (!isFetching) {
+                    scope.launch {
+                      isFetching = true
+                      val result = onFetchCandidate(candidate)
+                      isFetching = false
+                      if (result != null) {
+                        keyboard?.hide()
+                        onSelected(result)
+                      } else {
+                        fetchFailed = candidate.action
+                      }
                     }
                   }
-                }
-              },
-            )
+                },
+              )
+            }
           }
         }
       }

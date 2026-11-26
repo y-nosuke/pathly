@@ -1,9 +1,11 @@
 package com.pathly.presentation.tracking
 
 import android.Manifest
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.ui.test.SemanticsNodeInteraction
 import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertHasClickAction
@@ -26,6 +28,9 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextInput
+import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.swipeRight
+import androidx.test.espresso.Espresso
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.pathly.domain.model.GeoBounds
@@ -121,6 +126,10 @@ class TrackingScreenTest {
     // 地域の目印は本物（チップの増減・選び直し・上限を画面で確かめるため）。
     regionMarkers = RegionMarkerActions()
     io.mockk.every { mockViewModel.regionMarkers } returns regionMarkers
+    // 「場所｜地域」の選んだほうは本物の流れで持つ（切り替え・開き直しを画面で確かめるため）。
+    val mapSearchMode = MutableStateFlow(MapSearchMode.Place)
+    io.mockk.every { mockViewModel.mapSearchMode } returns mapSearchMode
+    io.mockk.every { mockViewModel.setMapSearchMode(any()) } answers { mapSearchMode.value = firstArg() }
   }
 
   @Test
@@ -541,6 +550,11 @@ class TrackingScreenTest {
     // 2 つ目の地域を選ぶとチップが増え、最後に移した地域のチップが選ばれた見た目になる。2 つ以上で「すべて外す」が出る。
     selectRegion(query = "札幌")
     composeTestRule.onNodeWithText("すべて外す").assertDoesNotExist()
+    // 開き直すと、前に選んだ「地域」のまま（はじめは「場所」）。
+    assertEquals(MapSearchMode.Region, mockViewModel.mapSearchMode.value)
+    composeTestRule.onNodeWithContentDescription(SEARCH_ENTRY).performClick()
+    composeTestRule.onNodeWithTag(MODE_REGION).assertIsSelected()
+    composeTestRule.onNodeWithContentDescription("検索を閉じる").performClick()
     selectRegion(query = "北九州")
     composeTestRule.onAllNodesWithTag("regionMarkerChip").assertCountEquals(2)
     composeTestRule.onNodeWithText("すべて外す").assertIsDisplayed()
@@ -605,6 +619,71 @@ class TrackingScreenTest {
     composeTestRule.onNodeWithText("すべて外す").assertDoesNotExist()
   }
 
+  @Test
+  fun trackingScreen_jumpToRegion_dragReordersChipsAndMovesInAndOutOfTheFolded() {
+    repeat(VISIBLE_REGION_CHIPS + 2) { i ->
+      regionMarkers.show(RegionMarker("p$i", "地域$i", 35.0, 139.0, GeoBounds(34.9, 138.9, 35.1, 139.1)))
+    }
+    setTrackingContent()
+    fun order() = regionMarkers.state.value.markers.map { it.placeId }
+    val pitch = chip("地域1").fetchSemanticsNode().boundsInRoot.top - chip("地域0").fetchSemanticsNode().boundsInRoot.top
+
+    // 縦にドラッグして（長押しは要らない）、2 つ下のチップの中心を越えて離すと、そこへ移る。離しても寄せ直しにはならない（塗りつぶしはそのまま）。
+    chip("地域0").dragBy(pitch * 2.3f)
+    assertEquals(listOf("p1", "p2", "p0", "p3", "p4", "p5", "p6"), order())
+    assertEquals("p6", regionMarkers.state.value.focusedPlaceId)
+
+    // 横に動かしても並びは変わらない。
+    chip("地域3").performTouchInput { swipeRight(startX = centerX, endX = centerX + 200f) }
+    assertEquals(listOf("p1", "p2", "p0", "p3", "p4", "p5", "p6"), order())
+    // 軽いタップは今までどおり寄せ直し（並びは変わらない）。
+    composeTestRule.onNodeWithText("地域3").performClick()
+    assertEquals(listOf("p1", "p2", "p0", "p3", "p4", "p5", "p6"), order())
+    assertEquals("p3", regionMarkers.state.value.focusedPlaceId)
+
+    // 「すべて外す」の上へは行かない（いちばん上に止まる）。
+    chip("地域3").dragBy(-pitch * 10)
+    assertEquals(listOf("p3", "p1", "p2", "p0", "p4", "p5", "p6"), order())
+
+    // 「他 N 件」に重ねて離すと、吸い込まれてまとめの最後に入り、まとめの先頭（地域5）が 5 つ目に上がる。
+    chip("地域1").dragBy(pitch * 10)
+    assertEquals(listOf("p3", "p2", "p0", "p4", "p5", "p6", "p1"), order())
+    chip("地域5").assertIsDisplayed()
+    composeTestRule.onNodeWithText("他 2 件").assertIsDisplayed()
+
+    // まとめのメニューの「上に出す」で 5 つ目に出し、5 つ目だった地域はまとめの最後へ。メニューは開いたまま。
+    composeTestRule.onNodeWithTag("regionMarkerFoldedChip").performClick()
+    composeTestRule.onNodeWithContentDescription("地域6を上に出す").performClick()
+    assertEquals(listOf("p3", "p2", "p0", "p4", "p6", "p1", "p5"), order())
+    composeTestRule.onNodeWithContentDescription("地域5を上に出す").assertIsDisplayed()
+    Espresso.pressBack()
+
+    // 読み上げでは、地名（読み上げで止まるところ）の操作で動かす。
+    composeTestRule.onNodeWithText("地域2").performCustomAction("上へ移す")
+    assertEquals(listOf("p2", "p3", "p0", "p4", "p6", "p1", "p5"), order())
+    composeTestRule.onNodeWithText("地域6").performCustomAction("まとめに入れる")
+    assertEquals(listOf("p2", "p3", "p0", "p4", "p1", "p5", "p6"), order())
+  }
+
+  /** 読み上げの操作（[label]）を実行する。 */
+  private fun SemanticsNodeInteraction.performCustomAction(label: String) {
+    val action = fetchSemanticsNode().config[SemanticsActions.CustomActions].first { it.label == label }
+    composeTestRule.runOnIdle { action.action() }
+    // まとめに入れる操作は画面の側で順に進める（コルーチン）ので、終わるまで待つ。
+    composeTestRule.waitForIdle()
+  }
+
+  /** 触れてすぐ、少しずつ [dy]（px）だけ縦に動かして離す。 */
+  private fun SemanticsNodeInteraction.dragBy(dy: Float) {
+    performTouchInput {
+      down(center)
+      val steps = 20
+      repeat(steps) { moveBy(Offset(0f, dy / steps)) }
+      up()
+    }
+    composeTestRule.waitForIdle()
+  }
+
   /** 地名の候補（札幌・北九州。地域）と、その範囲を返すようにする。 */
   private fun stubRegions() {
     val regionPredictions: (String) -> List<PlacePrediction> = { query ->
@@ -638,8 +717,7 @@ class TrackingScreenTest {
   /** 検索窓を「地域」に切り替えて [query] を打ち、「地域へ移動」の行を選んで窓が閉じるまで待つ。 */
   private fun selectRegion(query: String, openSearch: Boolean = true) {
     if (openSearch) composeTestRule.onNodeWithContentDescription(SEARCH_ENTRY).performClick()
-    // 窓は開くたびに「場所」から始まる。
-    composeTestRule.onNodeWithTag(MODE_PLACE).assertIsSelected()
+    // 前に「地域」を選んでいれば「地域」で開く（選び直しても変わらない）。
     composeTestRule.onNodeWithTag(MODE_REGION).performClick()
     composeTestRule.onNodeWithTag("trackingPlaceSearchField").performTextInput(query)
     composeTestRule.waitUntil(timeoutMillis = 5_000) {

@@ -66,6 +66,45 @@ class RegionMarkerActions {
     }
   }
 
+  /**
+   * その地域を並びの [toIndex] 番目へ移す（チップのドラッグの並べ替え・まとめの「上に出す」→ ADR 0047）。
+   * 先に抜いてから入れるので、[toIndex] は移した後の位置。範囲の外は端に寄せる。塗りつぶしは変えない。
+   */
+  fun move(placeId: String, toIndex: Int) {
+    _state.update { state ->
+      val from = state.markers.indexOfFirst { it.placeId == placeId }
+      if (from < 0) return@update state
+      val rest = state.markers.toMutableList()
+      val marker = rest.removeAt(from)
+      val to = toIndex.coerceIn(0, rest.size)
+      if (to == from) return@update state
+      rest.add(to, marker)
+      state.copy(markers = rest)
+    }
+  }
+
+  /** その地域を並びの最後（「他 N 件」のまとめの最後）へ入れる。代わりに、まとめの先頭が縦のチップに上がる（ADR 0047）。 */
+  fun fold(placeId: String) {
+    move(placeId, Int.MAX_VALUE)
+  }
+
+  /**
+   * まとめの中の地域を並びの [slot] 番目（縦のチップのいちばん下）に出し、そこにいた地域をまとめの最後へ入れる
+   * （まとめのメニューの「上に出す」→ ADR 0047）。
+   */
+  fun bringUp(placeId: String, slot: Int) {
+    _state.update { state ->
+      val from = state.markers.indexOfFirst { it.placeId == placeId }
+      if (from <= slot || slot !in state.markers.indices) return@update state
+      val rest = state.markers.toMutableList()
+      val pushedOut = rest[slot]
+      rest.add(slot, rest.removeAt(from))
+      rest.remove(pushedOut)
+      rest.add(pushedOut)
+      state.copy(markers = rest)
+    }
+  }
+
   /** すべて外す。 */
   fun clear() {
     _state.value = RegionMarkersState()
