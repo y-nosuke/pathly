@@ -1,9 +1,12 @@
 package com.pathly.presentation.tracking
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.snap
 import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -358,8 +361,9 @@ private fun formatElapsed(millis: Long): String {
  * 縦に出す数を決めて残りはまとめのメニューから選ぶ。最後に地図を移した地域（[focusedPlaceId]）のチップは塗りつぶし、
  * それがまとめの中なら、まとめのチップを塗りつぶす。
  *
- * 地名のチップは縦にドラッグして並べ替え、「他 N 件」に重ねて離すとまとめの先頭に入れる（[onMove] に地域と移した後の位置
- * を渡す → ADR 0047）。
+ * 地名のチップは縦にドラッグして並べ替え（[onMove] に地域と移した後の位置）、「他 N 件」に重ねて離すとまとめの最後に入れる
+ * （[onFold]）。まとめのメニューの「上に出す」は [onBringUp]。まとめと入れ替わったときは、入れたチップが「他 N 件」へ
+ * 吸い込まれ、「他 N 件」が弾み、代わりに出たチップがせり上がって少しの間枠を太くする（→ ADR 0047）。
  */
 @Composable
 internal fun RegionMarkerChips(
@@ -369,6 +373,8 @@ internal fun RegionMarkerChips(
   onClear: (RegionMarker) -> Unit,
   onClearAll: () -> Unit,
   onMove: (RegionMarker, Int) -> Unit,
+  onFold: (RegionMarker) -> Unit,
+  onBringUp: (RegionMarker) -> Unit,
   modifier: Modifier = Modifier,
 ) {
   if (markers.isEmpty()) return
@@ -378,9 +384,42 @@ internal fun RegionMarkerChips(
   drag.ids = shown.map { it.placeId }
   val dragging = drag.placeId != null
   val haptic = LocalHapticFeedback.current
-  val spacing = with(LocalDensity.current) { PathlySpacing.sm.toPx() }
+  val density = LocalDensity.current
+  val spacing = with(density) { PathlySpacing.sm.toPx() }
+  val riseDistance = with(density) { ARRIVING_CHIP_RISE.toPx() }
+  val scope = rememberCoroutineScope()
   val currentMarkers by rememberUpdatedState(markers)
   val currentOnMove by rememberUpdatedState(onMove)
+  val currentOnFold by rememberUpdatedState(onFold)
+  // まとめと入れ替わって縦に出てきた地域（せり上がって枠を太くする）と、「他 N 件」を弾ませる合図。
+  var arrivedPlaceId by remember { mutableStateOf<String?>(null) }
+  var foldedBounce by remember { mutableIntStateOf(0) }
+  LaunchedEffect(arrivedPlaceId) {
+    if (arrivedPlaceId != null) {
+      delay(ARRIVED_HIGHLIGHT_MILLIS)
+      arrivedPlaceId = null
+    }
+  }
+  // まとめに入れた地域が縦の並びから消えたら（並びが変わったら）、吸い込まれる動きを終える。
+  LaunchedEffect(drag.ids) {
+    if (drag.folding && drag.placeId !in drag.ids) drag.endFold()
+  }
+
+  // まとめの最後に入れ、代わりにまとめの先頭が縦に上がる。animate なら吸い込まれる動きを見せてから。
+  fun fold(marker: RegionMarker, animate: Boolean) {
+    scope.launch {
+      if (animate) drag.animateFold()
+      val all = currentMarkers
+      if (all.none { it.placeId == marker.placeId }) {
+        if (drag.folding) drag.endFold()
+        return@launch
+      }
+      arrivedPlaceId = all.drop(VISIBLE_REGION_CHIPS).firstOrNull()?.placeId
+      foldedBounce++
+      currentOnFold(marker)
+    }
+  }
+
   Column(
     modifier = modifier.testTag("regionMarkerChips"),
     verticalArrangement = Arrangement.spacedBy(PathlySpacing.sm),
@@ -398,27 +437,42 @@ internal fun RegionMarkerChips(
     shown.forEachIndexed { index, marker ->
       key(marker.placeId) {
         val lifted = drag.placeId == marker.placeId
-        // 掴んでいる間はよけるのを動かして見せ、離したら並びが変わるので、ずらした分はすぐに戻す。
+        // 掴んでいる間はよけるのを動かして見せ、離したら並びが変わるので、ずらした分はすぐに戻す
+        // （吸い込まれている間も、並びが変わった瞬間に戻るので動かさない）。
         val shift by animateFloatAsState(
           targetValue = drag.shiftOf(index, spacing),
-          animationSpec = if (dragging) spring() else snap(),
+          animationSpec = if (dragging && !drag.folding) spring() else snap(),
           label = "regionChipShift",
         )
+        // まとめから出てきたチップは、「他 N 件」の側からせり上がって現れる。
+        val arriving = arrivedPlaceId == marker.placeId
+        val rise = remember { Animatable(if (arriving) 0f else 1f) }
+        LaunchedEffect(arriving) {
+          if (arriving) rise.animateTo(1f, tween(ARRIVING_CHIP_MILLIS))
+        }
         RegionMarkerChip(
           name = marker.name,
           focused = marker.placeId == focusedPlaceId,
           onRefit = { onRefit(marker) },
           onClear = { onClear(marker) },
           lifted = lifted,
+          highlighted = arriving,
           modifier = Modifier
             // 位置はずらす前（graphicsLayer の外）で測る。
             .onPlaced { drag.place(marker.placeId, it.positionInParent().y, it.size.height.toFloat()) }
             .zIndex(if (lifted) 1f else 0f)
             .graphicsLayer {
-              translationY = if (lifted) drag.offset else shift
               if (lifted) {
-                scaleX = LIFTED_CHIP_SCALE
-                scaleY = LIFTED_CHIP_SCALE
+                // 掴んでいる間は少し大きく浮かせ、まとめに入れるときは縮みながら「他 N 件」へ寄って消える。
+                val progress = drag.foldProgress
+                translationY = drag.offset + drag.foldDistance() * progress
+                val scale = LIFTED_CHIP_SCALE + (FOLDED_CHIP_SCALE - LIFTED_CHIP_SCALE) * progress
+                scaleX = scale
+                scaleY = scale
+                alpha = 1f - progress
+              } else {
+                translationY = shift + (1f - rise.value) * riseDistance
+                alpha = rise.value
               }
             }
             .regionChipReorderGesture(
@@ -426,7 +480,12 @@ internal fun RegionMarkerChips(
               drag = drag,
               onStart = { haptic.performHapticFeedback(HapticFeedbackType.GestureThresholdActivate) },
               onDrop = { placeId, to ->
-                currentMarkers.firstOrNull { it.placeId == placeId }?.let { currentOnMove(it, to) }
+                val dropped = currentMarkers.firstOrNull { it.placeId == placeId }
+                when {
+                  dropped == null -> if (drag.folding) drag.endFold()
+                  drag.folding -> fold(dropped, animate = true)
+                  else -> currentOnMove(dropped, to)
+                }
               },
             ),
           customActions = buildList {
@@ -448,7 +507,7 @@ internal fun RegionMarkerChips(
             } else if (folded.isNotEmpty()) {
               add(
                 CustomAccessibilityAction("まとめに入れる") {
-                  onMove(marker, shown.size)
+                  fold(marker, animate = false)
                   true
                 },
               )
@@ -462,9 +521,14 @@ internal fun RegionMarkerChips(
         markers = folded,
         focusedPlaceId = focusedPlaceId,
         dropTarget = dragging && drag.overFolded(),
+        bounce = foldedBounce,
         onRefit = onRefit,
         onClear = onClear,
-        onBringUp = { marker -> onMove(marker, VISIBLE_REGION_CHIPS - 1) },
+        onBringUp = { marker ->
+          arrivedPlaceId = marker.placeId
+          foldedBounce++
+          onBringUp(marker)
+        },
         modifier = Modifier.onPlaced { drag.placeFolded(it.positionInParent().y, it.size.height.toFloat()) },
       )
     } else {
@@ -475,6 +539,16 @@ internal fun RegionMarkerChips(
 
 /** 掴んだチップの大きさ（少し大きくして浮かせる）。 */
 private const val LIFTED_CHIP_SCALE = 1.05f
+
+/** まとめに吸い込まれ終わるときのチップの大きさ。 */
+private const val FOLDED_CHIP_SCALE = 0.3f
+
+/** まとめから出てきたチップがせり上がる距離と長さ。 */
+private val ARRIVING_CHIP_RISE = 40.dp
+private const val ARRIVING_CHIP_MILLIS = 280
+
+/** まとめから出てきたチップの枠を太くしておく長さ（ms）。 */
+private const val ARRIVED_HIGHLIGHT_MILLIS = 1_500L
 
 /**
  * 縦にドラッグして掴み（長押しは要らない）、離した所で [onDrop]（地域・移した後の位置）を呼ぶ。動かし始めると子の地名
@@ -509,22 +583,41 @@ private fun Modifier.regionChipReorderGesture(
 /** 縦に出す地域のチップの数。これより後に選んだ地域は「他 N 件」にまとめる。 */
 internal const val VISIBLE_REGION_CHIPS = 5
 
+/** 入れ替わったときに「他 N 件」を弾ませる大きさと長さ。 */
+private const val FOLDED_BOUNCE_SCALE = 1.15f
+private const val FOLDED_BOUNCE_MILLIS = 120
+
 /**
  * 6 つ目からの地域をまとめたチップ。押すとメニューで地名を出し、行でその地域へ寄せ直し、↑ で 5 つ目に出し
- * （[onBringUp]）、× で外す。[dropTarget] は掴んだチップを重ねている間（離すとまとめに入る）で、枠を出す。
+ * （[onBringUp]）、× で外す。[dropTarget] は掴んだチップを重ねている間（離すとまとめに入る）で、枠を太くする。
+ * [bounce] が増えると弾む（まとめと入れ替わったとき）。
  */
 @Composable
 private fun FoldedRegionChip(
   markers: List<RegionMarker>,
   focusedPlaceId: String?,
   dropTarget: Boolean,
+  bounce: Int,
   onRefit: (RegionMarker) -> Unit,
   onClear: (RegionMarker) -> Unit,
   onBringUp: (RegionMarker) -> Unit,
   modifier: Modifier = Modifier,
 ) {
   var menuOpen by remember { mutableStateOf(false) }
-  Box(modifier = modifier) {
+  // まとめと入れ替わったら、少し弾ませる（[bounce] が増えるたび）。
+  val bounceScale = remember { Animatable(1f) }
+  LaunchedEffect(bounce) {
+    if (bounce > 0) {
+      bounceScale.animateTo(FOLDED_BOUNCE_SCALE, tween(FOLDED_BOUNCE_MILLIS))
+      bounceScale.animateTo(1f, spring(dampingRatio = Spring.DampingRatioMediumBouncy))
+    }
+  }
+  Box(
+    modifier = modifier.graphicsLayer {
+      scaleX = bounceScale.value
+      scaleY = bounceScale.value
+    },
+  ) {
     RegionChipSurface(
       focused = markers.any { it.placeId == focusedPlaceId },
       onClick = { menuOpen = true },

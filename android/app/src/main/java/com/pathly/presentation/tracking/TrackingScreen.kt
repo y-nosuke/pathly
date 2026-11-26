@@ -362,6 +362,8 @@ fun TrackingScreen(
         onClear = { region -> viewModel.regionMarkers.remove(region.placeId) },
         onClearAll = viewModel.regionMarkers::clear,
         onMove = { region, to -> viewModel.regionMarkers.move(region.placeId, to) },
+        onFold = { region -> viewModel.regionMarkers.fold(region.placeId) },
+        onBringUp = { region -> viewModel.regionMarkers.bringUp(region.placeId, VISIBLE_REGION_CHIPS - 1) },
       )
     }
 

@@ -40,7 +40,7 @@ import com.pathly.ui.theme.PathlySpacing
 /**
  * 地域の地名のチップ（記録画面の地域の目印・場所一覧の地図の境界）。地名の部分で [onRefit]（範囲へ寄せ直す）、
  * × で [onClear]（その地域を外す）。[clearDescription] は × の読み上げ。[lifted] はドラッグで掴んでいる間（影を濃くして浮かせる）。
- * [customActions] は地名の部分（読み上げで止まるところ）に付ける操作（並べ替えなど）。
+ * [highlighted] は枠を太くする（まとめから出てきた直後）。[customActions] は地名の部分（読み上げで止まるところ）に付ける操作（並べ替えなど）。
  */
 @Composable
 internal fun RegionMarkerChip(
@@ -51,6 +51,7 @@ internal fun RegionMarkerChip(
   modifier: Modifier = Modifier,
   clearDescription: String = "${name}の目印を外す",
   lifted: Boolean = false,
+  highlighted: Boolean = false,
   customActions: List<CustomAccessibilityAction> = emptyList(),
 ) {
   Surface(
@@ -61,7 +62,8 @@ internal fun RegionMarkerChip(
     // 押せる札に見えるよう、境界・目印と同じ藍で縁取って薄く塗る。今見ている地域は藍で塗りつぶして白い字にする。
     color = if (focused) PathlyMapColors.Region else PathlyMapColors.RegionContainer,
     contentColor = if (focused) PathlyMapColors.OnMarker else PathlyMapColors.Region,
-    border = BorderStroke(1.dp, PathlyMapColors.Region),
+    // [highlighted]（まとめから出てきた直後）は枠を太くして目を引く。
+    border = BorderStroke(if (highlighted) 3.dp else 1.dp, PathlyMapColors.Region),
     shadowElevation = if (lifted) PathlyElevation.sheet else PathlyElevation.floating,
   ) {
     // 地名を押したときの色はチップ全体（ピルの形）に出す（押せる範囲は地名の部分のまま。× は丸く出す）。

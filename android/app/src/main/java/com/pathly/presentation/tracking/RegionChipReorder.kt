@@ -1,5 +1,7 @@
 package com.pathly.presentation.tracking
 
+import androidx.compose.animation.core.animate
+import androidx.compose.animation.core.tween
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -17,6 +19,16 @@ internal class RegionChipDragState {
 
   /** 掴んだチップを元の位置から縦に動かした量（px）。 */
   var offset by mutableFloatStateOf(0f)
+    private set
+
+  /**
+   * まとめに入れる途中（離してから「他 N 件」へ吸い込まれ終わるまで）。その間は掴んだまま（[placeId] は残る）で、
+   * 吸い込まれる進み具合が [foldProgress]（0→1）。並びが変わったら [endFold] で終える。
+   */
+  var folding by mutableStateOf(false)
+    private set
+
+  var foldProgress by mutableFloatStateOf(0f)
     private set
 
   /** 縦に出している地名のチップの地域（上から）。描くたびに入れ直す。外した地域の位置は忘れる。 */
@@ -74,14 +86,41 @@ internal class RegionChipDragState {
     return regionChipShift(index, from, target, pitch)
   }
 
-  /** 離した。並びが変わるなら（地域・行き先）を返す。行き先が並びの数ならまとめの先頭。 */
+  /**
+   * 離した。並びが変わるなら（地域・行き先）を返す。行き先が並びの数ならまとめに入れる: そのときは [folding] にし、
+   * 吸い込まれる動き（[animateFold]）のあと並びが変わるまで掴んだままにする。
+   */
   fun drop(): Pair<String, Int>? {
     val id = placeId ?: return null
     val from = ids.indexOf(id)
     val target = target()
+    if (from >= 0 && target == ids.size) {
+      folding = true
+      return id to target
+    }
     placeId = null
     offset = 0f
     return if (from < 0 || target == null || target == from) null else id to target
+  }
+
+  /** 掴んだチップを「他 N 件」へ吸い込ませる（縮みながら寄って消える）。 */
+  suspend fun animateFold() {
+    animate(0f, 1f, animationSpec = tween(FOLD_MILLIS)) { value, _ -> foldProgress = value }
+  }
+
+  /** 吸い込まれる先（「他 N 件」の中心）まで、掴んだチップの今の中心から縦にどれだけあるか（px）。 */
+  fun foldDistance(): Float {
+    val slot = slots[placeId] ?: return 0f
+    val folded = foldedSlot ?: return 0f
+    return (folded.top + folded.height / 2) - (slot.top + offset + slot.height / 2)
+  }
+
+  /** まとめに入れ終えた（並びが変わった）。 */
+  fun endFold() {
+    placeId = null
+    offset = 0f
+    foldProgress = 0f
+    folding = false
   }
 
   /** 掴んでいるチップと、並びのすべてのチップの位置が分かっているときだけ上端を返す。 */
@@ -96,6 +135,11 @@ internal class RegionChipDragState {
   }
 
   private data class Slot(val top: Float, val height: Float)
+
+  private companion object {
+    /** 吸い込まれる動きの長さ（ms）。 */
+    const val FOLD_MILLIS = 220
+  }
 }
 
 /**

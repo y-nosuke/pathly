@@ -95,16 +95,19 @@ class RegionMarkerActionsTest {
   }
 
   @Test
-  fun move_intoAndOutOfTheFolded() {
+  fun foldAndBringUp_goToTheEndOfTheFolded() {
     val actions = RegionMarkerActions()
     (1..7).forEach { actions.show(marker("$it")) }
 
-    // 2 つ目をまとめの先頭（6 つ目）へ入れると、まとめの先頭だった 6 が 5 つ目に上がる。
-    actions.move("2", VISIBLE_REGION_CHIPS)
-    assertEquals(listOf("1", "3", "4", "5", "6", "2", "7"), actions.state.value.markers.map { it.placeId })
-    // まとめの 7 を上に出す（5 つ目）と、5 つ目だった 6 がまとめの先頭へ。
-    actions.move("7", VISIBLE_REGION_CHIPS - 1)
-    assertEquals(listOf("1", "3", "4", "5", "7", "6", "2"), actions.state.value.markers.map { it.placeId })
+    // 2 つ目をまとめに入れると、まとめの最後に入り、まとめの先頭だった 6 が 5 つ目に上がる。
+    actions.fold("2")
+    assertEquals(listOf("1", "3", "4", "5", "6", "7", "2"), actions.state.value.markers.map { it.placeId })
+    // まとめの 2 を上に出す（5 つ目）と、5 つ目だった 6 がまとめの最後へ。
+    actions.bringUp("2", VISIBLE_REGION_CHIPS - 1)
+    assertEquals(listOf("1", "3", "4", "5", "2", "7", "6"), actions.state.value.markers.map { it.placeId })
+    // まとめに無い地域は上に出さない。
+    actions.bringUp("1", VISIBLE_REGION_CHIPS - 1)
+    assertEquals(listOf("1", "3", "4", "5", "2", "7", "6"), actions.state.value.markers.map { it.placeId })
   }
 
   @Test

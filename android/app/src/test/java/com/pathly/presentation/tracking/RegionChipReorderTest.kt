@@ -81,6 +81,12 @@ class RegionChipReorderTest {
     assertEquals(144f, drag.offset)
     assertTrue(drag.overFolded())
     assertEquals("a" to 3, drag.drop())
+    // まとめに入れるときは、吸い込まれて並びが変わるまで掴んだまま（ほかのチップを掴めない）。
+    assertTrue(drag.folding)
+    assertEquals("a", drag.placeId)
+    assertFalse(drag.start("b"))
+    drag.endFold()
+    assertNull(drag.placeId)
 
     // 掴んでいる間、2 本目の指で別のチップを長押ししても掴み直さない。
     assertTrue(drag.start("c"))

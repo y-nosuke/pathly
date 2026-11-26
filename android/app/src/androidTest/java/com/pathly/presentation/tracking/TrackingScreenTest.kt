@@ -645,30 +645,32 @@ class TrackingScreenTest {
     chip("地域3").dragBy(-pitch * 10)
     assertEquals(listOf("p3", "p1", "p2", "p0", "p4", "p5", "p6"), order())
 
-    // 「他 N 件」に重ねて離すと、まとめの先頭に入り、まとめの先頭（地域5）が 5 つ目に上がる。
+    // 「他 N 件」に重ねて離すと、吸い込まれてまとめの最後に入り、まとめの先頭（地域5）が 5 つ目に上がる。
     chip("地域1").dragBy(pitch * 10)
-    assertEquals(listOf("p3", "p2", "p0", "p4", "p5", "p1", "p6"), order())
+    assertEquals(listOf("p3", "p2", "p0", "p4", "p5", "p6", "p1"), order())
     chip("地域5").assertIsDisplayed()
     composeTestRule.onNodeWithText("他 2 件").assertIsDisplayed()
 
-    // まとめのメニューの「上に出す」で 5 つ目に出し、5 つ目だった地域はまとめの先頭へ。メニューは開いたまま。
+    // まとめのメニューの「上に出す」で 5 つ目に出し、5 つ目だった地域はまとめの最後へ。メニューは開いたまま。
     composeTestRule.onNodeWithTag("regionMarkerFoldedChip").performClick()
     composeTestRule.onNodeWithContentDescription("地域6を上に出す").performClick()
-    assertEquals(listOf("p3", "p2", "p0", "p4", "p6", "p5", "p1"), order())
+    assertEquals(listOf("p3", "p2", "p0", "p4", "p6", "p1", "p5"), order())
     composeTestRule.onNodeWithContentDescription("地域5を上に出す").assertIsDisplayed()
     Espresso.pressBack()
 
     // 読み上げでは、地名（読み上げで止まるところ）の操作で動かす。
     composeTestRule.onNodeWithText("地域2").performCustomAction("上へ移す")
-    assertEquals(listOf("p2", "p3", "p0", "p4", "p6", "p5", "p1"), order())
+    assertEquals(listOf("p2", "p3", "p0", "p4", "p6", "p1", "p5"), order())
     composeTestRule.onNodeWithText("地域6").performCustomAction("まとめに入れる")
-    assertEquals(listOf("p2", "p3", "p0", "p4", "p5", "p6", "p1"), order())
+    assertEquals(listOf("p2", "p3", "p0", "p4", "p1", "p5", "p6"), order())
   }
 
   /** 読み上げの操作（[label]）を実行する。 */
   private fun SemanticsNodeInteraction.performCustomAction(label: String) {
     val action = fetchSemanticsNode().config[SemanticsActions.CustomActions].first { it.label == label }
     composeTestRule.runOnIdle { action.action() }
+    // まとめに入れる操作は画面の側で順に進める（コルーチン）ので、終わるまで待つ。
+    composeTestRule.waitForIdle()
   }
 
   /** 触れてすぐ、少しずつ [dy]（px）だけ縦に動かして離す。 */

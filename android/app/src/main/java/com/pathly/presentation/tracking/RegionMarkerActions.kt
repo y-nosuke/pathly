@@ -83,6 +83,28 @@ class RegionMarkerActions {
     }
   }
 
+  /** その地域を並びの最後（「他 N 件」のまとめの最後）へ入れる。代わりに、まとめの先頭が縦のチップに上がる（ADR 0047）。 */
+  fun fold(placeId: String) {
+    move(placeId, Int.MAX_VALUE)
+  }
+
+  /**
+   * まとめの中の地域を並びの [slot] 番目（縦のチップのいちばん下）に出し、そこにいた地域をまとめの最後へ入れる
+   * （まとめのメニューの「上に出す」→ ADR 0047）。
+   */
+  fun bringUp(placeId: String, slot: Int) {
+    _state.update { state ->
+      val from = state.markers.indexOfFirst { it.placeId == placeId }
+      if (from <= slot || slot !in state.markers.indices) return@update state
+      val rest = state.markers.toMutableList()
+      val pushedOut = rest[slot]
+      rest.add(slot, rest.removeAt(from))
+      rest.remove(pushedOut)
+      rest.add(pushedOut)
+      state.copy(markers = rest)
+    }
+  }
+
   /** すべて外す。 */
   fun clear() {
     _state.value = RegionMarkersState()
