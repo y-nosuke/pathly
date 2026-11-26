@@ -174,53 +174,6 @@ class OfflineDataStorageTest {
   }
 
   @Test
-  fun testDataIntegrityCheck() = runBlocking {
-    // Given: いくつかのテストデータ
-    val track = createTestTrack(isActive = false)
-    val trackId = gpsTrackDao.insertTrack(track)
-
-    val point = GpsPointEntity(
-      id = 0,
-      trackId = trackId,
-      latitude = 35.6762,
-      longitude = 139.6503,
-      altitude = 10.0,
-      accuracy = 5.0f,
-      speed = 0.0f,
-      bearing = 0.0f,
-      timestamp = Date(System.currentTimeMillis()),
-      createdAt = Date(),
-    )
-    gpsPointDao.insertPoint(point)
-
-    // When: データ健全性チェック実行
-    val isIntegrityValid = repository.performDataIntegrityCheck()
-
-    // Then: データの整合性が保たれている
-    assertTrue("Data integrity should be valid", isIntegrityValid)
-  }
-
-  @Test
-  fun testOfflineDataCleanup() = runBlocking {
-    // Given: 古いテストデータ
-    val oldDate = Date(System.currentTimeMillis() - (40L * 24 * 60 * 60 * 1000)) // 40日前
-    val oldTrack = createTestTrack(isActive = false, createdAt = oldDate)
-    gpsTrackDao.insertTrack(oldTrack)
-
-    val recentTrack = createTestTrack(isActive = false)
-    gpsTrackDao.insertTrack(recentTrack)
-
-    // When: 30日以上古いデータをクリーンアップ
-    val cleanedCount = repository.cleanupOldOfflineData(daysToKeep = 30)
-
-    // Then: 古いデータが削除されている
-    assertEquals("Should clean up 1 old track", 1, cleanedCount)
-
-    val remainingTracks = gpsTrackDao.getAllTracksSync()
-    assertEquals("Should have 1 remaining track", 1, remainingTracks.size)
-  }
-
-  @Test
   fun testDatabaseVersioning() {
     // Given: データベースインスタンス
 
@@ -230,45 +183,6 @@ class OfflineDataStorageTest {
     // Then: 現在のスキーマバージョンと一致（マイグレーション追加時はここも更新。
     // マイグレーションの内容検証は MigrationTest が担う）。
     assertEquals("Database version should match current schema", 21, currentVersion)
-  }
-
-  @Test
-  fun testOrphanedDataCleanup() = runBlocking {
-    // Given: 立ち寄り点を持つ正常な軌跡
-    val trackId = gpsTrackDao.insertTrack(createTestTrack(isActive = false))
-    gpsPointDao.insertPoint(
-      GpsPointEntity(
-        id = 0,
-        trackId = trackId,
-        latitude = 35.6762,
-        longitude = 139.6503,
-        altitude = 10.0,
-        accuracy = 5.0f,
-        speed = 0.0f,
-        bearing = 0.0f,
-        timestamp = Date(System.currentTimeMillis()),
-        createdAt = Date(),
-      ),
-    )
-
-    // FK 制約が有効なため、通常は孤立点（存在しない trackId）を作れない。
-    // 一時的に FK を切って親軌跡だけを消し、孤立点を意図的に作る（クリーンアップ機能の検証用）。
-    val db = database.openHelper.writableDatabase
-    db.execSQL("PRAGMA foreign_keys = OFF")
-    db.execSQL("DELETE FROM gps_tracks WHERE id = ?", arrayOf<Any>(trackId))
-    db.execSQL("PRAGMA foreign_keys = ON")
-
-    // When: 孤立したポイントをカウント
-    val orphanedCount = gpsPointDao.getOrphanedPointsCount()
-
-    // Then: 孤立したポイントが検出される
-    assertEquals("Should find 1 orphaned point", 1, orphanedCount)
-
-    // When: 孤立したポイントを削除
-    val deletedCount = gpsPointDao.deleteOrphanedPoints()
-
-    // Then: 孤立したポイントが削除される
-    assertEquals("Should delete 1 orphaned point", 1, deletedCount)
   }
 
   private fun createTestTrack(

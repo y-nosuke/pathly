@@ -18,7 +18,6 @@ import com.pathly.domain.model.PlacePrediction
 import com.pathly.domain.model.PlaceSearchResult
 import com.pathly.domain.model.PlaceVisit
 import com.pathly.domain.model.PlaceWithDistance
-import com.pathly.domain.model.Priority
 import com.pathly.domain.model.RegionKey
 import com.pathly.domain.model.RegisteredPlace
 import com.pathly.domain.model.SameFacilityPlace
@@ -266,17 +265,6 @@ class PlacesViewModel @Inject constructor(
     viewModelScope.launch {
       try {
         wishlistRepository.updatePlaceNote(placeId, note)
-      } catch (e: Exception) {
-        _uiState.update { it.copy(errorMessage = "更新に失敗しました: ${e.message}") }
-      }
-    }
-  }
-
-  /** 行きたいの優先度を更新する。 */
-  fun updatePriority(wishlistId: Long, priority: Priority) {
-    viewModelScope.launch {
-      try {
-        wishlistRepository.updateWishlist(wishlistId, priority)
       } catch (e: Exception) {
         _uiState.update { it.copy(errorMessage = "更新に失敗しました: ${e.message}") }
       }

@@ -143,44 +143,5 @@ abstract class PathlyDatabase : RoomDatabase() {
         logger.e("Failed to log database stats", e)
       }
     }
-
-    /**
-     * データベースの手動削除（テスト用）
-     */
-    fun deleteDatabase(context: Context): Boolean = try {
-      context.deleteDatabase(DATABASE_NAME)
-      INSTANCE = null
-      logger.i("Database deleted successfully")
-      true
-    } catch (e: Exception) {
-      logger.e("Failed to delete database", e)
-      false
-    }
-
-    /**
-     * データベース接続のクリーンアップ
-     */
-    fun closeDatabase() {
-      synchronized(this) {
-        INSTANCE?.close()
-        INSTANCE = null
-        logger.i("Database connection closed")
-      }
-    }
-
-    /**
-     * データベースの健全性チェック
-     */
-    suspend fun performIntegrityCheck(context: Context): Boolean = try {
-      val database = getInstance(context)
-      // 簡単な健全性チェックとして、データベースへの接続をテスト
-      val trackDao = database.gpsTrackDao()
-      trackDao.getTrackCount() // データベースアクセステスト
-      logger.i("Database integrity check: PASSED")
-      true
-    } catch (e: Exception) {
-      logger.e("Database integrity check failed", e)
-      false
-    }
   }
 }

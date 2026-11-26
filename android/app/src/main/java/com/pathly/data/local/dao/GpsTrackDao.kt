@@ -117,16 +117,4 @@ interface GpsTrackDao {
 
   @Query("SELECT * FROM gps_tracks ORDER BY startTime DESC")
   suspend fun getAllTracksSync(): List<GpsTrackEntity>
-
-  @Query("DELETE FROM gps_tracks WHERE createdAt < :cutoffDate")
-  suspend fun deleteTracksOlderThan(cutoffDate: java.util.Date): Int
-
-  @Query("SELECT COUNT(*) FROM gps_tracks WHERE createdAt >= :since")
-  suspend fun getTrackCountSince(since: java.util.Date): Int
-
-  @Query("SELECT * FROM gps_tracks WHERE createdAt BETWEEN :startDate AND :endDate ORDER BY startTime DESC")
-  suspend fun getTracksByDateRange(
-    startDate: java.util.Date,
-    endDate: java.util.Date,
-  ): List<GpsTrackEntity>
 }
