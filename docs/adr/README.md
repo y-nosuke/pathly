@@ -65,3 +65,5 @@
 | [0047](0047-reorder-region-chips-by-drag.md)                | 地名のチップは縦のドラッグで並べ替え、「他 N 件」とも出し入れできる。並べた順も保存しない                                  | Accepted |
 | [0048](0048-screens-use-domain-except-device-features.md)   | 画面は設定と場所の検索を domain 越しに使い、端末の機能だけ data を直接使う                                                 | Accepted |
 | [0049](0049-split-place-repository-by-responsibility.md)    | 場所と立ち寄りの Repository は窓口ごと 3 つに分け、ロックと状態は 1 つを共有する                                           | Accepted |
+| [0050](0050-plans-as-ordered-items-with-optional-dates.md)  | 計画は場所を参照する行の並びとして別のテーブルに持ち、日付は後から付け、「行った」は立ち寄りから求める（v22・v23）         | Accepted |
+| [0051](0051-plan-tab-and-overlay-on-maps.md)                | 計画のタブを足して 5 つにし、計画は番号と直線で地図に描き、記録画面と計画の詳細で記録中の経路と重ねて見る                  | Accepted |
