@@ -557,7 +557,7 @@ private const val OVER_FOLDED_CHIP_ALPHA = 0.5f
 
 /** まとめから出てきたチップがせり上がる距離と長さ。 */
 private val ARRIVING_CHIP_RISE = 40.dp
-private const val ARRIVING_CHIP_MILLIS = 280
+private const val ARRIVING_CHIP_MILLIS = 160
 
 /** まとめから出てきたチップの枠を太くしておく長さ（ms）。 */
 private const val ARRIVED_HIGHLIGHT_MILLIS = 1_500L
