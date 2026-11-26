@@ -39,13 +39,16 @@
   付け直してマイグレーションと schema を作り直すことになり、「version を上げる前にコンパイルしない」の落とし穴もある。
 - 並べる Issue は**触る画面・層が離れたもの**を選ぶ。`strings.xml`・ナビゲーション・`README.md` の機能一覧・docs は
   どの Issue でも触りがちで、衝突しやすい。
-- **後からマージする側は、main を取り込み直してから**確かめる（build・instrumented test・スマホ）。
+- **後からマージする側は、main を取り込み直してから**確かめる（build・スマホ）。instrumented test は全部を PR の CI が回すので、
+  ローカルではやり直さない（[start-issue](../../.claude/skills/start-issue/SKILL.md) の 9）。
 - Project の In Progress は複数になってよい。
 
 ## worktree
 
-- Claude Desktop では、Issue を頼まれたセッション（親）が Issue ごとに**子のセッションを worktree 付きで立て**、子が作業する
-  （[start-issue](../../.claude/skills/start-issue/SKILL.md) の 2）。親は受付、作業・確認・承認は子のチャットで行う。
+- Claude Desktop では、Issue を 2 つ以上頼まれたら、頼まれたセッション（親）が Issue ごとに**子のセッションを worktree 付きで立て**、
+  子が作業する（[start-issue](../../.claude/skills/start-issue/SKILL.md) の 2）。親は受付、作業・確認・承認は子のチャットで行う。
+  1 つだけなら子は立てず、頼まれたセッションが `EnterWorktree` で worktree を切って作業する。本体はいつも main のままにしておき、
+  途中で別の Issue を頼まれたら、そちらを子のセッションに出す。
   worktree は `.claude/worktrees/` に作られる（`.git/info/exclude` で git の対象外）。
 - 始めたら **`.claude/skills/start-issue/setup-worktree.sh`** を 1 回。git に入らない `android/local.properties`
   （Google Maps のキー）を本体からコピーする。無いとビルドは通るが、開発版の地図が出ない。
@@ -60,12 +63,16 @@
 
 - **入っている開発版のコミットが、今のブランチの祖先のときだけ上書きで入れる**（同じブランチの前のコミット、
   または分岐元の main）。DB の版は一本道で上がるだけなので、マイグレーションで移せる。
-- **それ以外（別のブランチ・見分けられない）は、アンインストールしてまっさらな状態から入れる**。
+- **祖先でなくても、DB の版と形が同じなら上書きで入れる**（`android/app/schemas` に差が無いとき。取り消したコミット・DB を
+  触らない別のブランチなど）。入っている DB をそのまま読めるので、データも残せる。versionCode が下がるときは
+  `adb install -r -d`（版の巻き戻しを許す）で入れる（#254）。
+- **それ以外（DB が違う・見分けられない）は、アンインストールしてまっさらな状態から入れる**。
   データは**リリース版から書き出したファイルを読み込んで**使う（古い版の書き出しは、読み込んだあとに今の形へ移し替えられる。
   [specs/backup.md](../specs/backup.md)）。読み込むたびに、リリース版の版からのマイグレーションを実データで確かめることにもなる。
 - アンインストールで開発版のデータは消える。残したいものがあれば、先に開発版から書き出してもらう。
-- 入っている開発版のコミットは、版名（`0.5.0+dev.3.abc1234` の `abc1234`）で分かる。見方は
-  [phone-check](../../.claude/skills/phone-check/SKILL.md) の 2。
+- 入っている開発版のコミットは、版名（`0.5.0+dev.3.abc1234` の `abc1234`）で分かる。どれに当たるかは
+  `installed-dev.sh` が見分ける（[phone-check](../../.claude/skills/phone-check/SKILL.md) の 2）。
+- エミュレータのデータはテスト用なので、DB が同じでも祖先でなければアンインストールして入れる（分かれ道を増やさないため）。
 
 ## 採らなかった案（今は）
 

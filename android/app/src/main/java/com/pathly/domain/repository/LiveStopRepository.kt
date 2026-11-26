@@ -7,7 +7,7 @@ import java.util.Date
 /**
  * 記録中の立ち寄り（検出した立ち寄り中・「今ここを立ち寄り」で手で始めた立ち寄り中）を担う。
  * 立ち寄り中はメモリだけに持ち、離れたら（記録を止めたら）立ち寄りとして保存する。
- * 詳細は docs/designs/places-and-stops.md を参照。分け方は adr/0048。
+ * 詳細は docs/designs/places-and-stops.md を参照。分け方は adr/0049。
  */
 interface LiveStopRepository {
 

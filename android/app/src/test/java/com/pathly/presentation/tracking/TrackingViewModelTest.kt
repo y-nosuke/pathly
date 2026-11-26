@@ -1,7 +1,5 @@
 package com.pathly.presentation.tracking
 
-import com.pathly.data.places.PlacesTextSearcher
-import com.pathly.data.settings.SettingsRepository
 import com.pathly.data.tracking.TrackingController
 import com.pathly.domain.model.GpsTrack
 import com.pathly.domain.model.MapPlaceFilter
@@ -10,6 +8,8 @@ import com.pathly.domain.model.RegisteredPlace
 import com.pathly.domain.repository.GpsTrackRepository
 import com.pathly.domain.repository.LiveStopRepository
 import com.pathly.domain.repository.PlaceRepository
+import com.pathly.domain.repository.PlaceSearchRepository
+import com.pathly.domain.repository.SettingsRepository
 import com.pathly.domain.repository.StopRepository
 import com.pathly.domain.repository.WishlistRepository
 import com.pathly.domain.usecase.AddManualStopUseCase
@@ -58,7 +58,7 @@ class TrackingViewModelTest {
   private val mockWishlistRepository = mockk<WishlistRepository>(relaxed = true)
   private val mockPlaceEditUseCase = mockk<PlaceEditUseCase>(relaxed = true)
   private val mockAddManualStopUseCase = mockk<AddManualStopUseCase>(relaxed = true)
-  private val mockPlacesTextSearcher = mockk<PlacesTextSearcher>(relaxed = true)
+  private val mockPlaceSearchRepository = mockk<PlaceSearchRepository>(relaxed = true)
   private val mockSettingsRepository = mockk<SettingsRepository>(relaxed = true).also {
     every { it.showRegisteredPlaces(any()) } returns MutableStateFlow(false)
     every { it.mapPlaceFilter(any()) } returns MutableStateFlow(MapPlaceFilter())
@@ -99,7 +99,7 @@ class TrackingViewModelTest {
     mockSettingsRepository,
     mockPlaceEditUseCase,
     mockAddManualStopUseCase,
-    mockPlacesTextSearcher,
+    mockPlaceSearchRepository,
   ).also { testDispatcher.scheduler.advanceUntilIdle() }
 
   @Test

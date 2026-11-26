@@ -32,7 +32,7 @@ DAO をモックして JVM で回す。守りたいのは SQL ではなく**書�
 
 場所と立ち寄りの 3 つの窓口（`LiveStopRepositoryImpl`・`StopRepositoryImpl`・`PlaceRepositoryImpl`）は、テストも窓口ごとに分け、
 組み立ては `PlaceStopRepositoryTestBase` で共有する。本番と同じく 3 つが 1 つのロックと状態を共有するので、
-窓口をまたぐ操作（記録中の立ち寄りの場所の名前を変える など）もそのまま確かめられる（→ [ADR-0048](../adr/0048-split-place-repository-by-responsibility.md)）。
+窓口をまたぐ操作（記録中の立ち寄りの場所の名前を変える など）もそのまま確かめられる（→ [ADR-0049](../adr/0049-split-place-repository-by-responsibility.md)）。
 
 **例外は「取り消しのある変更」**（立ち寄りの統合・削除・付け替え、場所の削除）。変更前の行を控えて消し、
 子は CASCADE に任せ、取り消しでは外部キーの順に元の ID で入れ直す、という作りなので、
@@ -72,7 +72,8 @@ debug APK（開発版 `com.pathly.debug`）と lint/test レポートをアー�
 main の ruleset で **`build` と `instrumented-test` の両方が必須**（どちらかが落ちている・終わっていないとマージできない →
 [branch-and-pr.md](../development/branch-and-pr.md) の「main の守り」）。
 手元で回すときは、Wi-Fi でつないだスマホを巻き込まないよう `ANDROID_SERIAL=emulator-5554` を付けて
-`./gradlew connectedDebugAndroidTest` を実行する。
+`./gradlew connectedDebugAndroidTest` を実行する。手元では変えた画面のクラス（DB を変えたら `com.pathly.data` のパッケージ）だけを回し、
+全部は CI に任せる（[start-issue](../../.claude/skills/start-issue/SKILL.md) の 6）。
 
 ## 実機でしか確かめられないもの
 

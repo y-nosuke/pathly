@@ -11,7 +11,7 @@ import java.util.Date
 /**
  * 記録された立ち寄り（stops）の取得・追加・編集・削除と、その取り消しを担う。
  * 記録中の立ち寄り中は [LiveStopRepository]、場所そのもの（places）は [PlaceRepository]。
- * 詳細は docs/designs/places-and-stops.md を参照。分け方は adr/0048。
+ * 詳細は docs/designs/places-and-stops.md を参照。分け方は adr/0049。
  */
 interface StopRepository {
 

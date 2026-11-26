@@ -2,12 +2,10 @@ package com.pathly.presentation.history
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.pathly.data.places.PlacesTextSearcher
-import com.pathly.data.settings.MapSurface
-import com.pathly.data.settings.SettingsRepository
 import com.pathly.data.tracking.TrackingController
 import com.pathly.domain.model.GpsTrack
 import com.pathly.domain.model.MapPlaceFilter
+import com.pathly.domain.model.MapSurface
 import com.pathly.domain.model.NearbyRegisterPrompt
 import com.pathly.domain.model.NearbyStopPrompt
 import com.pathly.domain.model.PlaceListItem
@@ -24,6 +22,8 @@ import com.pathly.domain.model.StopCandidate
 import com.pathly.domain.repository.GpsTrackRepository
 import com.pathly.domain.repository.LiveStopRepository
 import com.pathly.domain.repository.PlaceRepository
+import com.pathly.domain.repository.PlaceSearchRepository
+import com.pathly.domain.repository.SettingsRepository
 import com.pathly.domain.repository.StopRepository
 import com.pathly.domain.repository.WishlistRepository
 import com.pathly.domain.usecase.AddManualStopUseCase
@@ -69,7 +69,7 @@ class TrackDetailViewModel @Inject constructor(
   private val placeEditUseCase: PlaceEditUseCase,
   private val addManualStopUseCase: AddManualStopUseCase,
   // 「Googleで情報を取得」の名前検索フォールバック用（場所詳細と同じ編集機能を出すため）。
-  private val placesTextSearcher: PlacesTextSearcher,
+  private val placeSearchRepository: PlaceSearchRepository,
   private val trackDeletionQueue: TrackDeletionQueue,
   // 記録中の経路の「今ここを立ち寄り」に使う現在地（記録サービスが受けている最新の位置）。
   private val trackingController: TrackingController,
@@ -146,7 +146,7 @@ class TrackDetailViewModel @Inject constructor(
     scope = viewModelScope,
     placeEditUseCase = placeEditUseCase,
     wishlistRepository = wishlistRepository,
-    placesTextSearcher = placesTextSearcher,
+    placeSearchRepository = placeSearchRepository,
     shownOnMap = { shownOnMap() },
     placeNameOf = { placeId -> registeredPlaces.value.firstOrNull { it.placeId == placeId }?.displayName },
     onMessage = { _message.value = it },

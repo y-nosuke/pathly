@@ -136,7 +136,7 @@ API キー（地図と共用）を**そのまま安全に**使えるため。
   （`resolvedAt` の行を残す）、例外＝「未実施」（行を作らない）。
 - 最寄り 1 件は隣の別施設に化けやすいので、**ユーザーが選ぶ場面では候補を複数返す**
   （`searchNearbyCandidates` / `nearbyPois`）。自動命名だけが 1 件で妥協している。
-- キーワード検索は別系統（`data/places/PlacesTextSearcher`）。Autocomplete は**セッショントークン**で
+- キーワード検索は別系統（`domain/repository/PlaceSearchRepository`。実装は `data/places/PlacesTextSearcher`）。Autocomplete は**セッショントークン**で
   まとめ、確定した 1 件だけ `fetchPlace` する。取得済みの情報は `knownDetails` として登録時に渡し、
   **Google を引き直さない**。
 - **Autocomplete の候補の名前は、日本語以外で出ることがある**（Autocomplete の仕様。アプリでは直さない）。
@@ -213,5 +213,5 @@ Intent で Google アプリ／Web に切り替える（API 呼び出しではな
 | UseCase         | `domain/usecase/PlaceEditUseCase.kt`（登録・近接確認・紐付け・編集の差分適用を 3 画面で共有）               |
 | 編集の部品      | `presentation/places/PlaceEditActions.kt`（確認待ち・結果の一言・削除の取り消しまで含めて 3 画面で共有）    |
 | 編集の UI       | `presentation/places/PlaceEditHost.kt`（`PlaceEditUi`・場所シートと近接確認・削除の取り消しのつなぎ込み）   |
-| リポジトリ      | `domain/repository/` の Place・Stop・LiveStop・Wishlist と各実装（ADR-0048）                                |
+| リポジトリ      | `domain/repository/` の Place・Stop・LiveStop・Wishlist と各実装（ADR-0049）                                |
 | 画面            | `presentation/places/`（`PlacesScreen` / `PlaceActionSheet` / `PlacesViewModel` / `PlacesState`）           |

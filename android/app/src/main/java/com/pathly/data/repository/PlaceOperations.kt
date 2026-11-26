@@ -29,7 +29,7 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
- * 場所と立ち寄りの 3 つの窓口が共有する、場所の確保・名前解決・同じ施設の自動まとめ・後片付けの処理（→ adr/0048）。
+ * 場所と立ち寄りの 3 つの窓口が共有する、場所の確保・名前解決・同じ施設の自動まとめ・後片付けの処理（→ adr/0049）。
  *
  * どれもロックを取らない。記録中の状態（[PlaceStopSession]）に触るものがあるので、呼び出しは
  * [PlaceStopSession.mutex] の下で行う（[findOrCreatePlace]・[findOrCreateByGooglePlaceId] は状態に触らないので例外）。

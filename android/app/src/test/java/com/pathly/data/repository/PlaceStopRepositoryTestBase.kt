@@ -22,7 +22,7 @@ import org.junit.Before
 import java.util.Date
 
 /**
- * 場所と立ち寄りの 3 つの窓口のテストの土台（→ adr/0048）。DAO はモックで、3 つの実装は
+ * 場所と立ち寄りの 3 つの窓口のテストの土台（→ adr/0049）。DAO はモックで、3 つの実装は
  * 実際と同じく 1 つの [PlaceStopSession]・[PlaceOperations] を共有する（窓口をまたぐ操作も確かめられる）。
  */
 abstract class PlaceStopRepositoryTestBase {

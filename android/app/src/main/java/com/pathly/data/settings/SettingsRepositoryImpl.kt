@@ -3,10 +3,15 @@ package com.pathly.data.settings
 import android.content.Context
 import androidx.core.content.edit
 import com.pathly.domain.model.GroupOpenState
+import com.pathly.domain.model.LocationAccuracy
 import com.pathly.domain.model.MapPlaceFilter
+import com.pathly.domain.model.MapSurface
 import com.pathly.domain.model.PlaceCategoryFacet
 import com.pathly.domain.model.PlaceGrouping
+import com.pathly.domain.model.StatsList
+import com.pathly.domain.model.ThemeMode
 import com.pathly.domain.model.TrackGrouping
+import com.pathly.domain.repository.SettingsRepository
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -15,24 +20,22 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
- * アプリ設定の保存・取得（SharedPreferences）。
+ * アプリ設定の保存・取得（[SettingsRepository] の SharedPreferences による実装）。
  */
 @Singleton
-class SettingsRepository @Inject constructor(
+class SettingsRepositoryImpl @Inject constructor(
   @ApplicationContext context: Context,
-) {
+) : SettingsRepository {
   private val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
 
   private val _gpsIntervalSeconds =
-    MutableStateFlow(prefs.getInt(KEY_GPS_INTERVAL, DEFAULT_GPS_INTERVAL_SECONDS))
+    MutableStateFlow(prefs.getInt(KEY_GPS_INTERVAL, SettingsRepository.DEFAULT_GPS_INTERVAL_SECONDS))
 
-  /** GPS記録間隔（秒）。UI が購読する。 */
-  val gpsIntervalSeconds: StateFlow<Int> = _gpsIntervalSeconds.asStateFlow()
+  override val gpsIntervalSeconds: StateFlow<Int> = _gpsIntervalSeconds.asStateFlow()
 
-  /** 現在の GPS 記録間隔（秒）。サービスが起動時に参照する。 */
-  fun currentGpsIntervalSeconds(): Int = _gpsIntervalSeconds.value
+  override fun currentGpsIntervalSeconds(): Int = _gpsIntervalSeconds.value
 
-  fun setGpsIntervalSeconds(seconds: Int) {
+  override fun setGpsIntervalSeconds(seconds: Int) {
     prefs.edit { putInt(KEY_GPS_INTERVAL, seconds) }
     _gpsIntervalSeconds.value = seconds
   }
@@ -40,36 +43,29 @@ class SettingsRepository @Inject constructor(
   private val _locationAccuracy =
     MutableStateFlow(LocationAccuracy.fromKey(prefs.getString(KEY_LOCATION_ACCURACY, null)))
 
-  /** 位置の取り方（省電力／高精度）。UI が購読する。 */
-  val locationAccuracy: StateFlow<LocationAccuracy> = _locationAccuracy.asStateFlow()
+  override val locationAccuracy: StateFlow<LocationAccuracy> = _locationAccuracy.asStateFlow()
 
-  /** 現在の設定。サービスが記録開始時に参照する。 */
-  fun currentLocationAccuracy(): LocationAccuracy = _locationAccuracy.value
+  override fun currentLocationAccuracy(): LocationAccuracy = _locationAccuracy.value
 
-  fun setLocationAccuracy(accuracy: LocationAccuracy) {
+  override fun setLocationAccuracy(accuracy: LocationAccuracy) {
     prefs.edit { putString(KEY_LOCATION_ACCURACY, accuracy.key) }
     _locationAccuracy.value = accuracy
   }
 
   private val _themeMode = MutableStateFlow(ThemeMode.fromKey(prefs.getString(KEY_THEME_MODE, null)))
 
-  /** 画面の明暗（端末の設定に従う／明るい／暗い）。既定は端末の設定に従う。 */
-  val themeMode: StateFlow<ThemeMode> = _themeMode.asStateFlow()
+  override val themeMode: StateFlow<ThemeMode> = _themeMode.asStateFlow()
 
-  fun setThemeMode(mode: ThemeMode) {
+  override fun setThemeMode(mode: ThemeMode) {
     prefs.edit { putString(KEY_THEME_MODE, mode.key) }
     _themeMode.value = mode
   }
 
   private val _useDynamicColor = MutableStateFlow(prefs.getBoolean(KEY_USE_DYNAMIC_COLOR, false))
 
-  /**
-   * 画面の色に壁紙の色（ダイナミックカラー）を使うか。既定は使わず Pathly の色（→ adr/0040）。
-   * 使っても地図に描くもの（経路・マーカー）の色は変わらない。
-   */
-  val useDynamicColor: StateFlow<Boolean> = _useDynamicColor.asStateFlow()
+  override val useDynamicColor: StateFlow<Boolean> = _useDynamicColor.asStateFlow()
 
-  fun setUseDynamicColor(use: Boolean) {
+  override fun setUseDynamicColor(use: Boolean) {
     prefs.edit { putBoolean(KEY_USE_DYNAMIC_COLOR, use) }
     _useDynamicColor.value = use
   }
@@ -80,10 +76,9 @@ class SettingsRepository @Inject constructor(
       MutableStateFlow(prefs.getBoolean(keyShowPlaces(surface), false))
     }
 
-  /** その画面で「登録済みの場所」を表示するか。UI が購読する。既定は OFF。 */
-  fun showRegisteredPlaces(surface: MapSurface): StateFlow<Boolean> = showRegisteredPlacesFlows.getValue(surface).asStateFlow()
+  override fun showRegisteredPlaces(surface: MapSurface): StateFlow<Boolean> = showRegisteredPlacesFlows.getValue(surface).asStateFlow()
 
-  fun setShowRegisteredPlaces(surface: MapSurface, show: Boolean) {
+  override fun setShowRegisteredPlaces(surface: MapSurface, show: Boolean) {
     prefs.edit { putBoolean(keyShowPlaces(surface), show) }
     showRegisteredPlacesFlows.getValue(surface).value = show
   }
@@ -93,10 +88,9 @@ class SettingsRepository @Inject constructor(
   private val mapPlaceFilterFlows: Map<MapSurface, MutableStateFlow<MapPlaceFilter>> =
     MapSurface.entries.associateWith { surface -> MutableStateFlow(readMapPlaceFilter(surface)) }
 
-  /** その画面の地図の「登録済みの場所」の絞り込み。UI が購読する。既定は絞り込みなし。 */
-  fun mapPlaceFilter(surface: MapSurface): StateFlow<MapPlaceFilter> = mapPlaceFilterFlows.getValue(surface).asStateFlow()
+  override fun mapPlaceFilter(surface: MapSurface): StateFlow<MapPlaceFilter> = mapPlaceFilterFlows.getValue(surface).asStateFlow()
 
-  fun setMapPlaceFilter(surface: MapSurface, filter: MapPlaceFilter) {
+  override fun setMapPlaceFilter(surface: MapSurface, filter: MapPlaceFilter) {
     prefs.edit {
       putString(keyMapFilterWishlisted(surface), filter.wishlisted.toTriStateKey())
       putString(keyMapFilterVisited(surface), filter.visited.toTriStateKey())
@@ -111,10 +105,9 @@ class SettingsRepository @Inject constructor(
     PlaceGrouping.entries.firstOrNull { it.name == prefs.getString(KEY_PLACE_GROUPING, null) } ?: PlaceGrouping.NONE,
   )
 
-  /** 場所一覧の分け方。UI が購読する。既定は分けない。 */
-  val placeGrouping: StateFlow<PlaceGrouping> = _placeGrouping.asStateFlow()
+  override val placeGrouping: StateFlow<PlaceGrouping> = _placeGrouping.asStateFlow()
 
-  fun setPlaceGrouping(grouping: PlaceGrouping) {
+  override fun setPlaceGrouping(grouping: PlaceGrouping) {
     prefs.edit { putString(KEY_PLACE_GROUPING, grouping.name) }
     _placeGrouping.value = grouping
   }
@@ -125,10 +118,9 @@ class SettingsRepository @Inject constructor(
       MutableStateFlow(readGroupKeys(keyOpenPlaceGroups(grouping)))
     }
 
-  /** その分け方で開いているまとまりのキー。UI が購読する。既定はすべて閉じる（空）。 */
-  fun openPlaceGroups(grouping: PlaceGrouping): StateFlow<Set<String>> = openPlaceGroupsFlows.getValue(grouping).asStateFlow()
+  override fun openPlaceGroups(grouping: PlaceGrouping): StateFlow<Set<String>> = openPlaceGroupsFlows.getValue(grouping).asStateFlow()
 
-  fun setOpenPlaceGroups(grouping: PlaceGrouping, keys: Set<String>) {
+  override fun setOpenPlaceGroups(grouping: PlaceGrouping, keys: Set<String>) {
     // 書き出し（BackupArchive）が StringSet を扱わないので、改行でつないだ文字列で持つ（地域の名前にカンマが入り得る）。
     prefs.edit { putString(keyOpenPlaceGroups(grouping), keys.sorted().joinToString(GROUP_KEY_SEPARATOR)) }
     openPlaceGroupsFlows.getValue(grouping).value = keys
@@ -139,10 +131,9 @@ class SettingsRepository @Inject constructor(
     TrackGrouping.entries.firstOrNull { it.name == prefs.getString(KEY_HISTORY_GROUPING, null) } ?: TrackGrouping.NONE,
   )
 
-  /** 履歴一覧の分け方。UI が購読する。既定は分けない。 */
-  val historyGrouping: StateFlow<TrackGrouping> = _historyGrouping.asStateFlow()
+  override val historyGrouping: StateFlow<TrackGrouping> = _historyGrouping.asStateFlow()
 
-  fun setHistoryGrouping(grouping: TrackGrouping) {
+  override fun setHistoryGrouping(grouping: TrackGrouping) {
     prefs.edit { putString(KEY_HISTORY_GROUPING, grouping.name) }
     _historyGrouping.value = grouping
   }
@@ -152,10 +143,9 @@ class SettingsRepository @Inject constructor(
     GroupOpenState(opened = readGroupKeys(KEY_HISTORY_OPENED_GROUPS), closed = readGroupKeys(KEY_HISTORY_CLOSED_GROUPS)),
   )
 
-  /** 履歴一覧で押して変えた開閉。UI が購読する。既定は何も押していない（空）。 */
-  val historyGroupOpenState: StateFlow<GroupOpenState> = _historyGroupOpenState.asStateFlow()
+  override val historyGroupOpenState: StateFlow<GroupOpenState> = _historyGroupOpenState.asStateFlow()
 
-  fun setHistoryGroupOpenState(state: GroupOpenState) {
+  override fun setHistoryGroupOpenState(state: GroupOpenState) {
     prefs.edit {
       putString(KEY_HISTORY_OPENED_GROUPS, state.opened.sorted().joinToString(GROUP_KEY_SEPARATOR))
       putString(KEY_HISTORY_CLOSED_GROUPS, state.closed.sorted().joinToString(GROUP_KEY_SEPARATOR))
@@ -167,10 +157,9 @@ class SettingsRepository @Inject constructor(
   private val statsExpandedFlows: Map<StatsList, MutableStateFlow<Boolean>> =
     StatsList.entries.associateWith { list -> MutableStateFlow(prefs.getBoolean(keyStatsExpanded(list), false)) }
 
-  /** その一覧で統計のカードを広げているか。UI が購読する。既定は畳んだ帯。 */
-  fun statsExpanded(list: StatsList): StateFlow<Boolean> = statsExpandedFlows.getValue(list).asStateFlow()
+  override fun statsExpanded(list: StatsList): StateFlow<Boolean> = statsExpandedFlows.getValue(list).asStateFlow()
 
-  fun setStatsExpanded(list: StatsList, expanded: Boolean) {
+  override fun setStatsExpanded(list: StatsList, expanded: Boolean) {
     prefs.edit { putBoolean(keyStatsExpanded(list), expanded) }
     statsExpandedFlows.getValue(list).value = expanded
   }
@@ -189,11 +178,6 @@ class SettingsRepository @Inject constructor(
   }
 
   companion object {
-    const val DEFAULT_GPS_INTERVAL_SECONDS = 10
-
-    /** 選択できる間隔（秒）。 */
-    val GPS_INTERVAL_OPTIONS = listOf(5, 10, 30, 60)
-
     /** 書き出し（data/backup）にも含めるため公開する。 */
     const val PREFS_NAME = "pathly_settings"
     private const val KEY_GPS_INTERVAL = "gps_interval_seconds"
@@ -228,61 +212,4 @@ class SettingsRepository @Inject constructor(
       else -> null
     }
   }
-}
-
-/**
- * 位置の取り方。記録間隔と同じく、精度と電池のトレードオフをユーザーに選ばせる。
- *
- * [BALANCED] は「街区レベルで十分」という要求なので、OS は GNSS を使わず Wi-Fi や基地局から
- * 推定して済ませてよい。乗り物で移動していると Wi-Fi は当てにならず基地局も切り替わり続けるため、
- * 衛星が見えている区間でも測位が返らないことがある。[HIGH] は GNSS を積極的に使うので
- * そうした区間が埋まるが、電池を多く使う（トンネルなど衛星が見えない区間はどちらでも取れない）。
- */
-enum class LocationAccuracy(val key: String) {
-  /** 省電力。Wi-Fi・基地局中心（既定）。 */
-  BALANCED("balanced"),
-
-  /** 高精度。GNSS を積極的に使う。 */
-  HIGH("high"),
-  ;
-
-  companion object {
-    val DEFAULT = BALANCED
-
-    fun fromKey(key: String?): LocationAccuracy = entries.firstOrNull { it.key == key } ?: DEFAULT
-  }
-}
-
-/** 画面の明暗。知らない値は端末の設定に従う。 */
-enum class ThemeMode(val key: String) {
-  /** 端末の設定に従う（既定）。 */
-  SYSTEM("system"),
-
-  /** いつも明るい。 */
-  LIGHT("light"),
-
-  /** いつも暗い。 */
-  DARK("dark"),
-  ;
-
-  companion object {
-    val DEFAULT = SYSTEM
-
-    fun fromKey(key: String?): ThemeMode = entries.firstOrNull { it.key == key } ?: DEFAULT
-  }
-}
-
-/** 統計の帯（と広げたカード）を置く一覧。[key] は設定のキーに使うので変えない。 */
-enum class StatsList(val key: String) {
-  HISTORY("history_list"),
-  PLACES("places_list"),
-}
-
-/** 「登録済みの場所」トグルを保持する画面（それぞれ独立して ON/OFF を記憶する）。 */
-enum class MapSurface(val key: String) {
-  RECORDING("recording"),
-  HISTORY("history"),
-  PLACE_DETAIL("place_detail"),
-  PLACE_ADD("place_add"),
-  HISTORY_MAP("history_map"),
 }

@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.pathly.domain.model.MapPlaceFilter
+import com.pathly.domain.model.MapSurface
 import com.pathly.domain.model.PlaceCategoryFacet
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -20,13 +21,13 @@ class SettingsRepositoryMapFilterTest {
 
   @Before
   fun setUp() {
-    val repository = SettingsRepository(context)
+    val repository = SettingsRepositoryImpl(context)
     saved = MapSurface.entries.associateWith { repository.mapPlaceFilter(it).value }
   }
 
   @After
   fun tearDown() {
-    val repository = SettingsRepository(context)
+    val repository = SettingsRepositoryImpl(context)
     saved.forEach { (surface, filter) -> repository.setMapPlaceFilter(surface, filter) }
   }
 
@@ -38,27 +39,27 @@ class SettingsRepositoryMapFilterTest {
       categories = setOf(PlaceCategoryFacet.CAFE, PlaceCategoryFacet.UNCATEGORIZED),
     )
 
-    SettingsRepository(context).setMapPlaceFilter(MapSurface.RECORDING, filter)
+    SettingsRepositoryImpl(context).setMapPlaceFilter(MapSurface.RECORDING, filter)
 
-    assertEquals(filter, SettingsRepository(context).mapPlaceFilter(MapSurface.RECORDING).value)
+    assertEquals(filter, SettingsRepositoryImpl(context).mapPlaceFilter(MapSurface.RECORDING).value)
   }
 
   @Test
   fun `絞り込みなしも保存して戻る`() {
-    SettingsRepository(context).setMapPlaceFilter(MapSurface.HISTORY, MapPlaceFilter(wishlisted = false))
-    SettingsRepository(context).setMapPlaceFilter(MapSurface.HISTORY, MapPlaceFilter())
+    SettingsRepositoryImpl(context).setMapPlaceFilter(MapSurface.HISTORY, MapPlaceFilter(wishlisted = false))
+    SettingsRepositoryImpl(context).setMapPlaceFilter(MapSurface.HISTORY, MapPlaceFilter())
 
-    assertEquals(MapPlaceFilter(), SettingsRepository(context).mapPlaceFilter(MapSurface.HISTORY).value)
+    assertEquals(MapPlaceFilter(), SettingsRepositoryImpl(context).mapPlaceFilter(MapSurface.HISTORY).value)
   }
 
   @Test
   fun `地図ごとに独立して持つ`() {
-    val repository = SettingsRepository(context)
+    val repository = SettingsRepositoryImpl(context)
     repository.setMapPlaceFilter(MapSurface.RECORDING, MapPlaceFilter(wishlisted = true))
     repository.setMapPlaceFilter(MapSurface.HISTORY, MapPlaceFilter())
     repository.setMapPlaceFilter(MapSurface.PLACE_DETAIL, MapPlaceFilter(categories = setOf(PlaceCategoryFacet.PARK)))
 
-    val reopened = SettingsRepository(context)
+    val reopened = SettingsRepositoryImpl(context)
     assertEquals(MapPlaceFilter(wishlisted = true), reopened.mapPlaceFilter(MapSurface.RECORDING).value)
     assertEquals(MapPlaceFilter(), reopened.mapPlaceFilter(MapSurface.HISTORY).value)
     assertEquals(MapPlaceFilter(categories = setOf(PlaceCategoryFacet.PARK)), reopened.mapPlaceFilter(MapSurface.PLACE_DETAIL).value)

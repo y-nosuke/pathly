@@ -5,7 +5,7 @@ import android.net.Uri
 import com.pathly.BuildConfig
 import com.pathly.data.local.PathlyDatabase
 import com.pathly.data.settings.MaintenanceStore
-import com.pathly.data.settings.SettingsRepository
+import com.pathly.data.settings.SettingsRepositoryImpl
 import com.pathly.service.LocationTrackingService
 import com.pathly.util.Logger
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -123,7 +123,7 @@ class DataBackupManager @Inject constructor(
     private val logger = Logger("DataBackupManager")
 
     /** 書き出しに含める設定ファイル。 */
-    val PREFS_NAMES = listOf(SettingsRepository.PREFS_NAME, MaintenanceStore.PREFS_NAME)
+    val PREFS_NAMES = listOf(SettingsRepositoryImpl.PREFS_NAME, MaintenanceStore.PREFS_NAME)
 
     private fun pendingDir(context: Context) = File(context.filesDir, "backup/pending-import")
 

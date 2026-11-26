@@ -14,7 +14,7 @@ import javax.inject.Singleton
 
 /**
  * 場所と立ち寄りの 3 つの窓口（[LiveStopRepositoryImpl]・[StopRepositoryImpl]・[PlaceRepositoryImpl]）が共有する、
- * ロックとメモリ上の状態（→ adr/0048）。
+ * ロックとメモリ上の状態（→ adr/0049）。
  *
  * 1 回の操作が複数の状態をまたぐ（場所をまとめると、記録中の場所を差し替え、立ち寄りの取り消しの控えを捨てる など）ので、
  * ロックは 1 つだけにする。**状態に触るのは必ず [mutex] の下**。[mutex] は再入できないので、ロックを持ったまま

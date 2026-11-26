@@ -11,7 +11,7 @@ import kotlinx.coroutines.flow.Flow
  * 場所（places）の登録・同定・命名・まとめるを担う。
  * 命名は「記録中（自動）」「場所を取得ボタン」「オンライン復帰後のキャッチアップ」で行う。
  * 立ち寄りは [StopRepository]・[LiveStopRepository]。
- * 詳細は docs/designs/places-and-stops.md を参照。分け方は adr/0048。
+ * 詳細は docs/designs/places-and-stops.md を参照。分け方は adr/0049。
  */
 interface PlaceRepository {
 

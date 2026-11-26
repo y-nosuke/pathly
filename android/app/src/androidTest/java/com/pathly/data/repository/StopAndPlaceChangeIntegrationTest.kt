@@ -61,7 +61,7 @@ class StopAndPlaceChangeIntegrationTest {
       .allowMainThreadQueries()
       .build()
 
-    // 本番と同じく、窓口どうしで 1 つのロックと状態を共有する（→ adr/0048）。
+    // 本番と同じく、窓口どうしで 1 つのロックと状態を共有する（→ adr/0049）。
     val session = PlaceStopSession()
     val resolver = PlacesNameResolver(context)
     val placeOperations = PlaceOperations(

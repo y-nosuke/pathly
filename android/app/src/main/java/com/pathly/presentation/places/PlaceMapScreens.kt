@@ -26,7 +26,7 @@ import com.google.maps.android.compose.MapUiSettings
 import com.google.maps.android.compose.MarkerState
 import com.google.maps.android.compose.rememberCameraPositionState
 import com.pathly.R
-import com.pathly.data.settings.MapSurface
+import com.pathly.domain.model.MapSurface
 import com.pathly.domain.model.PlaceCategoryGroup
 import com.pathly.domain.model.PlaceListItem
 import com.pathly.domain.model.PlaceVisit

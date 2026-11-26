@@ -17,6 +17,7 @@ import com.pathly.domain.model.GeoBounds
 import com.pathly.domain.model.MapRegion
 import com.pathly.domain.model.PlacePrediction
 import com.pathly.domain.model.PlaceSearchResult
+import com.pathly.domain.repository.PlaceSearchRepository
 import com.pathly.util.Logger
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
@@ -25,7 +26,7 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
- * キーワードから場所を検索する（Places SDK for Android / New）。
+ * キーワードから場所を検索する（[PlaceSearchRepository] の Places SDK for Android / New による実装）。
  * Autocomplete（候補）→ fetchPlace（確定）をセッショントークンでまとめて課金を最小化する。
  * 詳細は docs/designs/wishlist.md を参照。
  *
@@ -35,7 +36,7 @@ import javax.inject.Singleton
 @Singleton
 class PlacesTextSearcher @Inject constructor(
   @param:ApplicationContext private val context: Context,
-) {
+) : PlaceSearchRepository {
   private val logger = Logger("PlacesTextSearcher")
 
   private val client: PlacesClient? by lazy {
@@ -56,7 +57,7 @@ class PlacesTextSearcher @Inject constructor(
   private var lastFetch: Pair<String, PlaceSearchResult>? = null
 
   /** 検索画面を開いたときに呼ぶ。新しいセッショントークンを用意する。 */
-  fun startSession() {
+  override fun startSession() {
     sessionToken = AutocompleteSessionToken.newInstance()
   }
 
@@ -66,10 +67,10 @@ class PlacesTextSearcher @Inject constructor(
    * 種類では絞らず、施設と地域を 1 回で取る（候補ごとの [PlacePrediction.isRegion] で見分ける）。
    * [regionsOnly] なら地域（国・都道府県・市区町村・郵便番号など）だけに絞る（立ち寄りの追加中の記録画面の検索窓）。
    */
-  suspend fun predict(
+  override suspend fun predict(
     query: String,
-    locationBias: GeoBounds? = null,
-    regionsOnly: Boolean = false,
+    locationBias: GeoBounds?,
+    regionsOnly: Boolean,
   ): List<PlacePrediction> = withContext(Dispatchers.IO) {
     if (query.isBlank() || !isOnline()) return@withContext emptyList()
     val placesClient = client ?: return@withContext emptyList()
@@ -101,7 +102,7 @@ class PlacesTextSearcher @Inject constructor(
   }
 
   /** 候補を確定して座標つきの結果を得る。セッションはここで終了する（トークンを破棄）。 */
-  suspend fun fetch(placeId: String): PlaceSearchResult? = withContext(Dispatchers.IO) {
+  override suspend fun fetch(placeId: String): PlaceSearchResult? = withContext(Dispatchers.IO) {
     // 直近と同じ placeId なら控えを返す（Places を二度叩かない）。
     lastFetch?.let { if (it.first == placeId) return@withContext it.second }
     if (!isOnline()) return@withContext null
@@ -135,7 +136,7 @@ class PlacesTextSearcher @Inject constructor(
    * （施設の名前・種類は引かない＝Place Details の安い区分に収まる。名前は候補の文字を使う）。セッションはここで終了する。
    * 範囲が返らないときは、位置のまわりの決まった広さにする。位置が返らないときは範囲の中心。オフライン・失敗時は null。
    */
-  suspend fun fetchRegion(placeId: String): MapRegion? = withContext(Dispatchers.IO) {
+  override suspend fun fetchRegion(placeId: String): MapRegion? = withContext(Dispatchers.IO) {
     if (!isOnline()) return@withContext null
     val placesClient = client ?: return@withContext null
     try {
@@ -158,7 +159,7 @@ class PlacesTextSearcher @Inject constructor(
    * 段で選ぶのは、「東京都」で探しても寄せた範囲の中の府中市が先に出ることがあるため。
    * 検索画面のセッションとは別のトークンを使う。オフライン・段の合う候補が無い・失敗時は null。
    */
-  suspend fun findRegion(query: String, topLevel: Boolean, near: GeoBounds?): MapRegion? = withContext(Dispatchers.IO) {
+  override suspend fun findRegion(query: String, topLevel: Boolean, near: GeoBounds?): MapRegion? = withContext(Dispatchers.IO) {
     regionCache[query]?.let { return@withContext it }
     if (query.isBlank() || !isOnline()) return@withContext null
     val placesClient = client ?: return@withContext null

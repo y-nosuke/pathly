@@ -21,8 +21,8 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.lifecycleScope
-import com.pathly.data.settings.SettingsRepository
-import com.pathly.data.settings.ThemeMode
+import com.pathly.domain.model.ThemeMode
+import com.pathly.domain.repository.SettingsRepository
 import com.pathly.presentation.navigation.PathlyNavHost
 import com.pathly.presentation.tracking.TrackingViewModel
 import com.pathly.ui.theme.PathlyAndroidTheme
