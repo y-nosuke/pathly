@@ -1,9 +1,14 @@
 package com.pathly.presentation.tracking
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.snap
+import androidx.compose.animation.core.spring
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -18,6 +23,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
@@ -44,24 +50,36 @@ import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.changedToUp
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onPlaced
+import androidx.compose.ui.layout.positionInParent
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.zIndex
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
@@ -341,6 +359,9 @@ private fun formatElapsed(millis: Long): String {
  * [VISIBLE_REGION_CHIPS] 個まで・6 つ目からをまとめた「他 N 件」。地図の上でスクロールさせると地図のドラッグと紛れるので、
  * 縦に出す数を決めて残りはまとめのメニューから選ぶ。最後に地図を移した地域（[focusedPlaceId]）のチップは塗りつぶし、
  * それがまとめの中なら、まとめのチップを塗りつぶす。
+ *
+ * 地名のチップは長押しで掴んで並べ替え、「他 N 件」に重ねて離すとまとめの先頭に入れる（[onMove] に地域と移した後の位置
+ * を渡す → ADR 0047）。
  */
 @Composable
 internal fun RegionMarkerChips(
@@ -349,11 +370,19 @@ internal fun RegionMarkerChips(
   onRefit: (RegionMarker) -> Unit,
   onClear: (RegionMarker) -> Unit,
   onClearAll: () -> Unit,
+  onMove: (RegionMarker, Int) -> Unit,
   modifier: Modifier = Modifier,
 ) {
   if (markers.isEmpty()) return
   val shown = markers.take(VISIBLE_REGION_CHIPS)
   val folded = markers.drop(VISIBLE_REGION_CHIPS)
+  val drag = remember { RegionChipDragState() }
+  drag.ids = shown.map { it.placeId }
+  val dragging = drag.placeId != null
+  val haptic = LocalHapticFeedback.current
+  val spacing = with(LocalDensity.current) { PathlySpacing.sm.toPx() }
+  val currentMarkers by rememberUpdatedState(markers)
+  val currentOnMove by rememberUpdatedState(onMove)
   Column(
     modifier = modifier.testTag("regionMarkerChips"),
     verticalArrangement = Arrangement.spacedBy(PathlySpacing.sm),
@@ -368,13 +397,65 @@ internal fun RegionMarkerChips(
         )
       }
     }
-    shown.forEach { marker ->
+    shown.forEachIndexed { index, marker ->
       key(marker.placeId) {
+        val lifted = drag.placeId == marker.placeId
+        // 掴んでいる間はよけるのを動かして見せ、離したら並びが変わるので、ずらした分はすぐに戻す。
+        val shift by animateFloatAsState(
+          targetValue = drag.shiftOf(index, spacing),
+          animationSpec = if (dragging) spring() else snap(),
+          label = "regionChipShift",
+        )
         RegionMarkerChip(
           name = marker.name,
           focused = marker.placeId == focusedPlaceId,
           onRefit = { onRefit(marker) },
           onClear = { onClear(marker) },
+          lifted = lifted,
+          modifier = Modifier
+            // 位置はずらす前（graphicsLayer の外）で測る。
+            .onPlaced { drag.place(marker.placeId, it.positionInParent().y, it.size.height.toFloat()) }
+            .zIndex(if (lifted) 1f else 0f)
+            .graphicsLayer {
+              translationY = if (lifted) drag.offset else shift
+              if (lifted) {
+                scaleX = LIFTED_CHIP_SCALE
+                scaleY = LIFTED_CHIP_SCALE
+              }
+            }
+            .regionChipReorderGesture(
+              placeId = marker.placeId,
+              drag = drag,
+              onStart = { haptic.performHapticFeedback(HapticFeedbackType.LongPress) },
+              onDrop = { placeId, to ->
+                currentMarkers.firstOrNull { it.placeId == placeId }?.let { currentOnMove(it, to) }
+              },
+            ),
+          customActions = buildList {
+            if (index > 0) {
+              add(
+                CustomAccessibilityAction("上へ移す") {
+                  onMove(marker, index - 1)
+                  true
+                },
+              )
+            }
+            if (index < shown.lastIndex) {
+              add(
+                CustomAccessibilityAction("下へ移す") {
+                  onMove(marker, index + 1)
+                  true
+                },
+              )
+            } else if (folded.isNotEmpty()) {
+              add(
+                CustomAccessibilityAction("まとめに入れる") {
+                  onMove(marker, shown.size)
+                  true
+                },
+              )
+            }
+          },
         )
       }
     }
@@ -382,29 +463,84 @@ internal fun RegionMarkerChips(
       FoldedRegionChip(
         markers = folded,
         focusedPlaceId = focusedPlaceId,
+        dropTarget = dragging && drag.overFolded(),
         onRefit = onRefit,
         onClear = onClear,
+        onBringUp = { marker -> onMove(marker, VISIBLE_REGION_CHIPS - 1) },
+        modifier = Modifier.onPlaced { drag.placeFolded(it.positionInParent().y, it.size.height.toFloat()) },
       )
+    } else {
+      drag.placeFolded(null, 0f)
     }
   }
 }
 
+/** 掴んだチップの大きさ（少し大きくして浮かせる）。 */
+private const val LIFTED_CHIP_SCALE = 1.05f
+
+/**
+ * 長押しで掴んで縦に動かし、離した所で [onDrop]（地域・移した後の位置）を呼ぶ。掴んでいる間に指を離したときは、
+ * 子の地名（寄せ直し）・× のタップにしない（離す指を子より先に受けて消費する）。地図には指が行かない。
+ */
+private fun Modifier.regionChipReorderGesture(
+  placeId: String,
+  drag: RegionChipDragState,
+  onStart: () -> Unit,
+  onDrop: (String, Int) -> Unit,
+): Modifier = this
+  .pointerInput(drag) {
+    awaitPointerEventScope {
+      while (true) {
+        val event = awaitPointerEvent(PointerEventPass.Initial)
+        if (drag.placeId == placeId) event.changes.forEach { if (it.changedToUp()) it.consume() }
+      }
+    }
+  }
+  .pointerInput(placeId, drag) {
+    // 離す指は上で消費するので、終わりは取り消しとして届く。どちらも離した所で決める。
+    // 2 本目の指で別のチップを長押ししたときは掴まず、その指の動きでは何もしない。
+    var holding = false
+    val finish = {
+      if (holding) drag.drop()?.let { (id, to) -> onDrop(id, to) }
+      holding = false
+    }
+    detectDragGesturesAfterLongPress(
+      onDragStart = {
+        holding = drag.start(placeId)
+        if (holding) onStart()
+      },
+      onDrag = { change, amount ->
+        change.consume()
+        if (holding) drag.dragBy(amount.y)
+      },
+      onDragEnd = { finish() },
+      onDragCancel = { finish() },
+    )
+  }
+
 /** 縦に出す地域のチップの数。これより後に選んだ地域は「他 N 件」にまとめる。 */
 internal const val VISIBLE_REGION_CHIPS = 5
 
-/** 6 つ目からの地域をまとめたチップ。押すとメニューで地名を出し、行でその地域へ寄せ直し、× で外す。 */
+/**
+ * 6 つ目からの地域をまとめたチップ。押すとメニューで地名を出し、行でその地域へ寄せ直し、↑ で 5 つ目に出し
+ * （[onBringUp]）、× で外す。[dropTarget] は掴んだチップを重ねている間（離すとまとめに入る）で、枠を出す。
+ */
 @Composable
 private fun FoldedRegionChip(
   markers: List<RegionMarker>,
   focusedPlaceId: String?,
+  dropTarget: Boolean,
   onRefit: (RegionMarker) -> Unit,
   onClear: (RegionMarker) -> Unit,
+  onBringUp: (RegionMarker) -> Unit,
+  modifier: Modifier = Modifier,
 ) {
   var menuOpen by remember { mutableStateOf(false) }
-  Box {
+  Box(modifier = modifier) {
     RegionChipSurface(
       focused = markers.any { it.placeId == focusedPlaceId },
       onClick = { menuOpen = true },
+      outlined = dropTarget,
       modifier = Modifier.testTag("regionMarkerFoldedChip"),
     ) {
       Row(
@@ -433,6 +569,8 @@ private fun FoldedRegionChip(
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
                 fontWeight = if (marker.placeId == focusedPlaceId) FontWeight.Bold else null,
+                // 短い地名でも行の真ん中を押して寄せ直せるよう、地名の幅を取る（↑・× の押せる範囲と離す）。
+                modifier = Modifier.widthIn(min = 120.dp),
               )
             },
             leadingIcon = {
@@ -444,13 +582,22 @@ private fun FoldedRegionChip(
               )
             },
             trailingIcon = {
-              // 外してもメニューは開いたまま（続けて外せるように）。最後の 1 つを外すと、まとめごと消える。
-              IconButton(onClick = { onClear(marker) }) {
-                Icon(
-                  painter = painterResource(R.drawable.ic_close),
-                  contentDescription = "${marker.name}の目印を外す",
-                  modifier = Modifier.size(18.dp),
-                )
+              // 上に出しても外してもメニューは開いたまま（続けて操作できるように）。最後の 1 つを外すと、まとめごと消える。
+              Row {
+                IconButton(onClick = { onBringUp(marker) }) {
+                  Icon(
+                    painter = painterResource(R.drawable.ic_arrow_upward),
+                    contentDescription = "${marker.name}を上に出す",
+                    modifier = Modifier.size(18.dp),
+                  )
+                }
+                IconButton(onClick = { onClear(marker) }) {
+                  Icon(
+                    painter = painterResource(R.drawable.ic_close),
+                    contentDescription = "${marker.name}の目印を外す",
+                    modifier = Modifier.size(18.dp),
+                  )
+                }
               }
             },
             onClick = {
@@ -464,12 +611,13 @@ private fun FoldedRegionChip(
   }
 }
 
-/** 地域のチップの外枠（地図に浮かぶピル）。[focused] なら塗りつぶす。 */
+/** 地域のチップの外枠（地図に浮かぶピル）。[focused] なら塗りつぶし、[outlined] なら枠を出す。 */
 @Composable
 private fun RegionChipSurface(
   focused: Boolean,
   onClick: () -> Unit,
   modifier: Modifier = Modifier,
+  outlined: Boolean = false,
   content: @Composable () -> Unit,
 ) {
   Surface(
@@ -479,6 +627,7 @@ private fun RegionChipSurface(
     color = if (focused) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface,
     contentColor = if (focused) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface,
     shadowElevation = PathlyElevation.floating,
+    border = if (outlined) BorderStroke(2.dp, MaterialTheme.colorScheme.primary) else null,
     content = content,
   )
 }

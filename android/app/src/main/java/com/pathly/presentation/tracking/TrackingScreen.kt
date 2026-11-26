@@ -355,7 +355,7 @@ fun TrackingScreen(
       )
     }
 
-    // 「地域へ移動」で出した目印の地名のチップ（左上に縦に並べ、6 つ目からは 1 つにまとめる）。
+    // 「地域へ移動」で出した目印の地名のチップ（左上に縦に並べ、6 つ目からは 1 つにまとめる。長押しで並べ替える）。
     // 地名でその地域の範囲へ寄せ直し、× でその目印を外す（地図は動かさない）。
     val regionChips: @Composable () -> Unit = {
       RegionMarkerChips(
@@ -364,6 +364,7 @@ fun TrackingScreen(
         onRefit = { region -> refitRegion(region) },
         onClear = { region -> viewModel.regionMarkers.remove(region.placeId) },
         onClearAll = viewModel.regionMarkers::clear,
+        onMove = { region, to -> viewModel.regionMarkers.move(region.placeId, to) },
       )
     }
 

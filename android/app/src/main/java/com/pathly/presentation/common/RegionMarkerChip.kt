@@ -18,6 +18,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.semantics.CustomAccessibilityAction
+import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
@@ -31,7 +33,8 @@ import com.pathly.ui.theme.PathlySpacing
 
 /**
  * 地域の地名のチップ（記録画面の地域の目印・場所一覧の地図の境界）。地名の部分で [onRefit]（範囲へ寄せ直す）、
- * × で [onClear]（その地域を外す）。[clearDescription] は × の読み上げ。
+ * × で [onClear]（その地域を外す）。[clearDescription] は × の読み上げ。[lifted] は長押しで掴んでいる間（影を濃くして浮かせる）。
+ * [customActions] は地名の部分（読み上げで止まるところ）に付ける操作（並べ替えなど）。
  */
 @Composable
 internal fun RegionMarkerChip(
@@ -41,6 +44,8 @@ internal fun RegionMarkerChip(
   onClear: () -> Unit,
   modifier: Modifier = Modifier,
   clearDescription: String = "${name}の目印を外す",
+  lifted: Boolean = false,
+  customActions: List<CustomAccessibilityAction> = emptyList(),
 ) {
   Surface(
     modifier = modifier
@@ -49,12 +54,13 @@ internal fun RegionMarkerChip(
     shape = PathlyShapes.pill,
     color = if (focused) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface,
     contentColor = if (focused) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface,
-    shadowElevation = PathlyElevation.floating,
+    shadowElevation = if (lifted) PathlyElevation.sheet else PathlyElevation.floating,
   ) {
     Row(verticalAlignment = Alignment.CenterVertically) {
       Row(
         modifier = Modifier
           .clickable(onClickLabel = "この地域へ地図を寄せる", onClick = onRefit)
+          .semantics { if (customActions.isNotEmpty()) this.customActions = customActions }
           .padding(start = PathlySpacing.md, top = PathlySpacing.sm, bottom = PathlySpacing.sm, end = PathlySpacing.xs),
         verticalAlignment = Alignment.CenterVertically,
       ) {

@@ -66,6 +66,23 @@ class RegionMarkerActions {
     }
   }
 
+  /**
+   * その地域を並びの [toIndex] 番目へ移す（チップの長押しの並べ替え・まとめの「上に出す」→ ADR 0047）。
+   * 先に抜いてから入れるので、[toIndex] は移した後の位置。範囲の外は端に寄せる。塗りつぶしは変えない。
+   */
+  fun move(placeId: String, toIndex: Int) {
+    _state.update { state ->
+      val from = state.markers.indexOfFirst { it.placeId == placeId }
+      if (from < 0) return@update state
+      val rest = state.markers.toMutableList()
+      val marker = rest.removeAt(from)
+      val to = toIndex.coerceIn(0, rest.size)
+      if (to == from) return@update state
+      rest.add(to, marker)
+      state.copy(markers = rest)
+    }
+  }
+
   /** すべて外す。 */
   fun clear() {
     _state.value = RegionMarkersState()
