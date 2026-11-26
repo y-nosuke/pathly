@@ -1,0 +1,523 @@
+package com.pathly.presentation.tracking
+
+import androidx.activity.compose.BackHandler
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.snap
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onPlaced
+import androidx.compose.ui.layout.positionInParent
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.semantics.CustomAccessibilityAction
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.customActions
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.zIndex
+import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LifecycleEventEffect
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.google.android.gms.location.LocationServices
+import com.google.android.gms.location.Priority
+import com.google.android.gms.maps.CameraUpdateFactory
+import com.google.android.gms.maps.model.CameraPosition
+import com.google.android.gms.maps.model.LatLng
+import com.google.android.gms.maps.model.LatLngBounds
+import com.google.android.gms.maps.model.PointOfInterest
+import com.google.android.gms.tasks.CancellationTokenSource
+import com.google.maps.android.compose.CameraMoveStartedReason
+import com.google.maps.android.compose.CameraPositionState
+import com.google.maps.android.compose.GoogleMap
+import com.google.maps.android.compose.MapProperties
+import com.google.maps.android.compose.MapType
+import com.google.maps.android.compose.MapUiSettings
+import com.google.maps.android.compose.MarkerState
+import com.google.maps.android.compose.Polyline
+import com.google.maps.android.compose.rememberCameraPositionState
+import com.pathly.R
+import com.pathly.domain.model.GeoBounds
+import com.pathly.domain.model.GpsPoint
+import com.pathly.domain.model.GpsTrack
+import com.pathly.domain.model.RegisteredPlace
+import com.pathly.domain.model.Stop
+import com.pathly.presentation.common.CloseInfoWindowWithSheet
+import com.pathly.presentation.common.MapInfoWindowState
+import com.pathly.presentation.common.MapMarker
+import com.pathly.presentation.common.MapPinMarker
+import com.pathly.presentation.common.MapPlaceFilterButton
+import com.pathly.presentation.common.NearbyConfirmPurpose
+import com.pathly.presentation.common.NearbyPlaceConfirmDialog
+import com.pathly.presentation.common.RegionMarkerChip
+import com.pathly.presentation.common.RegisteredPlaceMarkers
+import com.pathly.presentation.common.RouteMapContent
+import com.pathly.presentation.common.SheetDetent
+import com.pathly.presentation.common.heightOf
+import com.pathly.presentation.common.rememberFloatingSheetState
+import com.pathly.presentation.common.rememberMapInfoWindowState
+import com.pathly.presentation.common.rememberMarkerIconCache
+import com.pathly.presentation.common.stopSegmentPoints
+import com.pathly.presentation.places.PlaceActionSheet
+import com.pathly.presentation.places.PlaceDeleteUndoEffect
+import com.pathly.presentation.places.PlaceMergeActions
+import com.pathly.presentation.places.PlaceSheetTarget
+import com.pathly.presentation.stops.ManualStopOrigin
+import com.pathly.presentation.stops.ManualStopSheet
+import com.pathly.presentation.stops.ManualStopTarget
+import com.pathly.presentation.stops.StopReassignDialog
+import com.pathly.ui.theme.PathlyElevation
+import com.pathly.ui.theme.PathlyMapColors
+import com.pathly.ui.theme.PathlyShapes
+import com.pathly.ui.theme.PathlySpacing
+import com.pathly.ui.theme.PathlyTheme
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import java.util.Date
+import kotlin.math.roundToInt
+
+/**
+ * 地域の目印のチップ（左上に縦に並べる）。上から「すべて外す」（2 つ以上のとき）・選んだ順の地名のチップ
+ * [VISIBLE_REGION_CHIPS] 個まで・6 つ目からをまとめた「他 N 件」。地図の上でスクロールさせると地図のドラッグと紛れるので、
+ * 縦に出す数を決めて残りはまとめのメニューから選ぶ。最後に地図を移した地域（[focusedPlaceId]）のチップは塗りつぶし、
+ * それがまとめの中なら、まとめのチップを塗りつぶす。
+ *
+ * 地名のチップは縦にドラッグして並べ替え（[onMove] に地域と移した後の位置）、「他 N 件」に重ねて離すとまとめの最後に入れる
+ * （[onFold]）。まとめのメニューの「上に出す」は [onBringUp]。まとめと入れ替わったときは、入れたチップが「他 N 件」へ
+ * 吸い込まれ、「他 N 件」が弾み、代わりに出たチップがせり上がって少しの間枠を太くする（→ ADR 0047）。
+ */
+@Composable
+internal fun RegionMarkerChips(
+  markers: List<RegionMarker>,
+  focusedPlaceId: String?,
+  onRefit: (RegionMarker) -> Unit,
+  onClear: (RegionMarker) -> Unit,
+  onClearAll: () -> Unit,
+  onMove: (RegionMarker, Int) -> Unit,
+  onFold: (RegionMarker) -> Unit,
+  onBringUp: (RegionMarker) -> Unit,
+  modifier: Modifier = Modifier,
+) {
+  if (markers.isEmpty()) return
+  val shown = markers.take(VISIBLE_REGION_CHIPS)
+  val folded = markers.drop(VISIBLE_REGION_CHIPS)
+  val drag = remember { RegionChipDragState() }
+  drag.ids = shown.map { it.placeId }
+  val dragging = drag.placeId != null
+  val haptic = LocalHapticFeedback.current
+  val density = LocalDensity.current
+  val spacing = with(density) { PathlySpacing.sm.toPx() }
+  val riseDistance = with(density) { ARRIVING_CHIP_RISE.toPx() }
+  val scope = rememberCoroutineScope()
+  val currentMarkers by rememberUpdatedState(markers)
+  val currentOnMove by rememberUpdatedState(onMove)
+  val currentOnFold by rememberUpdatedState(onFold)
+  // まとめと入れ替わって縦に出てきた地域（せり上がって枠を太くする）と、「他 N 件」を弾ませる合図。
+  var arrivedPlaceId by remember { mutableStateOf<String?>(null) }
+  var foldedBounce by remember { mutableIntStateOf(0) }
+  LaunchedEffect(arrivedPlaceId) {
+    if (arrivedPlaceId != null) {
+      delay(ARRIVED_HIGHLIGHT_MILLIS)
+      arrivedPlaceId = null
+    }
+  }
+  // まとめに入れた地域が縦の並びから消えたら（並びが変わったら）、吸い込まれる動きを終える。
+  LaunchedEffect(drag.ids) {
+    if (drag.folding && drag.placeId !in drag.ids) drag.endFold()
+  }
+
+  // まとめの最後に入れ、代わりにまとめの先頭が縦に上がる。animate なら吸い込まれる動きを見せてから。
+  fun fold(marker: RegionMarker, animate: Boolean) {
+    scope.launch {
+      if (animate) drag.animateFold()
+      val all = currentMarkers
+      if (all.none { it.placeId == marker.placeId }) {
+        if (drag.folding) drag.endFold()
+        return@launch
+      }
+      arrivedPlaceId = all.drop(VISIBLE_REGION_CHIPS).firstOrNull()?.placeId
+      foldedBounce++
+      currentOnFold(marker)
+    }
+  }
+
+  Column(
+    modifier = modifier.testTag("regionMarkerChips"),
+    verticalArrangement = Arrangement.spacedBy(PathlySpacing.sm),
+  ) {
+    if (markers.size >= 2) {
+      RegionChipSurface(focused = false, onClick = onClearAll) {
+        Text(
+          text = "すべて外す",
+          style = MaterialTheme.typography.labelLarge,
+          fontWeight = FontWeight.Medium,
+          modifier = Modifier.padding(horizontal = PathlySpacing.md, vertical = PathlySpacing.sm),
+        )
+      }
+    }
+    shown.forEachIndexed { index, marker ->
+      key(marker.placeId) {
+        val lifted = drag.placeId == marker.placeId
+        // 掴んでいる間はよけるのを動かして見せ、離したら並びが変わるので、ずらした分はすぐに戻す
+        // （吸い込まれている間も、並びが変わった瞬間に戻るので動かさない）。
+        val shift by animateFloatAsState(
+          targetValue = drag.shiftOf(index, spacing),
+          animationSpec = if (dragging && !drag.folding) spring() else snap(),
+          label = "regionChipShift",
+        )
+        // まとめから出てきたチップは、「他 N 件」の側からせり上がって現れる。
+        val arriving = arrivedPlaceId == marker.placeId
+        val rise = remember { Animatable(if (arriving) 0f else 1f) }
+        LaunchedEffect(arriving) {
+          if (arriving) rise.animateTo(1f, tween(ARRIVING_CHIP_MILLIS))
+        }
+        // 「他 N 件」に重ねている間は、下の「他 N 件」（太い枠）が透けて見えるよう、小さく半透明にする。
+        val overFolded by animateFloatAsState(
+          targetValue = if (lifted && drag.overFolded()) 1f else 0f,
+          label = "regionChipOverFolded",
+        )
+        RegionMarkerChip(
+          name = marker.name,
+          focused = marker.placeId == focusedPlaceId,
+          onRefit = { onRefit(marker) },
+          onClear = { onClear(marker) },
+          lifted = lifted,
+          highlighted = arriving,
+          modifier = Modifier
+            // 位置はずらす前（graphicsLayer の外）で測る。
+            .onPlaced { drag.place(marker.placeId, it.positionInParent().y, it.size.height.toFloat()) }
+            .zIndex(if (lifted) 1f else 0f)
+            .graphicsLayer {
+              if (lifted) {
+                // 掴んでいる間は少し大きく浮かせ、まとめに入れるときは縮みながら「他 N 件」へ寄って消える。
+                val progress = drag.foldProgress
+                translationY = drag.offset + drag.foldDistance() * progress
+                val baseScale = LIFTED_CHIP_SCALE + (OVER_FOLDED_CHIP_SCALE - LIFTED_CHIP_SCALE) * overFolded
+                val scale = baseScale + (FOLDED_CHIP_SCALE - baseScale) * progress
+                scaleX = scale
+                scaleY = scale
+                alpha = (1f - (1f - OVER_FOLDED_CHIP_ALPHA) * overFolded) * (1f - progress)
+              } else {
+                translationY = shift + (1f - rise.value) * riseDistance
+                alpha = rise.value
+              }
+            }
+            .regionChipReorderGesture(
+              placeId = marker.placeId,
+              drag = drag,
+              onStart = { haptic.performHapticFeedback(HapticFeedbackType.GestureThresholdActivate) },
+              onDrop = { placeId, to ->
+                val dropped = currentMarkers.firstOrNull { it.placeId == placeId }
+                when {
+                  dropped == null -> if (drag.folding) drag.endFold()
+                  drag.folding -> fold(dropped, animate = true)
+                  else -> currentOnMove(dropped, to)
+                }
+              },
+            ),
+          customActions = buildList {
+            if (index > 0) {
+              add(
+                CustomAccessibilityAction("上へ移す") {
+                  onMove(marker, index - 1)
+                  true
+                },
+              )
+            }
+            if (index < shown.lastIndex) {
+              add(
+                CustomAccessibilityAction("下へ移す") {
+                  onMove(marker, index + 1)
+                  true
+                },
+              )
+            } else if (folded.isNotEmpty()) {
+              add(
+                CustomAccessibilityAction("まとめに入れる") {
+                  fold(marker, animate = false)
+                  true
+                },
+              )
+            }
+          },
+        )
+      }
+    }
+    if (folded.isNotEmpty()) {
+      FoldedRegionChip(
+        markers = folded,
+        focusedPlaceId = focusedPlaceId,
+        dropTarget = dragging && drag.overFolded(),
+        // 入れ替わった後は、せり上がったチップと同じ間だけ枠を太くする（指や吸い込まれるチップで弾むのを見逃しても分かるように）。
+        highlighted = arrivedPlaceId != null,
+        bounce = foldedBounce,
+        onRefit = onRefit,
+        onClear = onClear,
+        onBringUp = { marker ->
+          arrivedPlaceId = marker.placeId
+          foldedBounce++
+          onBringUp(marker)
+        },
+        modifier = Modifier.onPlaced { drag.placeFolded(it.positionInParent().y, it.size.height.toFloat()) },
+      )
+    } else {
+      drag.placeFolded(null, 0f)
+    }
+  }
+}
+
+/** 掴んだチップの大きさ（少し大きくして浮かせる）。 */
+private const val LIFTED_CHIP_SCALE = 1.05f
+
+/** まとめに吸い込まれ終わるときのチップの大きさ。 */
+private const val FOLDED_CHIP_SCALE = 0.3f
+
+/** 「他 N 件」に重ねている間の、掴んだチップの大きさと濃さ（下の「他 N 件」を透かす）。 */
+private const val OVER_FOLDED_CHIP_SCALE = 0.8f
+private const val OVER_FOLDED_CHIP_ALPHA = 0.5f
+
+/** まとめから出てきたチップがせり上がる距離と長さ。 */
+private val ARRIVING_CHIP_RISE = 40.dp
+private const val ARRIVING_CHIP_MILLIS = 160
+
+/** まとめから出てきたチップの枠を太くしておく長さ（ms）。 */
+private const val ARRIVED_HIGHLIGHT_MILLIS = 1_500L
+
+/**
+ * 縦にドラッグして掴み（長押しは要らない）、離した所で [onDrop]（地域・移した後の位置）を呼ぶ。動かし始めると子の地名
+ * （寄せ直し）・× のタップは取り消され、軽いタップは今までどおり子に届く。横に動かしても何もしない。地図には指が行かない。
+ */
+private fun Modifier.regionChipReorderGesture(
+  placeId: String,
+  drag: RegionChipDragState,
+  onStart: () -> Unit,
+  onDrop: (String, Int) -> Unit,
+): Modifier = pointerInput(placeId, drag) {
+  // 2 本目の指で別のチップを動かしたときは掴まず、その指の動きでは何もしない。
+  var holding = false
+  val finish = {
+    if (holding) drag.drop()?.let { (id, to) -> onDrop(id, to) }
+    holding = false
+  }
+  detectVerticalDragGestures(
+    onDragStart = {
+      holding = drag.start(placeId)
+      if (holding) onStart()
+    },
+    onVerticalDrag = { change, amount ->
+      change.consume()
+      if (holding) drag.dragBy(amount)
+    },
+    onDragEnd = { finish() },
+    onDragCancel = { finish() },
+  )
+}
+
+/** 縦に出す地域のチップの数。これより後に選んだ地域は「他 N 件」にまとめる。 */
+internal const val VISIBLE_REGION_CHIPS = 5
+
+/** 入れ替わったときに「他 N 件」を弾ませる大きさと長さ。 */
+private const val FOLDED_BOUNCE_SCALE = 1.3f
+private const val FOLDED_BOUNCE_MILLIS = 150
+
+/**
+ * 6 つ目からの地域をまとめたチップ。押すとメニューで地名を出し、行でその地域へ寄せ直し、↑ で 5 つ目に出し
+ * （[onBringUp]）、× で外す。[dropTarget] は掴んだチップを重ねている間（離すとまとめに入る）で、枠を太くする。
+ * [bounce] が増えると弾み、[highlighted] の間は枠を太くする（まとめと入れ替わったとき）。
+ */
+@Composable
+private fun FoldedRegionChip(
+  markers: List<RegionMarker>,
+  focusedPlaceId: String?,
+  dropTarget: Boolean,
+  highlighted: Boolean,
+  bounce: Int,
+  onRefit: (RegionMarker) -> Unit,
+  onClear: (RegionMarker) -> Unit,
+  onBringUp: (RegionMarker) -> Unit,
+  modifier: Modifier = Modifier,
+) {
+  var menuOpen by remember { mutableStateOf(false) }
+  // まとめと入れ替わったら、少し弾ませる（[bounce] が増えるたび）。出てきたとき（まとめが空から戻ったとき）の数では
+  // 弾ませない（前の入れ替えで増えた数が残っているため）。
+  val bounceScale = remember { Animatable(1f) }
+  val bounceAtEnter = remember { bounce }
+  LaunchedEffect(bounce) {
+    if (bounce != bounceAtEnter) {
+      bounceScale.animateTo(FOLDED_BOUNCE_SCALE, tween(FOLDED_BOUNCE_MILLIS))
+      bounceScale.animateTo(1f, spring(dampingRatio = Spring.DampingRatioMediumBouncy))
+    }
+  }
+  Box(
+    modifier = modifier.graphicsLayer {
+      scaleX = bounceScale.value
+      scaleY = bounceScale.value
+    },
+  ) {
+    RegionChipSurface(
+      focused = markers.any { it.placeId == focusedPlaceId },
+      onClick = { menuOpen = true },
+      outlined = dropTarget || highlighted,
+      modifier = Modifier.testTag("regionMarkerFoldedChip"),
+    ) {
+      Row(
+        modifier = Modifier.padding(start = PathlySpacing.md, end = PathlySpacing.md, top = PathlySpacing.sm, bottom = PathlySpacing.sm),
+        verticalAlignment = Alignment.CenterVertically,
+      ) {
+        Text(
+          text = "他 ${markers.size} 件",
+          style = MaterialTheme.typography.labelLarge,
+          fontWeight = FontWeight.Medium,
+        )
+        Icon(
+          painter = painterResource(R.drawable.ic_expand_more),
+          contentDescription = null,
+          modifier = Modifier.size(18.dp),
+        )
+      }
+    }
+    DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+      markers.forEach { marker ->
+        key(marker.placeId) {
+          DropdownMenuItem(
+            text = {
+              Text(
+                text = marker.name,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                fontWeight = if (marker.placeId == focusedPlaceId) FontWeight.Bold else null,
+                // 短い地名でも行の真ん中を押して寄せ直せるよう、地名の幅を取る（↑・× の押せる範囲と離す）。
+                modifier = Modifier.widthIn(min = 120.dp),
+              )
+            },
+            leadingIcon = {
+              Icon(
+                painter = painterResource(R.drawable.ic_public),
+                contentDescription = null,
+                tint = PathlyMapColors.Region,
+                modifier = Modifier.size(18.dp),
+              )
+            },
+            trailingIcon = {
+              // 上に出しても外してもメニューは開いたまま（続けて操作できるように）。最後の 1 つを外すと、まとめごと消える。
+              Row {
+                IconButton(onClick = { onBringUp(marker) }) {
+                  Icon(
+                    painter = painterResource(R.drawable.ic_arrow_upward),
+                    contentDescription = "${marker.name}を上に出す",
+                    modifier = Modifier.size(18.dp),
+                  )
+                }
+                IconButton(onClick = { onClear(marker) }) {
+                  Icon(
+                    painter = painterResource(R.drawable.ic_close),
+                    contentDescription = "${marker.name}の目印を外す",
+                    modifier = Modifier.size(18.dp),
+                  )
+                }
+              }
+            },
+            onClick = {
+              menuOpen = false
+              onRefit(marker)
+            },
+          )
+        }
+      }
+    }
+  }
+}
+
+/**
+ * 地域のチップの外枠（地図に浮かぶピル。「すべて外す」「他 N 件」）。白地に藍の枠と藍の字にし、[focused] なら藍で塗りつぶし、
+ * [outlined]（掴んだチップを重ねている間）なら枠を太くして薄く塗る。
+ */
+@Composable
+private fun RegionChipSurface(
+  focused: Boolean,
+  onClick: () -> Unit,
+  modifier: Modifier = Modifier,
+  outlined: Boolean = false,
+  content: @Composable () -> Unit,
+) {
+  Surface(
+    onClick = onClick,
+    modifier = modifier.semantics { selected = focused },
+    shape = PathlyShapes.pill,
+    color = when {
+      focused -> PathlyMapColors.Region
+      outlined -> PathlyMapColors.RegionContainer
+      else -> Color.White
+    },
+    contentColor = if (focused) PathlyMapColors.OnMarker else PathlyMapColors.Region,
+    shadowElevation = PathlyElevation.floating,
+    border = BorderStroke(if (outlined) 3.dp else 1.dp, PathlyMapColors.Region),
+    content = content,
+  )
+}

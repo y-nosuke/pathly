@@ -4,10 +4,13 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
@@ -21,6 +24,10 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.SnackbarDuration
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
@@ -28,11 +35,13 @@ import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
@@ -47,14 +56,58 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
+import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LifecycleEventEffect
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.google.android.gms.maps.model.CameraPosition
+import com.google.android.gms.maps.model.LatLng
+import com.google.android.gms.maps.model.LatLngBounds
+import com.google.maps.android.compose.CameraPositionState
+import com.google.maps.android.compose.rememberCameraPositionState
 import com.pathly.R
+import com.pathly.domain.model.GeoBounds
+import com.pathly.domain.model.GpsTrack
+import com.pathly.domain.model.MapRegion
 import com.pathly.domain.model.PlacePrediction
+import com.pathly.domain.model.PlaceSearchResult
+import com.pathly.domain.model.Stop
+import com.pathly.domain.model.WishlistFlag
+import com.pathly.presentation.common.CloseInfoWindowWithSheet
+import com.pathly.presentation.common.DefaultMapLocation
+import com.pathly.presentation.common.MapTopBarInset
+import com.pathly.presentation.common.SheetDetent
+import com.pathly.presentation.common.SheetRestoreButtonInset
+import com.pathly.presentation.common.heightOf
+import com.pathly.presentation.common.rememberFixedFloatingSheetState
+import com.pathly.presentation.common.rememberFloatingSheetState
+import com.pathly.presentation.common.rememberMapInfoWindowState
+import com.pathly.presentation.common.toGeoBounds
+import com.pathly.presentation.common.toLatLngBounds
+import com.pathly.presentation.history.PlaceNameDialog
+import com.pathly.presentation.history.RenameTrackDialog
+import com.pathly.presentation.history.SameFacilityReview
+import com.pathly.presentation.history.SameFacilityReviewDialog
+import com.pathly.presentation.history.StopNoteDialog
+import com.pathly.presentation.places.PLACE_SHEET_PEEK_FRACTION
+import com.pathly.presentation.places.PlaceEditHost
+import com.pathly.presentation.places.PlaceEditUi
 import com.pathly.presentation.places.PlaceSearchCandidates
+import com.pathly.presentation.places.PlaceSheetTarget
 import com.pathly.presentation.places.PredictionRow
+import com.pathly.presentation.stops.LiveStopActions
+import com.pathly.presentation.stops.ManualStopHost
+import com.pathly.presentation.stops.ManualStopOrigin
+import com.pathly.presentation.stops.ManualStopTarget
+import com.pathly.presentation.stops.StopDurationSheet
+import com.pathly.presentation.stops.StopEditActions
+import com.pathly.presentation.stops.StopReassignHost
+import com.pathly.presentation.stops.isLive
 import com.pathly.ui.theme.PathlyElevation
 import com.pathly.ui.theme.PathlyMapColors
 import com.pathly.ui.theme.PathlyShapes
 import com.pathly.ui.theme.PathlySpacing
+import com.pathly.util.DateFormatters
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -352,4 +405,76 @@ private fun MapSearchCandidateRow(
 private fun fetchFailedText(action: MapSearchAction): String = when (action) {
   MapSearchAction.Register -> "場所の取得に失敗しました（オフライン等）"
   MapSearchAction.MoveToRegion -> "地域の取得に失敗しました（オフライン等）"
+}
+
+/**
+ * 地図の上端に重ねる検索窓。窓の下の「場所｜地域」で探し方を切り替え（[MapSearchMode]）、選んだ行の動き（[MapSearchAction]）で分ける:
+ * 登録 → 場所の詳細を引いて場所シート、地域へ移動 → 範囲を引いて目印。
+ * [registerEnabled] が false（立ち寄りの追加中）なら、切り替えを出さず地域に絞って地域へ移動だけにする。
+ */
+@Composable
+internal fun TrackingMapSearch(
+  registerEnabled: Boolean,
+  selectedMode: MapSearchMode,
+  onSelectMode: (MapSearchMode) -> Unit,
+  bias: GeoBounds?,
+  onPredictPlaces: suspend (query: String, bias: GeoBounds?) -> List<PlacePrediction>,
+  onFetchPlace: suspend (placeId: String) -> PlaceSearchResult?,
+  onPredictRegions: suspend (query: String, bias: GeoBounds?) -> List<PlacePrediction>,
+  onFetchRegion: suspend (placeId: String) -> MapRegion?,
+  regionMarkers: RegionMarkersState,
+  onPlaceSelected: (PlaceSearchResult) -> Unit,
+  onRegionSelected: (RegionMarker) -> Unit,
+  onClose: () -> Unit,
+  modifier: Modifier = Modifier,
+  belowModes: @Composable () -> Unit = {},
+) {
+  TrackingPlaceSearchBar(
+    registerEnabled = registerEnabled,
+    selectedMode = selectedMode,
+    onSelectMode = onSelectMode,
+    // 「場所」は種類で絞らず、「地域」は地域に絞って、どちらも 1 回の Autocomplete で取る（#254）。
+    onSearchPredictions = { query, mode ->
+      when (mode) {
+        MapSearchMode.Place -> onPredictPlaces(query, bias)
+        MapSearchMode.Region -> onPredictRegions(query, bias)
+      }
+    },
+    onFetchCandidate = { candidate ->
+      val prediction = candidate.prediction
+      when (candidate.action) {
+        MapSearchAction.Register -> onFetchPlace(prediction.placeId)?.let(MapSearchSelection::Place)
+
+        // もう出している地域は、引き直さずに覚えている範囲へ移す。
+        // 目印の名前は候補の文字を使う（Places から名前を引くと料金の区分が上がるため）。
+        MapSearchAction.MoveToRegion -> (
+          regionMarkers.find(prediction.placeId) ?: onFetchRegion(prediction.placeId)?.let { region ->
+            RegionMarker(
+              placeId = prediction.placeId,
+              name = prediction.primaryText,
+              latitude = region.latitude,
+              longitude = region.longitude,
+              bounds = region.bounds,
+            )
+          }
+          )?.let(MapSearchSelection::Region)
+      }
+    },
+    onSelected = { selection ->
+      when (selection) {
+        is MapSearchSelection.Place -> onPlaceSelected(selection.result)
+        is MapSearchSelection.Region -> onRegionSelected(selection.marker)
+      }
+    },
+    onClose = onClose,
+    modifier = modifier,
+    belowModes = belowModes,
+  )
+}
+
+/** 検索窓で選んだもの（引いた結果）。 */
+private sealed interface MapSearchSelection {
+  data class Place(val result: PlaceSearchResult) : MapSearchSelection
+
+  data class Region(val marker: RegionMarker) : MapSearchSelection
 }
