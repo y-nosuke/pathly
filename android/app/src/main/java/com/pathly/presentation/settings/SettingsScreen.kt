@@ -40,8 +40,8 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.pathly.BuildConfig
 import com.pathly.data.backup.BackupCounts
 import com.pathly.data.backup.BackupException
-import com.pathly.data.settings.LocationAccuracy
-import com.pathly.data.settings.ThemeMode
+import com.pathly.domain.model.LocationAccuracy
+import com.pathly.domain.model.ThemeMode
 import com.pathly.ui.theme.PathlySpacing
 import com.pathly.util.DateFormatters
 import java.util.Date

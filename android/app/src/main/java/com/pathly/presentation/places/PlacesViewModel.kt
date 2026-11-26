@@ -3,13 +3,10 @@ package com.pathly.presentation.places
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.pathly.data.places.PlacesTextSearcher
-import com.pathly.data.settings.MapSurface
-import com.pathly.data.settings.SettingsRepository
-import com.pathly.data.settings.StatsList
 import com.pathly.domain.model.GeoBounds
 import com.pathly.domain.model.MapPlaceFilter
 import com.pathly.domain.model.MapRegion
+import com.pathly.domain.model.MapSurface
 import com.pathly.domain.model.NearbyRegisterPrompt
 import com.pathly.domain.model.PlaceCategoryFacet
 import com.pathly.domain.model.PlaceGrouping
@@ -21,6 +18,9 @@ import com.pathly.domain.model.PlaceWithDistance
 import com.pathly.domain.model.RegionKey
 import com.pathly.domain.model.RegisteredPlace
 import com.pathly.domain.model.SameFacilityPlace
+import com.pathly.domain.model.StatsList
+import com.pathly.domain.repository.PlaceSearchRepository
+import com.pathly.domain.repository.SettingsRepository
 import com.pathly.domain.repository.WishlistRepository
 import com.pathly.domain.usecase.PlaceEditUseCase
 import com.pathly.presentation.common.ListMapMode
@@ -42,7 +42,7 @@ import javax.inject.Inject
 @HiltViewModel
 class PlacesViewModel @Inject constructor(
   private val wishlistRepository: WishlistRepository,
-  private val placesTextSearcher: PlacesTextSearcher,
+  private val placeSearchRepository: PlaceSearchRepository,
   private val settingsRepository: SettingsRepository,
   private val placeEditUseCase: PlaceEditUseCase,
   private val savedStateHandle: SavedStateHandle,
@@ -110,7 +110,7 @@ class PlacesViewModel @Inject constructor(
     scope = viewModelScope,
     placeEditUseCase = placeEditUseCase,
     wishlistRepository = wishlistRepository,
-    placesTextSearcher = placesTextSearcher,
+    placeSearchRepository = placeSearchRepository,
     // 近接確認で「見えている」とみなす場所。場所詳細の地図から登録するとき（[mainPlaceId] がある）だけ、
     // 表示 ON で地図の絞り込みに合うか、主マーカーとして出ている場所。地図で選んで追加・検索して追加は、
     // 登録済みのマーカーから紐付けられないので、いつも近接確認を出す（何も見えていない扱い）。
@@ -288,14 +288,14 @@ class PlacesViewModel @Inject constructor(
    * 入る範囲で、同じ名前の地域を取り違えないよう候補をそこに寄せる。地域不明・オフライン・引けないときは null。
    */
   suspend fun findRegion(region: RegionKey, near: GeoBounds?): MapRegion? = region.searchQuery?.let {
-    placesTextSearcher.findRegion(it, topLevel = region.city == null, near = near)
+    placeSearchRepository.findRegion(it, topLevel = region.city == null, near = near)
   }
 
   private var predictJob: Job? = null
 
   /** 検索画面を開いたとき。セッション開始＋状態リセット。 */
   fun startSearch() {
-    placesTextSearcher.startSession()
+    placeSearchRepository.startSession()
     _uiState.update { it.copy(search = SearchState()) }
   }
 
@@ -309,7 +309,7 @@ class PlacesViewModel @Inject constructor(
     predictJob = viewModelScope.launch {
       delay(300) // デバウンス（打鍵ごとに叩かない）
       _uiState.update { it.copy(search = it.search.copy(isSearching = true)) }
-      val preds = placesTextSearcher.predict(query)
+      val preds = placeSearchRepository.predict(query)
       _uiState.update {
         it.copy(
           search = it.search.copy(predictions = preds, isSearching = false),
@@ -321,7 +321,7 @@ class PlacesViewModel @Inject constructor(
   /** 候補を選んで確定（fetchPlace）。取得できたら入力フォーム用に result を保持する。 */
   fun selectPrediction(placeId: String) {
     viewModelScope.launch {
-      val result = placesTextSearcher.fetch(placeId)
+      val result = placeSearchRepository.fetch(placeId)
       if (result == null) {
         _uiState.update { it.copy(errorMessage = "場所の取得に失敗しました（オフライン等）") }
       } else {

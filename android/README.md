@@ -65,7 +65,7 @@ app/src/main/java/com/pathly/
 │   └── backup/        # データの書き出し・読み込み
 ├── domain/            # ドメイン層
 │   ├── model/         # ドメインモデル
-│   ├── repository/    # Repository の interface
+│   ├── repository/    # Repository の interface（設定・場所の検索も）
 │   └── usecase/       # 複数画面で共有する手順（場所の登録・立ち寄りの手動追加など）
 ├── presentation/      # プレゼン層（画面ごとの ViewModel・State・Screen）
 │   ├── tracking/      # 記録
