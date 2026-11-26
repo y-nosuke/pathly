@@ -1,6 +1,6 @@
 ---
 name: start-issue
-description: GitHub Issue を読んで着手し、実装・コード確認・コミット・スマホでの動作確認を経て PR で閉じるまでの手順。Claude Desktop では Issue ごとに子のセッションを立てて、そこで進める。「#12 をやって」「Issue 12 に着手」「Project の次をやって」「着手できるもののいちばん上をやって」と頼まれたときに使う。
+description: GitHub Issue を読んで着手し、実装・コード確認・コミット・スマホでの動作確認を経て PR で閉じるまでの手順。Claude Desktop では、1 つならそのセッションで worktree を切って進め、2 つ以上なら Issue ごとに子のセッションを立てる。「#12 をやって」「Issue 12 に着手」「Project の次をやって」「着手できるもののいちばん上をやって」と頼まれたときに使う。
 ---
 
 # Issue に着手して PR で閉じる
@@ -10,7 +10,8 @@ description: GitHub Issue を読んで着手し、実装・コード確認・コ
 ユーザーへの返答は日本語。**commit・push・マージ・タグ・GitHub の設定変更は、ユーザーの確認を取ってから**
 （自動マージは 9 の push の確認で一緒に取る）。
 
-Claude Desktop では、**頼まれたセッション（親）は 1・2 だけをして、3 から先は子のセッションが進める**。
+Claude Desktop では、**頼まれた Issue が 1 つならそのセッションで worktree を切って進め、2 つ以上なら頼まれたセッション（親）は
+1・2 だけをして、3 から先は Issue ごとの子のセッションが進める**（2）。
 
 ## 1. どの Issue をやるか決める
 
@@ -30,20 +31,27 @@ gh project item-list 3 --owner y-nosuke --format json --limit 100 \
 - In Progress の Issue と同じ画面・層を触りそう。
 - DB のスキーマを変えそうで、In Progress にも DB を変えるものがある。
 
-## 2. 子のセッションを立てる（Claude Desktop）
+## 2. どこで進めるか決める（Claude Desktop）
 
-Issue の作業は、頼まれたセッション（親）では始めない。**Issue ごとに子のセッションを立て、そこで 3 から先を進める**。
-親のチャットは受付にして、Issue ごとの作業・確認・承認の流れを子に分けるため（並行のときに混ざらない）。
+**頼まれた Issue が 1 つなら、子のセッションを立てずにそのセッションで進める**。分けても往復が増えるだけなので。
+
+- ただし本体では作業しない。`EnterWorktree` で worktree を切ってから 3 に進む（5 は「worktree の中」の手順）。
+  本体はいつも main のままにしておき、途中で別の Issue を頼まれても、そちらだけ子のセッションに出せるようにするため。
+- 作業の途中で別の Issue を頼まれたら、その Issue は下のとおり子のセッションを立てて進める（1 の「並行のとき」を見てから）。
+
+**2 つ以上を並行で頼まれたら、Issue ごとに子のセッションを立て、そこで 3 から先を進める**。頼まれたセッション（親）は受付にして、
+Issue ごとの作業・確認・承認の流れを子に分けるため（並行のときに混ざらない）。
 
 - `start_session` で立てる: `initiation: "user_asked"`・`use_worktree: true`・`context: "fresh"`。タイトルは `#<番号> <Issue の要約>`。
 - 依頼文は短く: 「#<番号> をやって。`start-issue` スキルの 3 から進める。あなたは作業をする子のセッションなので、子のセッションは立てない。」
   親でユーザーと決めた前提（画面の形・やらないことなど）があれば、それも書く（子は親の会話を読めない）。
-- 2 本以上頼まれたら、1 の「並行のとき」で並べられるかを見てから、並べられるものだけ立てる。並べられないものは、立てずにユーザーに伝える。
+- 1 の「並行のとき」で並べられるかを見てから、並べられるものだけ立てる。並べられないものは、立てずにユーザーに伝える。
 - 立てたら、子へのリンクを伝える。**コードの確認・コミット・push の OK は、ユーザーが子のチャットで直接出す**
   （親が取り次ぐと、ユーザーの言葉かどうかが子に分からない）。
 - 子が止まった（確認待ちなど）・終わった知らせが来たら、親は一言で伝える。親が子の作業を引き取らない。
 - **子のセッションでは 2 を飛ばす**（依頼文に「子のセッション」とある）。孫は立てない。
-- ユーザーが「ここでやって」と言ったときと、Claude Desktop 以外（ターミナルの `claude` など）では、子を立てずにそのセッションで 3 から進める。
+- ユーザーが「ここでやって」と言ったときは、子を立てずにそのセッションで 3 から進める。Claude Desktop 以外（ターミナルの `claude` など）でも、
+  子は立てずにそのセッションで進める。
 
 ## 3. 読む
 
@@ -77,7 +85,7 @@ Status の選択肢 id: Idea `533a6515` / Todo `f75ad846` / In Progress `47fc9ee
 
 種類は Issue のラベル（`feat` / `fix` / `test` / `docs` / `build` / `ci` / `chore` …）に合わせる。日付・番号は入れない。
 
-**子のセッション（worktree の中）**: main は本体で checkout されているので `git checkout main` できない。
+**worktree の中（子のセッション・`EnterWorktree` で切ったとき）**: main は本体で checkout されているので `git checkout main` できない。
 
 ```bash
 .claude/skills/start-issue/setup-worktree.sh   # android/local.properties（Maps のキー）を本体からコピーする
@@ -86,7 +94,7 @@ git switch -c <種類>/<英語のケバブケース> origin/main   # worktree �
                                                      # 代わりに git branch -m <種類>/<英語のケバブケース>（origin/main から作られていれば）
 ```
 
-worktree でないとき（Claude Desktop 以外・「ここでやって」）:
+worktree でないとき（Claude Desktop 以外で、本体で進めるとき）:
 
 ```bash
 git checkout main && git pull --ff-only
@@ -96,14 +104,16 @@ git checkout -b <種類>/<英語のケバブケース>
 ## 6. 作る・確かめる
 
 - CLAUDE.md の「守ること」に従う。DB を変えるなら version を上げてからコンパイル（schemas の上書きの罠）。
-- 確かめ方は CLAUDE.md の「確かめ方」の表。**途中は変えたところだけ、全部は push の前に 1 回**にする
-  （build と全部の instrumented test で 1 周 7 分ほどかかり、直すたびに回すと積み上がる）。
+- 確かめ方は CLAUDE.md の「確かめ方」の表。**ローカルで回すのは変えたところだけ**にする（直すたびに全部回すと積み上がる）。
   - 直している途中: `./gradlew compileDebugKotlin compileDebugAndroidTestKotlin` と、変えたパッケージのユニットテスト
     （`testDebugUnitTest --tests "com.pathly.xxx.*"`）、変えた画面の instrumented test を 1 クラスだけ
     （`run-instrumented.sh -Pandroid.testInstrumentationRunnerArguments.class=...`）。
+  - DB を変えたとき: instrumented test はデータ層をまとめて回す
+    （`run-instrumented.sh -Pandroid.testInstrumentationRunnerArguments.package=com.pathly.data`。マイグレーション・DAO・
+    書き出し・リポジトリのテストが入る。マイグレーションのテストは変えたクラスとは別にあるため）。
   - 8 のコード確認の前: `run-build.sh`（spotless・lint・全部のユニットテスト。コミットに崩れを入れないため）。
-  - 全部の instrumented test（`run-instrumented.sh`）は 9 の push の前に 1 回。スマホでの確認で直しが入っても、まとめて 1 回でよい
-    （CI でも全部回る）。DB を変えたときは、途中でも全部回す（マイグレーションのテストが別のクラスにあるため）。
+  - **全部の instrumented test はローカルでは回さない**。PR の CI（必須チェック `instrumented-test`）が全部回す。
+    ローカルで落ちることはほとんどなく、変えたところは上で回しているため。CI で落ちたら、落ちたクラスをローカルで回して直す。
 - UI を変えたら、スマホに入れる前に**エミュレータで自分で画面を触って見る**（`emulator-check` の「APK を入れて触る」）。
   あふれたとき（数を多く・名前を長く）・記録中・シートを畳んだときなど、3 で決めた形どおりかをスクリーンショットで確かめる。
   押せない・はみ出すといった見た目の問題は、ユーザーの確認の前に見つける。
@@ -142,7 +152,7 @@ PR を出す前に、ユーザーにコードと実機の動きを見てもら�
    - **気づいたこと（不具合も、足したい・変えたいことも）は、手順を最後まで試してからまとめて送ってもらう**よう頼む。
      1 つずつ直して入れ直すと、確認の往復が増える。
    - 問題があれば直してコミットし、3 をやり直す。直しが仕様の変更なら、作る前に 3（読む）と同じく形を見せて決める。
-   - **並行のとき**: スマホには 1 つずつ入れる。別のブランチの開発版が入っていればアンインストールしてから入れ、
+   - **並行のとき**: スマホには 1 つずつ入れる。別のブランチの開発版が入っていれば、DB が同じなら上書きで、違えばアンインストールして
      リリース版の書き出しを読み込んでもらう（`phone-check` の 2）。別のセッションの確認がまだ終わっていなければ、終わるまで待つ。
 
 ## 9. push して PR・完了の条件のチェック・自動マージ（ユーザーの確認を取ってから）
@@ -153,7 +163,7 @@ PR を出す前に、ユーザーにコードと実機の動きを見てもら�
 - PR: タイトルはコミットと同じ形（**リリースノートの 1 行になる**）。本文は `.github/pull_request_template.md` に沿って、
   概要・`Closes #<番号>`・変更内容・検証。確かめていないことは「未確認」と書く。スマホで確かめたなら「スマホ（開発版）で確かめた（ユーザー）」。
 - **並行のとき（main が進んでいたら）**: push の前に `git fetch origin && git merge origin/main` で取り込み、
-  `run-build.sh` と `run-instrumented.sh` をやり直す（取り込んだ変更でアプリの動きが変わるなら、スマホの確認もやり直す）。
+  `run-build.sh` をやり直す（instrumented test は PR の CI に任せる。取り込んだ変更でアプリの動きが変わるなら、スマホの確認もやり直す）。
   DB の版がぶつかったら、こちらの版を付け直してマイグレーションと schema を作り直す（`docs/development/parallel.md`）。
 - `git push -u origin <ブランチ>` → `gh pr create --base main --head <ブランチ> --title ... --body-file ...`
 - Claude Desktop では、出したら Auto-fix を有効にする（CI を自分でポーリングしない。CLAUDE.md の「確かめ方」）。

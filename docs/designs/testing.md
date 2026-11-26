@@ -68,7 +68,8 @@ debug APK（開発版 `com.pathly.debug`）と lint/test レポートをアー�
 main の ruleset で **`build` と `instrumented-test` の両方が必須**（どちらかが落ちている・終わっていないとマージできない →
 [branch-and-pr.md](../development/branch-and-pr.md) の「main の守り」）。
 手元で回すときは、Wi-Fi でつないだスマホを巻き込まないよう `ANDROID_SERIAL=emulator-5554` を付けて
-`./gradlew connectedDebugAndroidTest` を実行する。
+`./gradlew connectedDebugAndroidTest` を実行する。手元では変えた画面のクラス（DB を変えたら `com.pathly.data` のパッケージ）だけを回し、
+全部は CI に任せる（[start-issue](../../.claude/skills/start-issue/SKILL.md) の 6）。
 
 ## 実機でしか確かめられないもの
 

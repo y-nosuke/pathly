@@ -57,12 +57,14 @@ if ! emulator_ready; then
 fi
 
 # 別のブランチの開発版が入っていると、versionCode（コミット数）が下がって入らないことがある。消してから始める
-# （エミュレータのデータはテスト用）。
+# （エミュレータのデータはテスト用なので、DB の形が同じ 3 でも消す）。
 "$(dirname "$0")/../phone-check/installed-dev.sh" "$SERIAL" > /dev/null
-if [ $? = 2 ]; then
-  echo "別のブランチの開発版が入っているので、アンインストールしてから始める。"
-  adb_e uninstall com.pathly.debug > /dev/null 2>&1 || true
-fi
+case $? in
+  2 | 3)
+    echo "別のブランチの開発版が入っているので、アンインストールしてから始める。"
+    adb_e uninstall com.pathly.debug > /dev/null 2>&1 || true
+    ;;
+esac
 
 # 前の結果を読まないよう消す。終わったテストを数えるため、logcat を空にして大きくする（溢れて数が減らないように）。
 rm -rf "$RESULTS"

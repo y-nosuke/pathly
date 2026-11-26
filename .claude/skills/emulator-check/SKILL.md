@@ -71,8 +71,10 @@ Bash ツールで起動するときは、起動と待ちを 1 回の呼び出し
 - adb はすべて `timeout` 付き・`-s emulator-5554`（gradle にも `ANDROID_SERIAL=emulator-5554` を渡す）。
 - **Claude Desktop では `run_in_background` で回す**。終わったとき（固まって止めたときも）に知らせが来る。
 - 1 件で 3 分を超えるテストは、エミュレータが正常でも固まったとみなされる（今のテストは 1 件数秒）。そういうテストを足すなら見張りの回数を見直す。
-- 全部（200 件余り）で 3 分半ほどかかる。**直している途中は変えた画面のクラスだけ**を回し、全部は push の前に 1 回にする
-  （`start-issue` の 6。DB を変えたときは途中でも全部）。
+- 全部（200 件余り）で 3 分半ほどかかる。**ローカルでは変えた画面のクラスだけ**を回し、全部は PR の CI（`instrumented-test`）に任せる
+  （`start-issue` の 6）。DB を変えたときはデータ層をまとめて回す:
+  `run-instrumented.sh -Pandroid.testInstrumentationRunnerArguments.package=com.pathly.data`。
+  引数なしの `run-instrumented.sh`（全部）は、CI で落ちたのにどのクラスか絞れないときなどに使う。
 
 失敗したら `android/app/build/reports/androidTests/connected/debug/` の HTML を読む。
 
@@ -117,8 +119,9 @@ Bash ツールで起動するときは、起動と待ちを 1 回の呼び出し
 .claude/skills/emulator-check/hold-check-lock.sh release  # 触り終わったら手放す（忘れても 30 分で手放す）
 ```
 
-開発版を入れる前に、入っている開発版を見る。`2`（別のブランチの開発版）なら、上書きせずにアンインストールしてから入れる
-（DB の版や形が違うと入らない・落ちる。エミュレータのデータはテスト用なので、確かめずに消してよい）。
+開発版を入れる前に、入っている開発版を見る。`2`・`3`（祖先でないコミットの開発版）なら、上書きせずにアンインストールしてから入れる
+（DB の版や形が違うと入らない・落ちる。versionCode が下がると入らない。エミュレータのデータはテスト用なので、
+DB が同じ `3` でも確かめずに消してよい）。
 
 ```bash
 .claude/skills/phone-check/installed-dev.sh emulator-5554 || [ $? = 1 ] || $ADB -s emulator-5554 uninstall com.pathly.debug
@@ -130,8 +133,18 @@ ANDROID_SERIAL=emulator-5554 ./gradlew installDebug             # 開発版 com.
 for p in ACCESS_FINE_LOCATION ACCESS_COARSE_LOCATION ACCESS_BACKGROUND_LOCATION POST_NOTIFICATIONS; do
   $ADB -s emulator-5554 shell pm grant <パッケージ> android.permission.$p
 done
+$ADB -s emulator-5554 shell dumpsys deviceidle whitelist +<パッケージ>   # 電池の最適化を外す
 $ADB -s emulator-5554 shell am start -n <パッケージ>/com.pathly.MainActivity
 ```
+
+**画面を見る前に、記録画面の案内を消しておく**。「位置情報の権限が必要です」のカードや「電池の最適化で記録が止まることがあります」の帯が
+地図の真ん中・上を隠し、見たいものが見えなくなる（#157）。上の `pm grant` と `deviceidle whitelist` を**起動の前に**打てば出ない。
+
+- 入れ直す（アンインストール・instrumented test の後）と、許可も電池の最適化の除外も消える。入れ直したら打ち直す。
+- アプリが前に出ている間に打っても、案内は残る（アプリは画面に戻ったとき＝`ON_RESUME` に見直す）。ホームに戻ってから開き直すと消える:
+  `$ADB -s emulator-5554 shell input keyevent HOME` → `am start`。
+- 案内そのものを確かめたいときは、`pm revoke <パッケージ> android.permission.ACCESS_FINE_LOCATION`・
+  `dumpsys deviceidle whitelist -<パッケージ>` で戻す。
 
 - 位置を動かす: `$ADB -s emulator-5554 emu geo fix <経度> <緯度>`（`bc` は無い。計算は `awk "BEGIN{printf \"%.6f\", 139.7671 + $i*0.0006}"`）。
 - 画面を見る: `$ADB -s emulator-5554 exec-out screencap -p > <scratchpad>/x.png` を Read する（画像は 1080x2424、表示は縮小されるので座標は元の大きさに直す）。

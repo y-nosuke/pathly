@@ -32,13 +32,23 @@ PHONE=$($ADB devices | grep -oE '^adb-[^[:space:]]+' | head -1)
 
 ```bash
 $ADB -s "$PHONE" shell dumpsys activity services com.pathly.debug | grep -c LocationTrackingService   # 0 = 開発版で記録中でない
-.claude/skills/phone-check/installed-dev.sh "$PHONE"   # 0 = 上書きでよい / 1 = 入っていない / 2 = 入れ替え（下）
+.claude/skills/phone-check/installed-dev.sh "$PHONE"   # 0 = 上書きでよい / 1 = 入っていない / 2 = 入れ替え / 3 = DB が同じなので上書き（下）
 cd android && ANDROID_SERIAL="$PHONE" ./gradlew installDebug
 $ADB -s "$PHONE" shell dumpsys package com.pathly.debug | grep -m1 lastUpdateTime                      # 入れた時刻
 ```
 
 - 開発版で記録中なら、上書きで記録が止まる。ユーザーに止めてもらってから入れる。
-- **`installed-dev.sh` が 2（入れ替え）なら、上書きしない**。入っているのは別のブランチの開発版で、DB の版や形が違うと
+- **`installed-dev.sh` が 3 なら、上書きで入れる**（データも残る）。入っているのは祖先でないコミット（別のブランチ・取り消したコミット）の
+  開発版だが、`android/app/schemas` に差が無く、DB の版も形も同じなので読める。versionCode（コミット数）が下がるときは
+  `installDebug` が `INSTALL_FAILED_VERSION_DOWNGRADE` で落ちる（スクリプトが「adb install -r -d で入れる」と出す）。そのときは
+  APK を作って版の巻き戻しを許して入れる（開発版は debuggable なので通る。#254）。
+
+  ```bash
+  cd android && ./gradlew assembleDebug
+  $ADB -s "$PHONE" install -r -d "$(cygpath -m "$PWD")/app/build/outputs/apk/debug/app-debug.apk"   # adb.exe には D:/... の形で渡す
+  ```
+
+- **`installed-dev.sh` が 2（入れ替え）なら、上書きしない**。入っているのは DB の版や形が違う（または見分けられない）開発版で、
   上書きでは入らない・落ちる（`docs/development/parallel.md` の「開発版の入れ替え」）。次の順にする。
   1. ユーザーに「開発版をアンインストールしてデータを消してよいか（残したいものがあれば先に開発版から書き出す）」を確かめる。
      アンインストールはデータを消すので、必ず OK を取ってから。
@@ -66,6 +76,7 @@ cd app/build/outputs/apk/debug && powershell.exe -NoProfile -Command \
 - スマホでは展開して `app-debug.apk` を開く（「提供元不明のアプリ」の許可が要ることがある）。
 - 開発版は PC の debug 鍵で署名しているので、adb で入れた開発版にそのまま上書きで入る（データは残る）。
   ただし別のブランチの開発版が入っているとき（2 の入れ替え）は、先にスマホで開発版をアンインストールしてから入れてもらう。
+  DB が同じ（3）でも、versionCode が下がるならスマホでは版の巻き戻しができず入らないので、同じくアンインストールしてもらう。
   外出中は adb で見られないので、最後に入れたものを覚えていなければ、ユーザーに設定タブの「このアプリについて」の版を聞く。
 - **入れるのはコミットした中身**（作業中の変更を混ぜない）。何を入れたか（コミットの短い ID）を伝える。記録中の確認は 2 と同じく、
   ユーザーに見てもらってから入れてもらう。
