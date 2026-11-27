@@ -358,15 +358,16 @@ internal fun PlanItemDialog(
             NumberWheel(value = minutes, range = 0..59, onValueChange = { minutes = it }, tag = "planStayMinutes")
             Text(" 分", style = MaterialTheme.typography.bodyLarge)
           }
-          // 出発の時刻（着く時刻 ＋ 滞在の目安）。選ぶと滞在の目安を出発に合わせて直す。
-          Row(verticalAlignment = Alignment.CenterVertically) {
-            Text("出発の時刻", style = MaterialTheme.typography.labelLarge, modifier = Modifier.weight(1f))
-            OutlinedButton(
-              onClick = { timeOpen = TimeTarget.DEPARTURE },
-              enabled = plannedTime != null,
-              modifier = Modifier.testTag("planDepartureButton"),
-            ) {
-              Text(departure?.let { formatClock(it) } ?: if (plannedTime == null) "着く時刻を先に" else "決めない")
+          // 出発の時刻（着く時刻 ＋ 滞在の目安）。着く時刻を決めたときだけ出す。選ぶと滞在の目安を出発に合わせて直す。
+          if (plannedTime != null) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+              Text("出発の時刻", style = MaterialTheme.typography.labelLarge, modifier = Modifier.weight(1f))
+              OutlinedButton(
+                onClick = { timeOpen = TimeTarget.DEPARTURE },
+                modifier = Modifier.testTag("planDepartureButton"),
+              ) {
+                Text(departure?.let { formatClock(it) } ?: "決めない")
+              }
             }
           }
         }
