@@ -27,7 +27,6 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.Text
@@ -84,10 +83,14 @@ import com.pathly.presentation.common.MapRoundButton
 import com.pathly.presentation.common.MapRoundButtonSize
 import com.pathly.presentation.common.MapTopBar
 import com.pathly.presentation.common.MapTopBarInset
+import com.pathly.presentation.common.RegionBoundaries
 import com.pathly.presentation.common.RegisteredPlaceMarkers
 import com.pathly.presentation.common.RegisteredPlacesLayerButton
 import com.pathly.presentation.common.SheetDetent
 import com.pathly.presentation.common.SheetRestoreButtonInset
+import com.pathly.presentation.common.SwipeDismissSnackbarHost
+import com.pathly.presentation.common.boundaryMapColorScheme
+import com.pathly.presentation.common.boundaryMapOptions
 import com.pathly.presentation.common.heightOf
 import com.pathly.presentation.common.rememberFloatingSheetState
 import com.pathly.presentation.common.rememberLocationPermitted
@@ -103,8 +106,11 @@ import com.pathly.presentation.places.PlaceRegisterOptions
 import com.pathly.presentation.places.PlaceSheetTarget
 import com.pathly.presentation.places.PlacesViewModel
 import com.pathly.presentation.places.toRegisteredPlace
+import com.pathly.presentation.tracking.RegionMarker
 import com.pathly.presentation.tracking.RegionMarkerBadge
+import com.pathly.presentation.tracking.RegionMarkerChips
 import com.pathly.presentation.tracking.TrackingMapSearch
+import com.pathly.presentation.tracking.VISIBLE_REGION_CHIPS
 import com.pathly.ui.theme.PathlyElevation
 import com.pathly.ui.theme.PathlyMapColors
 import com.pathly.ui.theme.PathlySpacing
@@ -140,7 +146,7 @@ fun PlanDetailRoute(
         is PlanDetailEvent.PlaceAdded -> Unit
 
         is PlanDetailEvent.ItemRemoved -> scope.launch {
-          val result = snackbarHostState.showSnackbar("「${event.label}」を外しました", actionLabel = "取り消す", withDismissAction = true)
+          val result = snackbarHostState.showSnackbar("「${event.label}」を外しました", actionLabel = "取り消す")
           if (result == SnackbarResult.ActionPerformed) viewModel.undoRemoveItem()
         }
       }
@@ -159,7 +165,7 @@ fun PlanDetailRoute(
         onBack = onBack,
         onOpenPlace = onOpenPlace,
         viewModel = viewModel,
-        snackbarHost = { SnackbarHost(snackbarHostState, modifier = it) },
+        snackbarHost = { SwipeDismissSnackbarHost(snackbarHostState, modifier = it) },
         onDismissSnackbar = { snackbarHostState.currentSnackbarData?.dismiss() },
       )
     }
@@ -307,6 +313,27 @@ private fun PlanDetailContent(
   LaunchedEffect(placeSheetTarget) {
     placeSheetTarget?.registerLatLng()?.let { cameraPositionState.animate(CameraUpdateFactory.newLatLng(it)) }
   }
+  // 地域の目印からその地域の範囲へ寄せ直す（選んだときと同じ合わせ方）。
+  fun refitRegion(region: RegionMarker) {
+    viewModel.regionMarkers.focus(region.placeId)
+    scope.launch { cameraPositionState.animate(CameraUpdateFactory.newLatLngBounds(region.bounds.toLatLngBounds(), with(density) { FitPadding.roundToPx() })) }
+  }
+  // この地図で境界を描けるか。描ける間だけ、目印があるときに地図を明るくする（境界は明るい地図にしか描けない。記録画面と同じ）。
+  var boundaryAvailable by remember { mutableStateOf(false) }
+  val regionPlaceIds = remember(regionMarkers.markers) { regionMarkers.markers.map { it.placeId }.toSet() }
+  // 地域の地名のチップ。地名でその地域へ寄せ直し、× でその目印を外す（記録画面と同じ）。
+  val regionChips: @Composable () -> Unit = {
+    RegionMarkerChips(
+      markers = regionMarkers.markers,
+      focusedPlaceId = regionMarkers.focusedPlaceId,
+      onRefit = ::refitRegion,
+      onClear = { viewModel.regionMarkers.remove(it.placeId) },
+      onClearAll = viewModel.regionMarkers::clear,
+      onMove = { region, to -> viewModel.regionMarkers.move(region.placeId, to) },
+      onFold = { viewModel.regionMarkers.fold(it.placeId) },
+      onBringUp = { viewModel.regionMarkers.bringUp(it.placeId, VISIBLE_REGION_CHIPS - 1) },
+    )
+  }
   fun openRegister(target: PlaceSheetTarget) {
     pickOnMap = false
     // 出ているスナックバー（取り消しは押すまで残る）が登録のボタンに重ならないように閉じる。
@@ -333,6 +360,9 @@ private fun PlanDetailContent(
       modifier = Modifier.fillMaxSize(),
       cameraPositionState = cameraPositionState,
       contentPadding = PaddingValues(top = topInset, bottom = mapBottomPadding),
+      // 地域の境界を描くので、マップ ID を付ける（→ ADR 0046）。境界を出している間はダークモードでも明るくする。
+      googleMapOptionsFactory = ::boundaryMapOptions,
+      mapColorScheme = boundaryMapColorScheme(boundaryAvailable && regionPlaceIds.isNotEmpty()),
       properties = MapProperties(isMyLocationEnabled = hasLocationPermission),
       uiSettings = MapUiSettings(zoomControlsEnabled = false, mapToolbarEnabled = false, myLocationButtonEnabled = false),
       onMapLoaded = { mapLoaded = true },
@@ -390,6 +420,8 @@ private fun PlanDetailContent(
           MapPinMarker(bg = PathlyMapColors.Picked, glyph = R.drawable.ic_add)
         }
       }
+      // 検索の「地域」で出した地域の境界（目印と一緒に消える）。
+      RegionBoundaries(regionPlaceIds, onAvailableChange = { boundaryAvailable = it })
       // 検索の「地域」で出した目印。押すとその地域の範囲へ寄せ直す（保存しない）。
       val regionIcons = rememberMarkerIconCache()
       regionMarkers.markers.forEach { region ->
@@ -401,10 +433,7 @@ private fun PlanDetailContent(
             infoWindow = infoWindow,
             state = state,
             anchor = icon.anchor,
-            onClick = {
-              viewModel.regionMarkers.focus(region.placeId)
-              scope.launch { cameraPositionState.animate(CameraUpdateFactory.newLatLngBounds(region.bounds.toLatLngBounds(), with(density) { FitPadding.roundToPx() })) }
-            },
+            onClick = { refitRegion(region) },
           )
         }
       }
@@ -468,6 +497,7 @@ private fun PlanDetailContent(
             MapNoticeBanner(text = "地図をタップして足す場所を選ぶ", icon = R.drawable.ic_add, onClick = null)
           }
           if (!plan.isDayTrip) DayChips(plan = detail, selectedDay = day, onSelect = onSelectDay)
+          regionChips()
         },
       )
     }
@@ -581,6 +611,7 @@ private fun PlanDetailContent(
         },
         onClose = { mapSearchOpen = false },
         modifier = Modifier.align(Alignment.TopCenter),
+        belowModes = regionChips,
       )
     }
 

@@ -175,6 +175,28 @@ class PlanDetailViewModel @Inject constructor(
 
   init {
     load()
+    keepPlacesFresh()
+  }
+
+  /**
+   * 行が持つ場所の名前・座標を、場所の一覧の今の値に合わせる（場所の名前は場所のもの → docs/specs/plans.md）。
+   * 施設を登録すると、名前は Google から引いた後で入るので、足した直後の行は名前が無く緯度経度で出てしまう。
+   * 中身の比べ方（保存できるか）は場所の id しか見ないので、取り直しても「変更あり」にはならない。
+   */
+  private fun keepPlacesFresh() {
+    viewModelScope.launch {
+      places.collect { known ->
+        _state.update { s ->
+          if (s !is PlanDetailState.Loaded) return@update s
+          val detail = s.edit.detail
+          val items = detail.items.map { item ->
+            val fresh = item.place?.let { known[it.placeId] }
+            if (fresh != null && fresh != item.place) item.copy(place = fresh) else item
+          }
+          if (items == detail.items) s else s.copy(edit = s.edit.copy(detail = detail.copy(items = items)))
+        }
+      }
+    }
   }
 
   private fun load() {

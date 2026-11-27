@@ -17,7 +17,6 @@ import androidx.compose.material3.FloatingActionButtonDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.Text
@@ -43,6 +42,7 @@ import com.pathly.presentation.common.ListGroupHeader
 import com.pathly.presentation.common.ListHeader
 import com.pathly.presentation.common.ScrollToTopButton
 import com.pathly.presentation.common.ScrollToTopButtonClearance
+import com.pathly.presentation.common.SwipeDismissSnackbarHost
 import com.pathly.ui.theme.PathlyElevation
 import com.pathly.ui.theme.PathlySpacing
 
@@ -73,7 +73,7 @@ fun PlansRoute(
   }
   LaunchedEffect(undoTitle) {
     val title = undoTitle ?: return@LaunchedEffect
-    val result = snackbarHostState.showSnackbar("「$title」を削除しました", actionLabel = "取り消す", withDismissAction = true)
+    val result = snackbarHostState.showSnackbar("「$title」を削除しました", actionLabel = "取り消す")
     if (result == SnackbarResult.ActionPerformed) viewModel.undoDelete()
     undoTitle = null
   }
@@ -85,7 +85,7 @@ fun PlansRoute(
       onOpenPlan = onOpenPlan,
       onCreate = onCreatePlan,
     )
-    SnackbarHost(snackbarHostState, modifier = Modifier.align(Alignment.BottomCenter))
+    SwipeDismissSnackbarHost(snackbarHostState, modifier = Modifier.align(Alignment.BottomCenter))
   }
 }
 

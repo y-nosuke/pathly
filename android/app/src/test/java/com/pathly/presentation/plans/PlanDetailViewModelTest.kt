@@ -108,6 +108,24 @@ class PlanDetailViewModelTest {
   }
 
   @Test
+  fun `施設の名前が後から入ったら、足した行の名前も変わる`() = runTest(testDispatcher) {
+    registerReturns(PlaceEditUseCase.RegisterResult.Registered(9L, alreadyExisted = false))
+    // 登録した直後は施設の名前がまだ無い（緯度経度で出る）。
+    places.value = mapOf(9L to newPlace.copy(name = "35.00000, 139.00000"))
+    val viewModel = viewModel()
+    advanceUntilIdle()
+    viewModel.prepareRegister(1)
+    viewModel.register()
+    runCurrent()
+
+    places.value = mapOf(9L to newPlace)
+    runCurrent()
+
+    val edit = (viewModel.state.value as PlanDetailState.Loaded).edit
+    assertEquals("新しい店", edit.detail.items.single().place?.name)
+  }
+
+  @Test
   fun `近くの登録済みの場所を使うと、その場所を足す`() = runTest(testDispatcher) {
     registerReturns(PlaceEditUseCase.RegisterResult.NearbyFound(nearby))
     places.value = mapOf(5L to PlanPlace(5L, "隣の店", 35.0, 139.0))
