@@ -111,7 +111,8 @@ git checkout -b <種類>/<英語のケバブケース>
   - DB を変えたとき: instrumented test はデータ層をまとめて回す
     （`run-instrumented.sh -Pandroid.testInstrumentationRunnerArguments.package=com.pathly.data`。マイグレーション・DAO・
     書き出し・リポジトリのテストが入る。マイグレーションのテストは変えたクラスとは別にあるため）。
-  - 8 のコード確認の前: `run-build.sh`（spotless・lint・全部のユニットテスト。コミットに崩れを入れないため）。
+  - 8 のコード確認の前: `run-build.sh`（整形・全部のユニットテスト・androidTest のコンパイル。コミットに崩れを入れないため）。
+    lint・release 版は PR の CI（必須チェック `build`）に任せる。CI の lint で落ちたら、直して push し直す。
   - **全部の instrumented test はローカルでは回さない**。PR の CI（必須チェック `instrumented-test`）が全部回す。
     ローカルで落ちることはほとんどなく、変えたところは上で回しているため。CI で落ちたら、落ちたクラスをローカルで回して直す。
 - UI を変えたら、スマホに入れる前に**エミュレータで自分で画面を触って見る**（`emulator-check` の「APK を入れて触る」）。
@@ -126,7 +127,7 @@ git checkout -b <種類>/<英語のケバブケース>
 **並行のとき**:
 
 - `run-build.sh`・`run-instrumented.sh` は、別の worktree で走っていれば終わるまで待つ（「順番待ち: …」と出る）。
-  待っている間に止めない。重いビルドは順番待ちのスクリプトで回し、素の `./gradlew build` は使わない。
+  待っている間に止めない。push 前の確認は順番待ちのスクリプトで回し、素の `./gradlew build` は使わない（CI に任せる）。
 - エミュレータで画面を触る間は `hold-check-lock.sh` でロックを持つ（`emulator-check` の「APK を入れて触る」）。
 - エミュレータに別のブランチの開発版が入っていたら、アンインストールしてから入れる（`emulator-check` の「APK を入れて触る」）。
 
@@ -135,7 +136,7 @@ git checkout -b <種類>/<英語のケバブケース>
 コードを変えたら、PR を出す前に組み込みの `code-review` スキル（`/code-review`）を変更にかける。
 書いた本人とは別の目で、不具合・取りこぼし・無駄を探すため。
 
-- 指摘は、直すもの・直さないもの（理由つき）に分けてユーザーに見せる。直したら `./gradlew build` をやり直す。
+- 指摘は、直すもの・直さないもの（理由つき）に分けてユーザーに見せる。直したら `run-build.sh` をやり直す。
 - ドキュメントだけの変更なら省いてよい。
 - レビューで見つからないもの（実機の挙動・見た目）は、確かめ方の表のとおり別に確かめる。
 

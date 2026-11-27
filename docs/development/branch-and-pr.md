@@ -4,7 +4,7 @@ main から切ったブランチで作業し、PR を経て main にマージす
 [Conventional Commits](https://www.conventionalcommits.org/ja/) に揃え、**ブランチ名・コミット・PR タイトルで同じ語を使う**。
 
 ```
-main から切る → コミット → ./gradlew build → push → PR → CI → マージ（マージコミット）→ ブランチは自動で消える
+main から切る → コミット → 手元の確認（run-build.sh）→ push → PR → CI → マージ（マージコミット）→ ブランチは自動で消える
 ```
 
 ---
@@ -77,7 +77,7 @@ PR の中のコミットは、それぞれの中身に合った種類で分け�
   後から読んで何が変わったか分かる書き方にする。
 - 本文は [PR テンプレート](../../.github/pull_request_template.md) に沿って、概要・変更内容・検証を書く。
   対応する Issue があれば `Closes #番号` で結ぶ（→ [issues-and-adr.md](issues-and-adr.md)）。
-- **push 前に `./gradlew build` を通す**（[testing.md](../designs/testing.md#ci-と-push-前のゲート)）。
+- **push 前に手元の確認（`run-build.sh`。整形・ユニットテスト・androidTest のコンパイル）を通す**。lint・release 版は CI の `build` に任せる（[testing.md](../designs/testing.md#ci-と-push-前のゲート)）。
 - 1 つの PR は 1 つの目的に絞る。
 
 ---

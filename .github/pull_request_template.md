@@ -18,7 +18,7 @@ Closes #
 
 <!-- 何をどう確かめたか。確かめていないことはそう書く -->
 
-- [ ] `./gradlew build` が通る
+- [ ] 手元の確認（`spotlessCheck testDebugUnitTest compileDebugAndroidTestKotlin`）が通る（lint・release は CI の `build`）
 - [ ] （該当すれば）instrumented test・実機での確認
 - [ ] （DB スキーマを変えたら）`DatabaseMigrations` にマイグレーションを追加し、`schemas/` を確認した
 - [ ] （仕様・設計が変わったら）`docs/` を更新した
