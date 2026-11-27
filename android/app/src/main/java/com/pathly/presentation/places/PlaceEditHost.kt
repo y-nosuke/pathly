@@ -159,6 +159,7 @@ internal fun PlaceDeleteUndoEffect(placeEdit: PlaceEditUi, snackbarHostState: Sn
  * @param sheetState 地図の下パディングをシートに合わせたい画面は、自分で作った state を渡す。
  * @param onAddStop 既存の場所を「立ち寄りに追加」する（記録中だけ）。null なら出さない。
  * @param mainPlaceId 場所詳細の地図から登録するときの、その場所（→ [PlaceEditUi.registerPlaceWithNearbyCheck]）。
+ * @param registerOptions 計画の詳細から登録するときの違い（足す日・行きたいの初期・登録のボタンの文言）。
  */
 @Composable
 internal fun PlaceEditHost(
@@ -172,6 +173,7 @@ internal fun PlaceEditHost(
   onOpenTrack: (trackId: Long) -> Unit = {},
   onAddStop: ((item: PlaceListItem) -> Unit)? = null,
   mainPlaceId: Long? = null,
+  registerOptions: PlaceRegisterOptions? = null,
 ) {
   if (snackbarHostState != null) PlaceDeleteUndoEffect(placeEdit, snackbarHostState)
 
@@ -210,6 +212,7 @@ internal fun PlaceEditHost(
       mergeActions = placeEdit.mergeActions(),
       modifier = modifier,
       sheetState = sheetState ?: rememberFloatingSheetState(peekFraction = PLACE_SHEET_PEEK_FRACTION),
+      registerOptions = registerOptions,
     )
   }
 

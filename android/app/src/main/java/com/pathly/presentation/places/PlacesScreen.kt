@@ -380,6 +380,8 @@ internal fun PlaceFormBody(
   wishlistHistory: String? = null,
   // 行きたいの右に並べる訪問済みのボタン（[VisitedToggle]・[VisitedByStopsChip]）。
   visitedContent: (@Composable () -> Unit)? = null,
+  // 見出しの下・行きたいの上に足す欄（計画から登録するときの「足す日」）。
+  belowHeading: (@Composable () -> Unit)? = null,
 ) {
   Column(modifier = modifier) {
     heading?.let {
@@ -389,6 +391,10 @@ internal fun PlaceFormBody(
         fontWeight = FontWeight.Bold,
         modifier = Modifier.padding(bottom = PathlySpacing.md),
       )
+    }
+    belowHeading?.let {
+      it()
+      Spacer(modifier = Modifier.height(PathlySpacing.sm))
     }
 
     // 主役: 行きたい・訪問済み・優先度・メモ（いちばんよく直すもの。シートを開いてすぐ見える位置に置く）。

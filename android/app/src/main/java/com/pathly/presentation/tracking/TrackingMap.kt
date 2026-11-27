@@ -403,7 +403,7 @@ internal fun TrackingMapView(
 
 /** 地域の目印: 藍色の札（地名）の下にピン。札は地図の地名の文字と見分けられるよう塗りつぶす。 */
 @Composable
-private fun RegionMarkerBadge(name: String) {
+internal fun RegionMarkerBadge(name: String) {
   Column(horizontalAlignment = Alignment.CenterHorizontally) {
     Text(
       text = name,

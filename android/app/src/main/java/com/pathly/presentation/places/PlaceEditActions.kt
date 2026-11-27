@@ -30,6 +30,9 @@ import kotlinx.coroutines.launch
  *   登録するときの、その場所（主マーカーで見えている）。
  * - [placeNameOf]: 削除の取り消しのスナックバーに出す名前。
  * - [onMessage]・[onError]: 結果の一言と失敗を出す先（画面ごとに出し方が違う）。
+ * - [onRegistered]: 登録（既存の場所への相乗り・近接確認での紐付けも含む）で使うことになった場所。計画の詳細は
+ *   これを計画に足す（→ docs/specs/plans.md の「場所を足す」）。
+ * - [onRegisterCancelled]: 近接確認を閉じて、登録しなかった。
  */
 class PlaceEditActions internal constructor(
   private val scope: CoroutineScope,
@@ -40,6 +43,8 @@ class PlaceEditActions internal constructor(
   private val placeNameOf: (placeId: Long) -> String?,
   private val onMessage: (String) -> Unit,
   private val onError: (String) -> Unit,
+  private val onRegistered: (placeId: Long) -> Unit = {},
+  private val onRegisterCancelled: () -> Unit = {},
 ) : PlaceEditUi {
   private val _nearbyRegisterPrompt = MutableStateFlow<NearbyRegisterPrompt?>(null)
 
@@ -102,7 +107,10 @@ class PlaceEditActions internal constructor(
         is PlaceEditUseCase.RegisterResult.NearbyFound ->
           _nearbyRegisterPrompt.value = NearbyRegisterPrompt(result.nearby, latitude, longitude, name, wishlist, priority, visited, memo)
 
-        is PlaceEditUseCase.RegisterResult.Registered -> onMessage(registeredMessage(result.alreadyExisted, name))
+        is PlaceEditUseCase.RegisterResult.Registered -> {
+          onMessage(registeredMessage(result.alreadyExisted, name))
+          onRegistered(result.placeId)
+        }
       }
     }
   }
@@ -114,6 +122,7 @@ class PlaceEditActions internal constructor(
     launchCatching("紐付けに失敗しました") {
       placeEditUseCase.linkToExisting(prompt.nearby.placeId, prompt.wishlist, prompt.priority, prompt.visited, prompt.memo)
       onMessage("この場所に紐付けました")
+      onRegistered(prompt.nearby.placeId)
     }
   }
 
@@ -134,11 +143,14 @@ class PlaceEditActions internal constructor(
         forceNewPlace = true,
       )
       onMessage(registeredMessage(reg.alreadyExisted, prompt.name))
+      onRegistered(reg.placeId)
     }
   }
 
   override fun dismissNearbyPrompt() {
+    if (_nearbyRegisterPrompt.value == null) return
     _nearbyRegisterPrompt.value = null
+    onRegisterCancelled()
   }
 
   // ---- 編集 ----
