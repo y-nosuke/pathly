@@ -23,6 +23,9 @@ erDiagram
   places ||--o| wishlist : "行きたい"
   places ||--o| visited_places : "訪問済みの印"
   places ||--o{ wishlist_fulfillments : "行きたいの履歴"
+  plans ||--o{ plan_items : "行"
+  plans |o--o| plan_drafts : "下書き"
+  places |o--o{ plan_items : "場所の行"
   gps_points |o--o{ smoothed_points : "由来(sourcePointId)"
 
   gps_tracks {
@@ -115,6 +118,30 @@ erDiagram
     Date wishedAt
     Date fulfilledAt
   }
+  plans {
+    Long id PK
+    String title
+    String note
+    Long startDate
+    Int dayCount
+  }
+  plan_drafts {
+    Long id PK
+    Long planId FK
+    String json
+    Date updatedAt
+  }
+  plan_items {
+    Long id PK
+    Long planId FK
+    Int dayIndex
+    Int position
+    Long placeId FK
+    String title
+    String note
+    Int plannedTime
+    Int stayMinutes
+  }
 ```
 
 ## エンティティ一覧
@@ -132,11 +159,17 @@ erDiagram
 | **wishlist**                | 行きたい場所（優先度のみ。メモは places.note）                                                                                                                                                                                                                                                                                            | places に 1:0..1                                       |
 | **visited_places**          | 手動で「訪問済み」にした印（行の存在＝訪問済み・`markedAt`＝印を付けた日時）                                                                                                                                                                                                                                                              | places に 1:0..1                                       |
 | **wishlist_fulfillments**   | 行きたいの履歴。行きたいに入れて実際に行った 1 回ぶん（`wishedAt`＝入れた日時・`fulfilledAt`＝行った立ち寄りの到着）。件数が「行きたいで行った回数」                                                                                                                                                                                      | places に 1:0..N                                       |
+| **plans**                   | 計画（→ [plans.md](plans.md)・[ADR-0050](../adr/0050-plans-as-ordered-items-with-optional-dates.md)）。`startDate` は開始日（エポック日。null＝日付なし）、`dayCount` は 1 以上（1＝日帰り）                                                                                                                                              | plan_items を従える                                    |
+| **plan_items**              | 計画の行。`placeId` があれば場所の行、null ならメモの行（文言は `title`）。`dayIndex`（何日目）と `position`（日の中の順）で並ぶ。`plannedTime`（着く時刻・0 時からの分）・`stayMinutes`（滞在の目安）は任意                                                                                                                              | plans に属す／places を参照する                        |
+| **plan_drafts**             | 計画の下書き（保存していない編集の途中）。`planId` は保存済みの計画（null＝一度も保存していない）で、計画ごとに 1 つ（UNIQUE）。中身は計画と行の JSON（行は場所を id で指す）                                                                                                                                                             | plans に 0..1（計画の削除で消える）                    |
 
 ### 関連と削除規則（要点）
 
 - `gps_tracks` を削除すると、配下の `gps_points` / `smoothed_points` / `stops` も削除される（CASCADE）。
-- `stops` を削除しても概念上は `places` を残す（場所は複数の立ち寄りで再利用されるため）。ただし履歴画面の削除ではアプリ側で**孤立回収**を行い、削除後にどの `stops` からも参照されず `wishlist`・`wishlist_fulfillments` にも無い place は場所ごと消す。
+- `stops` を削除しても概念上は `places` を残す（場所は複数の立ち寄りで再利用されるため）。ただし履歴画面の削除ではアプリ側で**孤立回収**を行い、削除後にどの `stops` からも参照されず `wishlist`・`wishlist_fulfillments`・`plan_items` にも無い place は場所ごと消す。
+- **計画で使っている place は自動では消さず、同じ施設と分かっても自動ではまとめない**（自分で計画に入れた場所なので → [ADR-0050](../adr/0050-plans-as-ordered-items-with-optional-dates.md)）。
+  手でまとめたら `plan_items` は残す方へ付け替える。place を手で消すと、その place の `plan_items` も消える（CASCADE。取り消しで戻る）。
+  `plans` を消すと `plan_items` も消える（CASCADE）。日数を減らしたら、消える日の行は新しい最後の日の末尾へ移す。
 - `place_resolutions` / `google_places` は `places` に従属し、場所の削除で一緒に消える。
   Google 由来（名前・住所・カテゴリ・座標）は `google_places` に分離し、`places` は自分の名前・メモと
   **同定用のアンカー座標**のみ保持する。

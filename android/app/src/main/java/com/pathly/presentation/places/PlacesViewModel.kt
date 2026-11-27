@@ -46,6 +46,7 @@ class PlacesViewModel @Inject constructor(
   private val settingsRepository: SettingsRepository,
   private val placeEditUseCase: PlaceEditUseCase,
   private val savedStateHandle: SavedStateHandle,
+  private val listOptionsHub: PlaceListOptionsHub,
 ) : ViewModel() {
 
   // 絞り込み・並べ替えはアプリが裏で落とされても戻せるよう savedStateHandle から始める。
@@ -53,13 +54,31 @@ class PlacesViewModel @Inject constructor(
   private val _uiState = MutableStateFlow(
     settingsRepository.placeGrouping.value.let { grouping ->
       PlacesState(grouping = grouping, openGroups = settingsRepository.openPlaceGroups(grouping).value)
-    }.withListOptionsFrom(savedStateHandle),
+    }.withListOptionsFrom(savedStateHandle).let { state ->
+      // 並べ替え・絞り込みは、もう一方の一覧（場所タブ／計画の「場所を選ぶ」）で決めたものがあればそれから始める。
+      listOptionsHub.options.value?.let { state.withListOptions(it) } ?: state
+    },
   )
   val uiState: StateFlow<PlacesState> = _uiState.asStateFlow()
 
   init {
+    // もう一方の一覧から引き継いだ並べ替え・絞り込みも、アプリが裏で落とされても戻せるように残す。
+    _uiState.value.saveListOptionsTo(savedStateHandle)
     observePlaces()
     observeGrouping()
+    observeSharedListOptions()
+  }
+
+  /** もう一方の一覧で並べ替え・絞り込みを変えたら、こちらにも移す（→ [PlaceListOptionsHub]）。 */
+  private fun observeSharedListOptions() {
+    viewModelScope.launch {
+      listOptionsHub.options.collect { options ->
+        if (options != null && options != _uiState.value.listOptions) {
+          _uiState.update { it.withListOptions(options) }
+          _uiState.value.saveListOptionsTo(savedStateHandle)
+        }
+      }
+    }
   }
 
   /** 一覧の分け方と、その分け方で開いているまとまり（設定に保存・アプリを閉じても残る）。 */
@@ -361,5 +380,6 @@ class PlacesViewModel @Inject constructor(
   private fun updateListOptions(transform: (PlacesState) -> PlacesState) {
     _uiState.update(transform)
     _uiState.value.saveListOptionsTo(savedStateHandle)
+    listOptionsHub.publish(_uiState.value.listOptions)
   }
 }

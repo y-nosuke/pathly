@@ -175,6 +175,21 @@ object PathlyMapColors {
     Color(0xFF37474F), // 墨
   )
 
+  /**
+   * 計画の日の色（8 色を順に使う → docs/specs/plans.md）。地図のマーカーと線・シートの番号の丸・日の見出しの帯・日のチップの点を
+   * この色でそろえる。白い番号が読める濃さで、行った（緑）・行きたい（紅）・記録中の経路（橙）と取り違えない色にする。
+   */
+  val PlanDays = listOf(
+    Color(0xFF3949AB), // 藍
+    Color(0xFFC2185B), // 赤紫
+    Color(0xFF00838F), // 青緑
+    Color(0xFF7B1FA2), // 紫
+    Color(0xFF6D4C41), // 茶
+    Color(0xFF1565C0), // 青
+    Color(0xFF827717), // 黄土
+    Color(0xFF37474F), // 墨
+  )
+
   // ---- 丸バッジ（確定したもの） ----
 
   /** 出発。 */

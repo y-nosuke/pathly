@@ -371,6 +371,7 @@ private fun countLines(c: BackupCounts): String = buildList {
     c.fulfilledWishes?.let { "行きたいで行った ${number(it)}回" },
   ).joinToString("・")
   add("・場所 ${number(c.places)}件" + if (placeDetail.isNotEmpty()) "（$placeDetail）" else "")
+  c.plans?.let { add("・計画 ${number(it)}件") }
 }.joinToString("\n")
 
 private fun number(n: Int): String = "%,d".format(n)

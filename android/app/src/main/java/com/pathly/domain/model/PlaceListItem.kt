@@ -27,6 +27,8 @@ data class PlaceListItem(
    * いなければ（決めた・相手が消えた・同じ施設でない）null。
    */
   val sameFacility: SameFacilityPlace? = null,
+  /** この場所を使っている計画の数（消すと、その計画から外れる → adr/0050）。 */
+  val planCount: Int = 0,
 ) {
   /** 行きたいに登録済みか。 */
   val isWishlisted: Boolean get() = wishlistId != null

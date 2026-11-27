@@ -6,6 +6,7 @@ import com.pathly.data.local.dao.GpsPointDao
 import com.pathly.data.local.dao.PlaceDao
 import com.pathly.data.local.dao.PlaceMergeDao
 import com.pathly.data.local.dao.PlaceResolutionDao
+import com.pathly.data.local.dao.PlanDao
 import com.pathly.data.local.dao.SmoothedPointDao
 import com.pathly.data.local.dao.StopDao
 import com.pathly.data.local.dao.VisitedPlaceDao
@@ -38,6 +39,7 @@ abstract class PlaceStopRepositoryTestBase {
   protected val visitedPlaceDao = mockk<VisitedPlaceDao>(relaxed = true)
   protected val wishlistFulfillmentDao = mockk<WishlistFulfillmentDao>(relaxed = true)
   protected val placeMergeDao = mockk<PlaceMergeDao>(relaxed = true)
+  protected val planDao = mockk<PlanDao>(relaxed = true)
   protected val resolver = mockk<PlacesNameResolver>(relaxed = true)
 
   @Before
@@ -58,6 +60,7 @@ abstract class PlaceStopRepositoryTestBase {
     wishlistDao,
     visitedPlaceDao,
     wishlistFulfillmentDao,
+    planDao,
     resolver,
     session,
   )

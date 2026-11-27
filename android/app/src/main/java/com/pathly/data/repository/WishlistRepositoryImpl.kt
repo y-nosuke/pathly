@@ -4,6 +4,7 @@ import com.pathly.data.local.dao.GooglePlaceCategoryDao
 import com.pathly.data.local.dao.GooglePlaceDao
 import com.pathly.data.local.dao.PlaceDao
 import com.pathly.data.local.dao.PlaceResolutionDao
+import com.pathly.data.local.dao.PlanDao
 import com.pathly.data.local.dao.StopDao
 import com.pathly.data.local.dao.VisitedPlaceDao
 import com.pathly.data.local.dao.WishlistDao
@@ -13,6 +14,7 @@ import com.pathly.data.local.entity.GooglePlaceEntity
 import com.pathly.data.local.entity.PlaceEntity
 import com.pathly.data.local.entity.PlaceResolutionEntity
 import com.pathly.data.local.entity.PlaceWithWishlist
+import com.pathly.data.local.entity.PlanItemEntity
 import com.pathly.data.local.entity.VisitedPlaceEntity
 import com.pathly.data.local.entity.WishlistEntity
 import com.pathly.data.local.entity.WishlistFulfillmentEntity
@@ -46,6 +48,7 @@ class WishlistRepositoryImpl @Inject constructor(
   private val googlePlaceDao: GooglePlaceDao,
   private val googlePlaceCategoryDao: GooglePlaceCategoryDao,
   private val stopDao: StopDao,
+  private val planDao: PlanDao,
   private val placeRepository: PlaceRepository,
   private val placeSearchRepository: PlaceSearchRepository,
 ) : WishlistRepository {
@@ -208,7 +211,7 @@ class WishlistRepositoryImpl @Inject constructor(
 
   override suspend fun deletePlace(placeId: Long) {
     // 立ち寄り記録（stops）は残す方針。呼び出し側で stops のある場所は削除させない（UIで非活性）。
-    // place を消すと wishlist / visited_places / wishlist_fulfillments / place_resolutions は CASCADE で消える。
+    // place を消すと wishlist / visited_places / wishlist_fulfillments / place_resolutions / plan_items は CASCADE で消える。
     // 取り消し（Undo）で元IDのまま戻せるよう、削除前に実体を控える。
     val place = placeDao.getById(placeId) ?: return
     lastDeletedPlace = DeletedPlaceSnapshot(
@@ -218,6 +221,7 @@ class WishlistRepositoryImpl @Inject constructor(
       fulfillments = wishlistFulfillmentDao.getByPlaceId(placeId),
       resolution = placeResolutionDao.getByPlace(placeId),
       google = googlePlaceDao.getByPlace(placeId),
+      planItems = planDao.getItemsByPlace(placeId),
     )
     placeDao.deleteById(placeId)
     logger.i("Deleted place $placeId")
@@ -232,6 +236,10 @@ class WishlistRepositoryImpl @Inject constructor(
     snap.wishlist?.let { wishlistDao.insert(it) }
     snap.visited?.let { visitedPlaceDao.insert(it) }
     if (snap.fulfillments.isNotEmpty()) wishlistFulfillmentDao.insertAll(snap.fulfillments)
+    // 計画の行は、その計画が残っていれば戻す（消した後に計画ごと消していたら戻さない）。
+    for (item in snap.planItems) {
+      if (planDao.getPlan(item.planId) != null) planDao.insertItem(item)
+    }
     lastDeletedPlace = null
     logger.i("Undid place deletion: restored ${snap.place.id}")
     return true
@@ -245,6 +253,7 @@ class WishlistRepositoryImpl @Inject constructor(
     val fulfillments: List<WishlistFulfillmentEntity>,
     val resolution: PlaceResolutionEntity?,
     val google: GooglePlaceEntity?,
+    val planItems: List<PlanItemEntity>,
   )
 
   private fun PlaceWithWishlist.toPlaceListItem(): PlaceListItem = PlaceListItem(
@@ -270,5 +279,6 @@ class WishlistRepositoryImpl @Inject constructor(
     lastFulfilledAt = lastFulfilledAt,
     region = PlaceRegion.of(regionCountryCode, regionPrefecture, regionCity),
     sameFacility = sameFacilityPlaceId?.let { SameFacilityPlace(it, sameFacilityName) },
+    planCount = planCount,
   )
 }

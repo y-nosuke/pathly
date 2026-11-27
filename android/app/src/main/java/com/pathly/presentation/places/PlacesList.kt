@@ -21,6 +21,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -32,6 +33,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.MutableState
@@ -158,6 +160,8 @@ internal fun PlacesListContent(
   mapContent: (@Composable () -> Unit)? = null,
   // 地図で境界を描けるか（マップ ID・端末の対応）の初めの値。実マップが分かり次第置き換える。テストは地図を描かないので true を渡す。
   boundaryAvailableInitially: Boolean = false,
+  // 選ぶモード（計画の「場所を足す」）。null なら場所タブのふつうの一覧。
+  selection: PlaceSelection? = null,
 ) {
   val isMap = state.viewMode == ListMapMode.MAP
   // 地図表示はタブの中の一段奥の見方として扱い、システムバックで一覧表示へ戻す（タブは離れない）。
@@ -219,7 +223,7 @@ internal fun PlacesListContent(
   var searchOpen by rememberSaveable { mutableStateOf(false) }
   val header: @Composable () -> Unit = {
     ListHeader(
-      title = "場所",
+      title = if (selection != null) "場所を選ぶ" else "場所",
       query = state.nameQuery,
       onQueryChange = onNameQueryChange,
       searchPlaceholder = "名前で検索",
@@ -275,7 +279,8 @@ internal fun PlacesListContent(
           controls = { if (state.items.isNotEmpty()) listControls(true) {} },
           onViewModeChange = onViewModeChange,
           onControlsCollapsedChange = onControlsCollapsedChange,
-          onPlaceClick = onMapPlaceClick,
+          onPlaceClick = { id -> if (selection != null) selection.onToggle(id) else onMapPlaceClick(id) },
+          selectedPlaceIds = selection?.selectedIds.orEmpty(),
           focus = regionFocus,
           onFocusConsumed = { regionFocus = null },
           boundary = boundary?.takeIf { boundaryAvailable },
@@ -326,19 +331,25 @@ internal fun PlacesListContent(
         onShowGroupOnMap = showGroupOnMap,
         listState = listState,
         scrolledForState = listScrolledFor,
-        onItemClick = onItemClick,
+        onItemClick = { item -> if (selection != null) selection.onToggle(item.place.id) else onItemClick(item) },
         onToggleWishlist = onToggleWishlist,
+        selectedIds = selection?.selectedIds,
       )
     }
 
-    // 右下: 追加（一覧の主役）。一覧表示・地図表示で同じ位置に置き、切り替えても動かないようにする。
-    PlaceAddButton(
-      onAddBySearch = onAddBySearch,
-      onAddByMap = onAddByMap,
-      modifier = Modifier
-        .align(Alignment.BottomEnd)
-        .padding(end = PathlySpacing.screenEdge, bottom = PathlySpacing.screenEdge),
-    )
+    if (selection == null) {
+      // 右下: 追加（一覧の主役）。一覧表示・地図表示で同じ位置に置き、切り替えても動かないようにする。
+      PlaceAddButton(
+        onAddBySearch = onAddBySearch,
+        onAddByMap = onAddByMap,
+        modifier = Modifier
+          .align(Alignment.BottomEnd)
+          .padding(end = PathlySpacing.screenEdge, bottom = PathlySpacing.screenEdge),
+      )
+    } else {
+      // 選ぶモードの主役: 選んだ場所を足す（右下の追加の代わり）。
+      PlaceSelectionBar(selection, modifier = Modifier.align(Alignment.BottomCenter))
+    }
     // 欄を開いている間は、親指の届く下にも閉じるボタンを浮かべる（一覧表示・地図表示とも）。
     if (panelVisible) {
       FilterPanelCloseButton(
@@ -366,6 +377,7 @@ private fun PlacesListBody(
   scrolledForState: MutableState<String?>,
   onItemClick: (PlaceListItem) -> Unit,
   onToggleWishlist: (PlaceListItem) -> Unit,
+  selectedIds: Set<Long>?,
 ) {
   Column(modifier = Modifier.fillMaxSize()) {
     header()
@@ -389,6 +401,7 @@ private fun PlacesListBody(
         scrolledForState = scrolledForState,
         onItemClick = onItemClick,
         onToggleWishlist = onToggleWishlist,
+        selectedIds = selectedIds,
       )
     }
   }
@@ -407,6 +420,7 @@ private fun PlacesLazyList(
   scrolledForState: MutableState<String?>,
   onItemClick: (PlaceListItem) -> Unit,
   onToggleWishlist: (PlaceListItem) -> Unit,
+  selectedIds: Set<Long>?,
 ) {
   // 絞り込み・並べ替え・まとめを状態が変わったときだけ計算し直す（描き直しのたびにやらない）。
   val rows = remember(state) { state.listRows }
@@ -503,6 +517,7 @@ private fun PlacesLazyList(
             indent = indent,
             onClick = { onItemClick(row.item) },
             onToggleWishlist = { onToggleWishlist(row.item) },
+            selected = selectedIds?.let { row.item.place.id in it },
           )
         }
       }
@@ -573,3 +588,58 @@ internal fun PlaceListItem.toRegisteredPlace(): RegisteredPlace = RegisteredPlac
   categoryCode = place.category?.code,
   hasGoogleInfo = place.googlePlaceId != null,
 )
+
+/**
+ * 選ぶモード（計画の「場所を足す」→ docs/specs/plans.md）。場所タブの一覧・地図をそのまま使い、行やマーカーを押すと
+ * 選ぶ／外すが切り替わる。右下の追加の代わりに、下に「N 件を足す」を出す。
+ */
+class PlaceSelection(
+  val selectedIds: Set<Long>,
+  val onToggle: (Long) -> Unit,
+  /** 足す先の文言（「2日目 11/30(日) に足す」）。 */
+  val destination: String,
+  val onConfirm: () -> Unit,
+  val onCancel: () -> Unit,
+  /** 選んだものを全部外す。 */
+  val onClearAll: () -> Unit,
+)
+
+/** 選ぶモードの下の帯: 足す先、全解除・やめる・「N 件を足す」。 */
+@Composable
+private fun PlaceSelectionBar(selection: PlaceSelection, modifier: Modifier = Modifier) {
+  Surface(
+    modifier = modifier.fillMaxWidth(),
+    color = MaterialTheme.colorScheme.surface,
+    shadowElevation = PathlyElevation.sheet,
+  ) {
+    Column(
+      modifier = Modifier
+        .fillMaxWidth()
+        .padding(horizontal = PathlySpacing.screenEdge, vertical = PathlySpacing.sm),
+    ) {
+      Text(
+        text = selection.destination,
+        style = MaterialTheme.typography.bodyMedium,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        maxLines = 2,
+        overflow = TextOverflow.Ellipsis,
+      )
+      Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        TextButton(
+          onClick = selection.onClearAll,
+          enabled = selection.selectedIds.isNotEmpty(),
+          modifier = Modifier.testTag("placeSelectionClearAll"),
+        ) { Text("全解除") }
+        Spacer(modifier = Modifier.weight(1f))
+        TextButton(onClick = selection.onCancel) { Text("やめる") }
+        Button(
+          onClick = selection.onConfirm,
+          enabled = selection.selectedIds.isNotEmpty(),
+          modifier = Modifier.testTag("placeSelectionConfirm"),
+        ) {
+          Text(if (selection.selectedIds.isEmpty()) "選んでください" else "${selection.selectedIds.size} 件を足す")
+        }
+      }
+    }
+  }
+}

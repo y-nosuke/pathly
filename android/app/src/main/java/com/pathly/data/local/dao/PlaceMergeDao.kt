@@ -35,17 +35,21 @@ abstract class PlaceMergeDao {
     val google: GooglePlaceEntity?,
   )
 
-  /** まとめる前の控え。[from] はまとめられて消える方、[into] は残る方、[movedStopIds] は付け替えた立ち寄り。 */
+  /**
+   * まとめる前の控え。[from] はまとめられて消える方、[into] は残る方、[movedStopIds] は付け替えた立ち寄り、
+   * [movedPlanItemIds] は付け替えた計画の行。
+   */
   data class MergeSnapshot(
     val from: PlaceRows,
     val into: PlaceRows,
     val movedStopIds: List<Long>,
+    val movedPlanItemIds: List<Long> = emptyList(),
   )
 
   /**
    * [fromPlaceId] を [intoPlaceId] にまとめる（[fromPlaceId] は消える）。決めごとは adr/0037:
    *
-   * - 立ち寄り・行きたいの履歴は、すべて残る方へ付け替える。
+   * - 立ち寄り・行きたいの履歴・計画の行は、すべて残る方へ付け替える（計画の行 → adr/0050）。
    * - 名前は残る方を優先し、空ならもう一方を使う。メモは両方にあればつなげる（残る方が先）。
    * - 行きたい・訪問済みの印は、どちらかにあれば付ける。行きたいが両方にあれば、優先度は高い方。
    * - 施設情報は残る方を優先し、残る方に無ければもう一方のものを移す。
@@ -59,8 +63,10 @@ abstract class PlaceMergeDao {
     val from = rowsOf(fromPlaceId) ?: return null
     val into = rowsOf(intoPlaceId) ?: return null
     val movedStopIds = stopIdsOf(fromPlaceId)
+    val movedPlanItemIds = planItemIdsOf(fromPlaceId)
 
     repointStops(fromPlaceId, intoPlaceId)
+    repointPlanItems(fromPlaceId, intoPlaceId)
     repointFulfillments(fromPlaceId, intoPlaceId)
 
     val fromWish = from.wishlist
@@ -92,7 +98,7 @@ abstract class PlaceMergeDao {
     )
     // 付け替えなかった子（行きたい・訪問済み・解決記録・施設情報）は CASCADE で一緒に消える。
     deletePlace(fromPlaceId)
-    return MergeSnapshot(from, into, movedStopIds)
+    return MergeSnapshot(from, into, movedStopIds, movedPlanItemIds)
   }
 
   /** [merge] を取り消す。両方の場所を、まとめる前の行（元の id）に戻す。 */
@@ -109,6 +115,7 @@ abstract class PlaceMergeDao {
     updatePlace(snapshot.into.place)
     insertPlace(snapshot.from.place)
     if (snapshot.movedStopIds.isNotEmpty()) repointStopsByIds(snapshot.movedStopIds, fromId)
+    if (snapshot.movedPlanItemIds.isNotEmpty()) repointPlanItemsByIds(snapshot.movedPlanItemIds, fromId)
     for (rows in listOf(snapshot.into, snapshot.from)) {
       rows.google?.let { upsertGoogle(it) }
       rows.resolution?.let { insertResolution(it) }
@@ -150,6 +157,15 @@ abstract class PlaceMergeDao {
 
   @Query("SELECT id FROM stops WHERE placeId = :placeId")
   protected abstract suspend fun stopIdsOf(placeId: Long): List<Long>
+
+  @Query("SELECT id FROM plan_items WHERE placeId = :placeId")
+  protected abstract suspend fun planItemIdsOf(placeId: Long): List<Long>
+
+  @Query("UPDATE plan_items SET placeId = :intoPlaceId WHERE placeId = :fromPlaceId")
+  protected abstract suspend fun repointPlanItems(fromPlaceId: Long, intoPlaceId: Long)
+
+  @Query("UPDATE plan_items SET placeId = :placeId WHERE id IN (:itemIds)")
+  protected abstract suspend fun repointPlanItemsByIds(itemIds: List<Long>, placeId: Long)
 
   @Query("UPDATE stops SET placeId = :intoPlaceId WHERE placeId = :fromPlaceId")
   protected abstract suspend fun repointStops(fromPlaceId: Long, intoPlaceId: Long)

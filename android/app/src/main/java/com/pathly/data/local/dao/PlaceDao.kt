@@ -105,6 +105,7 @@ interface PlaceDao {
       "(SELECT MAX(s.arrivalTime) FROM stops s WHERE s.placeId = p.id) AS lastStopAt, " +
       "(SELECT COUNT(*) FROM wishlist_fulfillments f WHERE f.placeId = p.id) AS fulfilledWishCount, " +
       "(SELECT MAX(f.fulfilledAt) FROM wishlist_fulfillments f WHERE f.placeId = p.id) AS lastFulfilledAt, " +
+      "(SELECT COUNT(DISTINCT pi.planId) FROM plan_items pi WHERE pi.placeId = p.id) AS planCount, " +
       SAME_FACILITY_COLUMNS +
       "p.countryCode AS regionCountryCode, p.prefecture AS regionPrefecture, p.city AS regionCity " +
       "FROM places p " +
@@ -128,6 +129,7 @@ interface PlaceDao {
       "(SELECT MAX(s.arrivalTime) FROM stops s WHERE s.placeId = p.id) AS lastStopAt, " +
       "(SELECT COUNT(*) FROM wishlist_fulfillments f WHERE f.placeId = p.id) AS fulfilledWishCount, " +
       "(SELECT MAX(f.fulfilledAt) FROM wishlist_fulfillments f WHERE f.placeId = p.id) AS lastFulfilledAt, " +
+      "(SELECT COUNT(DISTINCT pi.planId) FROM plan_items pi WHERE pi.placeId = p.id) AS planCount, " +
       SAME_FACILITY_COLUMNS +
       "p.countryCode AS regionCountryCode, p.prefecture AS regionPrefecture, p.city AS regionCity " +
       "FROM places p " +

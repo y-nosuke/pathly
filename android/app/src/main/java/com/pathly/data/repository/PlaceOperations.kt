@@ -4,6 +4,7 @@ import com.pathly.data.local.dao.GooglePlaceCategoryDao
 import com.pathly.data.local.dao.GooglePlaceDao
 import com.pathly.data.local.dao.PlaceDao
 import com.pathly.data.local.dao.PlaceResolutionDao
+import com.pathly.data.local.dao.PlanDao
 import com.pathly.data.local.dao.StopDao
 import com.pathly.data.local.dao.VisitedPlaceDao
 import com.pathly.data.local.dao.WishlistDao
@@ -44,6 +45,7 @@ class PlaceOperations @Inject constructor(
   private val wishlistDao: WishlistDao,
   private val visitedPlaceDao: VisitedPlaceDao,
   private val wishlistFulfillmentDao: WishlistFulfillmentDao,
+  private val planDao: PlanDao,
   private val placesNameResolver: PlacesNameResolver,
   private val session: PlaceStopSession,
 ) {
@@ -182,7 +184,7 @@ class PlaceOperations @Inject constructor(
   }
 
   /**
-   * 聞かずにまとめてよい place か（**名前・メモ・行きたい・訪問済みの印が何も無い** → adr/0037）。
+   * 聞かずにまとめてよい place か（**名前・メモ・行きたい・訪問済みの印が何も無く、計画にも入っていない** → adr/0037・adr/0050）。
    *
    * 自動命名は半径 50m の最寄り1件しか見ないので、別の場所が同じ施設に解決されることがある。
    * 中身を入れた place をまとめると、名前・メモが相手に混ざって分け直せないため、それは聞く。
@@ -195,11 +197,15 @@ class PlaceOperations @Inject constructor(
   private suspend fun hasNoUserContent(place: PlaceEntity): Boolean = place.name == null &&
     place.note == null &&
     !hasWishes(place.id) &&
+    !isInPlan(place.id) &&
     visitedPlaceDao.countByPlace(place.id) == 0
 
   /** 行きたいに入っているか、行きたいの履歴があるか（本人が行きたいと思ったことがある場所 → adr/0036）。 */
   suspend fun hasWishes(placeId: Long): Boolean = wishlistDao.countByPlace(placeId) > 0 ||
     wishlistFulfillmentDao.countByPlace(placeId) > 0
+
+  /** 計画に入っているか（自分で計画に入れた場所なので、自動の削除・自動の統合から守る → adr/0050）。 */
+  suspend fun isInPlan(placeId: Long): Boolean = planDao.countPlansUsingPlace(placeId) > 0
 
   /**
    * 行った行きたいを終わらせる（入れた後の立ち寄りが記録された行きたいを履歴へ移す → adr/0036）。
@@ -223,18 +229,18 @@ class PlaceOperations @Inject constructor(
     logger.i("Merged place $fromPlaceId into $intoPlaceId (same googlePlaceId)")
   }
 
-  /** 参照（訪問・行きたい・行きたいの履歴）が無くなった場所が検出由来（DETECTED）なら回収する。子は CASCADE で消える。 */
+  /** 参照（訪問・行きたい・行きたいの履歴・計画）が無くなった場所が検出由来（DETECTED）なら回収する。子は CASCADE で消える。 */
   suspend fun recycleIfOrphanedDetected(placeId: Long) {
     val place = placeDao.getById(placeId) ?: return
-    val referenced = stopDao.countByPlace(placeId) > 0 || hasWishes(placeId)
+    val referenced = stopDao.countByPlace(placeId) > 0 || hasWishes(placeId) || isInPlan(placeId)
     if (!referenced && place.source == PlaceSource.DETECTED.name) {
       placeDao.deleteById(placeId)
     }
   }
 
-  /** 立ち寄り・行きたいのどれからも使われていない場所を消す（子は CASCADE で消える）。 */
+  /** 立ち寄り・行きたい・計画のどれからも使われていない場所を消す（子は CASCADE で消える）。 */
   suspend fun removeIfUnused(placeId: Long) {
-    if (stopDao.countByPlace(placeId) == 0 && !hasWishes(placeId)) placeDao.deleteById(placeId)
+    if (stopDao.countByPlace(placeId) == 0 && !hasWishes(placeId) && !isInPlan(placeId)) placeDao.deleteById(placeId)
   }
 
   /** 表示用の [Place]（Google 情報つき）。場所が無ければ null。 */

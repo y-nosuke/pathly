@@ -115,7 +115,7 @@ Phase 3 の「行きたい場所リスト」を先行して着手する。既存
 **優先度: 中〜低**
 
 - [ ] 事前計画（行きたい場所リスト〔先行着手済〕・ルート計画・予算）。仕様は [specs/plans.md](specs/plans.md)（#270）
-  - [ ] 計画のタブ・計画の作成と地図（日付は後から・場所とメモの行） → [#271](https://github.com/y-nosuke/pathly/issues/271)
+  - [x] 計画のタブ・計画の作成と地図（日付は後から・場所とメモの行） → [#271](https://github.com/y-nosuke/pathly/issues/271)
   - [ ] 計画の画面から新しい場所を登録する → [#272](https://github.com/y-nosuke/pathly/issues/272)
   - [ ] 計画と実績（行った・記録中の経路を重ねる） → [#273](https://github.com/y-nosuke/pathly/issues/273)
   - [ ] 記録画面に計画を重ねる → [#274](https://github.com/y-nosuke/pathly/issues/274)

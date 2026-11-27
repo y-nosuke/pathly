@@ -541,6 +541,47 @@ object DatabaseMigrations {
     db.execSQL("ALTER TABLE `place_resolutions` ADD COLUMN `keptSeparate` INTEGER NOT NULL DEFAULT 0")
   }
 
+  /**
+   * v21 → v22: 計画（`plans`）・計画の行（`plan_items`）・計画の下書き（`plan_drafts`）を足す（→ adr/0050）。既存のデータは変えない。
+   */
+  val MIGRATION_21_22 = loggedMigration(21, 22) { db ->
+    db.execSQL(
+      "CREATE TABLE IF NOT EXISTS `plans` (" +
+        "`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+        "`title` TEXT NOT NULL, " +
+        "`note` TEXT, " +
+        "`startDate` INTEGER, " +
+        "`dayCount` INTEGER NOT NULL, " +
+        "`createdAt` INTEGER NOT NULL, " +
+        "`updatedAt` INTEGER NOT NULL)",
+    )
+    db.execSQL(
+      "CREATE TABLE IF NOT EXISTS `plan_items` (" +
+        "`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+        "`planId` INTEGER NOT NULL, " +
+        "`dayIndex` INTEGER NOT NULL, " +
+        "`position` INTEGER NOT NULL, " +
+        "`placeId` INTEGER, " +
+        "`title` TEXT, " +
+        "`note` TEXT, " +
+        "`plannedTime` INTEGER, " +
+        "`stayMinutes` INTEGER, " +
+        "FOREIGN KEY(`planId`) REFERENCES `plans`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE , " +
+        "FOREIGN KEY(`placeId`) REFERENCES `places`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+    )
+    db.execSQL("CREATE INDEX IF NOT EXISTS `index_plan_items_planId` ON `plan_items` (`planId`)")
+    db.execSQL("CREATE INDEX IF NOT EXISTS `index_plan_items_placeId` ON `plan_items` (`placeId`)")
+    db.execSQL(
+      "CREATE TABLE IF NOT EXISTS `plan_drafts` (" +
+        "`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+        "`planId` INTEGER, " +
+        "`json` TEXT NOT NULL, " +
+        "`updatedAt` INTEGER NOT NULL, " +
+        "FOREIGN KEY(`planId`) REFERENCES `plans`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+    )
+    db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS `index_plan_drafts_planId` ON `plan_drafts` (`planId`)")
+  }
+
   val ALL_MIGRATIONS = arrayOf(
     MIGRATION_1_2,
     MIGRATION_2_3,
@@ -562,6 +603,7 @@ object DatabaseMigrations {
     MIGRATION_18_19,
     MIGRATION_19_20,
     MIGRATION_20_21,
+    MIGRATION_21_22,
     // 将来のマイグレーションをここに追加
   )
 }

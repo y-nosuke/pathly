@@ -21,6 +21,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -128,6 +129,8 @@ internal fun PlaceItemRow(
   indent: Dp,
   onClick: () -> Unit,
   onToggleWishlist: () -> Unit,
+  // 選ぶモード（計画の「場所を足す」）で選んでいるか。null なら選ぶモードではない（右は行きたいの旗）。
+  selected: Boolean? = null,
 ) {
   Column(modifier = Modifier.fillMaxWidth()) {
     Row(
@@ -215,7 +218,12 @@ internal fun PlaceItemRow(
         }
       }
 
-      WishlistFlagButton(flag = item.wishlistFlag, onClick = onToggleWishlist)
+      if (selected != null) {
+        // 行のどこを押しても選ぶ／外すが切り替わる（行の onClick）。チェックは見せるだけ。
+        Checkbox(checked = selected, onCheckedChange = null, modifier = Modifier.padding(PathlySpacing.md).testTag("placeSelect:${item.place.id}"))
+      } else {
+        WishlistFlagButton(flag = item.wishlistFlag, onClick = onToggleWishlist)
+      }
     }
     HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
   }

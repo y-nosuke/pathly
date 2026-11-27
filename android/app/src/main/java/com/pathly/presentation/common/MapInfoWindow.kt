@@ -134,6 +134,8 @@ internal fun MapMarker(
   title: String? = null,
   snippet: String? = null,
   dismissWithBack: Boolean = true,
+  // マーカーが指す点。中身の幅・高さに対する割合で、既定は下端中央。
+  anchor: Offset = Offset(0.5f, 1f),
   zIndex: Float = DEFAULT_MARKER_Z_INDEX,
   // 吹き出しを薄く染める色（ふつうはマーカーの地の色）。null なら染めない。
   bubbleColor: Color? = null,
@@ -156,6 +158,7 @@ internal fun MapMarker(
     MarkerComposable(
       *keys,
       state = state,
+      anchor = anchor,
       zIndex = zIndex,
       onClick = handleClick,
       onInfoWindowClose = { infoWindow.onInfoWindowClose(state) },
@@ -167,6 +170,7 @@ internal fun MapMarker(
       state = state,
       title = bubbleTitle,
       snippet = snippet,
+      anchor = anchor,
       zIndex = zIndex,
       onClick = handleClick,
       onInfoWindowClose = { infoWindow.onInfoWindowClose(state) },

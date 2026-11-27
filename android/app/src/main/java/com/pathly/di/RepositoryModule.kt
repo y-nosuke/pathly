@@ -6,6 +6,7 @@ import com.pathly.data.places.PlacesTextSearcher
 import com.pathly.data.repository.GpsTrackRepositoryImpl
 import com.pathly.data.repository.LiveStopRepositoryImpl
 import com.pathly.data.repository.PlaceRepositoryImpl
+import com.pathly.data.repository.PlanRepositoryImpl
 import com.pathly.data.repository.StopRepositoryImpl
 import com.pathly.data.repository.WishlistRepositoryImpl
 import com.pathly.data.settings.SettingsRepositoryImpl
@@ -13,6 +14,7 @@ import com.pathly.domain.repository.GpsTrackRepository
 import com.pathly.domain.repository.LiveStopRepository
 import com.pathly.domain.repository.PlaceRepository
 import com.pathly.domain.repository.PlaceSearchRepository
+import com.pathly.domain.repository.PlanRepository
 import com.pathly.domain.repository.SettingsRepository
 import com.pathly.domain.repository.StopRepository
 import com.pathly.domain.repository.WishlistRepository
@@ -73,4 +75,10 @@ abstract class RepositoryModule {
   abstract fun bindExitReasonSource(
     androidExitReasonSource: AndroidExitReasonSource,
   ): ExitReasonSource
+
+  @Binds
+  @Singleton
+  abstract fun bindPlanRepository(
+    planRepositoryImpl: PlanRepositoryImpl,
+  ): PlanRepository
 }

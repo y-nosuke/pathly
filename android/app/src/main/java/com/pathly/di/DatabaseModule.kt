@@ -10,6 +10,7 @@ import com.pathly.data.local.dao.PlaceDao
 import com.pathly.data.local.dao.PlaceMergeDao
 import com.pathly.data.local.dao.PlaceRegionDao
 import com.pathly.data.local.dao.PlaceResolutionDao
+import com.pathly.data.local.dao.PlanDao
 import com.pathly.data.local.dao.SmoothedPointDao
 import com.pathly.data.local.dao.StopDao
 import com.pathly.data.local.dao.VisitedPlaceDao
@@ -68,4 +69,7 @@ object DatabaseModule {
 
   @Provides
   fun provideWishlistFulfillmentDao(database: PathlyDatabase): WishlistFulfillmentDao = database.wishlistFulfillmentDao()
+
+  @Provides
+  fun providePlanDao(database: PathlyDatabase): PlanDao = database.planDao()
 }

@@ -71,6 +71,7 @@ app/src/main/java/com/pathly/
 │   ├── tracking/      # 記録
 │   ├── history/       # 履歴・経路詳細
 │   ├── places/        # 場所・行きたい
+│   ├── plans/         # 計画（一覧・詳細）
 │   ├── stops/         # 立ち寄りの追加・付け替え（画面をまたいで使う）
 │   ├── common/        # 画面をまたぐ部品（フローティングシート・地図の描画・確認ダイアログ）
 │   ├── settings/      # 設定
