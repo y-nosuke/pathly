@@ -8,7 +8,12 @@ import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.pathly.data.local.PathlyDatabase
 import com.pathly.data.local.entity.GpsTrackEntity
+import com.pathly.data.local.entity.PlaceEntity
+import com.pathly.data.local.entity.PlanDraftEntity
+import com.pathly.data.local.entity.PlanEntity
+import com.pathly.data.local.entity.PlanItemEntity
 import com.pathly.data.local.migration.DatabaseMigrations
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -125,6 +130,47 @@ class BackupArchiveTest {
     assertEquals(0.5f, settings.getFloat("ratio", 0f))
     assertFalse("書き出しに無いキーは消える", settings.contains("added_later"))
     assertEquals(2, context.getSharedPreferences(PREFS[1], Context.MODE_PRIVATE).getInt("generation", 0))
+  }
+
+  @Test
+  fun exportThenApplyRestoresPlansWithTheirRowsAndDrafts() = runBlocking {
+    val db = openDatabase()
+    val placeId = db.placeDao().insert(PlaceEntity(name = "店", latitude = 35.0, longitude = 135.0))
+    val planDao = db.planDao()
+    val planId = planDao.insertPlan(PlanEntity(title = "旅行", note = "メモ", startDate = 20_000, dayCount = 2))
+    val items = listOf(
+      PlanItemEntity(planId = planId, dayIndex = 1, position = 0, placeId = placeId, plannedTime = 10 * 60, stayMinutes = 90),
+      PlanItemEntity(planId = planId, dayIndex = 2, position = 0, title = "昼ごはん", note = "駅前"),
+    )
+    planDao.insertItems(items)
+    planDao.upsertDraft(PlanDraftEntity(planId = planId, json = "{\"draft\":1}"))
+    planDao.upsertDraft(PlanDraftEntity(json = "{\"draft\":2}"))
+
+    val bytes = exportBytes(db)
+
+    // 書き出したあとに計画を消す（読み込めば書き出した時点に戻るはず）。
+    planDao.deletePlan(planId)
+    assertEquals(null, planDao.getPlan(planId))
+
+    val candidate = extract(bytes, "candidate")
+    assertEquals(1, BackupArchive.inspect(candidate, PathlyDatabase.VERSION).counts.plans)
+
+    db.close()
+    database = null
+    val pending = File(workDir, "pending")
+    assertTrue(candidate.renameTo(pending))
+    assertTrue(BackupArchive.applyPending(context, pending, DB_NAME, PREFS))
+
+    val restored = openDatabase().planDao()
+    val plan = restored.getPlan(planId)!!
+    assertEquals("旅行", plan.title)
+    assertEquals("メモ", plan.note)
+    assertEquals(20_000L, plan.startDate)
+    assertEquals(2, plan.dayCount)
+    assertEquals(items, restored.getItems(planId).map { it.copy(id = 0) })
+    assertEquals("場所の行は場所に結び付いたまま", "店", restored.getItemsWithPlace(planId).first().placeName)
+    assertEquals("{\"draft\":1}", restored.getDraftOfPlan(planId)?.json)
+    assertEquals(listOf("{\"draft\":2}"), restored.observeDrafts().first().filter { it.planId == null }.map { it.json })
   }
 
   @Test
