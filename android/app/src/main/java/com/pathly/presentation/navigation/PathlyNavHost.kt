@@ -78,9 +78,10 @@ object Routes {
   // 「計画」タブはネストグラフ（一覧と詳細。詳細でもタブを選んだままにする）。
   const val PLANS_GRAPH = "plans"
   const val PLANS_LIST = "plans_list"
-  const val PLAN_DETAIL = "plan_detail/{planId}"
+  const val PLAN_DETAIL = "plan_detail/{planId}?draftId={draftId}"
 
-  fun planDetail(planId: Long) = "plan_detail/$planId"
+  /** 計画の詳細。[planId] が 0 なら新しい計画（[draftId] があれば、その下書きの続き）。 */
+  fun planDetail(planId: Long, draftId: Long? = null) = "plan_detail/$planId" + (draftId?.let { "?draftId=$it" } ?: "")
 
   fun placeDetail(placeId: Long) = "place_detail/$placeId"
   fun trackDetail(trackId: Long) = "track_detail/$trackId"
@@ -238,7 +239,8 @@ private fun NavGraphBuilder.plansGraph(navController: NavController) {
       val deletedTitle by entry.savedStateHandle.getStateFlow<String?>(DELETED_PLAN_KEY, null).collectAsStateWithLifecycle()
       PlansRoute(
         viewModel = hiltViewModel<PlansViewModel>(),
-        onOpenPlan = { planId -> navController.navigate(Routes.planDetail(planId)) },
+        onOpenPlan = { planId, draftId -> navController.navigate(Routes.planDetail(planId, draftId)) },
+        onCreatePlan = { navController.navigate(Routes.planDetail(0)) },
         deletedPlanTitle = deletedTitle,
         onDeletedShown = { entry.savedStateHandle[DELETED_PLAN_KEY] = null },
       )
@@ -246,7 +248,13 @@ private fun NavGraphBuilder.plansGraph(navController: NavController) {
 
     composable(
       route = Routes.PLAN_DETAIL,
-      arguments = listOf(navArgument(PlanDetailViewModel.ARG_PLAN_ID) { type = NavType.LongType }),
+      arguments = listOf(
+        navArgument(PlanDetailViewModel.ARG_PLAN_ID) { type = NavType.LongType },
+        navArgument(PlanDetailViewModel.ARG_DRAFT_ID) {
+          type = NavType.LongType
+          defaultValue = 0L
+        },
+      ),
     ) {
       PlanDetailRoute(
         viewModel = hiltViewModel<PlanDetailViewModel>(),

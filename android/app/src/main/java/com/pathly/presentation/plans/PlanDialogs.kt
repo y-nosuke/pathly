@@ -3,8 +3,6 @@ package com.pathly.presentation.plans
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -17,10 +15,9 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.DatePicker
 import androidx.compose.material3.DatePickerDialog
+import androidx.compose.material3.DateRangePicker
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -30,7 +27,7 @@ import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TimePicker
-import androidx.compose.material3.rememberDatePickerState
+import androidx.compose.material3.rememberDateRangePickerState
 import androidx.compose.material3.rememberTimePickerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -52,6 +49,7 @@ import com.pathly.ui.theme.PathlySpacing
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneOffset
+import java.time.temporal.ChronoUnit
 
 /** 名前とメモ（⋮ の「名前とメモ」）。 */
 @Composable
@@ -85,14 +83,15 @@ internal fun PlanTitleDialog(plan: Plan, onSave: (title: String, note: String?) 
       TextButton(onClick = {
         onSave(title, note)
         onDismiss()
-      }, enabled = title.isNotBlank()) { Text("保存") }
+      }, enabled = title.isNotBlank()) { Text("決める") }
     },
     dismissButton = { TextButton(onClick = onDismiss) { Text("やめる") } },
   )
 }
 
 /**
- * 日付と日数（⋮ の「日付と日数」）。開始日は「日付なし」を選べる。日数は（−）（＋）と数字で入れる（上限なし）。
+ * 日付と日数（⋮ の「日付と日数」・シートの要約）。開始日は「日付なし」を選べる。
+ * 日付ありなら、開始と終了の日付で期間を決めても（期間のカレンダー）、日数で決めてもよい（どちらも連動する。日数の上限なし）。
  * 日数を減らすと、消える日の行が最後の日の末尾へ移ることを添える。
  */
 @OptIn(ExperimentalMaterial3Api::class)
@@ -106,9 +105,10 @@ internal fun PlanDatesDialog(
   var dated by rememberSaveable { mutableStateOf(plan.startDate != null) }
   var startEpochDay by rememberSaveable { mutableStateOf(plan.startDate?.toEpochDay() ?: LocalDate.now().toEpochDay()) }
   var daysText by rememberSaveable { mutableStateOf(plan.dayCount.toString()) }
-  var pickerOpen by rememberSaveable { mutableStateOf(false) }
+  var rangeOpen by rememberSaveable { mutableStateOf(false) }
   val days = daysText.toIntOrNull()?.takeIf { it >= 1 }
   val start = LocalDate.ofEpochDay(startEpochDay)
+  val end = days?.let { start.plusDays(it - 1L) }
 
   AlertDialog(
     onDismissRequest = onDismiss,
@@ -118,12 +118,14 @@ internal fun PlanDatesDialog(
         ChoiceRow(text = "日付なし", selected = !dated, onClick = { dated = false }, tag = "planUndated")
         ChoiceRow(text = "日付あり", selected = dated, onClick = { dated = true }, tag = "planDated")
         if (dated) {
-          OutlinedButton(
-            onClick = { pickerOpen = true },
-            modifier = Modifier
-              .padding(start = 48.dp)
-              .testTag("planStartDate"),
-          ) { Text("開始日 ${formatPlanDate(start)}") }
+          // 開始・終了を押すと期間のカレンダー（2 回押して始めと終わりを選ぶ。日帰りは同じ日を 2 回）。
+          Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(start = PathlySpacing.xl)) {
+            OutlinedButton(onClick = { rangeOpen = true }, modifier = Modifier.testTag("planStartDate")) { Text(formatPlanDate(start)) }
+            Text(" 〜 ", style = MaterialTheme.typography.bodyLarge)
+            OutlinedButton(onClick = { rangeOpen = true }, enabled = end != null, modifier = Modifier.testTag("planEndDate")) {
+              Text(end?.let { formatPlanDate(it) } ?: "―")
+            }
+          }
         }
         Spacer(modifier = Modifier.padding(top = PathlySpacing.md))
         Text("日数", style = MaterialTheme.typography.labelLarge)
@@ -149,13 +151,6 @@ internal fun PlanDatesDialog(
           ) { Icon(painterResource(R.drawable.ic_add), contentDescription = "1 日増やす") }
           Text(if (days == 1) "（日帰り）" else "", style = MaterialTheme.typography.bodyMedium)
         }
-        if (days != null && days > 1 && dated) {
-          Text(
-            text = "${formatPlanDate(start)}〜${formatPlanDate(start.plusDays(days - 1L))}",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-          )
-        }
         val moved = days?.let { PlanArrangement.movedByShrink(slots, it) } ?: 0
         if (moved > 0) {
           Text(
@@ -176,33 +171,50 @@ internal fun PlanDatesDialog(
           onDismiss()
         },
         enabled = days != null,
-      ) { Text("保存") }
+      ) { Text("決める") }
     },
     dismissButton = { TextButton(onClick = onDismiss) { Text("やめる") } },
   )
 
-  if (pickerOpen) {
-    // DatePicker は UTC の 0 時のミリ秒で日付を持つ。
-    val pickerState = rememberDatePickerState(initialSelectedDateMillis = start.atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli())
+  if (rangeOpen) {
+    // DateRangePicker は UTC の 0 時のミリ秒で日付を持つ。
+    fun LocalDate.millis(): Long = atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli()
+    fun Long.localDate(): LocalDate = Instant.ofEpochMilli(this).atZone(ZoneOffset.UTC).toLocalDate()
+    val pickerState = rememberDateRangePickerState(
+      initialSelectedStartDateMillis = start.millis(),
+      initialSelectedEndDateMillis = (end ?: start).millis(),
+    )
     DatePickerDialog(
-      onDismissRequest = { pickerOpen = false },
+      onDismissRequest = { rangeOpen = false },
       confirmButton = {
-        TextButton(onClick = {
-          pickerState.selectedDateMillis?.let { startEpochDay = Instant.ofEpochMilli(it).atZone(ZoneOffset.UTC).toLocalDate().toEpochDay() }
-          pickerOpen = false
-        }) { Text("決める") }
+        TextButton(
+          onClick = {
+            val from = pickerState.selectedStartDateMillis?.localDate()
+            if (from != null) {
+              val to = pickerState.selectedEndDateMillis?.localDate() ?: from
+              startEpochDay = from.toEpochDay()
+              daysText = (ChronoUnit.DAYS.between(from, to) + 1).toString()
+            }
+            rangeOpen = false
+          },
+          enabled = pickerState.selectedStartDateMillis != null,
+        ) { Text("決める") }
       },
-      dismissButton = { TextButton(onClick = { pickerOpen = false }) { Text("やめる") } },
+      dismissButton = { TextButton(onClick = { rangeOpen = false }) { Text("やめる") } },
     ) {
-      DatePicker(state = pickerState)
+      DateRangePicker(
+        state = pickerState,
+        title = { Text("期間を選ぶ（始めと終わりを押す）", modifier = Modifier.padding(start = PathlySpacing.xl, top = PathlySpacing.md)) },
+        modifier = Modifier.weight(1f),
+      )
     }
   }
 }
 
 /**
  * 行の編集・メモの行を足す。[item] が null なら新しいメモの行。場所の行では文言は出さない（名前は場所のもの）。
+ * 場所の行は、滞在の目安を時間と分で入れる。着く時刻があれば出発の時刻も出し、出発を選ぶと滞在の目安が変わる。
  */
-@OptIn(ExperimentalLayoutApi::class)
 @Composable
 internal fun PlanItemDialog(
   item: PlanItem?,
@@ -212,9 +224,14 @@ internal fun PlanItemDialog(
   val isMemo = item == null || !item.isPlace
   var title by rememberSaveable { mutableStateOf(item?.title.orEmpty()) }
   var plannedTime by rememberSaveable { mutableStateOf(item?.plannedTime) }
-  var stay by rememberSaveable { mutableStateOf(item?.stayMinutes) }
+  var hoursText by rememberSaveable { mutableStateOf(item?.stayMinutes?.let { (it / 60).toString() }.orEmpty()) }
+  var minutesText by rememberSaveable { mutableStateOf(item?.stayMinutes?.let { (it % 60).toString() }.orEmpty()) }
   var note by rememberSaveable { mutableStateOf(item?.note.orEmpty()) }
-  var timeOpen by rememberSaveable { mutableStateOf(false) }
+  var timeOpen by rememberSaveable { mutableStateOf<TimeTarget?>(null) }
+  val hours = hoursText.toIntOrNull() ?: 0
+  val minutes = minutesText.toIntOrNull() ?: 0
+  val stay = if (hoursText.isBlank() && minutesText.isBlank()) null else (hours * 60 + minutes).takeIf { it > 0 }
+  val departure = if (plannedTime != null && stay != null) plannedTime!! + stay else null
 
   AlertDialog(
     onDismissRequest = onDismiss,
@@ -245,9 +262,9 @@ internal fun PlanItemDialog(
           )
         }
         Row(verticalAlignment = Alignment.CenterVertically) {
-          Text("予定時刻", style = MaterialTheme.typography.labelLarge, modifier = Modifier.weight(1f))
-          OutlinedButton(onClick = { timeOpen = true }, modifier = Modifier.testTag("planTimeButton")) {
-            Text(plannedTime?.let { "${formatMinutesOfDay(it)} 着" } ?: "決めない")
+          Text("着く時刻", style = MaterialTheme.typography.labelLarge, modifier = Modifier.weight(1f))
+          OutlinedButton(onClick = { timeOpen = TimeTarget.ARRIVAL }, modifier = Modifier.testTag("planTimeButton")) {
+            Text(plannedTime?.let { formatClock(it) } ?: "決めない")
           }
           if (plannedTime != null) {
             TextButton(onClick = { plannedTime = null }) { Text("消す") }
@@ -255,13 +272,21 @@ internal fun PlanItemDialog(
         }
         if (!isMemo) {
           Text("滞在の目安", style = MaterialTheme.typography.labelLarge)
-          FlowRow(horizontalArrangement = Arrangement.spacedBy(PathlySpacing.xs)) {
-            StayChoices.forEach { choice ->
-              FilterChip(
-                selected = stay == choice,
-                onClick = { stay = choice },
-                label = { Text(choice?.let { stayLabel(it) } ?: "なし") },
-              )
+          Row(verticalAlignment = Alignment.CenterVertically) {
+            NumberField(value = hoursText, onValueChange = { hoursText = it }, maxDigits = 2, tag = "planStayHours")
+            Text(" 時間 ", style = MaterialTheme.typography.bodyLarge)
+            NumberField(value = minutesText, onValueChange = { minutesText = it }, maxDigits = 3, tag = "planStayMinutes")
+            Text(" 分", style = MaterialTheme.typography.bodyLarge)
+          }
+          // 出発の時刻（着く時刻 ＋ 滞在の目安）。選ぶと滞在の目安を出発に合わせて直す。
+          Row(verticalAlignment = Alignment.CenterVertically) {
+            Text("出発の時刻", style = MaterialTheme.typography.labelLarge, modifier = Modifier.weight(1f))
+            OutlinedButton(
+              onClick = { timeOpen = TimeTarget.DEPARTURE },
+              enabled = plannedTime != null,
+              modifier = Modifier.testTag("planDepartureButton"),
+            ) {
+              Text(departure?.let { formatClock(it) } ?: if (plannedTime == null) "着く時刻を先に" else "決めない")
             }
           }
         }
@@ -282,30 +307,63 @@ internal fun PlanItemDialog(
         },
         enabled = !isMemo || title.isNotBlank(),
         modifier = Modifier.testTag("planItemSave"),
-      ) { Text(if (item == null) "足す" else "保存") }
+      ) { Text(if (item == null) "足す" else "決める") }
     },
     dismissButton = { TextButton(onClick = onDismiss) { Text("やめる") } },
   )
 
-  if (timeOpen) {
-    PlanTimeDialog(
+  when (timeOpen) {
+    null -> Unit
+
+    TimeTarget.ARRIVAL -> PlanTimeDialog(
+      title = "着く時刻",
       initial = plannedTime ?: DEFAULT_TIME,
       onPick = {
         plannedTime = it
-        timeOpen = false
+        timeOpen = null
       },
-      onDismiss = { timeOpen = false },
+      onDismiss = { timeOpen = null },
+    )
+
+    TimeTarget.DEPARTURE -> PlanTimeDialog(
+      title = "出発の時刻",
+      initial = (departure ?: plannedTime ?: DEFAULT_TIME) % (24 * 60),
+      onPick = { picked ->
+        val arrival = plannedTime ?: return@PlanTimeDialog
+        // 着く時刻より前を選んだら、翌日の出発とみなす。同じ時刻なら滞在の目安を消す。
+        val diff = (picked - arrival).let { if (it < 0) it + 24 * 60 else it }
+        hoursText = if (diff == 0) "" else (diff / 60).toString()
+        minutesText = if (diff == 0) "" else (diff % 60).toString()
+        timeOpen = null
+      },
+      onDismiss = { timeOpen = null },
     )
   }
 }
 
+private enum class TimeTarget { ARRIVAL, DEPARTURE }
+
+/** 数字だけを入れる小さな欄（滞在の目安の時間・分）。 */
+@Composable
+private fun NumberField(value: String, onValueChange: (String) -> Unit, maxDigits: Int, tag: String) {
+  OutlinedTextField(
+    value = value,
+    onValueChange = { v -> onValueChange(v.filter { it.isDigit() }.take(maxDigits)) },
+    singleLine = true,
+    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+    modifier = Modifier
+      .width(72.dp)
+      .testTag(tag),
+  )
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun PlanTimeDialog(initial: Int, onPick: (Int) -> Unit, onDismiss: () -> Unit) {
+private fun PlanTimeDialog(title: String, initial: Int, onPick: (Int) -> Unit, onDismiss: () -> Unit) {
   val state = rememberTimePickerState(initialHour = initial / 60, initialMinute = initial % 60, is24Hour = true)
   AlertDialog(
     onDismissRequest = onDismiss,
-    title = { Text("着く時刻") },
+    title = { Text(title) },
     text = { TimePicker(state = state) },
     confirmButton = { TextButton(onClick = { onPick(state.hour * 60 + state.minute) }) { Text("決める") } },
     dismissButton = { TextButton(onClick = onDismiss) { Text("やめる") } },

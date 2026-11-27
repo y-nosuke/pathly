@@ -27,6 +27,7 @@ import com.pathly.data.local.entity.GpsPointEntity
 import com.pathly.data.local.entity.GpsTrackEntity
 import com.pathly.data.local.entity.PlaceEntity
 import com.pathly.data.local.entity.PlaceResolutionEntity
+import com.pathly.data.local.entity.PlanDraftEntity
 import com.pathly.data.local.entity.PlanEntity
 import com.pathly.data.local.entity.PlanItemEntity
 import com.pathly.data.local.entity.SmoothedPointEntity
@@ -52,6 +53,7 @@ import com.pathly.util.Logger
     WishlistFulfillmentEntity::class,
     PlanEntity::class,
     PlanItemEntity::class,
+    PlanDraftEntity::class,
   ],
   version = PathlyDatabase.VERSION,
   exportSchema = true,

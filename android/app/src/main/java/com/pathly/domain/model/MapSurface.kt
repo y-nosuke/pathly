@@ -7,4 +7,5 @@ enum class MapSurface(val key: String) {
   PLACE_DETAIL("place_detail"),
   PLACE_ADD("place_add"),
   HISTORY_MAP("history_map"),
+  PLAN_DETAIL("plan_detail"),
 }

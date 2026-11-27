@@ -11,6 +11,7 @@ import com.pathly.data.local.entity.GpsTrackEntity
 import com.pathly.data.local.entity.PlaceEntity
 import com.pathly.data.local.entity.PlaceResolutionEntity
 import com.pathly.data.local.entity.PlanEntity
+import com.pathly.data.local.entity.PlanItemEntity
 import com.pathly.data.local.entity.StopEntity
 import com.pathly.data.local.entity.VisitedPlaceEntity
 import com.pathly.data.local.entity.WishlistEntity
@@ -719,7 +720,7 @@ class StopAndPlaceChangeIntegrationTest {
   /** [placeId] を 1 日目に入れた計画を作る。 */
   private suspend fun plan(placeId: Long): Long {
     val planId = database.planDao().insertPlan(PlanEntity(title = "計画", createdAt = Date(BASE), updatedAt = Date(BASE)))
-    database.planDao().appendPlaces(planId, 1, listOf(placeId), Date(BASE))
+    database.planDao().insertItem(PlanItemEntity(planId = planId, dayIndex = 1, position = 0, placeId = placeId))
     return planId
   }
 

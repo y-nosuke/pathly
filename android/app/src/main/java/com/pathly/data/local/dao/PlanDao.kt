@@ -2,19 +2,19 @@ package com.pathly.data.local.dao
 
 import androidx.room.Dao
 import androidx.room.Insert
+import androidx.room.OnConflictStrategy
 import androidx.room.Query
 import androidx.room.Transaction
 import androidx.room.Update
+import com.pathly.data.local.entity.PlanDraftEntity
 import com.pathly.data.local.entity.PlanEntity
 import com.pathly.data.local.entity.PlanItemEntity
 import com.pathly.data.local.entity.PlanItemWithPlace
 import com.pathly.data.local.entity.PlanListRow
-import com.pathly.domain.model.PlanArrangement
-import com.pathly.domain.model.PlanSlot
+import com.pathly.data.local.entity.PlanPlaceRow
 import kotlinx.coroutines.flow.Flow
-import java.util.Date
 
-/** 計画と計画の行（→ adr/0050）。 */
+/** 計画・計画の行・計画の下書き（→ adr/0050）。 */
 @Dao
 abstract class PlanDao {
 
@@ -24,8 +24,11 @@ abstract class PlanDao {
   )
   abstract fun observePlans(): Flow<List<PlanListRow>>
 
+  @Query("SELECT * FROM plan_drafts")
+  abstract fun observeDrafts(): Flow<List<PlanDraftEntity>>
+
   @Query("SELECT * FROM plans WHERE id = :planId")
-  abstract fun observePlan(planId: Long): Flow<PlanEntity?>
+  abstract suspend fun getPlan(planId: Long): PlanEntity?
 
   /** 計画の行（日・順番どおり）。場所の行には名前とアンカーの座標を添える。 */
   @Query(
@@ -36,26 +39,25 @@ abstract class PlanDao {
       "LEFT JOIN google_places g ON g.placeId = i.placeId " +
       "WHERE i.planId = :planId ORDER BY i.dayIndex, i.position, i.id",
   )
-  abstract fun observeItems(planId: Long): Flow<List<PlanItemWithPlace>>
-
-  @Query("SELECT * FROM plans WHERE id = :planId")
-  abstract suspend fun getPlan(planId: Long): PlanEntity?
+  abstract suspend fun getItemsWithPlace(planId: Long): List<PlanItemWithPlace>
 
   @Query("SELECT * FROM plan_items WHERE planId = :planId ORDER BY dayIndex, position, id")
   abstract suspend fun getItems(planId: Long): List<PlanItemEntity>
 
-  @Query("SELECT * FROM plan_items WHERE id = :itemId")
-  abstract suspend fun getItem(itemId: Long): PlanItemEntity?
-
   @Query("SELECT * FROM plan_items WHERE placeId = :placeId")
   abstract suspend fun getItemsByPlace(placeId: Long): List<PlanItemEntity>
+
+  /** 場所の名前とアンカーの座標（下書きの行を場所に結び付けるため）。 */
+  @Query(
+    "SELECT p.id AS id, p.name AS placeName, g.name AS googleName, g.address AS googleAddress, " +
+      "p.latitude AS latitude, p.longitude AS longitude " +
+      "FROM places p LEFT JOIN google_places g ON g.placeId = p.id",
+  )
+  abstract fun observePlaces(): Flow<List<PlanPlaceRow>>
 
   /** 場所を使っている計画の数（同じ計画に 2 回入っていても 1 と数える）。 */
   @Query("SELECT COUNT(DISTINCT planId) FROM plan_items WHERE placeId = :placeId")
   abstract suspend fun countPlansUsingPlace(placeId: Long): Int
-
-  @Query("SELECT COALESCE(MAX(position) + 1, 0) FROM plan_items WHERE planId = :planId AND dayIndex = :day")
-  abstract suspend fun nextPosition(planId: Long, day: Int): Int
 
   @Insert
   abstract suspend fun insertPlan(plan: PlanEntity): Long
@@ -72,66 +74,40 @@ abstract class PlanDao {
   @Insert
   abstract suspend fun insertItems(items: List<PlanItemEntity>)
 
-  @Update
-  abstract suspend fun updateItem(item: PlanItemEntity)
+  @Query("DELETE FROM plan_items WHERE planId = :planId")
+  protected abstract suspend fun deleteItemsOf(planId: Long)
 
-  @Query("DELETE FROM plan_items WHERE id = :itemId")
-  abstract suspend fun deleteItem(itemId: Long)
+  // ---- 下書き ----
 
-  @Query("UPDATE plan_items SET dayIndex = :day, position = :position WHERE id = :itemId")
-  protected abstract suspend fun moveItem(itemId: Long, day: Int, position: Int)
+  @Query("SELECT * FROM plan_drafts WHERE id = :draftId")
+  abstract suspend fun getDraft(draftId: Long): PlanDraftEntity?
 
-  @Query("UPDATE plans SET updatedAt = :now WHERE id = :planId")
-  abstract suspend fun touch(planId: Long, now: Date)
+  @Query("SELECT * FROM plan_drafts WHERE planId = :planId")
+  abstract suspend fun getDraftOfPlan(planId: Long): PlanDraftEntity?
 
-  /** 行の並び（日・順番）をまとめて書く。 */
-  @Transaction
-  open suspend fun applySlots(planId: Long, slots: List<PlanSlot>, now: Date) {
-    slots.forEach { moveItem(it.itemId, it.dayIndex, it.position) }
-    touch(planId, now)
-  }
+  @Insert(onConflict = OnConflictStrategy.REPLACE)
+  abstract suspend fun upsertDraft(draft: PlanDraftEntity): Long
 
-  /** 場所の行を [day] 日目の末尾に足す（[placeIds] の順で）。 */
-  @Transaction
-  open suspend fun appendPlaces(planId: Long, day: Int, placeIds: List<Long>, now: Date) {
-    val start = nextPosition(planId, day)
-    insertItems(placeIds.mapIndexed { i, placeId -> PlanItemEntity(planId = planId, dayIndex = day, position = start + i, placeId = placeId) })
-    touch(planId, now)
-  }
-
-  /** 行を [day] 日目の末尾に足す（[item] の日と順番は上書きする）。 */
-  @Transaction
-  open suspend fun append(item: PlanItemEntity, day: Int, now: Date): Long {
-    val id = insertItem(item.copy(id = 0, dayIndex = day, position = nextPosition(item.planId, day)))
-    touch(item.planId, now)
-    return id
-  }
-
-  /** 行を [day] 日目の末尾へ移す。 */
-  @Transaction
-  open suspend fun moveToDayEnd(itemId: Long, day: Int, now: Date) {
-    val item = getItem(itemId) ?: return
-    if (item.dayIndex == day) return
-    moveItem(itemId, day, nextPosition(item.planId, day))
-    touch(item.planId, now)
-  }
+  @Query("DELETE FROM plan_drafts WHERE id = :draftId")
+  abstract suspend fun deleteDraft(draftId: Long)
 
   /**
-   * 開始日と日数を変える。日数を減らしたら、消える日の行を新しい最後の日の末尾へ移す（→ adr/0050）。
+   * 計画を保存する（新しければ作る）。行は丸ごと入れ替える。[draftId] の下書きは消す。保存した計画の id を返す。
    */
   @Transaction
-  open suspend fun setDates(planId: Long, startDate: Long?, dayCount: Int, now: Date) {
-    val plan = getPlan(planId) ?: return
-    val days = dayCount.coerceAtLeast(1)
-    val slots = getItems(planId).map { PlanSlot(it.id, it.dayIndex, it.position) }
-    PlanArrangement.shrink(slots, days).forEach { moveItem(it.itemId, it.dayIndex, it.position) }
-    updatePlan(plan.copy(startDate = startDate, dayCount = days, updatedAt = now))
+  open suspend fun savePlan(plan: PlanEntity, items: List<PlanItemEntity>, draftId: Long?): Long {
+    val planId = if (plan.id == 0L) insertPlan(plan) else plan.id.also { updatePlan(plan) }
+    deleteItemsOf(planId)
+    if (items.isNotEmpty()) insertItems(items.map { it.copy(id = 0, planId = planId) })
+    if (draftId != null) deleteDraft(draftId)
+    return planId
   }
 
-  /** 消した計画を、元の id のまま行ごと戻す。 */
+  /** 消した計画を、元の id のまま行・下書きごと戻す。 */
   @Transaction
-  open suspend fun restore(plan: PlanEntity, items: List<PlanItemEntity>) {
+  open suspend fun restore(plan: PlanEntity, items: List<PlanItemEntity>, draft: PlanDraftEntity?) {
     insertPlan(plan)
     if (items.isNotEmpty()) insertItems(items)
+    if (draft != null) upsertDraft(draft)
   }
 }

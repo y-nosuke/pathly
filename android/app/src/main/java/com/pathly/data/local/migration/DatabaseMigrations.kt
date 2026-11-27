@@ -542,7 +542,7 @@ object DatabaseMigrations {
   }
 
   /**
-   * v21 → v22: 計画（`plans`）と計画の行（`plan_items`）を足す（→ adr/0050）。既存のデータは変えない。
+   * v21 → v22: 計画（`plans`）・計画の行（`plan_items`）・計画の下書き（`plan_drafts`）を足す（→ adr/0050）。既存のデータは変えない。
    */
   val MIGRATION_21_22 = loggedMigration(21, 22) { db ->
     db.execSQL(
@@ -571,6 +571,15 @@ object DatabaseMigrations {
     )
     db.execSQL("CREATE INDEX IF NOT EXISTS `index_plan_items_planId` ON `plan_items` (`planId`)")
     db.execSQL("CREATE INDEX IF NOT EXISTS `index_plan_items_placeId` ON `plan_items` (`placeId`)")
+    db.execSQL(
+      "CREATE TABLE IF NOT EXISTS `plan_drafts` (" +
+        "`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+        "`planId` INTEGER, " +
+        "`json` TEXT NOT NULL, " +
+        "`updatedAt` INTEGER NOT NULL, " +
+        "FOREIGN KEY(`planId`) REFERENCES `plans`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+    )
+    db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS `index_plan_drafts_planId` ON `plan_drafts` (`planId`)")
   }
 
   val ALL_MIGRATIONS = arrayOf(

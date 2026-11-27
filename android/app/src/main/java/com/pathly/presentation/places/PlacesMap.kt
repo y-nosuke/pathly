@@ -1,6 +1,8 @@
 package com.pathly.presentation.places
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -14,12 +16,14 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
@@ -43,6 +47,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
@@ -59,6 +64,7 @@ import com.google.android.gms.maps.model.LatLngBounds
 import com.google.maps.android.compose.GoogleMap
 import com.google.maps.android.compose.MapProperties
 import com.google.maps.android.compose.MapUiSettings
+import com.google.maps.android.compose.MarkerState
 import com.pathly.R
 import com.pathly.domain.model.GeoBounds
 import com.pathly.domain.model.MapRegion
@@ -90,6 +96,7 @@ import com.pathly.presentation.common.ListMenuChoice
 import com.pathly.presentation.common.ListMenuSectionTitle
 import com.pathly.presentation.common.ListToolRow
 import com.pathly.presentation.common.MapControls
+import com.pathly.presentation.common.MapMarker
 import com.pathly.presentation.common.MapRoundButton
 import com.pathly.presentation.common.MapRoundButtonSize
 import com.pathly.presentation.common.RegionBoundaries
@@ -111,6 +118,7 @@ import com.pathly.presentation.common.rememberLocationPermitted
 import com.pathly.presentation.common.rememberMapInfoWindowState
 import com.pathly.presentation.common.requestCurrentLatLng
 import com.pathly.ui.theme.PathlyElevation
+import com.pathly.ui.theme.PathlyMapColors
 import com.pathly.ui.theme.PathlySpacing
 import com.pathly.ui.theme.PathlyTheme
 import com.pathly.util.DateFormatters
@@ -142,6 +150,8 @@ internal fun PlacesMapLayout(
   onBoundaryClear: () -> Unit,
   modifier: Modifier = Modifier,
   mapContent: (@Composable () -> Unit)? = null,
+  // 選ぶモードで選んでいる場所（マーカーに印を付ける）。
+  selectedPlaceIds: Set<Long> = emptySet(),
 ) {
   val context = LocalContext.current
   val scope = rememberCoroutineScope()
@@ -162,6 +172,7 @@ internal fun PlacesMapLayout(
         items = state.visibleItems,
         emptyMessage = if (visible && state.visibleItems.isEmpty()) state.emptyMessage() else null,
         onPlaceClick = onPlaceClick,
+        selectedPlaceIds = selectedPlaceIds,
         visible = visible,
         camera = camera,
         showMyLocation = hasLocationPermission,
@@ -250,6 +261,7 @@ private fun PlacesMapView(
   items: List<PlaceListItem>,
   emptyMessage: String?,
   onPlaceClick: (Long) -> Unit,
+  selectedPlaceIds: Set<Long>,
   visible: Boolean,
   camera: ListMapCamera,
   showMyLocation: Boolean,
@@ -333,6 +345,21 @@ private fun PlacesMapView(
           onAvailableChange = onBoundaryAvailableChange,
         )
         RegisteredPlaceMarkers(places, infoWindow) { onPlaceClick(it.placeId) }
+        // 選ぶモードで選んでいる場所には、マーカーの右上にチェックの印を重ねる（押すと外せる）。
+        places.filter { it.placeId in selectedPlaceIds }.forEach { place ->
+          val state = remember(place.placeId, place.latitude, place.longitude) { MarkerState(LatLng(place.latitude, place.longitude)) }
+          MapMarker(
+            "place-selected",
+            place.placeId,
+            infoWindow = infoWindow,
+            state = state,
+            anchor = SelectedMarkAnchor,
+            zIndex = SELECTED_MARK_Z_INDEX,
+            onClick = { onPlaceClick(place.placeId) },
+          ) {
+            SelectedPlaceMark()
+          }
+        }
       }
     }
     emptyMessage?.let { message ->
@@ -412,3 +439,26 @@ private val PlacesMapBoundsPadding = 56.dp
 
 // 現在地へ寄せるときの、いちばん引いた縮尺（これより引いていれば寄せる）。
 private const val MY_LOCATION_ZOOM = 15f
+
+/** 選ぶモードで選んだ場所の印（緑の丸にチェック）。 */
+@Composable
+private fun SelectedPlaceMark() {
+  Box(
+    modifier = Modifier
+      .size(22.dp)
+      .background(PathlyMapColors.PlaceVisited, CircleShape)
+      .border(2.dp, PathlyMapColors.OnMarker, CircleShape),
+    contentAlignment = Alignment.Center,
+  ) {
+    Icon(
+      painter = painterResource(R.drawable.ic_check_circle),
+      contentDescription = "選んだ",
+      tint = PathlyMapColors.OnMarker,
+      modifier = Modifier.size(16.dp),
+    )
+  }
+}
+
+// 印は、場所のマーカー（下端が場所）の右上に重ねる。
+private val SelectedMarkAnchor = Offset(-0.1f, 2.1f)
+private const val SELECTED_MARK_Z_INDEX = 10f

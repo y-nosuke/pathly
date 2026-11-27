@@ -41,11 +41,28 @@ enum class PlanGroup(val label: String) {
   PAST("終わった"),
 }
 
-/** 計画の一覧の 1 行。 */
+/**
+ * 計画の一覧の 1 行。保存済みの計画か、一度も保存していない新しい計画の下書き（[Plan.id] が 0）。
+ * 下書きがあれば、名前・日付・場所の数は下書きのもの（開くと下書きの続きから始まるため）。
+ */
 data class PlanSummary(
   val plan: Plan,
   /** 場所の行の数。 */
   val placeCount: Int,
+  /** 下書きの id（下書きが無ければ null）。 */
+  val draftId: Long? = null,
+) {
+  val hasDraft: Boolean get() = draftId != null
+
+  /** 一覧の中で見分ける鍵（保存済みは計画の id、新しい計画の下書きは下書きの id）。 */
+  val key: String get() = if (plan.id != 0L) "plan:${plan.id}" else "draft:$draftId"
+}
+
+/** 保存した下書き（[detail] の計画の id は、一度も保存していなければ 0）。 */
+data class StoredPlanDraft(
+  val draftId: Long,
+  val detail: PlanDetail,
+  val updatedAt: Date,
 )
 
 /**
@@ -64,6 +81,9 @@ data class PlanItem(
   val stayMinutes: Int?,
 ) {
   val isPlace: Boolean get() = place != null
+
+  /** 予定の出発時刻（着く時刻 ＋ 滞在の目安。どちらかが無ければ null）。日をまたげば 24 時を超える。 */
+  val plannedDeparture: Int? get() = if (plannedTime != null && stayMinutes != null) plannedTime + stayMinutes else null
 
   /** 行に出す名前（場所の行は場所の表示名、メモの行は文言）。 */
   val label: String get() = place?.name ?: title.orEmpty()

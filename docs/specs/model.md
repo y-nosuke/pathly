@@ -24,6 +24,7 @@ erDiagram
   places ||--o| visited_places : "訪問済みの印"
   places ||--o{ wishlist_fulfillments : "行きたいの履歴"
   plans ||--o{ plan_items : "行"
+  plans |o--o| plan_drafts : "下書き"
   places |o--o{ plan_items : "場所の行"
   gps_points |o--o{ smoothed_points : "由来(sourcePointId)"
 
@@ -124,6 +125,12 @@ erDiagram
     Long startDate
     Int dayCount
   }
+  plan_drafts {
+    Long id PK
+    Long planId FK
+    String json
+    Date updatedAt
+  }
   plan_items {
     Long id PK
     Long planId FK
@@ -154,6 +161,7 @@ erDiagram
 | **wishlist_fulfillments**   | 行きたいの履歴。行きたいに入れて実際に行った 1 回ぶん（`wishedAt`＝入れた日時・`fulfilledAt`＝行った立ち寄りの到着）。件数が「行きたいで行った回数」                                                                                                                                                                                      | places に 1:0..N                                       |
 | **plans**                   | 計画（→ [plans.md](plans.md)・[ADR-0050](../adr/0050-plans-as-ordered-items-with-optional-dates.md)）。`startDate` は開始日（エポック日。null＝日付なし）、`dayCount` は 1 以上（1＝日帰り）                                                                                                                                              | plan_items を従える                                    |
 | **plan_items**              | 計画の行。`placeId` があれば場所の行、null ならメモの行（文言は `title`）。`dayIndex`（何日目）と `position`（日の中の順）で並ぶ。`plannedTime`（着く時刻・0 時からの分）・`stayMinutes`（滞在の目安）は任意                                                                                                                              | plans に属す／places を参照する                        |
+| **plan_drafts**             | 計画の下書き（保存していない編集の途中）。`planId` は保存済みの計画（null＝一度も保存していない）で、計画ごとに 1 つ（UNIQUE）。中身は計画と行の JSON（行は場所を id で指す）                                                                                                                                                             | plans に 0..1（計画の削除で消える）                    |
 
 ### 関連と削除規則（要点）
 

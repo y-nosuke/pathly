@@ -37,28 +37,28 @@ internal fun planDayColor(day: Int): Color = PathlyMapColors.PlanDays[(day - 1).
 /** 「10:00」。 */
 internal fun formatMinutesOfDay(minutes: Int): String = "%d:%02d".format(minutes / 60, minutes % 60)
 
-/** 滞在の目安の言い方（「30分」「1時間」「1.5時間」「半日」）。 */
+/** 滞在の目安の言い方（「30分」「1時間」「1時間30分」）。 */
 internal fun stayLabel(minutes: Int): String = when {
-  minutes == HALF_DAY_MINUTES -> "半日"
   minutes < 60 -> "${minutes}分"
   minutes % 60 == 0 -> "${minutes / 60}時間"
-  minutes % 30 == 0 -> "${minutes / 60}.5時間"
   else -> "${minutes / 60}時間${minutes % 60}分"
 }
 
-/** 行の 2 行目（「10:00 着・1時間」）。予定時刻も滞在の目安も無ければ null。 */
+/** 「10:00」。24 時を超えたら翌日の時刻に「翌」を付ける（「翌1:00」）。 */
+internal fun formatClock(minutes: Int): String = if (minutes >= DAY_MINUTES) "翌" + formatMinutesOfDay(minutes % DAY_MINUTES) else formatMinutesOfDay(minutes)
+
+/**
+ * 行の 2 行目。「10:00 着 – 11:30 発・1時間30分」（出発は着く時刻 ＋ 滞在の目安）。
+ * 着く時刻が無ければ「1時間30分」だけ。どちらも無ければ null。
+ */
 internal fun itemTimeLine(item: PlanItem): String? {
-  val parts = listOfNotNull(
-    item.plannedTime?.let { "${formatMinutesOfDay(it)} 着" },
-    item.stayMinutes?.let { stayLabel(it) },
-  )
+  val arrival = item.plannedTime?.let { "${formatClock(it)} 着" }
+  val departure = item.plannedDeparture?.let { " – ${formatClock(it)} 発" }.orEmpty()
+  val parts = listOfNotNull(arrival?.plus(departure), item.stayMinutes?.let { stayLabel(it) })
   return parts.joinToString("・").ifEmpty { null }
 }
 
-/** 滞在の目安の選択肢（分。null は「なし」）。 */
-internal val StayChoices: List<Int?> = listOf(null, 30, 60, 90, 120, 180, HALF_DAY_MINUTES)
-
-internal const val HALF_DAY_MINUTES = 240
+private const val DAY_MINUTES = 24 * 60
 
 /** 新しく作った計画の名前。 */
 internal const val NEW_PLAN_TITLE = "新しい計画"

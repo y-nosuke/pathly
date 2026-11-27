@@ -17,3 +17,13 @@ data class PlanListRow(
   @Embedded val plan: PlanEntity,
   val placeCount: Int,
 )
+
+/** 場所の名前とアンカーの座標（下書きの行を場所に結び付けるため）。 */
+data class PlanPlaceRow(
+  val id: Long,
+  val placeName: String?,
+  val googleName: String?,
+  val googleAddress: String?,
+  val latitude: Double,
+  val longitude: Double,
+)

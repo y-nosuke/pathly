@@ -4,9 +4,11 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -51,16 +53,16 @@ import com.pathly.ui.theme.PathlySpacing
 @Composable
 fun PlansRoute(
   viewModel: PlansViewModel,
-  onOpenPlan: (planId: Long) -> Unit,
+  /** 計画を開く（[PlanSummary.plan] の id が 0 なら新しい計画の下書き。下書きが無ければ [PlanSummary.draftId] は null）。 */
+  onOpenPlan: (planId: Long, draftId: Long?) -> Unit,
+  /** 新しい計画を開く（保存するまで計画は作らない）。 */
+  onCreatePlan: () -> Unit,
   deletedPlanTitle: String?,
   onDeletedShown: () -> Unit,
   modifier: Modifier = Modifier,
 ) {
   val state by viewModel.uiState.collectAsStateWithLifecycle()
   val snackbarHostState = remember { SnackbarHostState() }
-  LaunchedEffect(viewModel) {
-    viewModel.created.collect { onOpenPlan(it) }
-  }
   // 受け取った名前は画面の状態に移してから消す（消すと鍵が変わり、出している途中の処理が止まるため）。
   var undoTitle by remember { mutableStateOf<String?>(null) }
   LaunchedEffect(deletedPlanTitle) {
@@ -81,7 +83,7 @@ fun PlansRoute(
       onQueryChange = viewModel::setQuery,
       onToggleGroup = viewModel::toggleGroup,
       onOpenPlan = onOpenPlan,
-      onCreate = viewModel::createPlan,
+      onCreate = onCreatePlan,
     )
     SnackbarHost(snackbarHostState, modifier = Modifier.align(Alignment.BottomCenter))
   }
@@ -92,7 +94,7 @@ internal fun PlansContent(
   state: PlansUiState,
   onQueryChange: (String) -> Unit,
   onToggleGroup: (PlanGroup) -> Unit,
-  onOpenPlan: (Long) -> Unit,
+  onOpenPlan: (Long, Long?) -> Unit,
   onCreate: () -> Unit,
   modifier: Modifier = Modifier,
 ) {
@@ -143,8 +145,8 @@ internal fun PlansContent(
               )
             }
             if (section.expanded) {
-              items(section.plans, key = { "plan:${it.plan.id}" }) { summary ->
-                PlanRow(summary = summary, onClick = { onOpenPlan(summary.plan.id) })
+              items(section.plans, key = { it.key }) { summary ->
+                PlanRow(summary = summary, onClick = { onOpenPlan(summary.plan.id, summary.draftId) })
               }
             }
           }
@@ -177,15 +179,19 @@ private fun PlanRow(summary: PlanSummary, onClick: () -> Unit) {
     modifier = Modifier
       .fillMaxWidth()
       .clickable(onClick = onClick)
-      .testTag("planRow:${summary.plan.id}"),
+      .testTag("planRow:${summary.key}"),
   ) {
     Column(modifier = Modifier.padding(horizontal = PathlySpacing.screenEdge, vertical = PathlySpacing.md)) {
-      Text(
-        text = summary.plan.title,
-        style = MaterialTheme.typography.titleMedium,
-        maxLines = 1,
-        overflow = TextOverflow.Ellipsis,
-      )
+      Row(verticalAlignment = Alignment.CenterVertically) {
+        Text(
+          text = summary.plan.title,
+          style = MaterialTheme.typography.titleMedium,
+          maxLines = 1,
+          overflow = TextOverflow.Ellipsis,
+          modifier = Modifier.weight(1f, fill = false),
+        )
+        if (summary.hasDraft) DraftMark(modifier = Modifier.padding(start = PathlySpacing.sm))
+      }
       Text(
         // 日付なしの区分の中なので「日付なし」は繰り返さない。
         text = (summary.plan.startDate?.let { planDateSummary(summary.plan) } ?: dayCountLabel(summary.plan.dayCount)) +
@@ -202,3 +208,20 @@ private fun PlanRow(summary: PlanSummary, onClick: () -> Unit) {
 
 /** 右下の（＋）が下端から占める高さ（丸と下の余白）に、上に置くものとの間を足したもの。 */
 private val PlanAddButtonClearance = 56.dp + PathlySpacing.screenEdge + PathlySpacing.sm
+
+/** 下書きのある計画の印（「✎下書き」）。 */
+@Composable
+internal fun DraftMark(modifier: Modifier = Modifier) {
+  Row(
+    modifier = modifier.testTag("planDraftMark"),
+    verticalAlignment = Alignment.CenterVertically,
+  ) {
+    Icon(
+      painter = painterResource(R.drawable.ic_edit),
+      contentDescription = null,
+      tint = MaterialTheme.colorScheme.tertiary,
+      modifier = Modifier.size(16.dp),
+    )
+    Text(text = "下書き", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.tertiary, maxLines = 1)
+  }
+}

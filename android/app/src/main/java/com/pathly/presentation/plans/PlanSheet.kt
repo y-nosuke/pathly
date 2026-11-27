@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -28,7 +29,10 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
+import androidx.compose.material3.SwipeToDismissBox
+import androidx.compose.material3.SwipeToDismissBoxValue
 import androidx.compose.material3.Text
+import androidx.compose.material3.rememberSwipeToDismissBoxState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -71,6 +75,12 @@ import kotlinx.coroutines.launch
 internal class PlanSheetActions(
   val onAddPlaces: () -> Unit,
   val onAddMemo: () -> Unit,
+  /** 日付・日数の要約を押した（「日付と日数」を開く）。 */
+  val onSummaryClick: () -> Unit,
+  /** 日の見出しを押した（地図にその日だけ出して寄せる）。 */
+  val onDayClick: (Int) -> Unit,
+  /** 日の見出しの ×（その日を消し、行は前の日の末尾へ）。 */
+  val onRemoveDay: (Int) -> Unit,
   /** 行のタップ（場所の行は地図をその場所へ寄せ、メモの行は編集を開く）。 */
   val onItemClick: (PlanItem) -> Unit,
   val onEdit: (PlanItem) -> Unit,
@@ -90,13 +100,13 @@ internal fun ColumnScope.PlanSheetContent(
   detail: PlanDetail,
   listState: LazyListState,
   actions: PlanSheetActions,
-  // 並べ替えを保存できなかった回数。増えたら画面の並びを計画のとおりに戻す。
-  reorderFailures: Int = 0,
+  /** 選んでいる日（見出しを目立たせる）。 */
+  selectedDay: Int? = null,
 ) {
   val plan = detail.plan
   val original = remember(detail) { slotsOf(detail) }
   val reorder = remember(listState) { PlanReorderState(listState) }
-  LaunchedEffect(original, reorderFailures) { reorder.sync(original) }
+  LaunchedEffect(original) { reorder.sync(original) }
   val slots = reorder.slots.ifEmpty { original }
   val itemsById = remember(detail) { detail.items.associateBy { it.id } }
   // 並べ替えの途中は、番号も今の並びで振り直して見せる（離す前から地図と同じ番号になる）。
@@ -140,14 +150,25 @@ internal fun ColumnScope.PlanSheetContent(
     contentPadding = PaddingValues(bottom = PathlySpacing.xl),
   ) {
     item(key = "summary") {
-      PlanSummaryHeader(summary = planDateSummary(plan), onAddPlaces = actions.onAddPlaces, onAddMemo = actions.onAddMemo)
+      PlanSummaryHeader(
+        summary = planDateSummary(plan),
+        onSummaryClick = actions.onSummaryClick,
+        onAddPlaces = actions.onAddPlaces,
+        onAddMemo = actions.onAddMemo,
+      )
     }
     if (detail.items.isEmpty() && plan.isDayTrip) {
       item(key = "emptyPlan") { EmptyDayLine("場所を足すか、メモの行を足してください") }
     }
     items(rendered, key = { it.key }) { entry ->
       when (entry) {
-        is SheetEntry.Header -> DayHeader(label = dayLabel(plan, entry.day), color = planDayColor(entry.day))
+        is SheetEntry.Header -> DayHeader(
+          label = dayLabel(plan, entry.day),
+          color = planDayColor(entry.day),
+          selected = entry.day == selectedDay,
+          onClick = { actions.onDayClick(entry.day) },
+          onRemove = { actions.onRemoveDay(entry.day) },
+        )
 
         is SheetEntry.Empty -> EmptyDayLine("まだ何もありません")
 
@@ -269,15 +290,26 @@ private fun placeNumbersOf(slots: List<PlanSlotKey>, items: Map<Long, PlanItem>)
 }
 
 @Composable
-private fun PlanSummaryHeader(summary: String, onAddPlaces: () -> Unit, onAddMemo: () -> Unit) {
+private fun PlanSummaryHeader(summary: String, onSummaryClick: () -> Unit, onAddPlaces: () -> Unit, onAddMemo: () -> Unit) {
   Column(modifier = Modifier.padding(horizontal = SheetContentHorizontalPadding)) {
-    Text(
-      text = summary,
-      style = MaterialTheme.typography.titleMedium,
-      maxLines = 1,
-      overflow = TextOverflow.Ellipsis,
-      modifier = Modifier.testTag("planSummary"),
-    )
+    // 押すと「日付と日数」を開く（日付の印で押せると分かるように）。
+    Row(
+      modifier = Modifier
+        .clip(MaterialTheme.shapes.small)
+        .clickable(onClickLabel = "日付と日数を変える", onClick = onSummaryClick)
+        .padding(vertical = PathlySpacing.xs)
+        .testTag("planSummary"),
+      verticalAlignment = Alignment.CenterVertically,
+    ) {
+      Icon(painterResource(R.drawable.ic_event_note), contentDescription = null, modifier = Modifier.size(20.dp), tint = MaterialTheme.colorScheme.primary)
+      Spacer(modifier = Modifier.width(PathlySpacing.sm))
+      Text(
+        text = summary,
+        style = MaterialTheme.typography.titleMedium,
+        maxLines = 1,
+        overflow = TextOverflow.Ellipsis,
+      )
+    }
     Spacer(modifier = Modifier.height(PathlySpacing.sm))
     Row(horizontalArrangement = Arrangement.spacedBy(PathlySpacing.sm)) {
       OutlinedButton(onClick = onAddPlaces, modifier = Modifier.testTag("planAddPlaces")) {
@@ -295,13 +327,18 @@ private fun PlanSummaryHeader(summary: String, onAddPlaces: () -> Unit, onAddMem
   }
 }
 
-/** 日の見出し。左端の帯をその日の色にし、地図の線・マーカーと結び付ける。 */
+/**
+ * 日の見出し。左端の帯をその日の色にし、地図の線・マーカーと結び付ける。押すと地図にその日だけを出して寄せる。
+ * 右の × でその日を消す（行は前の日の末尾へ）。
+ */
 @Composable
-private fun DayHeader(label: String, color: Color) {
+private fun DayHeader(label: String, color: Color, selected: Boolean, onClick: () -> Unit, onRemove: () -> Unit) {
   Row(
     modifier = Modifier
       .fillMaxWidth()
-      .padding(start = SheetContentHorizontalPadding, end = SheetContentHorizontalPadding, top = PathlySpacing.md, bottom = PathlySpacing.xs)
+      .background(if (selected) color.copy(alpha = 0.10f) else Color.Transparent)
+      .clickable(onClickLabel = "地図にこの日だけ出す", onClick = onClick)
+      .padding(start = SheetContentHorizontalPadding, end = PathlySpacing.xs, top = PathlySpacing.xs)
       .testTag("planDayHeader"),
     verticalAlignment = Alignment.CenterVertically,
   ) {
@@ -322,6 +359,9 @@ private fun DayHeader(label: String, color: Color) {
       overflow = TextOverflow.Ellipsis,
       modifier = Modifier.weight(1f),
     )
+    IconButton(onClick = onRemove, modifier = Modifier.testTag("planDayRemove")) {
+      Icon(painterResource(R.drawable.ic_close), contentDescription = "${label}を消す", tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(20.dp))
+    }
   }
   HorizontalDivider(modifier = Modifier.padding(horizontal = SheetContentHorizontalPadding), color = MaterialTheme.colorScheme.outlineVariant)
 }
@@ -354,74 +394,108 @@ private fun PlanItemRow(
   accessibilityActions: List<CustomAccessibilityAction>,
   modifier: Modifier = Modifier,
 ) {
-  Surface(
+  // 左へスワイプすると外す（確認は出さず、取り消しのスナックバーで戻せる）。掴んでいる間はスワイプしない。
+  val dismissState = rememberSwipeToDismissBoxState()
+  val currentItem by rememberUpdatedState(item)
+  LaunchedEffect(dismissState.currentValue) {
+    if (dismissState.currentValue == SwipeToDismissBoxValue.EndToStart) {
+      actions.onRemove(currentItem)
+      dismissState.snapTo(SwipeToDismissBoxValue.Settled)
+    }
+  }
+  SwipeToDismissBox(
+    state = dismissState,
+    enableDismissFromStartToEnd = false,
+    enableDismissFromEndToStart = !lifted,
+    backgroundContent = { SwipeRemoveBackground() },
     modifier = modifier.fillMaxWidth(),
-    color = MaterialTheme.colorScheme.surface,
-    shadowElevation = if (lifted) PathlyElevation.floating else 0.dp,
   ) {
-    Row(
-      modifier = Modifier
-        .fillMaxWidth()
-        .clickable { actions.onItemClick(item) }
-        .semantics { customActions = accessibilityActions }
-        .padding(start = SheetContentHorizontalPadding - PathlySpacing.sm, end = PathlySpacing.xs)
-        .testTag("planItem:${item.id}"),
-      verticalAlignment = Alignment.CenterVertically,
+    Surface(
+      modifier = Modifier.fillMaxWidth(),
+      color = MaterialTheme.colorScheme.surface,
+      shadowElevation = if (lifted) PathlyElevation.floating else 0.dp,
     ) {
-      // 取っ手。ここに触れて縦に動かすと掴む（行のほかの所を縦に動かせばスクロール）。
-      Box(
-        modifier = handleModifier
-          .size(width = HandleWidth, height = 48.dp)
-          .semantics { contentDescription = "並べ替えの取っ手" }
-          .testTag("planItemHandle:${item.id}"),
-        contentAlignment = Alignment.Center,
+      Row(
+        modifier = Modifier
+          .fillMaxWidth()
+          .clickable { actions.onItemClick(item) }
+          .semantics { customActions = accessibilityActions }
+          .padding(start = SheetContentHorizontalPadding - PathlySpacing.sm, end = PathlySpacing.xs)
+          .testTag("planItem:${item.id}"),
+        verticalAlignment = Alignment.CenterVertically,
       ) {
-        Icon(
-          painter = painterResource(R.drawable.ic_drag_indicator),
-          contentDescription = null,
-          tint = MaterialTheme.colorScheme.onSurfaceVariant,
-          modifier = Modifier.size(20.dp),
-        )
-      }
-      if (item.isPlace && number != null) {
-        PlanNumberBadge(number = number, color = color)
-      } else {
-        Box(modifier = Modifier.size(BadgeSize), contentAlignment = Alignment.Center) {
-          Box(
-            modifier = Modifier
-              .size(6.dp)
-              .clip(CircleShape)
-              .background(MaterialTheme.colorScheme.onSurfaceVariant),
+        // 取っ手。ここに触れて縦に動かすと掴む（行のほかの所を縦に動かせばスクロール）。
+        Box(
+          modifier = handleModifier
+            .size(width = HandleWidth, height = 48.dp)
+            .semantics { contentDescription = "並べ替えの取っ手" }
+            .testTag("planItemHandle:${item.id}"),
+          contentAlignment = Alignment.Center,
+        ) {
+          Icon(
+            painter = painterResource(R.drawable.ic_drag_indicator),
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.size(20.dp),
           )
         }
-      }
-      Spacer(modifier = Modifier.width(PathlySpacing.md))
-      Column(
-        modifier = Modifier
-          .weight(1f)
-          .padding(vertical = PathlySpacing.sm),
-      ) {
-        Text(
-          text = item.label,
-          style = MaterialTheme.typography.bodyLarge,
-          maxLines = 1,
-          overflow = TextOverflow.Ellipsis,
-        )
-        itemTimeLine(item)?.let {
-          Text(text = it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
+        if (item.isPlace && number != null) {
+          PlanNumberBadge(number = number, color = color)
+        } else {
+          Box(modifier = Modifier.size(BadgeSize), contentAlignment = Alignment.Center) {
+            Box(
+              modifier = Modifier
+                .size(6.dp)
+                .clip(CircleShape)
+                .background(MaterialTheme.colorScheme.onSurfaceVariant),
+            )
+          }
         }
-        item.note?.let {
+        Spacer(modifier = Modifier.width(PathlySpacing.md))
+        Column(
+          modifier = Modifier
+            .weight(1f)
+            .padding(vertical = PathlySpacing.sm),
+        ) {
           Text(
-            text = it.lineSequence().first(),
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            text = item.label,
+            style = MaterialTheme.typography.bodyLarge,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
           )
+          itemTimeLine(item)?.let {
+            Text(text = it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
+          }
+          item.note?.let {
+            Text(
+              text = it.lineSequence().first(),
+              style = MaterialTheme.typography.bodySmall,
+              color = MaterialTheme.colorScheme.onSurfaceVariant,
+              maxLines = 1,
+              overflow = TextOverflow.Ellipsis,
+            )
+          }
         }
+        PlanItemMenu(item = item, canMoveDay = canMoveDay, actions = actions)
       }
-      PlanItemMenu(item = item, canMoveDay = canMoveDay, actions = actions)
     }
+  }
+}
+
+/** 左へスワイプしている間に、行の下から見える「外す」。 */
+@Composable
+private fun SwipeRemoveBackground() {
+  Row(
+    modifier = Modifier
+      .fillMaxSize()
+      .background(MaterialTheme.colorScheme.errorContainer)
+      .padding(horizontal = SheetContentHorizontalPadding),
+    horizontalArrangement = Arrangement.End,
+    verticalAlignment = Alignment.CenterVertically,
+  ) {
+    Text("外す", color = MaterialTheme.colorScheme.onErrorContainer, style = MaterialTheme.typography.labelLarge)
+    Spacer(modifier = Modifier.width(PathlySpacing.sm))
+    Icon(painterResource(R.drawable.ic_delete), contentDescription = null, tint = MaterialTheme.colorScheme.onErrorContainer)
   }
 }
 

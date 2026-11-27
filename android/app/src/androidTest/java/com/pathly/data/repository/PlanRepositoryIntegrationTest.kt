@@ -8,13 +8,19 @@ import com.pathly.data.local.PathlyDatabase
 import com.pathly.data.local.entity.GooglePlaceEntity
 import com.pathly.data.local.entity.PlaceEntity
 import com.pathly.domain.model.PlaceSource
-import com.pathly.domain.model.PlanDetail
+import com.pathly.domain.model.newPlanDetail
+import com.pathly.domain.model.sameContentAs
+import com.pathly.domain.model.withDates
+import com.pathly.domain.model.withMemoAdded
+import com.pathly.domain.model.withPlacesAdded
+import com.pathly.domain.model.withTitleAndNote
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.runTest
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
@@ -23,12 +29,13 @@ import org.junit.runner.RunWith
 import java.time.LocalDate
 import java.util.Date
 
-/** 計画の窓口を Room の実 DB で通す（外部キー・CASCADE・元の id のままの戻し → adr/0050）。 */
+/** 計画の窓口を Room の実 DB で通す（保存・下書き・外部キー・CASCADE・元の id のままの戻し → adr/0050）。 */
 @RunWith(AndroidJUnit4::class)
 class PlanRepositoryIntegrationTest {
 
   private lateinit var database: PathlyDatabase
   private lateinit var repository: PlanRepositoryImpl
+  private var nextId = -1L
 
   @Before
   fun setup() = runBlocking {
@@ -45,140 +52,106 @@ class PlanRepositoryIntegrationTest {
   }
 
   @Test
-  fun createPlan_isUndatedDayTrip_andDatesCanBeAddedLater() = runTest {
-    val planId = repository.createPlan("新しい計画")
-
-    val created = detail(planId).plan
-    assertNull("日付なしで作れる", created.startDate)
-    assertEquals(1, created.dayCount)
-
-    repository.setDates(planId, LocalDate.of(2026, 11, 30), 2)
-
-    val dated = detail(planId).plan
-    assertEquals(LocalDate.of(2026, 11, 30), dated.startDate)
-    assertEquals(2, dated.dayCount)
-    assertEquals(LocalDate.of(2026, 12, 1), dated.endDate)
-
-    repository.setDates(planId, null, 2)
-    assertNull("日付を外せる", detail(planId).plan.startDate)
-  }
-
-  @Test
-  fun placesAndMemos_areAppendedToTheDay_andPlaceRowsUseThePlaceNameAndAnchor() = runTest {
+  fun savePlan_createsThenUpdates_andRowsUseThePlaceNameAndAnchor() = runTest {
     val shrine = insertPlace(name = null, latitude = 35.0)
     database.googlePlaceDao().upsert(GooglePlaceEntity(shrine, "g-shrine", "鶴岡八幡宮", latitude = 36.0, longitude = 140.0))
     val temple = insertPlace(name = "長谷寺", latitude = 35.1)
-    val planId = repository.createPlan("鎌倉")
-    repository.setDates(planId, null, 2)
+    val draft = newPlanDetail("鎌倉")
+      .withDates(null, 2)
+      .withPlacesAdded(1, listOf(place(shrine), place(temple))) { nextId-- }
+      .withMemoAdded(1, "昼食", 12 * 60, null, nextId--)
+      .withPlacesAdded(2, listOf(place(shrine))) { nextId-- }
 
-    repository.addPlaces(planId, 1, listOf(shrine, temple))
-    repository.addMemo(planId, 1, "昼食", plannedTime = 12 * 60, note = null)
-    repository.addPlaces(planId, 2, listOf(shrine))
+    val planId = repository.savePlan(draft, draftId = null)
 
-    val items = detail(planId).items
-    assertEquals(listOf("鶴岡八幡宮", "長谷寺", "昼食", "鶴岡八幡宮"), items.map { it.label })
-    assertEquals(listOf(1, 1, 1, 2), items.map { it.dayIndex })
-    assertEquals("座標は場所のアンカー（Google の座標ではない）", 35.0, items[0].place!!.latitude, 0.0)
-    assertEquals(12 * 60, items[2].plannedTime)
+    val saved = repository.loadPlan(planId)!!
+    assertNull("日付なしで作れる", saved.plan.startDate)
+    assertEquals(listOf("鶴岡八幡宮", "長谷寺", "昼食", "鶴岡八幡宮"), saved.items.map { it.label })
+    assertEquals(listOf(1, 1, 1, 2), saved.items.map { it.dayIndex })
+    assertEquals("座標は場所のアンカー（Google の座標ではない）", 35.0, saved.items[0].place!!.latitude, 0.0)
     assertEquals("同じ場所を 2 回入れてよい", 3, repository.observePlans().first().single().placeCount)
+
+    // 後から日付を付けて保存し直す（行は入れ替わるが中身は同じ）。
+    val updated = saved.withDates(LocalDate.of(2026, 11, 30), 2)
+    assertEquals(planId, repository.savePlan(updated, draftId = null))
+    val reloaded = repository.loadPlan(planId)!!
+    assertEquals(LocalDate.of(2026, 11, 30), reloaded.plan.startDate)
+    assertTrue(reloaded.sameContentAs(updated))
   }
 
   @Test
-  fun shrinkingDays_movesRowsOfRemovedDaysToTheEndOfTheLastDay() = runTest {
+  fun draftOfNewPlan_isListedAsDraft_andSavingRemovesTheDraft() = runTest {
+    val a = insertPlace(name = "A")
+    val draft = newPlanDetail("下書きの計画").withPlacesAdded(1, listOf(place(a))) { nextId-- }
+
+    val draftId = repository.saveDraft(null, draft)
+
+    val listed = repository.observePlans().first().single()
+    assertEquals(0L, listed.plan.id)
+    assertEquals(draftId, listed.draftId)
+    assertEquals("下書きの計画", listed.plan.title)
+    assertEquals(1, listed.placeCount)
+    val loaded = repository.loadDraft(0, draftId)!!
+    assertTrue(loaded.detail.sameContentAs(draft))
+
+    val planId = repository.savePlan(loaded.detail, draftId)
+
+    val summary = repository.observePlans().first().single()
+    assertEquals(planId, summary.plan.id)
+    assertFalse("保存したら下書きは消える", summary.hasDraft)
+  }
+
+  @Test
+  fun draftOfSavedPlan_isOnePerPlan_andShownInsteadOfTheSavedContent() = runTest {
+    val planId = repository.savePlan(newPlanDetail("保存した名前"), null)
+    val saved = repository.loadPlan(planId)!!
+
+    val first = repository.saveDraft(null, saved.withTitleAndNote("下書きの名前", null))
+    val second = repository.saveDraft(null, saved.withTitleAndNote("下書きの名前 2", null))
+
+    assertEquals("計画ごとに下書きは 1 つ（上書き）", first, second)
+    val summary = repository.observePlans().first().single()
+    assertEquals("下書きの名前 2", summary.plan.title)
+    assertEquals(first, summary.draftId)
+    assertEquals("下書きの名前 2", repository.loadDraft(planId, null)!!.detail.plan.title)
+    assertEquals("保存済みの中身は変わらない", "保存した名前", repository.loadPlan(planId)!!.plan.title)
+
+    repository.deleteDraft(first)
+    assertNull(repository.loadDraft(planId, null))
+  }
+
+  @Test
+  fun draftRowsOfDeletedPlaces_areDropped() = runTest {
     val a = insertPlace(name = "A")
     val b = insertPlace(name = "B", latitude = 35.1)
-    val c = insertPlace(name = "C", latitude = 35.2)
-    val planId = repository.createPlan("旅行")
-    repository.setDates(planId, LocalDate.of(2026, 11, 30), 3)
-    repository.addPlaces(planId, 1, listOf(a))
-    repository.addPlaces(planId, 2, listOf(b))
-    repository.addPlaces(planId, 3, listOf(c))
-    repository.addMemo(planId, 3, "帰る", null, null)
+    val draftId = repository.saveDraft(null, newPlanDetail("計画").withPlacesAdded(1, listOf(place(a), place(b))) { nextId-- })
 
-    repository.setDates(planId, LocalDate.of(2026, 11, 30), 2)
+    database.placeDao().deleteById(a)
 
-    val items = detail(planId).items
-    assertEquals(listOf("A", "B", "C", "帰る"), items.map { it.label })
-    assertEquals(listOf(1, 2, 2, 2), items.map { it.dayIndex })
-    assertEquals("消えた日の行は消えない", 4, items.size)
+    assertEquals(listOf("B"), repository.loadDraft(0, draftId)!!.detail.items.map { it.label })
   }
 
   @Test
-  fun reorder_movesRowsAcrossDays_andMoveToDayAppendsToTheEnd() = runTest {
+  fun deletePlan_cascadesRowsAndDraft_andUndoRestoresThem() = runTest {
     val a = insertPlace(name = "A")
-    val b = insertPlace(name = "B", latitude = 35.1)
-    val planId = repository.createPlan("旅行")
-    repository.setDates(planId, null, 2)
-    repository.addPlaces(planId, 1, listOf(a, b))
-    repository.addMemo(planId, 2, "メモ", null, null)
-    val (rowA, rowB, memo) = detail(planId).items
-
-    // B を 2 日目のメモの前へ。
-    repository.reorder(planId, listOf(rowA.id to 1, rowB.id to 2, memo.id to 2))
-
-    assertEquals(listOf("A", "B", "メモ"), detail(planId).items.map { it.label })
-    assertEquals(listOf(1, 2, 2), detail(planId).items.map { it.dayIndex })
-
-    repository.moveItemToDay(rowA.id, 2)
-
-    assertEquals(listOf("B", "メモ", "A"), detail(planId).items.map { it.label })
-  }
-
-  @Test
-  fun updateItem_keepsPlaceRowsNamedByThePlace() = runTest {
-    val a = insertPlace(name = "A")
-    val planId = repository.createPlan("旅行")
-    repository.addPlaces(planId, 1, listOf(a))
-    repository.addMemo(planId, 1, "昼食", null, null)
-    val (placeRow, memoRow) = detail(planId).items
-
-    repository.updateItem(placeRow.id, title = "無視される", plannedTime = 600, stayMinutes = 60, note = "  ")
-    repository.updateItem(memoRow.id, title = "夕食", plannedTime = null, stayMinutes = null, note = "予約")
-
-    val (p, m) = detail(planId).items
-    assertEquals("A", p.label)
-    assertNull(p.title)
-    assertEquals(600, p.plannedTime)
-    assertEquals(60, p.stayMinutes)
-    assertNull("空のメモは持たない", p.note)
-    assertEquals("夕食", m.label)
-    assertEquals("予約", m.note)
-  }
-
-  @Test
-  fun deletePlan_cascadesRows_andUndoRestoresThemWithOriginalIds() = runTest {
-    val a = insertPlace(name = "A")
-    val planId = repository.createPlan("旅行")
-    repository.addPlaces(planId, 1, listOf(a))
-    repository.addMemo(planId, 1, "メモ", null, null)
-    val before = detail(planId)
+    val planId = repository.savePlan(newPlanDetail("旅行").withPlacesAdded(1, listOf(place(a))) { nextId-- }, null)
+    val before = repository.loadPlan(planId)!!
+    val draftId = repository.saveDraft(null, before.withTitleAndNote("下書き", null))
 
     repository.deletePlan(planId)
 
-    assertNull(repository.observePlan(planId).first())
+    assertNull(repository.loadPlan(planId))
     assertTrue(database.planDao().getItems(planId).isEmpty())
+    assertNull("下書きも消える", database.planDao().getDraft(draftId))
     assertEquals("場所は残る", "A", database.placeDao().getById(a)!!.name)
 
     assertTrue(repository.undoDeletePlan())
-    assertEquals(before, detail(planId))
+    assertEquals(before, repository.loadPlan(planId))
+    assertNotNull(database.planDao().getDraft(draftId))
     assertFalse("取り消しは 1 回だけ", repository.undoDeletePlan())
   }
 
-  @Test
-  fun removeItem_undoBringsTheRowBack() = runTest {
-    val a = insertPlace(name = "A")
-    val planId = repository.createPlan("旅行")
-    repository.addPlaces(planId, 1, listOf(a))
-    val before = detail(planId)
-
-    repository.removeItem(before.items.single().id)
-    assertTrue(detail(planId).items.isEmpty())
-
-    assertTrue(repository.undoRemoveItem())
-    assertEquals(before.items, detail(planId).items)
-  }
-
-  private suspend fun detail(planId: Long): PlanDetail = repository.observePlan(planId).first()!!
+  private suspend fun place(placeId: Long) = repository.observePlanPlaces().first()[placeId]!!
 
   private suspend fun insertPlace(name: String?, latitude: Double = 35.0): Long = database.placeDao().insert(
     PlaceEntity(
