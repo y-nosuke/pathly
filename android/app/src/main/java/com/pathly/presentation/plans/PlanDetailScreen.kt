@@ -297,6 +297,8 @@ private fun PlanDetailContent(
         )
       },
       actions = {
+        // 一度も保存していない計画だけ、画面を閉じずに下書きに残せる（保存済みの計画は「保存」で足りる）。
+        if (edit.isNew) DraftSaveButton(enabled = edit.hasUnsavedChanges, onClick = { viewModel.saveDraft() })
         SaveButton(enabled = edit.canSave, onClick = { viewModel.save() })
         RegisteredPlacesLayerButton(registeredPlaces)
         MapOverflowMenuButton { close ->
@@ -442,7 +444,7 @@ private fun PlanDetailContent(
       },
       onSaveDraft = {
         dialog = null
-        viewModel.saveDraftAndLeave()
+        viewModel.saveDraft(leave = true)
       },
       onDiscard = {
         dialog = null
@@ -509,11 +511,34 @@ private fun SaveButton(enabled: Boolean, onClick: () -> Unit) {
       disabledContainerColor = MaterialTheme.colorScheme.surface,
       disabledContentColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f),
     ),
+    contentPadding = PaddingValues(horizontal = PathlySpacing.md),
     modifier = Modifier
       .height(MapRoundButtonSize)
       .testTag("planSave"),
   ) {
     Text("保存")
+  }
+}
+
+/** 上のバーの「下書き」（下書きに残す。一度も保存していない計画だけ）。画面は閉じない。 */
+@Composable
+private fun DraftSaveButton(enabled: Boolean, onClick: () -> Unit) {
+  Button(
+    onClick = onClick,
+    enabled = enabled,
+    elevation = ButtonDefaults.buttonElevation(defaultElevation = PathlyElevation.floating, disabledElevation = PathlyElevation.floating),
+    colors = ButtonDefaults.buttonColors(
+      containerColor = MaterialTheme.colorScheme.surface,
+      contentColor = MaterialTheme.colorScheme.primary,
+      disabledContainerColor = MaterialTheme.colorScheme.surface,
+      disabledContentColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f),
+    ),
+    contentPadding = PaddingValues(horizontal = PathlySpacing.md),
+    modifier = Modifier
+      .height(MapRoundButtonSize)
+      .testTag("planSaveDraft"),
+  ) {
+    Text("下書き", maxLines = 1)
   }
 }
 

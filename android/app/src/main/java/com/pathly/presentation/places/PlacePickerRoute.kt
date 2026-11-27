@@ -65,6 +65,7 @@ fun PlacePickerRoute(
           onClose()
         },
         onCancel = onClose,
+        onClearAll = { selected = emptyList() },
       ),
     )
   }

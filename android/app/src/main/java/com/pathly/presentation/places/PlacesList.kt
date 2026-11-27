@@ -600,9 +600,11 @@ class PlaceSelection(
   val destination: String,
   val onConfirm: () -> Unit,
   val onCancel: () -> Unit,
+  /** 選んだものを全部外す。 */
+  val onClearAll: () -> Unit,
 )
 
-/** 選ぶモードの下の帯: 足す先・やめる・「N 件を足す」。 */
+/** 選ぶモードの下の帯: 足す先、全解除・やめる・「N 件を足す」。 */
 @Composable
 private fun PlaceSelectionBar(selection: PlaceSelection, modifier: Modifier = Modifier) {
   Surface(
@@ -610,11 +612,10 @@ private fun PlaceSelectionBar(selection: PlaceSelection, modifier: Modifier = Mo
     color = MaterialTheme.colorScheme.surface,
     shadowElevation = PathlyElevation.sheet,
   ) {
-    Row(
+    Column(
       modifier = Modifier
         .fillMaxWidth()
         .padding(horizontal = PathlySpacing.screenEdge, vertical = PathlySpacing.sm),
-      verticalAlignment = Alignment.CenterVertically,
     ) {
       Text(
         text = selection.destination,
@@ -622,15 +623,22 @@ private fun PlaceSelectionBar(selection: PlaceSelection, modifier: Modifier = Mo
         color = MaterialTheme.colorScheme.onSurfaceVariant,
         maxLines = 2,
         overflow = TextOverflow.Ellipsis,
-        modifier = Modifier.weight(1f),
       )
-      TextButton(onClick = selection.onCancel) { Text("やめる") }
-      Button(
-        onClick = selection.onConfirm,
-        enabled = selection.selectedIds.isNotEmpty(),
-        modifier = Modifier.testTag("placeSelectionConfirm"),
-      ) {
-        Text(if (selection.selectedIds.isEmpty()) "選んでください" else "${selection.selectedIds.size} 件を足す")
+      Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        TextButton(
+          onClick = selection.onClearAll,
+          enabled = selection.selectedIds.isNotEmpty(),
+          modifier = Modifier.testTag("placeSelectionClearAll"),
+        ) { Text("全解除") }
+        Spacer(modifier = Modifier.weight(1f))
+        TextButton(onClick = selection.onCancel) { Text("やめる") }
+        Button(
+          onClick = selection.onConfirm,
+          enabled = selection.selectedIds.isNotEmpty(),
+          modifier = Modifier.testTag("placeSelectionConfirm"),
+        ) {
+          Text(if (selection.selectedIds.isEmpty()) "選んでください" else "${selection.selectedIds.size} 件を足す")
+        }
       }
     }
   }

@@ -202,14 +202,15 @@ class PlanDetailViewModel @Inject constructor(
     }
   }
 
-  /** 下書きに残して、画面を離れる。 */
-  fun saveDraftAndLeave() {
+  /** 下書きに残す。[leave] なら済んだら画面を離れ、そうでなければ編集を続ける。 */
+  fun saveDraft(leave: Boolean = false) {
     val e = edit ?: return
     io("下書きに残せませんでした") {
       val draftId = planRepository.saveDraft(e.draftId, e.detail)
       savedStateHandle[ARG_DRAFT_ID] = draftId
-      _state.value = PlanDetailState.Loaded(e.copy(persisted = e.detail, draftId = draftId, draftUpdatedAt = Date()))
-      _events.tryEmit(PlanDetailEvent.Leave)
+      // 書いている間に続けた編集は残す（detail は今のまま、persisted だけ書いた中身にする）。
+      _state.update { s -> if (s is PlanDetailState.Loaded) s.copy(edit = s.edit.copy(persisted = e.detail, draftId = draftId, draftUpdatedAt = Date())) else s }
+      _events.tryEmit(if (leave) PlanDetailEvent.Leave else PlanDetailEvent.Message("下書きに残しました"))
     }
   }
 
