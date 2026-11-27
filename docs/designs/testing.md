@@ -63,9 +63,16 @@ Repository をモックし、`StateFlow` の遷移を見る。**Android framewor
 debug APK（開発版 `com.pathly.debug`）と lint/test レポートをアーティファクトに残す（同一ブランチの新 push で進行中の実行はキャンセル）。
 版を git から決めるため全履歴を取得する。リリース（タグの push）は別のワークフローで、[release.md](release.md) を参照。
 
-> **push 前は `./gradlew build` を通すこと。** `test` だけ／`lint` だけを回すと、整形
-> （`spotlessKotlinCheck`）や別のゲートを見逃して CI で落ちる。実際に両方で落としたことがある。
-> 整形の崩れは `./gradlew spotlessApply` で直る。
+> **push 前は手元で `spotlessCheck testDebugUnitTest compileDebugAndroidTestKotlin` を通すこと**
+> （見張り付きの `.claude/skills/emulator-check/run-build.sh` の既定）。整形・コンパイル（本体・ユニットテスト・androidTest）・
+> ユニットテストを見る。`test` だけでは整形（`spotlessKotlinCheck`）を、本体のコンパイルだけではテストのコンパイルを見逃して
+> CI で落ちる（どちらも実際に落としたことがある）。整形の崩れは `./gradlew spotlessApply` で直る。
+>
+> **lint・release 版（コンパイル・`lintVitalRelease`・R8）・APK の組み立ては手元で回さず、CI の `build` に任せる**（#280）。
+> 手元（Windows のノート）で `./gradlew build` を回すと 30 分近くかかり、手元の確認は 1〜2 分で済む。CI の `build` は 9〜13 分で、
+> マージの必須チェックなので、手元で外したものも main に入る前に必ず見られる。lint の指摘は PR の CI で初めて分かる
+> （直して push し直す）。debug APK はスマホに入れる（`installDebug`）ときに組み立てる。
+> 重いのは lint（4 本）と R8 で、手元では CPU を取り合う。Gradle のヒープを上げても速くならない（測った結果は #280）。
 
 インストルメンテーションテストは、同じワークフローの別ジョブ（`instrumented-test`）が **CI のエミュレータ（API 36）で回す**。
 `build` と並行で走るので待ち時間は延びない。レポートはアーティファクト（`instrumented-test-reports`）に残る。
@@ -98,7 +105,7 @@ main の ruleset で **`build` と `instrumented-test` の両方が必須**（�
   アプリは動き、ユニットテストでも `./gradlew build` でも気づけない（`MigrationTest` でだけ落ちる）。
   → 順番は「エンティティを変える → version を上げる → コンパイル」。先にコンパイルしたら
   `git checkout <前のコミット> -- app/schemas/.../<前の版>.json` で戻す。コミット前に **過去の版の `schemas/*.json` が変わっていないか** `git status` で見る。
-- **整形の検査が増分ビルドで飛ばされる**: 手元の `./gradlew build` が通っても、spotless が up-to-date で飛ばされ、
+- **整形の検査が増分ビルドで飛ばされる**: 手元の確認が通っても、spotless が up-to-date で飛ばされ、
   CI（毎回まっさらに動く）で初めて落ちることがある。Kotlin を触ったら `./gradlew spotlessCheck --rerun-tasks` で強制的に検査する。
   部分タスク（compile だけ・test だけ）もそれぞれ別のゲートを見逃す（コンストラクタを変えてテストのコンパイルが落ちた例あり）。
 - **地図を描く UI テストはクラッシュする**（Play 開発者サービスの地図が、テスト環境で必要なクラスを欠く）。地図は
@@ -116,7 +123,8 @@ main の ruleset で **`build` と `instrumented-test` の両方が必須**（�
 ## テスト実行
 
 ```bash
-./gradlew build
+./gradlew spotlessCheck testDebugUnitTest compileDebugAndroidTestKotlin   # push 前の確認
+./gradlew build                                                           # CI と同じ全部入り（手元だと 30 分ほど）
 ```
 
 ```bash

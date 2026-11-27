@@ -83,8 +83,9 @@ Bash ツールで起動するときは、起動と待ちを 1 回の呼び出し
 エミュレータを使わないビルドでも止まることがある（ユニットテストの段でログが 2 時間進まなかった。2026-11-18）。
 
 ```bash
-.claude/skills/emulator-check/run-build.sh                         # ./gradlew build
+.claude/skills/emulator-check/run-build.sh                         # push 前の確認（spotlessCheck testDebugUnitTest compileDebugAndroidTestKotlin）
 .claude/skills/emulator-check/run-build.sh spotlessCheck --rerun-tasks
+.claude/skills/emulator-check/run-build.sh build                   # CI と同じ全部入り（手元だと 30 分ほど。ふだんは CI に任せる）
 ```
 
 - ログ（`--console=plain` の出力）が 10 分（`WATCH_STALL_MIN`）増えなければ止まったとみなし、`./gradlew --stop` で
