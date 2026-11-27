@@ -104,6 +104,8 @@ claude.ai の Design（[Pathly 画面の型の案](https://claude.ai/artifact/XJ
 - **「検索して登録」と「地域へ移動」は 1 つの検索窓にまとめる**（→ [ADR-0039](../adr/0039-one-search-box-for-places-and-regions.md)）。
 - 経路の削除だけ確認ダイアログ、ほかは取り消し、のような流儀の違いは、画面ごとの見直しのときにそろえる
   （経路の削除は、経路詳細の ⋮ から取り消しのスナックバーで。確認ダイアログは使わない）。
+- **スナックバーはどの画面でも横にスワイプして消す**（左右どちらへでも。× のボタンは置かない）。取り消しのように押すまで残るものも
+  同じ消し方で片付けられる。実体は `presentation/common/SwipeDismissSnackbarHost`（画面は `SnackbarHost` の代わりにこれを置く）。
 
 ---
 

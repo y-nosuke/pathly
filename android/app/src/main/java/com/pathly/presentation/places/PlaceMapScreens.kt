@@ -3,7 +3,6 @@ package com.pathly.presentation.places
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -47,6 +46,7 @@ import com.pathly.presentation.common.RegisteredPlaceMarkers
 import com.pathly.presentation.common.RegisteredPlacesLayerButton
 import com.pathly.presentation.common.SheetDetent
 import com.pathly.presentation.common.SheetRestoreButtonInset
+import com.pathly.presentation.common.SwipeDismissSnackbarHost
 import com.pathly.presentation.common.categoryGlyph
 import com.pathly.presentation.common.heightOf
 import com.pathly.presentation.common.rememberFloatingSheetState
@@ -143,7 +143,7 @@ fun PlaceDetailRoute(
       // 取り消しスナックバーは一覧側で出る。
       onDeleteRequest = { viewModel.placeEdit.deletePlace(item.place.id) },
     )
-    SnackbarHost(snackbarHostState, modifier = Modifier.align(Alignment.BottomCenter))
+    SwipeDismissSnackbarHost(snackbarHostState, modifier = Modifier.align(Alignment.BottomCenter))
   }
 }
 

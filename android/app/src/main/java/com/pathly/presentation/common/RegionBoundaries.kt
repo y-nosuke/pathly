@@ -32,7 +32,7 @@ import kotlinx.coroutines.delay
 /** 境界を描く地図に付けるマップ ID。未設定なら null（マップ ID の無い地図になり、境界は描かない）。 */
 private val boundaryMapId: String? = BuildConfig.GOOGLE_MAPS_MAP_ID.takeIf { it.isNotBlank() }
 
-/** 境界を描く地図（記録画面・場所一覧の地図）の作り方。マップ ID はこの地図にだけ付ける（ほかの地図は料金の区分が変わらないように）。 */
+/** 境界を描く地図（記録画面・場所一覧・計画の詳細の地図）の作り方。マップ ID はこの地図にだけ付ける（ほかの地図は料金の区分が変わらないように）。 */
 internal fun boundaryMapOptions(): GoogleMapOptions = GoogleMapOptions().apply { boundaryMapId?.let { mapId(it) } }
 
 /**

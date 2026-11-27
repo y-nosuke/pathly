@@ -9,7 +9,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.SnackbarDuration
-import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.SnackbarResult
 import androidx.compose.runtime.Composable
@@ -45,6 +44,7 @@ import com.pathly.presentation.common.DefaultMapLocation
 import com.pathly.presentation.common.MapTopBarInset
 import com.pathly.presentation.common.SheetDetent
 import com.pathly.presentation.common.SheetRestoreButtonInset
+import com.pathly.presentation.common.SwipeDismissSnackbarHost
 import com.pathly.presentation.common.heightOf
 import com.pathly.presentation.common.rememberFixedFloatingSheetState
 import com.pathly.presentation.common.rememberFloatingSheetState
@@ -553,7 +553,7 @@ fun TrackingScreen(
     }
 
     // 場所の削除を取り消すスナックバー（最前面）。シート・オーバーレイの上に出す。
-    SnackbarHost(
+    SwipeDismissSnackbarHost(
       hostState = snackbarHostState,
       modifier = Modifier
         .align(Alignment.BottomCenter)

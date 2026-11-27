@@ -31,7 +31,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.SnackbarDuration
-import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -64,6 +63,7 @@ import com.pathly.domain.model.PlaceVisit
 import com.pathly.domain.model.Priority
 import com.pathly.presentation.common.MapMarker
 import com.pathly.presentation.common.MapPinMarker
+import com.pathly.presentation.common.SwipeDismissSnackbarHost
 import com.pathly.presentation.common.heightOf
 import com.pathly.presentation.common.rememberFloatingSheetState
 import com.pathly.presentation.common.rememberMapInfoWindowState
@@ -127,7 +127,7 @@ fun PlacesListRoute(
       onFetchRegion = viewModel::findRegion,
     )
     // 右下の追加の丸を隠さないよう、その上に出す。
-    SnackbarHost(
+    SwipeDismissSnackbarHost(
       snackbarHostState,
       modifier = Modifier
         .align(Alignment.BottomCenter)
@@ -380,6 +380,8 @@ internal fun PlaceFormBody(
   wishlistHistory: String? = null,
   // 行きたいの右に並べる訪問済みのボタン（[VisitedToggle]・[VisitedByStopsChip]）。
   visitedContent: (@Composable () -> Unit)? = null,
+  // 見出しの下・行きたいの上に足す欄（計画から登録するときの「足す日」）。
+  belowHeading: (@Composable () -> Unit)? = null,
 ) {
   Column(modifier = modifier) {
     heading?.let {
@@ -389,6 +391,10 @@ internal fun PlaceFormBody(
         fontWeight = FontWeight.Bold,
         modifier = Modifier.padding(bottom = PathlySpacing.md),
       )
+    }
+    belowHeading?.let {
+      it()
+      Spacer(modifier = Modifier.height(PathlySpacing.sm))
     }
 
     // 主役: 行きたい・訪問済み・優先度・メモ（いちばんよく直すもの。シートを開いてすぐ見える位置に置く）。

@@ -33,6 +33,7 @@ class PlaceEditActionsTest {
 
   private val messages = mutableListOf<String>()
   private val errors = mutableListOf<String>()
+  private val registered = mutableListOf<Long>()
 
   private val nearby = RegisteredPlace(placeId = 5L, name = "隣の店", latitude = 35.0, longitude = 139.0)
 
@@ -48,6 +49,7 @@ class PlaceEditActionsTest {
     placeNameOf = placeNameOf,
     onMessage = { messages += it },
     onError = { errors += it },
+    onRegistered = { registered += it },
   )
 
   private fun registerReturns(result: PlaceEditUseCase.RegisterResult) {
@@ -177,6 +179,43 @@ class PlaceEditActionsTest {
 
     assertNull(actions.nearbyRegisterPrompt.value)
     coVerify(exactly = 0) { useCase.linkToExisting(any(), any(), any(), any(), any()) }
+  }
+
+  @Test
+  fun `登録の結果の場所を返す_登録・紐付け・新規のどれでも`() = runTest {
+    registerReturns(PlaceEditUseCase.RegisterResult.Registered(9L, alreadyExisted = true))
+    val actions = actions()
+    actions.registerAtPoint()
+    advanceUntilIdle()
+
+    registerReturns(PlaceEditUseCase.RegisterResult.NearbyFound(nearby))
+    actions.registerAtPoint()
+    advanceUntilIdle()
+    actions.confirmNearbyLink()
+    advanceUntilIdle()
+
+    coEvery {
+      useCase.register(any(), any(), any(), any(), any(), any(), any(), any(), any())
+    } returns PlaceEditUseCase.RegisterResult.Registered(11L, alreadyExisted = false)
+    actions.registerAtPoint()
+    advanceUntilIdle()
+    actions.confirmNearbyNew()
+    advanceUntilIdle()
+
+    assertEquals(listOf(9L, 5L, 11L), registered)
+  }
+
+  @Test
+  fun `登録の結果の場所を返す_確認を閉じたら返さない`() = runTest {
+    registerReturns(PlaceEditUseCase.RegisterResult.NearbyFound(nearby))
+    val actions = actions()
+    actions.registerAtPoint()
+    advanceUntilIdle()
+
+    actions.dismissNearbyPrompt()
+    advanceUntilIdle()
+
+    assertTrue(registered.isEmpty())
   }
 
   // ---- 編集 ----

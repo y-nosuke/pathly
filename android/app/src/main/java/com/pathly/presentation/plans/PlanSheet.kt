@@ -1,5 +1,6 @@
 package com.pathly.presentation.plans
 
+import androidx.annotation.DrawableRes
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
@@ -73,7 +74,12 @@ import kotlinx.coroutines.launch
 
 /** シートの行から呼ぶ操作。 */
 internal class PlanSheetActions(
-  val onAddPlaces: () -> Unit,
+  /** 「場所を足す」のメニューの「登録済みの場所から選ぶ」。 */
+  val onPickPlaces: () -> Unit,
+  /** 「場所を足す」のメニューの「検索して足す」（記録画面と同じ検索窓を地図の上端に重ねる）。 */
+  val onSearchPlace: () -> Unit,
+  /** 「場所を足す」のメニューの「地図で選ぶ」（シートを畳んで、地図をタップする案内を出す）。 */
+  val onPickOnMap: () -> Unit,
   val onAddMemo: () -> Unit,
   /** 日付・日数の要約を押した（「日付と日数」を開く）。 */
   val onSummaryClick: () -> Unit,
@@ -153,7 +159,9 @@ internal fun ColumnScope.PlanSheetContent(
       PlanSummaryHeader(
         summary = planDateSummary(plan),
         onSummaryClick = actions.onSummaryClick,
-        onAddPlaces = actions.onAddPlaces,
+        onPickPlaces = actions.onPickPlaces,
+        onSearchPlace = actions.onSearchPlace,
+        onPickOnMap = actions.onPickOnMap,
         onAddMemo = actions.onAddMemo,
       )
     }
@@ -290,7 +298,14 @@ private fun placeNumbersOf(slots: List<PlanSlotKey>, items: Map<Long, PlanItem>)
 }
 
 @Composable
-private fun PlanSummaryHeader(summary: String, onSummaryClick: () -> Unit, onAddPlaces: () -> Unit, onAddMemo: () -> Unit) {
+private fun PlanSummaryHeader(
+  summary: String,
+  onSummaryClick: () -> Unit,
+  onPickPlaces: () -> Unit,
+  onSearchPlace: () -> Unit,
+  onPickOnMap: () -> Unit,
+  onAddMemo: () -> Unit,
+) {
   Column(modifier = Modifier.padding(horizontal = SheetContentHorizontalPadding)) {
     // 押すと「日付と日数」を開く（日付の印で押せると分かるように）。
     Row(
@@ -312,10 +327,28 @@ private fun PlanSummaryHeader(summary: String, onSummaryClick: () -> Unit, onAdd
     }
     Spacer(modifier = Modifier.height(PathlySpacing.sm))
     Row(horizontalArrangement = Arrangement.spacedBy(PathlySpacing.sm)) {
-      OutlinedButton(onClick = onAddPlaces, modifier = Modifier.testTag("planAddPlaces")) {
-        Icon(painterResource(R.drawable.ic_place), contentDescription = null, modifier = Modifier.size(18.dp))
-        Spacer(modifier = Modifier.width(PathlySpacing.xs))
-        Text("場所を足す")
+      // 押すと足し方を選ぶ（登録済みから選ぶ・検索して足す・地図で選ぶ）。
+      Box {
+        var menuOpen by remember { mutableStateOf(false) }
+        OutlinedButton(onClick = { menuOpen = true }, modifier = Modifier.testTag("planAddPlaces")) {
+          Icon(painterResource(R.drawable.ic_place), contentDescription = null, modifier = Modifier.size(18.dp))
+          Spacer(modifier = Modifier.width(PathlySpacing.xs))
+          Text("場所を足す")
+        }
+        DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+          AddPlaceMenuItem("登録済みの場所から選ぶ", R.drawable.ic_place, "planAddPlacesPick") {
+            menuOpen = false
+            onPickPlaces()
+          }
+          AddPlaceMenuItem("検索して足す", R.drawable.ic_search, "planAddPlacesSearch") {
+            menuOpen = false
+            onSearchPlace()
+          }
+          AddPlaceMenuItem("地図で選ぶ", R.drawable.ic_map, "planAddPlacesMap") {
+            menuOpen = false
+            onPickOnMap()
+          }
+        }
       }
       OutlinedButton(onClick = onAddMemo, modifier = Modifier.testTag("planAddMemo")) {
         Icon(painterResource(R.drawable.ic_edit), contentDescription = null, modifier = Modifier.size(18.dp))
@@ -325,6 +358,16 @@ private fun PlanSummaryHeader(summary: String, onSummaryClick: () -> Unit, onAdd
     }
     Spacer(modifier = Modifier.height(PathlySpacing.sm))
   }
+}
+
+@Composable
+private fun AddPlaceMenuItem(text: String, @DrawableRes icon: Int, tag: String, onClick: () -> Unit) {
+  DropdownMenuItem(
+    text = { Text(text) },
+    leadingIcon = { Icon(painterResource(icon), contentDescription = null, modifier = Modifier.size(20.dp)) },
+    onClick = onClick,
+    modifier = Modifier.testTag(tag),
+  )
 }
 
 /**

@@ -3,6 +3,9 @@ package com.pathly.presentation.plans
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.pathly.domain.model.GeoBounds
+import com.pathly.domain.model.MapRegion
+import com.pathly.domain.model.PlacePrediction
 import com.pathly.domain.model.PlanDetail
 import com.pathly.domain.model.PlanPlace
 import com.pathly.domain.model.RemovedPlanItem
@@ -18,7 +21,13 @@ import com.pathly.domain.model.withMemoAdded
 import com.pathly.domain.model.withOrder
 import com.pathly.domain.model.withPlacesAdded
 import com.pathly.domain.model.withTitleAndNote
+import com.pathly.domain.repository.PlaceSearchRepository
 import com.pathly.domain.repository.PlanRepository
+import com.pathly.domain.repository.WishlistRepository
+import com.pathly.domain.usecase.PlaceEditUseCase
+import com.pathly.presentation.places.PlaceEditActions
+import com.pathly.presentation.tracking.MapSearchMode
+import com.pathly.presentation.tracking.RegionMarkerActions
 import com.pathly.util.Logger
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.CancellationException
@@ -29,9 +38,11 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 import java.time.LocalDate
 import java.util.Date
 import javax.inject.Inject
@@ -80,6 +91,9 @@ sealed interface PlanDetailEvent {
 
   data class Message(val message: String) : PlanDetailEvent
 
+  /** 新しく登録した場所を [day] 日目に足した（シートをその日へ寄せる）。 */
+  data class PlaceAdded(val day: Int) : PlanDetailEvent
+
   /** 計画を消した（一覧に戻って取り消しを出す）。 */
   data class Deleted(val title: String) : PlanDetailEvent
 
@@ -92,6 +106,9 @@ sealed interface PlanDetailEvent {
 class PlanDetailViewModel @Inject constructor(
   private val planRepository: PlanRepository,
   private val savedStateHandle: SavedStateHandle,
+  placeEditUseCase: PlaceEditUseCase,
+  wishlistRepository: WishlistRepository,
+  private val placeSearchRepository: PlaceSearchRepository,
 ) : ViewModel() {
 
   private val logger = Logger("PlanDetailViewModel")
@@ -115,8 +132,71 @@ class PlanDetailViewModel @Inject constructor(
   private var nextTempId = -1_000_000L
   private var lastRemoved: RemovedPlanItem? = null
 
+  // 新しく登録した場所を足す日（登録のボタンを押した順）。登録の結果が届いた順に先頭から使う。
+  // 1 つの値にすると、続けて登録したときに後の日で上書きされ、先の場所が違う日に入る。
+  private val registerDays = ArrayDeque<Int>()
+
+  // 地図に見えている登録済みの場所（番号のマーカー・レイヤーで出した場所）。近接確認でこれらは確かめない。
+  private var placeIdsShownOnMap: Set<Long> = emptySet()
+
+  /**
+   * 計画の詳細から場所を新しく登録する（地図のタップ・検索 → docs/specs/plans.md の「場所を足す」）。
+   * 登録の結果の場所（相乗り・近接確認での紐付けも）を、[registerDay] の日の末尾に足す。
+   */
+  val placeEdit = PlaceEditActions(
+    scope = viewModelScope,
+    placeEditUseCase = placeEditUseCase,
+    wishlistRepository = wishlistRepository,
+    placeSearchRepository = placeSearchRepository,
+    shownOnMap = { { place -> place.placeId in placeIdsShownOnMap } },
+    placeNameOf = { placeId -> places.value[placeId]?.name },
+    // 登録の一言は出さず、足したことを [onPlaceRegistered] で知らせる。
+    onMessage = {},
+    onError = {
+      // 登録が失敗したら、待っている足す日を捨てる（後の登録が古い日に入らないように）。
+      registerDays.clear()
+      _events.tryEmit(PlanDetailEvent.Failed(it))
+    },
+    onRegistered = ::onPlaceRegistered,
+    onRegisterCancelled = { registerDays.removeFirstOrNull() },
+  )
+
+  /** 検索窓で出した地域の目印（保存しない。計画の画面を閉じれば消える）。 */
+  val regionMarkers = RegionMarkerActions()
+
+  private val selectedMapSearchMode = MutableStateFlow(MapSearchMode.Place)
+
+  /** 検索窓の「場所｜地域」で最後に選んだほう（この画面の間だけ）。 */
+  internal val mapSearchMode: StateFlow<MapSearchMode> = selectedMapSearchMode.asStateFlow()
+
+  internal fun setMapSearchMode(mode: MapSearchMode) {
+    selectedMapSearchMode.value = mode
+  }
+
   init {
     load()
+    keepPlacesFresh()
+  }
+
+  /**
+   * 行が持つ場所の名前・座標を、場所の一覧の今の値に合わせる（場所の名前は場所のもの → docs/specs/plans.md）。
+   * 施設を登録すると、名前は Google から引いた後で入るので、足した直後の行は名前が無く緯度経度で出てしまう。
+   * 中身の比べ方（保存できるか）は場所の id しか見ないので、取り直しても「変更あり」にはならない。
+   */
+  private fun keepPlacesFresh() {
+    viewModelScope.launch {
+      places.collect { known ->
+        _state.update { s ->
+          if (s !is PlanDetailState.Loaded) return@update s
+          val detail = s.edit.detail
+          val items = detail.items.map { item ->
+            val fresh = item.place?.let { known[it.placeId] }
+            if (fresh != null && fresh != item.place) item.copy(place = fresh) else item
+          }
+          if (items == detail.items) s else s.copy(edit = s.edit.copy(detail = detail.copy(items = items)))
+        }
+      }
+    }
   }
 
   private fun load() {
@@ -149,6 +229,53 @@ class PlanDetailViewModel @Inject constructor(
     // 選んでいた日が無くなったら「すべて」に戻す。
     val day = selectedDay.value
     if (day != null && day > dayCount) selectDay(null)
+  }
+
+  /** 地図に見えている登録済みの場所（近接確認で確かめない場所）を画面から受ける。 */
+  fun setPlacesShownOnMap(placeIds: Set<Long>) {
+    placeIdsShownOnMap = placeIds
+  }
+
+  /** 登録のシートで「登録して N日目に足す」を押した（登録が済んだら [day] に足す）。 */
+  fun prepareRegister(day: Int) {
+    registerDays.addLast(day)
+  }
+
+  /** 地図の上の検索窓を開いたとき: 検索のセッションを始める（候補〜確定を 1 セッションにまとめて課金を抑える）。 */
+  fun startPlaceSearch() {
+    placeSearchRepository.startSession()
+  }
+
+  /** 検索窓: 施設の候補。開いたときに地図に映っていた範囲 [bias] の中を優先する。 */
+  suspend fun predictPlacesNear(query: String, bias: GeoBounds?): List<PlacePrediction> = placeSearchRepository.predict(query, bias)
+
+  /** 検索窓: 地名の候補（地域だけに絞る）。 */
+  suspend fun predictRegions(query: String, bias: GeoBounds?): List<PlacePrediction> = placeSearchRepository.predict(query, bias, regionsOnly = true)
+
+  /** 地域へ移動: 選んだ地名の範囲と中心。取れなければ null。 */
+  suspend fun fetchRegion(placeId: String): MapRegion? = placeSearchRepository.fetchRegion(placeId)
+
+  /**
+   * 登録した場所を計画に足す。場所の一覧（[places]）は DB の購読なので、登録した直後はまだ入っていないことがあり、
+   * 入るのを待ってから足す。
+   */
+  private fun onPlaceRegistered(placeId: Long) {
+    val day = registerDays.removeFirstOrNull() ?: return
+    viewModelScope.launch {
+      val place = withTimeoutOrNull(PLACE_WAIT_MILLIS) { places.first { placeId in it }[placeId] }
+      val plan = edit?.detail?.plan
+      if (place == null || plan == null) {
+        _events.tryEmit(PlanDetailEvent.Failed("場所は登録しましたが、計画に足せませんでした"))
+        return@launch
+      }
+      val target = day.coerceIn(1, plan.dayCount)
+      // 行が増えたときにその日へ寄せるので、寄せる先を先に知らせる。
+      _events.tryEmit(PlanDetailEvent.PlaceAdded(target))
+      change { it.withPlacesAdded(target, listOf(place)) { nextTempId-- } }
+      val where = if (plan.isDayTrip) "計画" else "${target}日目"
+      // 名前の無い地点は名前が座標になるので、名前は添えない（足した行はシートで見える）。
+      _events.tryEmit(PlanDetailEvent.Message("${where}に足しました"))
+    }
   }
 
   fun addPlaces(day: Int, placeIds: List<Long>) {
@@ -256,5 +383,8 @@ class PlanDetailViewModel @Inject constructor(
     const val ARG_PLAN_ID = "planId"
     const val ARG_DRAFT_ID = "draftId"
     private const val KEY_SELECTED_DAY = "selectedDay"
+
+    /** 登録した場所が場所の一覧に入るのを待つ長さ。 */
+    private const val PLACE_WAIT_MILLIS = 5_000L
   }
 }

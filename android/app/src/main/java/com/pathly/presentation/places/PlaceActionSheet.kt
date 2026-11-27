@@ -23,6 +23,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.google.android.gms.maps.model.LatLng
@@ -64,6 +66,23 @@ sealed interface PlaceSheetTarget {
   ) : PlaceSheetTarget
 }
 
+/**
+ * 登録のシートを計画の詳細から開いたときの違い（→ docs/specs/plans.md の「登録のシート（計画から開いたとき）」）。
+ * 場所タブ・記録画面・経路詳細では渡さない（null）。
+ */
+internal class PlaceRegisterOptions(
+  /** 行きたいを初めから入れておく（行きたくて計画に入れることが多いため）。 */
+  val initialWishlist: Boolean,
+  /** 登録のボタンの文言（「登録して 2日目に足す」）。 */
+  val registerLabel: String,
+  /** 見出しの下に足す欄（計画の「足す日」）。 */
+  val belowHeading: (@Composable () -> Unit)? = null,
+  /** [belowHeading] の高さ。登録のシートのハーフの最低の高さに足す（メモの欄まで見えるように）。 */
+  val belowHeadingHeight: Dp = 0.dp,
+  /** 登録のボタンを押した（登録を頼む前に呼ぶ。計画はここで足す日を決める）。 */
+  val onRegister: () -> Unit = {},
+)
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun PlaceActionSheet(
@@ -93,6 +112,8 @@ internal fun PlaceActionSheet(
   // シートの下に隠れる地点があると困る画面（対象を地図で示す画面）は、地図の下パディングを
   // 合わせるためにここへ自分で作った state を渡す。
   sheetState: FloatingSheetState = rememberFloatingSheetState(peekFraction = PLACE_SHEET_PEEK_FRACTION),
+  // 計画の詳細から登録するときの違い（null は場所タブ・記録画面などのふつうの登録）。
+  registerOptions: PlaceRegisterOptions? = null,
 ) {
   // 非モーダルなのでバックは自分で受ける（モーダルのときは自動で閉じていた）。
   BackHandler { onDismiss() }
@@ -101,7 +122,10 @@ internal fun PlaceActionSheet(
   // 場所詳細などと同じ state を使い回すので、登録でなくなったら・閉じたら元の高さに戻す。
   // 下の開き直しより先に置く（開き直す先のハーフを先に決める）。
   val isNew = target !is PlaceSheetTarget.Existing
-  val registerPeekPx = rememberRegisterSheetMinPeekPx()
+  // 計画から開くと行きたいが初めから入っていて優先度の行が出るので、その分も足す。
+  val registerExtra = (registerOptions?.belowHeadingHeight ?: 0.dp) +
+    (if (registerOptions?.initialWishlist == true) PRIORITY_ROW_HEIGHT else 0.dp)
+  val registerPeekPx = rememberRegisterSheetMinPeekPx(registerExtra)
   DisposableEffect(sheetState, isNew, registerPeekPx) {
     sheetState.raisePeekTo(if (isNew) registerPeekPx else null)
     onDispose { sheetState.raisePeekTo(null) }
@@ -122,6 +146,7 @@ internal fun PlaceActionSheet(
         onFetchPoiDetails = onFetchPoiDetails,
         onRegisterNew = onRegisterNew,
         onDismiss = onDismiss,
+        options = registerOptions,
       )
 
       is PlaceSheetTarget.NewPoi -> NewPlaceEditor(
@@ -132,6 +157,7 @@ internal fun PlaceActionSheet(
         onFetchPoiDetails = onFetchPoiDetails,
         onRegisterNew = onRegisterNew,
         onDismiss = onDismiss,
+        options = registerOptions,
       )
 
       is PlaceSheetTarget.NewSearchResult -> NewPlaceEditor(
@@ -142,6 +168,7 @@ internal fun PlaceActionSheet(
         onFetchPoiDetails = onFetchPoiDetails,
         onRegisterNew = onRegisterNew,
         onDismiss = onDismiss,
+        options = registerOptions,
       )
 
       is PlaceSheetTarget.Existing -> ExistingPlaceEditor(
@@ -180,10 +207,10 @@ internal const val PLACE_SHEET_PEEK_FRACTION = 0.4f
  * 大きな字ほど伸び方が小さい（Android の非線形の拡大）ので、全体を倍率で掛けると高くしすぎる。
  */
 @Composable
-private fun rememberRegisterSheetMinPeekPx(): Float {
+private fun rememberRegisterSheetMinPeekPx(extra: Dp): Float {
   val density = LocalDensity.current
   val typography = MaterialTheme.typography
-  return remember(density, typography) {
+  return remember(density, typography, extra) {
     with(density) {
       // 見出し・行きたい／訪問済み・メモの欄の字・登録のボタン、の 4 行。
       val textLines = listOf(
@@ -192,10 +219,13 @@ private fun rememberRegisterSheetMinPeekPx(): Float {
         typography.bodyLarge.lineHeight,
         typography.labelLarge.lineHeight,
       )
-      REGISTER_SHEET_MIN_PEEK_SPACING.toPx() + textLines.sumOf { it.toPx().toDouble() }.toFloat()
+      (REGISTER_SHEET_MIN_PEEK_SPACING + extra).toPx() + textLines.sumOf { it.toPx().toDouble() }.toFloat()
     }
   }
 }
+
+/** 優先度の行（星の 48dp と上の間）。行きたいが入っているときだけ出る。 */
+private val PRIORITY_ROW_HEIGHT = 56.dp
 
 /** 登録のシートのハーフのうち、字の行でない部分（つまみの行・ボタンや欄の枠と余白・登録の行の余白）。エミュレータの実測から。 */
 private val REGISTER_SHEET_MIN_PEEK_SPACING = 216.dp
@@ -214,12 +244,13 @@ private fun ColumnScope.NewPlaceEditor(
   onFetchPoiDetails: suspend (googlePlaceId: String) -> PlaceSearchResult?,
   onRegisterNew: (lat: Double, lng: Double, name: String?, wishlist: Boolean, priority: Priority, visited: Boolean, memo: String?, googlePlaceId: String?, googleName: String?) -> Unit,
   onDismiss: () -> Unit,
+  options: PlaceRegisterOptions?,
 ) {
   // 名前欄は「自分で付けた名前」専用なので、施設名を初期値には入れない（薄字の候補として見せる）。
   // 入っているかどうかで「自分で付けたのか、Google の名前なのか」が一目で分かる。
   var name by remember(latLng, googlePlaceId) { mutableStateOf("") }
   var memo by remember(latLng, googlePlaceId) { mutableStateOf("") }
-  var wishlist by remember(latLng, googlePlaceId) { mutableStateOf(false) }
+  var wishlist by remember(latLng, googlePlaceId) { mutableStateOf(options?.initialWishlist ?: false) }
   var priority by remember(latLng, googlePlaceId) { mutableStateOf(Priority.MEDIUM) }
   // このアプリを使う前に行った場所も、登録と同時に訪問済みにできる（行きたいとは独立）。
   var visited by remember(latLng, googlePlaceId) { mutableStateOf(false) }
@@ -239,14 +270,16 @@ private fun ColumnScope.NewPlaceEditor(
         val typed = name.trim().ifBlank { null }
         val googleName = initialName?.trim()?.ifBlank { null }
         val userName = typed?.takeIf { it != googleName }
+        options?.onRegister?.invoke()
         onRegisterNew(latLng.latitude, latLng.longitude, userName, wishlist, priority, visited, memo.ifBlank { null }, googlePlaceId, googleName)
         onDismiss()
-      }) { Text("登録") }
+      }, modifier = Modifier.testTag("placeRegister")) { Text(options?.registerLabel ?: "登録") }
     },
   ) {
     PlaceFormBody(
       // 施設なら名前を見出しに。名前を持たない地点は、何をしようとしているかを出す。
       heading = initialName ?: "この地点を場所として登録",
+      belowHeading = options?.belowHeading,
       nameField = { PlaceNameField(name = name, onNameChange = { name = it }, prefill = initialName) },
       category = details?.category,
       address = details?.address,

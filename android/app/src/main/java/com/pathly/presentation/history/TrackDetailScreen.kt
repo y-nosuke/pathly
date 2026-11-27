@@ -14,7 +14,6 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SnackbarDuration
-import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.Surface
@@ -48,6 +47,7 @@ import com.pathly.presentation.common.MapRoundButton
 import com.pathly.presentation.common.SameFacilityDialog
 import com.pathly.presentation.common.SheetDetent
 import com.pathly.presentation.common.SheetRestoreButtonInset
+import com.pathly.presentation.common.SwipeDismissSnackbarHost
 import com.pathly.presentation.common.heightOf
 import com.pathly.presentation.common.rememberFloatingSheetState
 import com.pathly.presentation.common.rememberLocationPermitted
@@ -318,7 +318,7 @@ fun TrackDetailScreen(
     }
 
     // スナックバー（最前面）。シート/オーバーレイの上に出す。
-    SnackbarHost(
+    SwipeDismissSnackbarHost(
       hostState = snackbarHostState,
       modifier = Modifier
         .align(Alignment.BottomCenter)

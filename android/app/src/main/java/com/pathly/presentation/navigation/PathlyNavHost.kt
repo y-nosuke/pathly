@@ -13,7 +13,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -39,6 +38,7 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.pathly.R
 import com.pathly.presentation.common.MapRegisteredPlaces
+import com.pathly.presentation.common.SwipeDismissSnackbarHost
 import com.pathly.presentation.history.HistoryScreen
 import com.pathly.presentation.history.SameFacilityReview
 import com.pathly.presentation.history.StopReanalysis
@@ -117,7 +117,7 @@ fun PathlyNavHost(
 
   Scaffold(
     modifier = modifier.fillMaxSize(),
-    snackbarHost = { SnackbarHost(snackbarHostState) },
+    snackbarHost = { SwipeDismissSnackbarHost(snackbarHostState) },
     bottomBar = {
       if (!hideBottomBar) {
         NavigationBar {
