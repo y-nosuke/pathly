@@ -309,6 +309,12 @@ private fun PlanDetailContent(
     snapshotFlow { sheetState.detent }.first { it != SheetDetent.HIDDEN }
     pickOnMap = false
   }
+  // 「地図で選ぶ」の間に戻るを押したら、選ぶのをやめて計画のシートを戻す（計画の一覧へは戻らない）。
+  // 保存していない変更のときの戻る（上の BackHandler）より後に置き、こちらを先に効かせる。
+  BackHandler(enabled = pickOnMap && placeSheetTarget == null) {
+    pickOnMap = false
+    sheetState.settleTo(SheetDetent.PEEK)
+  }
   // 登録のシートを開いた場所へ地図を寄せる（シートの裏に隠れないように）。
   LaunchedEffect(placeSheetTarget) {
     placeSheetTarget?.registerLatLng()?.let { cameraPositionState.animate(CameraUpdateFactory.newLatLng(it)) }
