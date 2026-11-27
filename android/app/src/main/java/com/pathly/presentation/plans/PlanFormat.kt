@@ -44,8 +44,19 @@ internal fun stayLabel(minutes: Int): String = when {
   else -> "${minutes / 60}時間${minutes % 60}分"
 }
 
-/** 「10:00」。24 時を超えたら翌日の時刻に「翌」を付ける（「翌1:00」）。 */
-internal fun formatClock(minutes: Int): String = if (minutes >= DAY_MINUTES) "翌" + formatMinutesOfDay(minutes % DAY_MINUTES) else formatMinutesOfDay(minutes)
+/**
+ * 「10:00」。24 時を超えたら何日後かを前に付ける（次の日は「翌1:00」、2 日後は「翌々1:00」、3 日後からは「3日後1:00」）。
+ * 滞在の目安は 99 時間まで選べるので、出発は 2 日以上先にもなる。
+ */
+internal fun formatClock(minutes: Int): String {
+  val prefix = when (val days = minutes / DAY_MINUTES) {
+    0 -> ""
+    1 -> "翌"
+    2 -> "翌々"
+    else -> "${days}日後"
+  }
+  return prefix + formatMinutesOfDay(minutes % DAY_MINUTES)
+}
 
 /**
  * 行の 2 行目。「10:00 着 – 11:30 発・1時間30分」（出発は着く時刻 ＋ 滞在の目安）。
