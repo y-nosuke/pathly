@@ -139,21 +139,22 @@ DB に持たないのは、`R.drawable` の ID を DB に入れられず結局�
     （ダイアログも画面側の `PlaceEditorDialogs`。地図タップの場所シートで本文が引っ込んでいても出せるように）。
 - **保存・登録はシートの下端に固定する**（`SheetFormLayout`、`presentation/common/SheetForm.kt`）。本文だけがスクロールし、
   操作の行（閉じる・立ち寄りに追加・保存／キャンセル・登録）はスクロールしても隠れない。場所シート・場所詳細で使う。
+  一覧（LazyColumn）を本文にするシートは、行だけの `SheetActionsBar` を一覧の下に置く（計画の詳細の「下書き」「保存」）。
 
 ## 地図の画面の型の部品
 
 地図の画面の区画（[ui-direction.md](ui-direction.md) の「地図の画面の型」）ごとの部品。記録画面（#193）から使い、
 経路詳細・場所詳細・履歴と場所の地図も順に載せ替える。
 
-| 区画         | 部品（`presentation/common/`）                                                          | 中身                                                                                         |
-| ------------ | --------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
-| 上・上の下   | `MapTopBar`（`MapTopBar.kt`）                                                           | 左（戻る＋見出し、または検索の入口）・右端（レイヤー・⋮）・その下に今の状態を縦に積む        |
-| 上（詳細）   | `MapBackTitle`・`MapOverflowMenuButton`（同）                                           | 戻る＋見出し（副題・見出しを押す操作つき）の窓と、⋮ のメニュー（中身は画面ごと）             |
-| 上の下       | `MapNoticeBanner`（同）                                                                 | 1 行の帯。押すと詳しい画面へ（›）。うまくいかなかった知らせは `isError`                      |
-| レイヤー     | `MapLayersButton`・`RegisteredPlacesLayerItems`・`MapLayerActionItem`（`MapLayers.kt`） | ［≋］と開くパネル。登録済みの場所の表示・絞り込みは共通、ほかは画面ごとの行                  |
-| 右下         | `MapControls`・`MapRoundButton`（`MapControls.kt`・`MapTopBar.kt`）                     | 地図の操作を縦に積む。`bottomInset` にいま出ているシートの高さ（段の確定値）を渡して沿わせる |
-| シートの脇役 | `MapSideActions`（`MapControls.kt`）                                                    | シートの中の脇役の操作を横に並べる器。#201 で浮かぶツールバーに差し替える                    |
-| シートの下端 | `SheetFormLayout`（`SheetForm.kt`）                                                     | 本文をスクロールさせ、保存・登録などの操作の行を下端に固定する                               |
+| 区画         | 部品（`presentation/common/`）                                                          | 中身                                                                                           |
+| ------------ | --------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
+| 上・上の下   | `MapTopBar`（`MapTopBar.kt`）                                                           | 左（戻る＋見出し、または検索の入口）・右端（レイヤー・⋮）・その下に今の状態を縦に積む          |
+| 上（詳細）   | `MapBackTitle`・`MapOverflowMenuButton`（同）                                           | 戻る＋見出し（副題・見出しを押す操作つき）の窓と、⋮ のメニュー（中身は画面ごと）               |
+| 上の下       | `MapNoticeBanner`（同）                                                                 | 1 行の帯。押すと詳しい画面へ（›）。うまくいかなかった知らせは `isError`                        |
+| レイヤー     | `MapLayersButton`・`RegisteredPlacesLayerItems`・`MapLayerActionItem`（`MapLayers.kt`） | ［≋］と開くパネル。登録済みの場所の表示・絞り込みは共通、ほかは画面ごとの行                    |
+| 右下         | `MapControls`・`MapRoundButton`（`MapControls.kt`・`MapTopBar.kt`）                     | 地図の操作を縦に積む。`bottomInset` にいま出ているシートの高さ（段の確定値）を渡して沿わせる   |
+| シートの脇役 | `MapSideActions`（`MapControls.kt`）                                                    | シートの中の脇役の操作を横に並べる器。#201 で浮かぶツールバーに差し替える                      |
+| シートの下端 | `SheetFormLayout`・`SheetActionsBar`（`SheetForm.kt`）                                  | 本文をスクロールさせ、保存・登録などの操作の行を下端に固定する（行だけなら `SheetActionsBar`） |
 
 - 現在地のボタンと地図の現在地の点は、位置情報の許可があるときだけ出す（`rememberLocationPermitted`、`MapCamera.kt`。
   画面に戻るたびに見直す。地図の画面からは許可を求めない）。
