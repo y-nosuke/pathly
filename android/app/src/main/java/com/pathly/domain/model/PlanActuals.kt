@@ -80,7 +80,7 @@ object PlanActuals {
     visits.filter { it.trackId in linked }.mapTo(HashSet()) { it.placeId }
   }
 
-  /** 行った場所の行の数（同じ場所が 2 行あれば 2 と数える。メモの行は数えない）。 */
+  /** 行った場所の行の数（同じ場所が 2 行あれば 2 と数える。予定の行は数えない）。 */
   fun visitedItemCount(placeIdsOfItems: List<Long>, visited: Set<Long>): Int = placeIdsOfItems.count { it in visited }
 
   /** 結び付いた経路の中に記録中のものがあれば、その経路の id。 */

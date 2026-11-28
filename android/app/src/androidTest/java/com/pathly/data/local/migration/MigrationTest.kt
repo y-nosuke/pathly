@@ -650,7 +650,7 @@ class MigrationTest {
     db.execSQL("DELETE FROM places WHERE id = 1")
     db.query("SELECT title FROM plan_items").use { cursor ->
       assertTrue(cursor.moveToNext())
-      assertEquals("メモの行は残る", "昼食", cursor.getString(0))
+      assertEquals("予定の行は残る", "昼食", cursor.getString(0))
       assertFalse(cursor.moveToNext())
     }
     db.close()

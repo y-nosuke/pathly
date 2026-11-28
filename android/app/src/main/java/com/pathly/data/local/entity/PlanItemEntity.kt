@@ -6,7 +6,7 @@ import androidx.room.Index
 import androidx.room.PrimaryKey
 
 /**
- * 計画の行（→ adr/0050）。[placeId] があれば場所の行、null ならメモの行（文言は [title]）。
+ * 計画の行（→ adr/0050）。[placeId] があれば場所の行、null なら予定の行（内容は [title]）。
  *
  * - [dayIndex] は 1〜計画の日数、[position] は日の中の順番（0 から）。
  * - [plannedTime] は着く時刻（0 時からの分）、[stayMinutes] は滞在の目安（分）。どちらも任意。
