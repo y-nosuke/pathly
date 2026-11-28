@@ -24,6 +24,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -74,6 +75,7 @@ import com.pathly.ui.theme.PathlySpacing
 import com.pathly.ui.theme.PathlyTheme
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import java.time.LocalDate
 
 /** シートの行から呼ぶ操作。 */
 internal class PlanSheetActions(
@@ -98,8 +100,14 @@ internal class PlanSheetActions(
   val onRemove: (PlanItem) -> Unit,
   /** 並べ替えた結果（上から順の行の id・入った日）。 */
   val onReorder: (List<Pair<Long, Int>>) -> Unit,
-  /** 「実際のお出掛け」の行を押した（経路詳細へ）。 */
+  /** 「実際のお出掛け」の行の ⋮「経路の詳細を開く」。 */
   val onOpenTrack: (GpsTrack) -> Unit = {},
+  /** 「実際のお出掛け」の行を押した（地図でその経路に寄せる）。 */
+  val onFocusTrack: (GpsTrack) -> Unit = {},
+  /** 実際の立ち寄りの行を押した（地図でその立ち寄りに寄せる）。 */
+  val onStopClick: (ActualStop) -> Unit = {},
+  /** 「実際も見る」の切り替え（地図とシートの両方）。 */
+  val onToggleActuals: () -> Unit = {},
   /** 手の結び付きを外す。 */
   val onUnlinkTrack: (GpsTrack) -> Unit = {},
   /** 「経路を結び付ける」（一度も保存していない計画では null）。 */
@@ -123,6 +131,14 @@ internal fun ColumnScope.PlanSheetContent(
   liveDistanceMeters: Double? = null,
   /** 経路の印の色（計画の日の色）。 */
   trackColorOf: (GpsTrack) -> Color = { PathlyMapColors.PlanActualTrack },
+  /** 「実際も見る」（計画の行に実際の立ち寄りを添え、予定外の立ち寄りを挟む）。 */
+  showActuals: Boolean = false,
+  /** 地図に出している実際の立ち寄り（日ごとの番号つき）。 */
+  actualStops: List<ActualStop> = emptyList(),
+  /** 立ち寄りの日付が計画の何日目か（日付の無い日帰りは 1、計画の日に入らなければ null）。 */
+  sheetDayOf: (LocalDate?) -> Int? = { null },
+  /** 立ち寄りの印の色（地図と同じ）。 */
+  stopColorOf: (ActualStop) -> Color = { PathlyMapColors.PlanActualTrack },
 ) {
   val plan = detail.plan
   val original = remember(detail) { slotsOf(detail) }
@@ -160,7 +176,10 @@ internal fun ColumnScope.PlanSheetContent(
     }
   }
 
-  val rendered = remember(slots) { renderedEntries(slots) }
+  val merged = remember(slots, itemsById, actualStops, showActuals) {
+    if (showActuals) mergeActuals(slots, itemsById, actualStops, sheetDayOf) else MergedActuals()
+  }
+  val rendered = remember(slots, merged) { renderedEntries(slots, merged) }
 
   LazyColumn(
     state = listState,
@@ -179,6 +198,9 @@ internal fun ColumnScope.PlanSheetContent(
         onSearchPlace = actions.onSearchPlace,
         onPickOnMap = actions.onPickOnMap,
         onAddMemo = actions.onAddMemo,
+        // 結び付いた経路があるときだけ「実際も見る」を出す。
+        showActuals = showActuals.takeIf { actuals.savedLinked.isNotEmpty() },
+        onToggleActuals = actions.onToggleActuals,
       )
     }
     if (detail.items.isEmpty() && plan.isDayTrip) {
@@ -196,6 +218,20 @@ internal fun ColumnScope.PlanSheetContent(
 
         is SheetEntry.Empty -> EmptyDayLine("まだ何もありません")
 
+        is SheetEntry.Actual -> ActualStopRow(
+          actual = entry.stop,
+          color = stopColorOf(entry.stop),
+          onClick = { actions.onStopClick(entry.stop) },
+        )
+
+        SheetEntry.OutsideHeader -> Text(
+          text = "計画の日の外の立ち寄り",
+          style = MaterialTheme.typography.titleSmall,
+          fontWeight = FontWeight.Bold,
+          color = MaterialTheme.colorScheme.onSurfaceVariant,
+          modifier = Modifier.padding(horizontal = SheetContentHorizontalPadding, vertical = PathlySpacing.sm),
+        )
+
         is SheetEntry.Item -> {
           val item = itemsById[entry.itemId] ?: return@items
           val index = slots.indexOfFirst { it.key == entry.key }
@@ -205,6 +241,10 @@ internal fun ColumnScope.PlanSheetContent(
             item = item,
             number = numbers[item.id],
             visited = item.place?.placeId?.let { it in actuals.visitedPlaceIds } == true,
+            visits = item.place?.placeId?.let { merged.visitsByPlace[it] }.orEmpty(),
+            rowDay = day,
+            sheetDayOf = sheetDayOf,
+            stopColorOf = stopColorOf,
             color = planDayColor(day),
             lifted = lifted,
             canMoveDay = !plan.isDayTrip,
@@ -282,7 +322,8 @@ internal fun ColumnScope.PlanSheetContent(
         recording = linked.track.id == actuals.recordingTrackId,
         color = trackColorOf(linked.track),
         liveDistanceMeters = liveDistanceMeters,
-        onOpen = { actions.onOpenTrack(linked.track) },
+        onOpen = { actions.onFocusTrack(linked.track) },
+        onOpenDetail = { actions.onOpenTrack(linked.track) },
         onUnlink = { actions.onUnlinkTrack(linked.track) },
       )
     }
@@ -338,19 +379,44 @@ private sealed interface SheetEntry {
   data class Empty(val day: Int) : SheetEntry {
     override val key: String get() = "empty:$day"
   }
+
+  /** 計画に無い（予定外の）実際の立ち寄り。並べ替えでは掴めない（見出しと行の間に挟むだけ）。 */
+  data class Actual(val stop: ActualStop) : SheetEntry {
+    override val key: String get() = "actual:${stop.stop.id}:${stop.live}"
+  }
+
+  /** 計画の日に入らない予定外の立ち寄りの見出し。 */
+  data object OutsideHeader : SheetEntry {
+    override val key: String get() = "actualOutside"
+  }
 }
 
-/** 並びに、行の無い日の案内を挟む（掴んだ行をその日へ落とせることが分かるように）。 */
-private fun renderedEntries(slots: List<PlanSlotKey>): List<SheetEntry> = buildList {
+/**
+ * 並びに、行の無い日の案内と、予定外の実際の立ち寄り（[merged]）を挟む（掴んだ行をその日へ落とせることが分かるように）。
+ */
+private fun renderedEntries(slots: List<PlanSlotKey>, merged: MergedActuals = MergedActuals()): List<SheetEntry> = buildList {
+  fun addActuals(key: String) = merged.unplannedAfter[key].orEmpty().forEach { add(SheetEntry.Actual(it)) }
+  // 見出しの無い日帰りは、いちばん上が 1 日目の頭。
+  if (slots.firstOrNull() !is PlanSlotKey.Day) addActuals(MergedActuals.dayStartKey(1))
   slots.forEachIndexed { i, slot ->
     when (slot) {
       is PlanSlotKey.Day -> {
         add(SheetEntry.Header(slot.day))
-        if (slots.getOrNull(i + 1) !is PlanSlotKey.Row) add(SheetEntry.Empty(slot.day))
+        addActuals(MergedActuals.dayStartKey(slot.day))
+        if (slots.getOrNull(i + 1) !is PlanSlotKey.Row && merged.unplannedAfter[MergedActuals.dayStartKey(slot.day)].isNullOrEmpty()) {
+          add(SheetEntry.Empty(slot.day))
+        }
       }
 
-      is PlanSlotKey.Row -> add(SheetEntry.Item(slot.itemId))
+      is PlanSlotKey.Row -> {
+        add(SheetEntry.Item(slot.itemId))
+        addActuals(MergedActuals.afterRowKey(slot.itemId))
+      }
     }
+  }
+  if (merged.outside.isNotEmpty()) {
+    add(SheetEntry.OutsideHeader)
+    merged.outside.forEach { add(SheetEntry.Actual(it)) }
   }
 }
 
@@ -379,6 +445,9 @@ private fun PlanSummaryHeader(
   onSearchPlace: () -> Unit,
   onPickOnMap: () -> Unit,
   onAddMemo: () -> Unit,
+  /** 「実際も見る」が今オンか（結び付いた経路が無ければ null で出さない）。 */
+  showActuals: Boolean? = null,
+  onToggleActuals: () -> Unit = {},
 ) {
   Column(modifier = Modifier.padding(horizontal = SheetContentHorizontalPadding)) {
     // 押すと「日付と日数」を開く（日付の印で押せると分かるように）。
@@ -434,6 +503,15 @@ private fun PlanSummaryHeader(
         Spacer(modifier = Modifier.width(PathlySpacing.xs))
         Text("メモを足す")
       }
+    }
+    // 実際の立ち寄り・経路を、地図とシートの両方で出す・隠す（計画だけを見るとき）。ボタンの並びに入れると折り返すので、1 行に置く。
+    if (showActuals != null) {
+      FilterChip(
+        selected = showActuals,
+        onClick = onToggleActuals,
+        label = { Text("実際も見る", maxLines = 1) },
+        modifier = Modifier.testTag("planShowActuals"),
+      )
     }
     Spacer(modifier = Modifier.height(PathlySpacing.sm))
   }
@@ -509,6 +587,12 @@ private fun PlanItemRow(
   item: PlanItem,
   number: Int?,
   visited: Boolean,
+  /** この場所への実際の立ち寄り（「実際も見る」の間だけ。着いた順）。 */
+  visits: List<ActualStop>,
+  /** 行が入っている日（別の日に行った立ち寄りに日付を添えるため）。 */
+  rowDay: Int,
+  sheetDayOf: (LocalDate?) -> Int?,
+  stopColorOf: (ActualStop) -> Color,
   color: Color,
   lifted: Boolean,
   canMoveDay: Boolean,
@@ -604,6 +688,17 @@ private fun PlanItemRow(
           itemTimeLine(item)?.let {
             Text(text = it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
           }
+          // 実際に立ち寄った時刻（地図と同じ番号）。別の日に行ったものは日付を添える。
+          visits.take(MAX_VISIT_LINES).forEach { visit ->
+            ActualVisitLine(actual = visit, color = stopColorOf(visit), showDate = sheetDayOf(visit.date) != rowDay)
+          }
+          if (visits.size > MAX_VISIT_LINES) {
+            Text(
+              text = "ほか ${visits.size - MAX_VISIT_LINES} 回",
+              style = MaterialTheme.typography.bodySmall,
+              color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+          }
           item.note?.let {
             Text(
               text = it.lineSequence().first(),
@@ -616,6 +711,42 @@ private fun PlanItemRow(
         }
         PlanItemMenu(item = item, canMoveDay = canMoveDay, actions = actions)
       }
+    }
+  }
+}
+
+/**
+ * 計画に無い（予定外の）実際の立ち寄りの行。計画の行の番号の列にそろえて番号の印を置き、名前と時刻と「予定外」を出す。
+ * 押すと地図でその立ち寄りに寄せる。並べ替えでは掴めない。
+ */
+@Composable
+private fun ActualStopRow(actual: ActualStop, color: Color, onClick: () -> Unit) {
+  Row(
+    modifier = Modifier
+      .fillMaxWidth()
+      .clickable(onClickLabel = "地図でこの立ち寄りに寄せる", onClick = onClick)
+      .padding(start = SheetContentHorizontalPadding - PathlySpacing.sm + HandleWidth, end = SheetContentHorizontalPadding)
+      .testTag("planActualStop:${actual.stop.id}"),
+    verticalAlignment = Alignment.CenterVertically,
+  ) {
+    Box(modifier = Modifier.size(BadgeSize), contentAlignment = Alignment.Center) {
+      ActualStopBadge(number = actual.number, color = color)
+    }
+    Spacer(modifier = Modifier.width(PathlySpacing.md))
+    Column(modifier = Modifier.weight(1f).padding(vertical = PathlySpacing.sm)) {
+      Text(
+        text = actual.stop.place.displayName,
+        style = MaterialTheme.typography.bodyMedium,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        maxLines = 1,
+        overflow = TextOverflow.Ellipsis,
+      )
+      Text(
+        text = actualStopTime(actual, withDate = false) + "・予定外",
+        style = MaterialTheme.typography.bodySmall,
+        color = color,
+        maxLines = 1,
+      )
     }
   }
 }
@@ -704,6 +835,7 @@ internal fun PlanNumberBadge(number: Int, color: Color, modifier: Modifier = Mod
 }
 
 private val BadgeSize = 28.dp
+private const val MAX_VISIT_LINES = 2
 private val HandleWidth = 32.dp
 private val DayBarWidth = 6.dp
 private val AutoScrollEdge = 48.dp

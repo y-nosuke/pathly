@@ -45,7 +45,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
@@ -53,6 +52,7 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.google.android.gms.maps.model.LatLng
@@ -105,10 +105,12 @@ internal fun PlanLayersButton(
       Icon(painter = painterResource(R.drawable.ic_route), contentDescription = null, tint = color)
       Spacer(modifier = Modifier.width(PathlySpacing.md))
       Column(modifier = Modifier.weight(1f)) {
-        Text(text = "結び付いた経路（${linkedTrackCount}本）", style = MaterialTheme.typography.bodyLarge, color = color)
-        if (linkedTrackCount == 0) {
-          Text(text = "計画の日付の経路か、⋮ で結び付けた経路", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        }
+        Text(text = "実際のお出掛け（${linkedTrackCount}本）", style = MaterialTheme.typography.bodyLarge, color = color)
+        Text(
+          text = if (linkedTrackCount == 0) "記録の開始か、⋮ で結び付けた経路" else "━ 実際の経路（実線）　┅ 計画（点線）",
+          style = MaterialTheme.typography.bodySmall,
+          color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
       }
       Switch(checked = showTracks && linkedTrackCount > 0, onCheckedChange = null, enabled = linkedTrackCount > 0)
     }
@@ -149,9 +151,6 @@ internal fun PlanActualTracks(lines: List<Pair<Color, List<List<GpsPoint>>>>, li
   }
 }
 
-/** 実際の経路の線の色: 計画の日の色を一段薄くしたもの（計画の線と同じ日だと分かり、計画の線より控えめに）。 */
-internal fun actualLineColor(dayColor: Color): Color = lerp(dayColor, Color.White, 0.35f)
-
 /**
  * 地図に出す実際の立ち寄り（白地の角丸に、日ごとに着いた順の番号）。縁と数字は計画の日の色（[colorOf]）、立ち寄り中は記録画面と同じティール。
  * 計画の番号のマーカーより奥・小さめにする。押すと場所の名前と時刻の吹き出し。
@@ -177,25 +176,61 @@ internal fun PlanActualStops(stops: List<ActualStop>, infoWindow: MapInfoWindowS
         zIndex = ACTUAL_STOP_Z_INDEX,
         bubbleColor = color,
       ) {
-        // 計画の番号（日の色で塗った丸に白い数字）と見分けるよう、白地の角丸に色の縁と数字にする。
-        Box(
-          modifier = Modifier
-            .size(ACTUAL_STOP_SIZE)
-            .clip(ActualStopShape)
-            .background(PathlyMapColors.OnMarker)
-            .border(2.dp, color, ActualStopShape),
-          contentAlignment = Alignment.Center,
-        ) {
-          Text(
-            text = "${actual.number}",
-            style = MaterialTheme.typography.labelMedium,
-            fontWeight = FontWeight.Bold,
-            color = color,
-            maxLines = 1,
-          )
-        }
+        ActualStopBadge(number = actual.number, color = color)
       }
     }
+  }
+}
+
+/**
+ * 実際の立ち寄りの番号の印。計画の番号（日の色で塗った丸に白い数字）と見分けるよう、白地の角丸に色の縁と数字にする。
+ * 地図とシートで同じものを使う。
+ */
+@Composable
+internal fun ActualStopBadge(number: Int, color: Color, modifier: Modifier = Modifier, size: Dp = ACTUAL_STOP_SIZE) {
+  Box(
+    modifier = modifier
+      .size(size)
+      .clip(ActualStopShape)
+      .background(PathlyMapColors.OnMarker)
+      .border(2.dp, color, ActualStopShape),
+    contentAlignment = Alignment.Center,
+  ) {
+    Text(
+      text = "$number",
+      style = MaterialTheme.typography.labelMedium,
+      fontWeight = FontWeight.Bold,
+      color = color,
+      maxLines = 1,
+    )
+  }
+}
+
+/** 立ち寄りの時刻（「10:05–10:40」・立ち寄り中は「13:20– 立ち寄り中」）。[withDate] なら日付を前に付ける。 */
+internal fun actualStopTime(actual: ActualStop, withDate: Boolean, zone: ZoneId = ZoneId.systemDefault()): String {
+  val arrival = actual.stop.arrivalTime.toInstant().atZone(zone)
+  val date = if (withDate) "${formatPlanDate(arrival.toLocalDate())} " else ""
+  return if (actual.live) "$date${CLOCK.format(arrival)}– 立ち寄り中" else "$date${CLOCK.format(arrival)}–${CLOCK.format(actual.stop.departureTime.toInstant().atZone(zone))}"
+}
+
+/** 計画の行に添える、実際に立ち寄った時刻の 1 行（番号の印・時刻）。 */
+@Composable
+internal fun ActualVisitLine(actual: ActualStop, color: Color, showDate: Boolean) {
+  Row(
+    modifier = Modifier
+      .padding(top = PathlySpacing.xxs)
+      .testTag("planItemActual:${actual.stop.id}"),
+    verticalAlignment = Alignment.CenterVertically,
+  ) {
+    ActualStopBadge(number = actual.number, color = color, size = 18.dp)
+    Spacer(modifier = Modifier.width(PathlySpacing.xs))
+    Text(
+      text = actualStopTime(actual, withDate = showDate) + if (actual.live) "" else " に寄った",
+      style = MaterialTheme.typography.bodySmall,
+      color = color,
+      maxLines = 1,
+      overflow = TextOverflow.Ellipsis,
+    )
   }
 }
 
@@ -382,7 +417,10 @@ internal fun LinkedTrackRow(
   /** 経路の印の色（計画の日の色。日付の外・日付なしは灰青）。 */
   color: Color,
   liveDistanceMeters: Double?,
+  /** 行を押した（地図でこの経路に寄せる）。 */
   onOpen: () -> Unit,
+  /** ⋮「経路の詳細を開く」。 */
+  onOpenDetail: () -> Unit,
   onUnlink: () -> Unit,
   modifier: Modifier = Modifier,
 ) {
@@ -392,7 +430,7 @@ internal fun LinkedTrackRow(
   Row(
     modifier = modifier
       .fillMaxWidth()
-      .clickable(onClickLabel = "経路の詳細を開く", onClick = onOpen)
+      .clickable(onClickLabel = "地図でこの経路に寄せる", onClick = onOpen)
       .heightIn(min = 48.dp)
       .padding(start = PathlySpacing.screenEdge, end = PathlySpacing.xs)
       .testTag("planLinkedTrack:${track.id}"),
@@ -437,6 +475,10 @@ internal fun LinkedTrackRow(
           Icon(painterResource(R.drawable.ic_more_vert), contentDescription = "経路の操作")
         }
         DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+          DropdownMenuItem(text = { Text("経路の詳細を開く") }, onClick = {
+            open = false
+            onOpenDetail()
+          }, modifier = Modifier.testTag("planOpenTrackDetail"))
           DropdownMenuItem(text = { Text("結び付きを外す") }, onClick = {
             open = false
             onUnlink()

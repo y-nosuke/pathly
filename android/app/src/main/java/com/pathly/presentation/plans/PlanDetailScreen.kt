@@ -56,6 +56,8 @@ import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.google.android.gms.maps.CameraUpdateFactory
 import com.google.android.gms.maps.model.CameraPosition
+import com.google.android.gms.maps.model.Dash
+import com.google.android.gms.maps.model.Gap
 import com.google.android.gms.maps.model.LatLng
 import com.google.android.gms.maps.model.LatLngBounds
 import com.google.maps.android.compose.GoogleMap
@@ -117,6 +119,7 @@ import com.pathly.ui.theme.PathlyMapColors
 import com.pathly.ui.theme.PathlySpacing
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 import java.time.LocalDate
 import java.time.ZoneId
 
@@ -268,21 +271,40 @@ private fun PlanDetailContent(
     if (start == null || date == null) null else (date.toEpochDay() - start.toEpochDay() + 1).toInt().takeIf { it in 1..plan.dayCount }
   }
   val trackDayOf: (GpsTrack) -> Int? = { track -> dayOfDate(track.startTime.toInstant().atZone(zone).toLocalDate()) }
-  val actualTrackColor: (Int?) -> Color = { d -> d?.let { actualLineColor(planDayColor(it)) } ?: PathlyMapColors.PlanActualTrack }
+  // 実際の経路・立ち寄りの色は、その日の色そのもの（計画の線とは線の形で分ける）。日付の外・日付なしは灰青。
+  val actualColor: (Int?) -> Color = { d -> d?.let { planDayColor(it) } ?: PathlyMapColors.PlanActualTrack }
+  // 地図に出す実際の経路と立ち寄り（「実際も見る」の間だけ。日を選んでいればその日の分だけ）。
+  val dayDate = day?.let { plan.dateOf(it) }
+  val shownLines = if (showActualTracks) {
+    actuals.linked.filter { day == null || trackDayOf(it.track) == day }.mapNotNull { linked ->
+      actualLines[linked.track.id]?.let { linked.track.id to (actualColor(trackDayOf(linked.track)) to it) }
+    }
+  } else {
+    emptyList()
+  }
+  val shownLive = liveTrack?.takeIf { showActualTracks && (day == null || trackDayOf(it) == day) }
+  val shownStops = if (showActualTracks) actualStops.filter { dayDate == null || it.date == dayDate } else emptyList()
+  // 押した経路・立ち寄りへ地図を寄せる（線を読み終えてから寄せるので、寄せる先の経路の id を持っておく）。
+  // 押すたびに寄せ直すよう、押した回数も持つ（同じ経路を続けて押しても寄せる）。
+  var focusRequest by remember { mutableStateOf<Pair<Long, Int>?>(null) }
 
   // 地図に出す場所の行（選んだ日だけ、または全部）。
   val shownItems = detail.items.filter { it.isPlace && (day == null || it.dayIndex == day) }
   val numbers = detail.placeNumbers
 
   // 出ているマーカーがすべて入るように寄せる（開いたとき・日を選び直したとき・行が増減したとき）。
-  val fitKey = "$day:" + shownItems.joinToString(",") { "${it.place!!.placeId}" }
+  val fitKey = "$day:$showActualTracks:" + shownItems.joinToString(",") { "${it.place!!.placeId}" }
   var fittedFor by rememberSaveable { mutableStateOf<String?>(null) }
   // 右下の［全体］を押した回数。押すたびに寄せ直す（寄せる先が変わっていなくても）。
   var fitRequest by remember { mutableIntStateOf(0) }
   LaunchedEffect(mapLoaded, fitKey, fitRequest) {
     if (!mapLoaded || fittedFor == fitKey) return@LaunchedEffect
     fittedFor = fitKey
-    val points = shownItems.map { LatLng(it.place!!.latitude, it.place.longitude) }
+    // 計画の場所と、出している実際の経路・立ち寄り（「実際も見る」の間）が全部入るように寄せる。
+    val points = shownItems.map { LatLng(it.place!!.latitude, it.place.longitude) } +
+      shownLines.flatMap { (_, line) -> line.second.flatten().map { LatLng(it.latitude, it.longitude) } } +
+      shownLive?.smoothedPoints.orEmpty().map { LatLng(it.latitude, it.longitude) } +
+      shownStops.map { LatLng(it.stop.place.latitude, it.stop.place.longitude) }
     when {
       points.isEmpty() -> Unit
 
@@ -292,6 +314,23 @@ private fun PlanDetailContent(
         val bounds = points.fold(LatLngBounds.builder()) { b, p -> b.include(p) }.build()
         cameraPositionState.animate(CameraUpdateFactory.newLatLngBounds(bounds, with(density) { FitPadding.roundToPx() }))
       }
+    }
+  }
+  // 「実際のお出掛け」の行を押したら、その経路へ寄せる（線を読み終えるのを待つ。待ちきれなければ寄せない）。
+  // 寄せる途中で鍵が変わると寄せるのが止まるので、鍵は押したことだけにし、線は中で待つ。
+  LaunchedEffect(focusRequest) {
+    val id = focusRequest?.first ?: return@LaunchedEffect
+    val points = withTimeoutOrNull(FOCUS_WAIT_MILLIS) {
+      snapshotFlow {
+        (if (liveTrack?.id == id) liveTrack?.smoothedPoints.orEmpty() else actualLines[id]?.flatten().orEmpty())
+          .map { LatLng(it.latitude, it.longitude) }
+      }.first { it.isNotEmpty() }
+    } ?: return@LaunchedEffect
+    if (points.distinct().size == 1) {
+      cameraPositionState.animate(CameraUpdateFactory.newLatLngZoom(points.first(), PLACE_ZOOM))
+    } else {
+      val bounds = points.fold(LatLngBounds.builder()) { b, p -> b.include(p) }.build()
+      cameraPositionState.animate(CameraUpdateFactory.newLatLngBounds(bounds, with(density) { FitPadding.roundToPx() }))
     }
   }
   // 場所の行が無い計画で記録中の経路が結び付いていれば、記録中の経路へ寄せる（開いたとき 1 回。重ねた線が見えるように）。
@@ -411,33 +450,22 @@ private fun PlanDetailContent(
     ) {
       // 登録済みの場所（レイヤーで出したとき）。押すと、この計画に足すかを聞く。
       RegisteredPlaceMarkers(registeredPlaces.visible, infoWindow) { dialog = PlanDialog.AddFromMap(it.placeId, it.name ?: "この場所") }
-      // 結び付いた経路（レイヤーで重ねたとき）と、記録中の経路（結び付いていればいつも）。計画の線・マーカーより奥に一色で描く。
-      // 線は計画の日の色を一段薄くした色（日付の外・日付なしは灰青）。日を選んでいればその日に始まった経路だけ。
+      // 実際の経路（「実際も見る」の間）。その日の色の実線で、道に沿って描く。計画の線（点線の直線）・マーカーより奥。
       PlanActualTracks(
-        lines = if (showActualTracks) {
-          actuals.linked.filter { day == null || trackDayOf(it.track) == day }.mapNotNull { linked ->
-            actualLines[linked.track.id]?.let { actualTrackColor(trackDayOf(linked.track)) to it }
-          }
-        } else {
-          emptyList()
-        },
-        liveTrack = liveTrack?.takeIf { day == null || trackDayOf(it) == day }?.let { actualTrackColor(trackDayOf(it)) to it },
+        lines = shownLines.map { it.second },
+        liveTrack = shownLive?.let { actualColor(trackDayOf(it)) to it },
       )
-      // 実際の立ち寄り（記録中の経路のものはいつも、過去の経路のものは重ねている間だけ）。
-      // 日を選んでいれば、その日の立ち寄りだけ（番号は日ごとに行った順）。
-      val dayDate = day?.let { plan.dateOf(it) }
-      PlanActualStops(
-        actualStops.filter { (it.onRecording || showActualTracks) && (dayDate == null || it.date == dayDate) },
-        infoWindow,
-        colorOf = { stop -> dayOfDate(stop.date)?.let { planDayColor(it) } ?: PathlyMapColors.PlanActualTrack },
-      )
-      // 同じ日の中を順に直線で結ぶ（「すべて」のときは日ごとに色を変える）。
+      // 実際の立ち寄り（番号は日ごとに行った順）。
+      PlanActualStops(shownStops, infoWindow, colorOf = { stop -> actualColor(dayOfDate(stop.date)) })
+      // 同じ日の中を順に点線の直線で結ぶ（「すべて」のときは日ごとに色を変える）。予定なので点線にし、実際の経路（実線）と見分ける。
+      val planDash = with(density) { listOf(Dash(PlanDash.toPx()), Gap(PlanGap.toPx())) }
       shownItems.groupBy { it.dayIndex }.forEach { (d, dayItems) ->
         if (dayItems.size >= 2) {
           Polyline(
             points = dayItems.map { LatLng(it.place!!.latitude, it.place.longitude) },
             color = planDayColor(d),
             width = with(density) { RouteWidth.toPx() },
+            pattern = planDash,
           )
         }
       }
@@ -643,12 +671,26 @@ private fun PlanDetailContent(
             onRemove = { viewModel.removeItem(it.id) },
             onReorder = viewModel::reorder,
             onOpenTrack = { onOpenTrack(it.id) },
+            onFocusTrack = { track ->
+              // 隠していれば出してから寄せる。
+              if (!showActualTracks) viewModel.actuals.toggleShowTracks()
+              focusRequest = track.id to ((focusRequest?.second ?: 0) + 1)
+            },
+            onStopClick = { stop ->
+              scope.launch { cameraPositionState.animate(CameraUpdateFactory.newLatLngZoom(LatLng(stop.stop.place.latitude, stop.stop.place.longitude), PLACE_ZOOM)) }
+            },
+            onToggleActuals = viewModel.actuals::toggleShowTracks,
             onUnlinkTrack = { viewModel.setTrackLinked(it.id, linked = false) },
             onLinkTracks = { dialog = PlanDialog.Tracks }.takeIf { !edit.isNew },
           ),
           actuals = actuals,
           liveDistanceMeters = liveTrack?.totalDistanceMeters,
-          trackColorOf = { track -> trackDayOf(track)?.let { planDayColor(it) } ?: PathlyMapColors.PlanActualTrack },
+          trackColorOf = { track -> actualColor(trackDayOf(track)) },
+          showActuals = showActualTracks,
+          actualStops = actualStops,
+          // 日付の無い日帰りは、立ち寄りをすべて 1 日目に出す。
+          sheetDayOf = { date -> if (plan.startDate == null && plan.isDayTrip) 1 else dayOfDate(date) },
+          stopColorOf = { stop -> if (stop.live) PathlyMapColors.CurrentStop else actualColor(dayOfDate(stop.date)) },
         )
       }
     }
@@ -944,6 +986,13 @@ private val DraftBannerHeight = 48.dp
 
 // 計画の番号のマーカーは、登録済みの場所のマーカーより上に描く。
 private const val PLAN_MARKER_Z_INDEX = 5f
+
+/** 押した経路の線を読み終えるのを待つ長さ。 */
+private const val FOCUS_WAIT_MILLIS = 5_000L
+
+/** 計画の線（点線）の線と間の長さ。 */
+private val PlanDash = 10.dp
+private val PlanGap = 6.dp
 
 /** 下書きを残した日時（「11/27 0:23」）。 */
 private fun draftStamp(date: java.util.Date): String = java.time.format.DateTimeFormatter.ofPattern("M/d H:mm")

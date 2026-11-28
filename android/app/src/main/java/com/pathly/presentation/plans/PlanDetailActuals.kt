@@ -141,7 +141,8 @@ internal class PlanDetailActuals(
     }
   }.stateIn(scope, SharingStarted.Eagerly, emptyList())
 
-  private val _showTracks = MutableStateFlow(false)
+  // 「実際も見る」（地図の実際の経路・立ち寄りと、シートの立ち寄り）。初めは見る。
+  private val _showTracks = MutableStateFlow(true)
 
   /** レイヤー［≋］の「結び付いた経路」を重ねているか（この画面の間だけ）。 */
   val showTracks: StateFlow<Boolean> = _showTracks.asStateFlow()
