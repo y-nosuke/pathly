@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
@@ -44,6 +45,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -107,9 +109,16 @@ internal fun PlanTitleDialog(plan: Plan, onSave: (title: String, note: String?) 
 internal fun PlanDatesDialog(
   plan: Plan,
   slots: List<PlanSlot>,
-  onSave: (startDate: LocalDate?, dayCount: Int) -> Unit,
+  /** 決めた日付と日数。[unlinkOutside] は、日付の外になる結び付いた経路を外すか（保存のときに外す）。 */
+  onSave: (startDate: LocalDate?, dayCount: Int, unlinkOutside: Boolean) -> Unit,
   onDismiss: () -> Unit,
+  /** その日付と日数で日が重なるほかの計画（無ければ null → docs/specs/plans.md の「計画の日付の重なり」）。 */
+  overlapOf: (startDate: LocalDate?, dayCount: Int) -> Plan? = { _, _ -> null },
+  /** その日付と日数にしたとき、日付の外になる結び付いた経路の名前（→ docs/specs/plans.md の「結び付いた経路」）。 */
+  outsideTracksOf: (startDate: LocalDate?, dayCount: Int) -> List<String> = { _, _ -> emptyList() },
 ) {
+  // 日付の外になる経路を外すか（null はまだ選んでいない）。
+  var unlinkOutside by rememberSaveable { mutableStateOf<Boolean?>(null) }
   var dated by rememberSaveable { mutableStateOf(plan.startDate != null) }
   var startEpochDay by rememberSaveable { mutableStateOf(plan.startDate?.toEpochDay() ?: LocalDate.now().toEpochDay()) }
   var daysText by rememberSaveable { mutableStateOf(plan.dayCount.toString()) }
@@ -176,15 +185,41 @@ internal fun PlanDatesDialog(
               .testTag("planShrinkNote"),
           )
         }
+        val outside = days?.let { outsideTracksOf(if (dated) start else null, it) }.orEmpty()
+        if (outside.isNotEmpty()) {
+          Text(
+            text = "この日付の外になる経路が ${outside.size} 本あります（${outside.take(2).joinToString("、")}${if (outside.size > 2) " ほか" else ""}）",
+            style = MaterialTheme.typography.bodyMedium,
+            modifier = Modifier
+              .padding(top = PathlySpacing.sm)
+              .testTag("planOutsideTracksNote"),
+          )
+          UnlinkChoice(text = "結び付きを外す", selected = unlinkOutside == true, tag = "planOutsideUnlink") { unlinkOutside = true }
+          UnlinkChoice(text = "結び付けたまま残す", selected = unlinkOutside == false, tag = "planOutsideKeep") { unlinkOutside = false }
+        }
+        val overlap = days?.let { overlapOf(if (dated) start else null, it) }
+        if (overlap != null && end != null) {
+          Text(
+            text = "${formatPlanDate(start)}〜${formatPlanDate(end)} は「${overlap.title}」と重なります",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.error,
+            modifier = Modifier
+              .padding(top = PathlySpacing.sm)
+              .testTag("planOverlapNote"),
+          )
+        }
       }
     },
     confirmButton = {
       TextButton(
         onClick = {
-          onSave(if (dated) start else null, days ?: return@TextButton)
+          onSave(if (dated) start else null, days ?: return@TextButton, unlinkOutside == true)
           onDismiss()
         },
-        enabled = days != null,
+        // 日付の外になる経路があれば、外すか残すかを選ぶまで決められない。
+        enabled = days != null &&
+          overlapOf(if (dated) start else null, days) == null &&
+          (unlinkOutside != null || outsideTracksOf(if (dated) start else null, days).isEmpty()),
       ) { Text("決める") }
     },
     dismissButton = { TextButton(onClick = onDismiss) { Text("やめる") } },
@@ -506,3 +541,20 @@ private fun ChoiceRow(text: String, selected: Boolean, onClick: () -> Unit, tag:
 private const val DEFAULT_TIME = 10 * 60
 private const val MAX_DAY_DIGITS = 3
 private const val MAX_STAY_HOURS = 99
+
+/** 「結び付きを外す」「結び付けたまま残す」の 1 行。 */
+@Composable
+private fun UnlinkChoice(text: String, selected: Boolean, tag: String, onClick: () -> Unit) {
+  Row(
+    modifier = Modifier
+      .fillMaxWidth()
+      .heightIn(min = 40.dp)
+      .selectable(selected = selected, role = Role.RadioButton, onClick = onClick)
+      .testTag(tag),
+    verticalAlignment = Alignment.CenterVertically,
+  ) {
+    RadioButton(selected = selected, onClick = null)
+    Spacer(modifier = Modifier.width(PathlySpacing.sm))
+    Text(text = text, style = MaterialTheme.typography.bodyMedium)
+  }
+}

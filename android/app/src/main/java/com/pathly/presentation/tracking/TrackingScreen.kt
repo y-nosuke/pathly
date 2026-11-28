@@ -90,6 +90,7 @@ fun TrackingScreen(
   onOpenSettings: () -> Unit = {},
   viewModel: TrackingViewModel = hiltViewModel(),
   trackOverlayViewModel: TrackOverlayViewModel = hiltViewModel(),
+  planLinkPromptViewModel: PlanLinkPromptViewModel = hiltViewModel(),
   mapContent: (@Composable () -> Unit)? = null,
 ) {
   val uiState by viewModel.uiState.collectAsStateWithLifecycle()
@@ -121,6 +122,17 @@ fun TrackingScreen(
       onResume = viewModel::resumeTracking,
       onFinish = viewModel::finishInterruptedTracking,
       onOpenLocationSettings = viewModel::openLocationSettings,
+    )
+  }
+
+  // 記録を始めたとき、今日の計画があれば最初の計画に結び付けて、それでよいかを聞く（→ docs/specs/plans.md の「記録の開始で聞く」）。
+  val planLinkPrompt by planLinkPromptViewModel.prompt.collectAsStateWithLifecycle()
+  planLinkPrompt?.let { prompt ->
+    PlanLinkPromptDialog(
+      prompt = prompt,
+      onChoose = planLinkPromptViewModel::choose,
+      onUnlink = planLinkPromptViewModel::unlink,
+      onClose = planLinkPromptViewModel::close,
     )
   }
 
@@ -438,7 +450,10 @@ fun TrackingScreen(
         manualMode = manualMode,
         onToggleManualMode = { manualMode = !manualMode },
         onAddStopHere = { loc -> manualTarget = ManualStopTarget(loc.latitude, loc.longitude, ManualStopOrigin.CurrentLocation) },
-        onStartTracking = viewModel::startTracking,
+        onStartTracking = {
+          viewModel.startTracking()
+          planLinkPromptViewModel.onTrackingStarted()
+        },
         onStopTracking = { showStopConfirm = true },
         todos = RecordSheetTodos(
           unresolvedCount = unresolvedCount,

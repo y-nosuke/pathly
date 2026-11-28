@@ -264,6 +264,7 @@ private fun NavGraphBuilder.plansGraph(navController: NavController) {
           navController.popBackStack()
         },
         onOpenPlace = { placeId -> navController.navigate(Routes.placeDetail(placeId)) },
+        onOpenTrack = { trackId -> navController.navigate(Routes.trackDetail(trackId)) },
       )
     }
   }

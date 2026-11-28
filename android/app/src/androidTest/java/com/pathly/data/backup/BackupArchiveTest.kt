@@ -12,6 +12,7 @@ import com.pathly.data.local.entity.PlaceEntity
 import com.pathly.data.local.entity.PlanDraftEntity
 import com.pathly.data.local.entity.PlanEntity
 import com.pathly.data.local.entity.PlanItemEntity
+import com.pathly.data.local.entity.PlanTrackEntity
 import com.pathly.data.local.migration.DatabaseMigrations
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
@@ -133,7 +134,7 @@ class BackupArchiveTest {
   }
 
   @Test
-  fun exportThenApplyRestoresPlansWithTheirRowsAndDrafts() = runBlocking {
+  fun exportThenApplyRestoresPlansWithTheirRowsDraftsAndLinkedTracks() = runBlocking {
     val db = openDatabase()
     val placeId = db.placeDao().insert(PlaceEntity(name = "店", latitude = 35.0, longitude = 135.0))
     val planDao = db.planDao()
@@ -145,6 +146,9 @@ class BackupArchiveTest {
     planDao.insertItems(items)
     planDao.upsertDraft(PlanDraftEntity(planId = planId, json = "{\"draft\":1}"))
     planDao.upsertDraft(PlanDraftEntity(json = "{\"draft\":2}"))
+    // 結び付いた経路（v23）。
+    val trackId = db.gpsTrackDao().insertTrack(GpsTrackEntity(startTime = Date(0), endTime = Date(1), isActive = false))
+    planDao.upsertPlanTrack(PlanTrackEntity(trackId = trackId, planId = planId, source = "START"))
 
     val bytes = exportBytes(db)
 
@@ -171,6 +175,7 @@ class BackupArchiveTest {
     assertEquals("場所の行は場所に結び付いたまま", "店", restored.getItemsWithPlace(planId).first().placeName)
     assertEquals("{\"draft\":1}", restored.getDraftOfPlan(planId)?.json)
     assertEquals(listOf("{\"draft\":2}"), restored.observeDrafts().first().filter { it.planId == null }.map { it.json })
+    assertEquals("結び付いた経路も戻る", listOf(PlanTrackEntity(trackId = trackId, planId = planId, source = "START")), restored.getPlanTracks(planId))
   }
 
   @Test

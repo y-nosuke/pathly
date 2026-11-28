@@ -6,6 +6,7 @@ import androidx.test.platform.app.InstrumentationRegistry
 import com.pathly.data.local.PathlyDatabase
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -650,6 +651,45 @@ class MigrationTest {
     db.query("SELECT title FROM plan_items").use { cursor ->
       assertTrue(cursor.moveToNext())
       assertEquals("メモの行は残る", "昼食", cursor.getString(0))
+      assertFalse(cursor.moveToNext())
+    }
+    db.close()
+  }
+
+  @Test
+  fun migrate22To23_addsPlanTracks_oneTrackPerPlan_cascadingFromPlansAndTracks() {
+    helper.createDatabase(TEST_DB, 22).apply {
+      execSQL("INSERT INTO plans (id, title, note, startDate, dayCount, createdAt, updatedAt) VALUES (1, '鎌倉', NULL, NULL, 1, 0, 0)")
+      execSQL("INSERT INTO plans (id, title, note, startDate, dayCount, createdAt, updatedAt) VALUES (2, '箱根', NULL, NULL, 1, 0, 0)")
+      execSQL("INSERT INTO gps_tracks (id, startTime, endTime, isActive, isFavorite, createdAt, updatedAt) VALUES (10, 0, 1, 0, 0, 0, 0)")
+      execSQL("INSERT INTO gps_tracks (id, startTime, endTime, isActive, isFavorite, createdAt, updatedAt) VALUES (11, 0, 1, 0, 0, 0, 0)")
+      close()
+    }
+
+    // 足した表の DDL（主キー・外部キー・索引を含む）が Room の生成物とずれていればここで失敗する。
+    val db = helper.runMigrationsAndValidate(TEST_DB, 23, true, DatabaseMigrations.MIGRATION_22_23)
+
+    db.query("SELECT COUNT(*) FROM plans").use {
+      assertTrue(it.moveToFirst())
+      assertEquals("計画は残る", 2, it.getInt(0))
+    }
+    db.execSQL("PRAGMA foreign_keys = ON")
+    db.execSQL("INSERT INTO plan_tracks (trackId, planId, source) VALUES (10, 1, 'START')")
+    db.execSQL("INSERT INTO plan_tracks (trackId, planId, source) VALUES (11, 2, 'MANUAL')")
+    // 1 つの経路は 1 つの計画だけ（経路が主キー）。
+    assertThrows(android.database.sqlite.SQLiteConstraintException::class.java) {
+      db.execSQL("INSERT INTO plan_tracks (trackId, planId, source) VALUES (10, 2, 'MANUAL')")
+    }
+    // 経路を消すと結び付きも消え、計画を消しても経路は残る（どちらも CASCADE は結び付きだけ）。
+    db.execSQL("DELETE FROM gps_tracks WHERE id = 10")
+    db.execSQL("DELETE FROM plans WHERE id = 2")
+    db.query("SELECT COUNT(*) FROM plan_tracks").use {
+      assertTrue(it.moveToFirst())
+      assertEquals(0, it.getInt(0))
+    }
+    db.query("SELECT id FROM gps_tracks").use { cursor ->
+      assertTrue(cursor.moveToNext())
+      assertEquals(11L, cursor.getLong(0))
       assertFalse(cursor.moveToNext())
     }
     db.close()

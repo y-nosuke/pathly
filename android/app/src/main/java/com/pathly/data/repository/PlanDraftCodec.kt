@@ -15,6 +15,8 @@ internal object PlanDraftCodec {
     val startDate: Long?,
     val dayCount: Int,
     val items: List<Item>,
+    /** 日付の変更で「結び付きを外す」を選んだ経路（保存したときに外す → docs/specs/plans.md の「結び付いた経路」）。 */
+    val unlinkTrackIds: List<Long> = emptyList(),
   )
 
   data class Item(
@@ -51,12 +53,14 @@ internal object PlanDraftCodec {
         }
       },
     )
+    if (content.unlinkTrackIds.isNotEmpty()) put("unlink", JSONArray().apply { content.unlinkTrackIds.forEach { put(it) } })
   }.toString()
 
   /** 読めなければ null（壊れた・知らない形の下書きは無いものとして扱う）。 */
   fun decode(json: String): Content? = runCatching {
     val o = JSONObject(json)
     val items = o.optJSONArray("items") ?: JSONArray()
+    val unlink = o.optJSONArray("unlink") ?: JSONArray()
     Content(
       title = o.getString("title"),
       note = o.optStringOrNull("note"),
@@ -73,6 +77,7 @@ internal object PlanDraftCodec {
           stayMinutes = if (it.isNull("stay")) null else it.getInt("stay"),
         )
       },
+      unlinkTrackIds = (0 until unlink.length()).map { unlink.getLong(it) },
     )
   }.getOrNull()
 

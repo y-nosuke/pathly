@@ -190,6 +190,15 @@ object PathlyMapColors {
     Color(0xFF37474F), // 墨
   )
 
+  /**
+   * 計画の詳細に重ねる、結び付いた実際の経路（→ docs/specs/plans.md の「重ねて見る」）。計画の日の色と混ざらないよう
+   * 一色の落ち着いた灰青にし、計画の直線・マーカーより奥に描く。
+   */
+  val PlanActualTrack = Color(0xFF78909C)
+
+  /** 計画の詳細に重ねる、記録中の経路。記録画面の軌跡と同じ橙。 */
+  val PlanLiveTrack = Route
+
   // ---- 丸バッジ（確定したもの） ----
 
   /** 出発。 */

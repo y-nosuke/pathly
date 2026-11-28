@@ -6,12 +6,19 @@ import com.pathly.data.local.entity.PlanEntity
 import com.pathly.data.local.entity.PlanItemEntity
 import com.pathly.data.local.entity.PlanItemWithPlace
 import com.pathly.data.local.entity.PlanPlaceRow
+import com.pathly.data.local.entity.PlanTrackEntity
+import com.pathly.data.local.entity.TrackStartRow
 import com.pathly.domain.model.Plan
+import com.pathly.domain.model.PlanActuals
 import com.pathly.domain.model.PlanDetail
 import com.pathly.domain.model.PlanItem
 import com.pathly.domain.model.PlanPlace
 import com.pathly.domain.model.PlanSummary
+import com.pathly.domain.model.PlanTrackLink
+import com.pathly.domain.model.PlanTrackSource
 import com.pathly.domain.model.StoredPlanDraft
+import com.pathly.domain.model.TrackStart
+import com.pathly.domain.model.TrackVisit
 import com.pathly.domain.model.normalized
 import com.pathly.domain.repository.PlanRepository
 import com.pathly.util.Logger
@@ -35,27 +42,73 @@ class PlanRepositoryImpl @Inject constructor(
   // 取り消し用の控え（直前の 1 件だけ。スナックバーは最新の 1 件しか出さない）。
   private var lastDeleted: DeletedPlan? = null
 
-  private class DeletedPlan(val plan: PlanEntity, val items: List<PlanItemEntity>, val draft: PlanDraftEntity?)
+  private class DeletedPlan(val plan: PlanEntity, val items: List<PlanItemEntity>, val draft: PlanDraftEntity?, val tracks: List<PlanTrackEntity>)
 
-  override fun observePlans(): Flow<List<PlanSummary>> = combine(planDao.observePlans(), planDao.observeDrafts(), planDao.observePlaces()) { rows, drafts, places ->
-    // 下書きの場所の数は、今もある場所だけ数える（開くと消えた場所の行は落ちるため）。
-    val placeIds = places.mapTo(HashSet()) { it.id }
-    val draftsByPlan = drafts.filter { it.planId != null }.associateBy { it.planId }
-    val saved = rows.map { row ->
-      val draft = draftsByPlan[row.plan.id]
-      val content = draft?.let { PlanDraftCodec.decode(it.json) }
-      if (draft != null && content != null) {
-        // 下書きがあれば、名前・日付・場所の数は下書きのもの（開くと下書きの続きから始まるため）。
-        PlanSummary(content.toPlan(row.plan.id, row.plan.createdAt, draft.updatedAt), content.items.count { it.placeId in placeIds }, draft.id)
-      } else {
-        PlanSummary(row.plan.toPlan(), row.placeCount)
+  override fun observePlans(): Flow<List<PlanSummary>> {
+    val base = combine(planDao.observePlans(), planDao.observeDrafts(), planDao.observePlaces(), planDao.observeItemPlaces()) { rows, drafts, places, itemPlaces ->
+      // 下書きの場所の数は、今もある場所だけ数える（開くと消えた場所の行は落ちるため）。
+      val placeIds = places.mapTo(HashSet()) { it.id }
+      val itemPlacesByPlan = itemPlaces.groupBy({ it.planId }, { it.placeId })
+      val draftsByPlan = drafts.filter { it.planId != null }.associateBy { it.planId }
+      val saved = rows.map { row ->
+        val draft = draftsByPlan[row.plan.id]
+        val content = draft?.let { PlanDraftCodec.decode(it.json) }
+        if (draft != null && content != null) {
+          // 下書きがあれば、名前・日付・場所の数は下書きのもの（開くと下書きの続きから始まるため）。
+          val draftPlaces = content.items.mapNotNull { it.placeId }.filter { it in placeIds }
+          ListedPlan(PlanSummary(content.toPlan(row.plan.id, row.plan.createdAt, draft.updatedAt), draftPlaces.size, draft.id), draftPlaces)
+        } else {
+          ListedPlan(PlanSummary(row.plan.toPlan(), row.placeCount), itemPlacesByPlan[row.plan.id].orEmpty())
+        }
+      }
+      val unsaved = drafts.filter { it.planId == null }.mapNotNull { draft ->
+        val content = PlanDraftCodec.decode(draft.json) ?: return@mapNotNull null
+        val draftPlaces = content.items.mapNotNull { it.placeId }.filter { it in placeIds }
+        ListedPlan(PlanSummary(content.toPlan(0, draft.updatedAt, draft.updatedAt), draftPlaces.size, draft.id), draftPlaces)
+      }
+      saved + unsaved
+    }
+    // 行った・記録中は保存せず、結び付いた経路（plan_tracks）からここで求める（→ adr/0050）。
+    return combine(base, planDao.observeTrackStarts(), planDao.observeAllPlanTracks(), planDao.observeTrackVisits()) { listed, startRows, links, visitRows ->
+      val tracks = startRows.map { it.toTrackStart() }
+      val visits = visitRows.map { TrackVisit(it.trackId, it.placeId) }
+      val linkedByPlan = links.groupBy({ it.planId }, { it.trackId })
+      listed.map { (summary, itemPlaceIds) ->
+        // 一度も保存していない計画（id が 0）には結び付かない。
+        val linked = if (summary.plan.id != 0L) linkedByPlan[summary.plan.id].orEmpty().toSet() else emptySet()
+        val visited = PlanActuals.visitedPlaceIds(linked, visits)
+        summary.copy(
+          linkedTrackCount = linked.size,
+          visitedCount = PlanActuals.visitedItemCount(itemPlaceIds, visited),
+          isRecording = PlanActuals.recordingTrackId(linked, tracks) != null,
+        )
       }
     }
-    val unsaved = drafts.filter { it.planId == null }.mapNotNull { draft ->
-      val content = PlanDraftCodec.decode(draft.json) ?: return@mapNotNull null
-      PlanSummary(content.toPlan(0, draft.updatedAt, draft.updatedAt), content.items.count { it.placeId in placeIds }, draft.id)
-    }
-    saved + unsaved
+  }
+
+  /** 一覧の 1 行と、その場所の行が指す場所（「行った N/M」を求めるため）。 */
+  private data class ListedPlan(val summary: PlanSummary, val itemPlaceIds: List<Long>)
+
+  override fun observeTrackStarts(): Flow<List<TrackStart>> = planDao.observeTrackStarts().map { rows -> rows.map { it.toTrackStart() } }
+
+  override fun observeTrackVisits(): Flow<List<TrackVisit>> = planDao.observeTrackVisits().map { rows -> rows.map { TrackVisit(it.trackId, it.placeId) } }
+
+  override fun observePlanTracks(planId: Long): Flow<List<PlanTrackLink>> = planDao.observePlanTracks(planId).map { rows -> rows.map { it.toLink() } }
+
+  override fun observeTrackPlans(): Flow<Map<Long, Pair<Long, String>>> = planDao.observeTrackPlans().map { rows -> rows.associate { it.trackId to (it.planId to it.title) } }
+
+  override fun observeDatedPlans(): Flow<List<Plan>> = planDao.observeDatedPlans().map { rows -> rows.map { it.toPlan() } }
+
+  override suspend fun plansOn(date: LocalDate): List<Plan> = planDao.getDatedPlans().map { it.toPlan() }.filter { PlanActuals.covers(it, date) }
+
+  override suspend fun linkTrack(planId: Long, trackId: Long, source: PlanTrackSource) {
+    planDao.upsertPlanTrack(PlanTrackEntity(trackId = trackId, planId = planId, source = source.name))
+    logger.i("Linked track $trackId to plan $planId (${source.name})")
+  }
+
+  override suspend fun unlinkTrack(planId: Long, trackId: Long) {
+    planDao.deletePlanTrack(planId, trackId)
+    logger.i("Unlinked track $trackId from plan $planId")
   }
 
   override suspend fun loadPlan(planId: Long): PlanDetail? {
@@ -77,14 +130,19 @@ class PlanRepositoryImpl @Inject constructor(
       val place = item.placeId?.let { places[it] ?: return@mapIndexedNotNull null }
       PlanItem(nextId--, ownerId, item.dayIndex.coerceIn(1, content.dayCount), index, place, item.title, item.note, item.plannedTime, item.stayMinutes)
     }
-    return StoredPlanDraft(draft.id, PlanDetail(content.toPlan(ownerId, createdAt, draft.updatedAt), items).normalized(), draft.updatedAt)
+    return StoredPlanDraft(
+      draft.id,
+      PlanDetail(content.toPlan(ownerId, createdAt, draft.updatedAt), items).normalized(),
+      draft.updatedAt,
+      content.unlinkTrackIds.toSet(),
+    )
   }
 
-  override suspend fun saveDraft(draftId: Long?, detail: PlanDetail): Long {
+  override suspend fun saveDraft(draftId: Long?, detail: PlanDetail, unlinkTrackIds: Set<Long>): Long {
     val planId = detail.plan.id.takeIf { it != 0L }
     // 計画ごとに下書きは 1 つ。保存済みの計画なら、その計画の下書きを上書きする。
     val id = draftId ?: planId?.let { planDao.getDraftOfPlan(it)?.id } ?: 0L
-    val saved = planDao.upsertDraft(PlanDraftEntity(id = id, planId = planId, json = PlanDraftCodec.encode(detail.toContent()), updatedAt = Date()))
+    val saved = planDao.upsertDraft(PlanDraftEntity(id = id, planId = planId, json = PlanDraftCodec.encode(detail.toContent().copy(unlinkTrackIds = unlinkTrackIds.sorted())), updatedAt = Date()))
     logger.i("Saved plan draft $saved")
     return saved
   }
@@ -124,14 +182,14 @@ class PlanRepositoryImpl @Inject constructor(
 
   override suspend fun deletePlan(planId: Long) {
     val plan = planDao.getPlan(planId) ?: return
-    lastDeleted = DeletedPlan(plan, planDao.getItems(planId), planDao.getDraftOfPlan(planId))
+    lastDeleted = DeletedPlan(plan, planDao.getItems(planId), planDao.getDraftOfPlan(planId), planDao.getPlanTracks(planId))
     planDao.deletePlan(planId)
     logger.i("Deleted plan $planId")
   }
 
   override suspend fun undoDeletePlan(): Boolean {
     val deleted = lastDeleted ?: return false
-    planDao.restore(deleted.plan, deleted.items, deleted.draft)
+    planDao.restore(deleted.plan, deleted.items, deleted.draft, deleted.tracks)
     lastDeleted = null
     return true
   }
@@ -191,3 +249,12 @@ internal fun PlanItemWithPlace.toPlanItem(): PlanItem {
     stayMinutes = item.stayMinutes,
   )
 }
+
+private fun TrackStartRow.toTrackStart(): TrackStart = TrackStart(id, startTime, isActive)
+
+private fun PlanTrackEntity.toLink(): PlanTrackLink = PlanTrackLink(
+  trackId = trackId,
+  planId = planId,
+  // 知らない値（先の版の書き出しなど）は手の結び付きとして扱う（日付を変えても外さない）。
+  source = PlanTrackSource.entries.firstOrNull { it.name == source } ?: PlanTrackSource.MANUAL,
+)

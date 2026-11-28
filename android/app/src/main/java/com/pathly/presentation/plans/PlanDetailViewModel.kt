@@ -4,10 +4,14 @@ import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.pathly.domain.model.GeoBounds
+import com.pathly.domain.model.GpsTrack
 import com.pathly.domain.model.MapRegion
 import com.pathly.domain.model.PlacePrediction
+import com.pathly.domain.model.Plan
+import com.pathly.domain.model.PlanActuals
 import com.pathly.domain.model.PlanDetail
 import com.pathly.domain.model.PlanPlace
+import com.pathly.domain.model.PlanTrackSource
 import com.pathly.domain.model.RemovedPlanItem
 import com.pathly.domain.model.newPlanDetail
 import com.pathly.domain.model.sameContentAs
@@ -21,6 +25,7 @@ import com.pathly.domain.model.withMemoAdded
 import com.pathly.domain.model.withOrder
 import com.pathly.domain.model.withPlacesAdded
 import com.pathly.domain.model.withTitleAndNote
+import com.pathly.domain.repository.GpsTrackRepository
 import com.pathly.domain.repository.PlaceSearchRepository
 import com.pathly.domain.repository.PlanRepository
 import com.pathly.domain.repository.WishlistRepository
@@ -31,6 +36,7 @@ import com.pathly.presentation.tracking.RegionMarkerActions
 import com.pathly.util.Logger
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -39,6 +45,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -109,6 +116,7 @@ class PlanDetailViewModel @Inject constructor(
   placeEditUseCase: PlaceEditUseCase,
   wishlistRepository: WishlistRepository,
   private val placeSearchRepository: PlaceSearchRepository,
+  gpsTrackRepository: GpsTrackRepository,
 ) : ViewModel() {
 
   private val logger = Logger("PlanDetailViewModel")
@@ -116,11 +124,27 @@ class PlanDetailViewModel @Inject constructor(
   private val draftIdArg: Long? get() = savedStateHandle.get<Long>(ARG_DRAFT_ID)?.takeIf { it > 0 }
 
   private val _state = MutableStateFlow<PlanDetailState>(PlanDetailState.Loading)
+
+  // 日付を変えて日付の外になった結び付きのうち、「外す」を選んだもの。日付の変更と同じく、保存のときに外す。
+  // 下書きに残すときは下書きにも持つ（下書きから保存したときに外すため）。init の load より前に置く。
+  private var pendingUnlinks: Set<Long> = emptySet()
   val state: StateFlow<PlanDetailState> = _state.asStateFlow()
 
   /** 場所の名前とアンカーの座標（足した場所を名前・地図に出すのに使う）。 */
   val places: StateFlow<Map<Long, PlanPlace>> = planRepository.observePlanPlaces()
     .stateIn(viewModelScope, SharingStarted.Eagerly, emptyMap())
+
+  /**
+   * 計画と実績: 結び付いた経路・行った場所・記録中の経路・重ねる線（→ docs/specs/plans.md の「計画と実績」）。
+   * 結び付きは保存済みの計画のもの。
+   */
+  internal val actuals = PlanDetailActuals(
+    savedPlanId = _state.map { (it as? PlanDetailState.Loaded)?.edit?.saved?.plan?.id ?: 0L },
+    planRepository = planRepository,
+    gpsTrackRepository = gpsTrackRepository,
+    scope = viewModelScope,
+    computeDispatcher = { Dispatchers.Default },
+  )
 
   /** 選んでいる日（null は「すべて」）。 */
   val selectedDay: StateFlow<Int?> = savedStateHandle.getStateFlow<Int?>(KEY_SELECTED_DAY, null)
@@ -204,9 +228,15 @@ class PlanDetailViewModel @Inject constructor(
       val saved = if (planIdArg != 0L) planRepository.loadPlan(planIdArg) else null
       val draft = if (planIdArg != 0L || draftIdArg != null) planRepository.loadDraft(planIdArg, draftIdArg) else null
       _state.value = when {
-        draft != null -> PlanDetailState.Loaded(PlanEditState(draft.detail, saved, draft.detail, draft.draftId, draft.updatedAt))
+        draft != null -> {
+          pendingUnlinks = draft.unlinkTrackIds
+          PlanDetailState.Loaded(PlanEditState(draft.detail, saved, draft.detail, draft.draftId, draft.updatedAt))
+        }
+
         saved != null -> PlanDetailState.Loaded(PlanEditState(saved, saved, saved))
+
         planIdArg == 0L && draftIdArg == null -> newPlanDetail(NEW_PLAN_TITLE).let { PlanDetailState.Loaded(PlanEditState(it, null, it)) }
+
         else -> PlanDetailState.Missing
       }
     }
@@ -224,7 +254,25 @@ class PlanDetailViewModel @Inject constructor(
 
   fun updateTitleAndNote(title: String, note: String?) = change { it.withTitleAndNote(title.trim().ifEmpty { NEW_PLAN_TITLE }, note?.trim()) }
 
-  fun setDates(startDate: LocalDate?, dayCount: Int) {
+  /** 日付のある保存済みの計画（日付の重なりを見るため）。 */
+  private val datedPlans: StateFlow<List<Plan>> = planRepository.observeDatedPlans()
+    .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+
+  /** [startDate] と [dayCount] にしたとき、日が重なるほかの保存済みの計画（無ければ null）。 */
+  fun overlappingPlan(startDate: LocalDate?, dayCount: Int): Plan? {
+    val plan = edit?.detail?.plan ?: return null
+    return PlanActuals.overlappingPlan(plan.copy(startDate = startDate, dayCount = dayCount), datedPlans.value)
+  }
+
+  /** [startDate] と [dayCount] にしたとき、日付の外になる結び付いた経路（保存済みの計画だけ。日付なしなら無い）。 */
+  fun tracksOutside(startDate: LocalDate?, dayCount: Int): List<GpsTrack> {
+    val plan = edit?.takeIf { !it.isNew }?.detail?.plan ?: return emptyList()
+    val range = PlanActuals.rangeMillis(plan.copy(startDate = startDate, dayCount = dayCount)) ?: return emptyList()
+    return actuals.state.value.linked.map { it.track }.filter { it.startTime.time !in range }
+  }
+
+  fun setDates(startDate: LocalDate?, dayCount: Int, unlinkOutside: Boolean = false) {
+    pendingUnlinks = if (unlinkOutside) tracksOutside(startDate, dayCount).mapTo(HashSet()) { it.id } else emptySet()
     change { it.withDates(startDate, dayCount) }
     // 選んでいた日が無くなったら「すべて」に戻す。
     val day = selectedDay.value
@@ -318,8 +366,17 @@ class PlanDetailViewModel @Inject constructor(
   /** 保存する。[leave] なら済んだら画面を離れる。 */
   fun save(leave: Boolean = false) {
     val e = edit ?: return
+    // 下書きの間にほかの計画が同じ日に保存されていることがあるので、保存の前にも日付の重なりを見る。
+    val plan = e.detail.plan
+    overlappingPlan(plan.startDate, plan.dayCount)?.let { other ->
+      _events.tryEmit(PlanDetailEvent.Failed("日付が「${other.title}」と重なるので保存できません。日付と日数を変えてください"))
+      return
+    }
     io("保存できませんでした") {
       val planId = planRepository.savePlan(e.detail, e.draftId)
+      // 日付の変更で「外す」を選んだ結び付きを外す。
+      pendingUnlinks.forEach { planRepository.unlinkTrack(planId, it) }
+      pendingUnlinks = emptySet()
       // 新しい計画を保存したら、この画面はその計画を指す（アプリが裏で落とされて戻ったときに、保存した計画を開くように）。
       savedStateHandle[ARG_PLAN_ID] = planId
       savedStateHandle[ARG_DRAFT_ID] = 0L
@@ -333,7 +390,7 @@ class PlanDetailViewModel @Inject constructor(
   fun saveDraft(leave: Boolean = false) {
     val e = edit ?: return
     io("下書きに残せませんでした") {
-      val draftId = planRepository.saveDraft(e.draftId, e.detail)
+      val draftId = planRepository.saveDraft(e.draftId, e.detail, pendingUnlinks)
       savedStateHandle[ARG_DRAFT_ID] = draftId
       // 書いている間に続けた編集は残す（detail は今のまま、persisted だけ書いた中身にする）。
       _state.update { s -> if (s is PlanDetailState.Loaded) s.copy(edit = s.edit.copy(persisted = e.detail, draftId = draftId, draftUpdatedAt = Date())) else s }
@@ -344,6 +401,7 @@ class PlanDetailViewModel @Inject constructor(
   /** 下書きを捨てて、保存済みの中身に戻す（一度も保存していなければ画面を離れる）。 */
   fun discardDraft() {
     val e = edit ?: return
+    pendingUnlinks = emptySet()
     io("下書きを捨てられませんでした") {
       e.draftId?.let { planRepository.deleteDraft(it) }
       val saved = e.saved
@@ -353,6 +411,17 @@ class PlanDetailViewModel @Inject constructor(
         _state.value = PlanDetailState.Loaded(PlanEditState(saved, saved, saved))
         _events.tryEmit(PlanDetailEvent.Message("下書きを捨てました"))
       }
+    }
+  }
+
+  /**
+   * 経路を手で結び付ける・外す（保存を待たず、すぐ入る → docs/specs/plans.md の「計画と実績」）。
+   * 一度も保存していない計画には結び付けられない（計画がまだ無いため。画面は入口を出さない）。
+   */
+  fun setTrackLinked(trackId: Long, linked: Boolean) {
+    val planId = edit?.saved?.plan?.id ?: return
+    io(if (linked) "経路を結び付けられませんでした" else "結び付きを外せませんでした") {
+      if (linked) planRepository.linkTrack(planId, trackId, PlanTrackSource.MANUAL) else planRepository.unlinkTrack(planId, trackId)
     }
   }
 

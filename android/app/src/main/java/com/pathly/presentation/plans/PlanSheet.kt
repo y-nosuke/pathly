@@ -33,6 +33,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.SwipeToDismissBox
 import androidx.compose.material3.SwipeToDismissBoxValue
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberSwipeToDismissBoxState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -63,12 +64,14 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
 import com.pathly.R
+import com.pathly.domain.model.GpsTrack
 import com.pathly.domain.model.PlanDetail
 import com.pathly.domain.model.PlanItem
 import com.pathly.presentation.common.SheetContentHorizontalPadding
 import com.pathly.ui.theme.PathlyElevation
 import com.pathly.ui.theme.PathlyMapColors
 import com.pathly.ui.theme.PathlySpacing
+import com.pathly.ui.theme.PathlyTheme
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -95,6 +98,12 @@ internal class PlanSheetActions(
   val onRemove: (PlanItem) -> Unit,
   /** 並べ替えた結果（上から順の行の id・入った日）。 */
   val onReorder: (List<Pair<Long, Int>>) -> Unit,
+  /** 「実際のお出掛け」の行を押した（経路詳細へ）。 */
+  val onOpenTrack: (GpsTrack) -> Unit = {},
+  /** 手の結び付きを外す。 */
+  val onUnlinkTrack: (GpsTrack) -> Unit = {},
+  /** 「経路を結び付ける」（一度も保存していない計画では null）。 */
+  val onLinkTracks: (() -> Unit)? = null,
 )
 
 /**
@@ -108,6 +117,10 @@ internal fun ColumnScope.PlanSheetContent(
   actions: PlanSheetActions,
   /** 選んでいる日（見出しを目立たせる）。 */
   selectedDay: Int? = null,
+  /** 計画と実績（行った・結び付いた経路）。 */
+  actuals: PlanActualsState = PlanActualsState(),
+  /** 記録中の経路の今の距離（記録中の行に出す）。 */
+  liveDistanceMeters: Double? = null,
 ) {
   val plan = detail.plan
   val original = remember(detail) { slotsOf(detail) }
@@ -158,6 +171,7 @@ internal fun ColumnScope.PlanSheetContent(
     item(key = "summary") {
       PlanSummaryHeader(
         summary = planDateSummary(plan),
+        visited = visitedSummary(detail, actuals),
         onSummaryClick = actions.onSummaryClick,
         onPickPlaces = actions.onPickPlaces,
         onSearchPlace = actions.onSearchPlace,
@@ -188,6 +202,7 @@ internal fun ColumnScope.PlanSheetContent(
           PlanItemRow(
             item = item,
             number = numbers[item.id],
+            visited = item.place?.placeId?.let { it in actuals.visitedPlaceIds } == true,
             color = planDayColor(day),
             lifted = lifted,
             canMoveDay = !plan.isDayTrip,
@@ -247,6 +262,61 @@ internal fun ColumnScope.PlanSheetContent(
         }
       }
     }
+    // 実際のお出掛け（結び付いた経路）。行の後ろに置く（計画の中身の並べ替えとは別のもの）。
+    item(key = "actualsHeader") {
+      ActualsHeader(count = actuals.linked.size, onLinkTracks = actions.onLinkTracks)
+    }
+    if (actuals.linked.isEmpty()) {
+      item(key = "actualsEmpty") {
+        EmptyDayLine(
+          // 一度も保存していない計画には、まだ結び付けられない。
+          if (actions.onLinkTracks == null) "保存すると経路を結び付けられます" else "記録を始めるときに選ぶか、経路を結び付けると出ます",
+        )
+      }
+    }
+    items(actuals.linked, key = { "track:${it.track.id}" }) { linked ->
+      LinkedTrackRow(
+        linked = linked,
+        recording = linked.track.id == actuals.recordingTrackId,
+        liveDistanceMeters = liveDistanceMeters,
+        onOpen = { actions.onOpenTrack(linked.track) },
+        onUnlink = { actions.onUnlinkTrack(linked.track) },
+      )
+    }
+  }
+}
+
+/** 要約に添える「行った N/M」（結び付いた経路があり、場所の行があるときだけ）。 */
+internal fun visitedSummary(detail: PlanDetail, actuals: PlanActualsState): String? {
+  val places = detail.items.mapNotNull { it.place?.placeId }
+  if (places.isEmpty() || actuals.linked.isEmpty()) return null
+  return "行った ${places.count { it in actuals.visitedPlaceIds }}/${places.size}"
+}
+
+/** 「実際のお出掛け N本」の見出し（右に「結び付ける」）。 */
+@Composable
+private fun ActualsHeader(count: Int, onLinkTracks: (() -> Unit)?) {
+  Column(modifier = Modifier.padding(top = PathlySpacing.md)) {
+    Row(
+      modifier = Modifier
+        .fillMaxWidth()
+        .padding(start = SheetContentHorizontalPadding, end = PathlySpacing.xs)
+        .testTag("planActualsHeader"),
+      verticalAlignment = Alignment.CenterVertically,
+    ) {
+      Text(
+        text = "実際のお出掛け $count 本",
+        style = MaterialTheme.typography.titleSmall,
+        fontWeight = FontWeight.Bold,
+        modifier = Modifier.weight(1f),
+      )
+      if (onLinkTracks != null) {
+        TextButton(onClick = onLinkTracks, modifier = Modifier.testTag("planLinkTracks")) { Text("結び付ける") }
+      } else {
+        Spacer(modifier = Modifier.height(48.dp))
+      }
+    }
+    HorizontalDivider(modifier = Modifier.padding(horizontal = SheetContentHorizontalPadding), color = MaterialTheme.colorScheme.outlineVariant)
   }
 }
 
@@ -300,6 +370,7 @@ private fun placeNumbersOf(slots: List<PlanSlotKey>, items: Map<Long, PlanItem>)
 @Composable
 private fun PlanSummaryHeader(
   summary: String,
+  visited: String?,
   onSummaryClick: () -> Unit,
   onPickPlaces: () -> Unit,
   onSearchPlace: () -> Unit,
@@ -323,7 +394,12 @@ private fun PlanSummaryHeader(
         style = MaterialTheme.typography.titleMedium,
         maxLines = 1,
         overflow = TextOverflow.Ellipsis,
+        modifier = Modifier.weight(1f, fill = false),
       )
+      visited?.let {
+        Spacer(modifier = Modifier.width(PathlySpacing.md))
+        VisitedCount(text = it)
+      }
     }
     Spacer(modifier = Modifier.height(PathlySpacing.sm))
     Row(horizontalArrangement = Arrangement.spacedBy(PathlySpacing.sm)) {
@@ -429,6 +505,7 @@ private fun EmptyDayLine(text: String) {
 private fun PlanItemRow(
   item: PlanItem,
   number: Int?,
+  visited: Boolean,
   color: Color,
   lifted: Boolean,
   canMoveDay: Boolean,
@@ -500,12 +577,27 @@ private fun PlanItemRow(
             .weight(1f)
             .padding(vertical = PathlySpacing.sm),
         ) {
-          Text(
-            text = item.label,
-            style = MaterialTheme.typography.bodyLarge,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-          )
+          Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+              text = item.label,
+              style = MaterialTheme.typography.bodyLarge,
+              maxLines = 1,
+              overflow = TextOverflow.Ellipsis,
+              modifier = Modifier.weight(1f, fill = false),
+            )
+            if (visited) {
+              // 行った（結び付いた経路のどれかで立ち寄った）。地図のマーカーも緑になる。
+              Icon(
+                painter = painterResource(R.drawable.ic_check_circle),
+                contentDescription = "行った",
+                tint = PathlyTheme.statusColors.visited,
+                modifier = Modifier
+                  .padding(start = PathlySpacing.xs)
+                  .size(18.dp)
+                  .testTag("planItemVisited:${item.id}"),
+              )
+            }
+          }
           itemTimeLine(item)?.let {
             Text(text = it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
           }
@@ -575,6 +667,16 @@ private fun PlanItemMenu(item: PlanItem, canMoveDay: Boolean, actions: PlanSheet
         },
       )
     }
+  }
+}
+
+/** 「✓ 行った N/M」（要約の右）。 */
+@Composable
+private fun VisitedCount(text: String) {
+  Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.testTag("planVisitedCount")) {
+    Icon(painterResource(R.drawable.ic_check_circle), contentDescription = null, tint = PathlyTheme.statusColors.visited, modifier = Modifier.size(18.dp))
+    Spacer(modifier = Modifier.width(PathlySpacing.xxs))
+    Text(text = text, style = MaterialTheme.typography.titleSmall, color = PathlyTheme.statusColors.visited, maxLines = 1)
   }
 }
 

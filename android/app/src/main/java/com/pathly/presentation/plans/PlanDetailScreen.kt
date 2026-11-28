@@ -116,6 +116,8 @@ import com.pathly.ui.theme.PathlyMapColors
 import com.pathly.ui.theme.PathlySpacing
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import java.time.LocalDate
+import java.time.ZoneId
 
 /** 計画の詳細（地図の型 → docs/specs/plans.md の「計画の詳細」）。計画が消えたら [onBack]。 */
 @Composable
@@ -124,6 +126,7 @@ fun PlanDetailRoute(
   onBack: () -> Unit,
   onDeleted: (title: String) -> Unit,
   onOpenPlace: (placeId: Long) -> Unit,
+  onOpenTrack: (trackId: Long) -> Unit,
   modifier: Modifier = Modifier,
 ) {
   val state by viewModel.state.collectAsStateWithLifecycle()
@@ -164,6 +167,7 @@ fun PlanDetailRoute(
         onSelectDay = viewModel::selectDay,
         onBack = onBack,
         onOpenPlace = onOpenPlace,
+        onOpenTrack = onOpenTrack,
         viewModel = viewModel,
         snackbarHost = { SwipeDismissSnackbarHost(snackbarHostState, modifier = it) },
         onDismissSnackbar = { snackbarHostState.currentSnackbarData?.dismiss() },
@@ -177,6 +181,7 @@ private sealed interface PlanDialog {
   data object Title : PlanDialog
   data object Dates : PlanDialog
   data object Places : PlanDialog
+  data object Tracks : PlanDialog
   data object NewMemo : PlanDialog
   data object Leave : PlanDialog
   data object DiscardDraft : PlanDialog
@@ -192,6 +197,7 @@ private fun PlanDetailContent(
   onSelectDay: (Int?) -> Unit,
   onBack: () -> Unit,
   onOpenPlace: (Long) -> Unit,
+  onOpenTrack: (Long) -> Unit,
   viewModel: PlanDetailViewModel,
   snackbarHost: @Composable (Modifier) -> Unit,
   onDismissSnackbar: () -> Unit,
@@ -216,7 +222,13 @@ private fun PlanDetailContent(
   var dialog by remember { mutableStateOf<PlanDialog?>(null) }
   // 保存していない変更があれば、戻る前に保存・下書き・破棄を聞く。
   val requestBack = { if (edit.hasUnsavedChanges) dialog = PlanDialog.Leave else onBack() }
-  BackHandler(enabled = edit.hasUnsavedChanges && dialog != PlanDialog.Places) { dialog = PlanDialog.Leave }
+  BackHandler(enabled = edit.hasUnsavedChanges && dialog != PlanDialog.Places && dialog != PlanDialog.Tracks) { dialog = PlanDialog.Leave }
+
+  // 計画と実績（結び付いた経路・行った・記録中の経路 → docs/specs/plans.md の「計画と実績」）。
+  val actuals by viewModel.actuals.state.collectAsStateWithLifecycle()
+  val liveTrack by viewModel.actuals.liveTrack.collectAsStateWithLifecycle()
+  val showActualTracks by viewModel.actuals.showTracks.collectAsStateWithLifecycle()
+  val actualLines by viewModel.actuals.lines.collectAsStateWithLifecycle()
 
   // 新しく登録する場所（地図のタップ・POI・検索で選んだ施設）。出している間は計画のシートを下げて登録のシートを出す。
   var placeSheetTarget by remember { mutableStateOf<PlaceSheetTarget?>(null) }
@@ -269,6 +281,15 @@ private fun PlanDetailContent(
         cameraPositionState.animate(CameraUpdateFactory.newLatLngBounds(bounds, with(density) { FitPadding.roundToPx() }))
       }
     }
+  }
+  // 場所の行が無い計画で記録中の経路が結び付いていれば、記録中の経路へ寄せる（開いたとき 1 回。重ねた線が見えるように）。
+  var fittedLive by rememberSaveable { mutableStateOf(false) }
+  val livePoints = liveTrack?.smoothedPoints.orEmpty()
+  LaunchedEffect(mapLoaded, livePoints.isNotEmpty(), shownItems.isEmpty()) {
+    if (!mapLoaded || fittedLive || livePoints.isEmpty() || shownItems.isNotEmpty()) return@LaunchedEffect
+    val bounds = livePoints.fold(LatLngBounds.builder()) { b, p -> b.include(LatLng(p.latitude, p.longitude)) }.build()
+    cameraPositionState.move(CameraUpdateFactory.newLatLngBounds(bounds, with(density) { FitPadding.roundToPx() }))
+    fittedLive = true
   }
   // 足した後は、足した日の見出しへ寄せる（足した行が見える所へ。日帰りは末尾へ）。行が増えてから動かす。
   var scrollToDay by remember { mutableStateOf<Int?>(null) }
@@ -378,6 +399,11 @@ private fun PlanDetailContent(
     ) {
       // 登録済みの場所（レイヤーで出したとき）。押すと、この計画に足すかを聞く。
       RegisteredPlaceMarkers(registeredPlaces.visible, infoWindow) { dialog = PlanDialog.AddFromMap(it.placeId, it.name ?: "この場所") }
+      // 結び付いた経路（レイヤーで重ねたとき）と、記録中の経路（結び付いていればいつも）。計画の線・マーカーより奥に一色で描く。
+      PlanActualTracks(
+        lines = if (showActualTracks) actuals.linked.mapNotNull { actualLines[it.track.id] } else emptyList(),
+        liveTrack = liveTrack,
+      )
       // 同じ日の中を順に直線で結ぶ（「すべて」のときは日ごとに色を変える）。
       shownItems.groupBy { it.dayIndex }.forEach { (d, dayItems) ->
         if (dayItems.size >= 2) {
@@ -392,7 +418,8 @@ private fun PlanDetailContent(
         val place = item.place!!
         val number = numbers[item.id] ?: return@forEach
         val markerState = remember(place.latitude, place.longitude) { MarkerState(LatLng(place.latitude, place.longitude)) }
-        val color = planDayColor(item.dayIndex)
+        // 行った場所は緑（番号はそのまま）。
+        val color = if (place.placeId in actuals.visitedPlaceIds) PathlyMapColors.PlaceVisited else planDayColor(item.dayIndex)
         MapMarker(
           "plan-item",
           item.id,
@@ -462,7 +489,12 @@ private fun PlanDetailContent(
           // 一度も保存していない計画だけ、画面を閉じずに下書きに残せる（保存済みの計画は「保存」で足りる）。
           if (edit.isNew) DraftSaveButton(enabled = edit.hasUnsavedChanges, onClick = { viewModel.saveDraft() })
           SaveButton(enabled = edit.canSave, onClick = { viewModel.save() })
-          RegisteredPlacesLayerButton(registeredPlaces)
+          PlanLayersButton(
+            registeredPlaces = registeredPlaces,
+            linkedTrackCount = actuals.linked.size,
+            showTracks = showActualTracks,
+            onToggleTracks = viewModel.actuals::toggleShowTracks,
+          )
           MapOverflowMenuButton { close ->
             DropdownMenuItem(text = { Text("名前とメモ") }, onClick = {
               close()
@@ -472,6 +504,13 @@ private fun PlanDetailContent(
               close()
               dialog = PlanDialog.Dates
             }, modifier = Modifier.testTag("planMenuDates"))
+            // 結び付きは保存を待たずに入るので、まだ作られていない（一度も保存していない）計画には出さない。
+            if (!edit.isNew) {
+              DropdownMenuItem(text = { Text("経路を結び付ける") }, onClick = {
+                close()
+                dialog = PlanDialog.Tracks
+              }, modifier = Modifier.testTag("planMenuLinkTracks"))
+            }
             if (edit.draftId != null) {
               DropdownMenuItem(text = { Text("下書きを捨てる") }, onClick = {
                 close()
@@ -573,7 +612,12 @@ private fun PlanDetailContent(
             onOpenPlace = { item -> item.place?.let { onOpenPlace(it.placeId) } },
             onRemove = { viewModel.removeItem(it.id) },
             onReorder = viewModel::reorder,
+            onOpenTrack = { onOpenTrack(it.id) },
+            onUnlinkTrack = { viewModel.setTrackLinked(it.id, linked = false) },
+            onLinkTracks = { dialog = PlanDialog.Tracks }.takeIf { !edit.isNew },
           ),
+          actuals = actuals,
+          liveDistanceMeters = liveTrack?.totalDistanceMeters,
         )
       }
     }
@@ -622,6 +666,18 @@ private fun PlanDetailContent(
     }
 
     // 場所を選ぶ（場所タブの一覧・地図を選ぶモードで、詳細の上に全画面で重ねる）。
+    // 経路を結び付ける（全画面。押したらすぐ結び付く・外れる）。
+    if (dialog == PlanDialog.Tracks) {
+      PlanTrackPicker(
+        tracks = viewModel.actuals.allTracks,
+        linkedTrackIds = actuals.linkedTrackIds,
+        trackPlans = viewModel.actuals.trackPlans,
+        planId = edit.saved?.plan?.id ?: 0L,
+        onToggle = { track, linked -> viewModel.setTrackLinked(track.id, linked) },
+        onClose = { dialog = null },
+      )
+    }
+
     if (dialog == PlanDialog.Places) {
       PlacePickerRoute(
         viewModel = placesViewModel,
@@ -636,7 +692,7 @@ private fun PlanDetailContent(
   }
 
   when (val d = dialog) {
-    null, PlanDialog.Places -> Unit
+    null, PlanDialog.Places, PlanDialog.Tracks -> Unit
 
     PlanDialog.Title -> PlanTitleDialog(plan = plan, onSave = viewModel::updateTitleAndNote, onDismiss = { dialog = null })
 
@@ -645,6 +701,8 @@ private fun PlanDetailContent(
       slots = detail.items.map { PlanSlot(it.id, it.dayIndex, it.position) },
       onSave = viewModel::setDates,
       onDismiss = { dialog = null },
+      overlapOf = viewModel::overlappingPlan,
+      outsideTracksOf = { start, days -> viewModel.tracksOutside(start, days).map { trackTitle(it, ZoneId.systemDefault(), LocalDate.now()) } },
     )
 
     PlanDialog.NewMemo -> PlanItemDialog(
