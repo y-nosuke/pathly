@@ -473,8 +473,8 @@ private fun PlanDetailContent(
         val place = item.place!!
         val number = numbers[item.id] ?: return@forEach
         val markerState = remember(place.latitude, place.longitude) { MarkerState(LatLng(place.latitude, place.longitude)) }
-        // 行った場所は緑（番号はそのまま）。
-        val color = if (place.placeId in actuals.visitedPlaceIds) PathlyMapColors.PlaceVisited else planDayColor(item.dayIndex)
+        // シートの番号の丸と同じ日の色（行ったかは、シートの ✓ と実際の立ち寄りの印で分かる）。
+        val color = planDayColor(item.dayIndex)
         MapMarker(
           "plan-item",
           item.id,
@@ -672,8 +672,10 @@ private fun PlanDetailContent(
             onReorder = viewModel::reorder,
             onOpenTrack = { onOpenTrack(it.id) },
             onFocusTrack = { track ->
-              // 隠していれば出してから寄せる。
+              // 隠していれば出してから寄せる。別の日を選んでいれば、その経路の日（計画の日の外なら「すべて」）に切り替える
+              // （選んだ日の経路しか出さないので、そのままだと線の無い所へ寄るだけになる）。
               if (!showActualTracks) viewModel.actuals.toggleShowTracks()
+              if (day != null && trackDayOf(track) != day) onSelectDay(trackDayOf(track))
               focusRequest = track.id to ((focusRequest?.second ?: 0) + 1)
             },
             onStopClick = { stop ->

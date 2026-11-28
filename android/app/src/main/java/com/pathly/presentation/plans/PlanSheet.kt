@@ -673,7 +673,7 @@ private fun PlanItemRow(
               modifier = Modifier.weight(1f, fill = false),
             )
             if (visited) {
-              // 行った（結び付いた経路のどれかで立ち寄った）。地図のマーカーも緑になる。
+              // 行った（結び付いた経路のどれかで立ち寄った）。
               Icon(
                 painter = painterResource(R.drawable.ic_check_circle),
                 contentDescription = "行った",
