@@ -6,12 +6,16 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyRow
@@ -21,12 +25,12 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.Text
@@ -47,10 +51,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -83,12 +89,12 @@ import com.pathly.presentation.common.MapOverflowMenuButton
 import com.pathly.presentation.common.MapPinMarker
 import com.pathly.presentation.common.MapRegisteredPlaces
 import com.pathly.presentation.common.MapRoundButton
-import com.pathly.presentation.common.MapRoundButtonSize
 import com.pathly.presentation.common.MapTopBar
 import com.pathly.presentation.common.MapTopBarInset
 import com.pathly.presentation.common.RegionBoundaries
 import com.pathly.presentation.common.RegisteredPlaceMarkers
 import com.pathly.presentation.common.RegisteredPlacesLayerButton
+import com.pathly.presentation.common.SheetActionsBar
 import com.pathly.presentation.common.SheetDetent
 import com.pathly.presentation.common.SheetRestoreButtonInset
 import com.pathly.presentation.common.SwipeDismissSnackbarHost
@@ -248,6 +254,8 @@ private fun PlanDetailContent(
   val sheetState = rememberFloatingSheetState()
   val placeSheetState = rememberFloatingSheetState(peekFraction = PLACE_SHEET_PEEK_FRACTION)
   val sheetListState = rememberLazyListState()
+  // シートの下端の操作の行の高さ（しまっている間は 0）。スナックバーをその上に出すため。
+  var actionsBarHeight by remember { mutableStateOf(0.dp) }
   // 地図の下の余白は、いま出ているシート（登録のシートか計画のシート）に合わせる。
   val activeSheet = if (placeSheetTarget != null) placeSheetState else sheetState
   val mapBottomPadding = activeSheet.heightOf(activeSheet.detent)
@@ -541,9 +549,6 @@ private fun PlanDetailContent(
           )
         },
         actions = {
-          // 一度も保存していない計画だけ、画面を閉じずに下書きに残せる（保存済みの計画は「保存」で足りる）。
-          if (edit.isNew) DraftSaveButton(enabled = edit.hasUnsavedChanges, onClick = { viewModel.saveDraft() })
-          SaveButton(enabled = edit.canSave, onClick = { viewModel.save() })
           PlanLayersButton(
             registeredPlaces = registeredPlaces,
             linkedTrackCount = actuals.linked.size,
@@ -694,6 +699,12 @@ private fun PlanDetailContent(
           sheetDayOf = { date -> if (plan.startDate == null && plan.isDayTrip) 1 else dayOfDate(date) },
           stopColorOf = { stop -> if (stop.live) PathlyMapColors.CurrentStop else actualColor(dayOfDate(stop.date)) },
         )
+        PlanEditActionsBar(
+          edit = edit,
+          onSaveDraft = viewModel::saveDraft,
+          onSave = viewModel::save,
+          modifier = Modifier.onSizeChanged { actionsBarHeight = with(density) { it.height.toDp() } },
+        )
       }
     }
 
@@ -709,7 +720,14 @@ private fun PlanDetailContent(
       registerOptions = registerOptions,
     )
 
-    snackbarHost(Modifier.align(Alignment.BottomCenter))
+    // シートの下端の操作の行（下書き・保存）が出ている間は、スナックバーをその上に出す
+    // （取り消しは押すまで残るので、重なると保存が押せなくなる）。
+    // 高さは伸び縮みの間ずっと変わるので、読むのは下の小さな関数の中だけにする（画面ごと組み直さないように）。
+    LiftedSnackbarHost(
+      liftBy = { if (placeSheetTarget == null && sheetState.detent != SheetDetent.HIDDEN) actionsBarHeight else 0.dp },
+      snackbarHost = snackbarHost,
+      modifier = Modifier.align(Alignment.BottomCenter),
+    )
 
     // 地図はそのままに上端へ検索窓を重ねる（記録画面と同じ窓）。
     if (mapSearchOpen) {
@@ -852,46 +870,40 @@ private fun PlanDetailContent(
   }
 }
 
-/** 上のバーの「保存」。保存できる変更があるときだけ押せる。 */
+/** スナックバーを [liftBy] の分（0 より大きければナビゲーションバーの分も）持ち上げて出す。 */
 @Composable
-private fun SaveButton(enabled: Boolean, onClick: () -> Unit) {
-  Button(
-    onClick = onClick,
-    enabled = enabled,
-    elevation = ButtonDefaults.buttonElevation(defaultElevation = PathlyElevation.floating, disabledElevation = PathlyElevation.floating),
-    // 押せないときも地図の上で見えるよう、地は白くする。
-    colors = ButtonDefaults.buttonColors(
-      disabledContainerColor = MaterialTheme.colorScheme.surface,
-      disabledContentColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f),
-    ),
-    contentPadding = PaddingValues(horizontal = PathlySpacing.md),
-    modifier = Modifier
-      .height(MapRoundButtonSize)
-      .testTag("planSave"),
-  ) {
-    Text("保存")
-  }
+private fun LiftedSnackbarHost(liftBy: () -> Dp, snackbarHost: @Composable (Modifier) -> Unit, modifier: Modifier = Modifier) {
+  val lift = liftBy()
+  snackbarHost(modifier.then(if (lift > 0.dp) Modifier.navigationBarsPadding().padding(bottom = lift) else Modifier))
 }
 
-/** 上のバーの「下書き」（下書きに残す。一度も保存していない計画だけ）。画面は閉じない。 */
+/**
+ * 計画のシートの下端に固定する操作の行（場所の詳細の「保存」の行と同じ形 → docs/specs/plans.md の「保存と下書き」）。
+ * 押せるものがあるときだけ下から出し、無いうちはその分を一覧に回す。右に「下書き」「保存」、
+ * 左端は一つ戻す・進める（#284）を置く場所として空けてある（[leading]）。
+ */
 @Composable
-private fun DraftSaveButton(enabled: Boolean, onClick: () -> Unit) {
-  Button(
-    onClick = onClick,
-    enabled = enabled,
-    elevation = ButtonDefaults.buttonElevation(defaultElevation = PathlyElevation.floating, disabledElevation = PathlyElevation.floating),
-    colors = ButtonDefaults.buttonColors(
-      containerColor = MaterialTheme.colorScheme.surface,
-      contentColor = MaterialTheme.colorScheme.primary,
-      disabledContainerColor = MaterialTheme.colorScheme.surface,
-      disabledContentColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f),
-    ),
-    contentPadding = PaddingValues(horizontal = PathlySpacing.md),
-    modifier = Modifier
-      .height(MapRoundButtonSize)
-      .testTag("planSaveDraft"),
-  ) {
-    Text("下書き", maxLines = 1)
+internal fun ColumnScope.PlanEditActionsBar(
+  edit: PlanEditState,
+  onSaveDraft: () -> Unit,
+  onSave: () -> Unit,
+  modifier: Modifier = Modifier,
+  leading: @Composable RowScope.() -> Unit = {},
+) {
+  SheetActionsBar(visible = edit.showsEditActions, modifier = modifier, leading = leading) {
+    // 一度も保存していない計画だけ、画面を閉じずに下書きに残せる（保存済みの計画は「保存」で足りる）。
+    if (edit.isNew) {
+      OutlinedButton(
+        onClick = onSaveDraft,
+        enabled = edit.hasUnsavedChanges,
+        modifier = Modifier.testTag("planSaveDraft"),
+      ) {
+        Text("下書き", maxLines = 1)
+      }
+    }
+    Button(onClick = onSave, enabled = edit.canSave, modifier = Modifier.testTag("planSave")) {
+      Text("保存", maxLines = 1)
+    }
   }
 }
 

@@ -85,6 +85,9 @@ data class PlanEditState(
 
   /** 戻るときに聞く（最後に書いた中身・外す経路から変えた）。 */
   val hasUnsavedChanges: Boolean get() = !detail.sameContentAs(persisted) || unlinkTrackIds != persistedUnlinkTrackIds
+
+  /** シートの下端の操作の行（下書き・保存）を出す。押せるもの（保存・新しい計画の下書き）があるときだけ。 */
+  val showsEditActions: Boolean get() = canSave || (isNew && hasUnsavedChanges)
 }
 
 /** 計画の詳細の読み込みの状態。 */
