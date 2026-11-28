@@ -21,7 +21,7 @@
 | 解決記録         | resolution (record) | 場所名を Google に問い合わせた記録（叩いたか・結果）                                                      | `PlaceResolution` / `place_resolutions`                          |
 | 計画             | plan                | これからのお出掛けの予定。日付は任意で、日数と、日ごとに並ぶ行を持つ（[plans.md](plans.md)）              | `Plan` / `plans`                                                 |
 | 計画の下書き     | plan draft          | 保存していない計画の編集の途中。「下書きに残す」で端末に残る（[plans.md](plans.md)）                      | `plan_drafts`                                                    |
-| 計画の行         | plan item           | 計画に並ぶ 1 行。**場所の行**（place を参照）か**メモの行**（文言だけ・地図に出ない）                     | `PlanItem` / `plan_items`                                        |
+| 計画の行         | plan item           | 計画に並ぶ 1 行。**場所の行**（place を参照）か**予定の行**（内容だけ・地図に出ない）                     | `PlanItem` / `plan_items`                                        |
 | 結び付いた経路   | linked track        | 計画の実績として見る経路。記録の開始で自動で結び付けるか、手動で結び付ける（1 つの経路は 1 つの計画だけ） | `plan_tracks`                                                    |
 
 データの流れ:

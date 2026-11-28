@@ -111,7 +111,7 @@ class PlanEditsTest {
     assertEquals("場所1", placeRow.label)
     assertEquals(690, placeRow.plannedDeparture)
     assertEquals("夕食", memoRow.label)
-    assertEquals("メモの行は滞在の目安を持たない", null, memoRow.stayMinutes)
+    assertEquals("予定の行は滞在の目安を持たない", null, memoRow.stayMinutes)
   }
 
   @Test

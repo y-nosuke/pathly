@@ -92,7 +92,7 @@ internal class PlanSheetActions(
   val onDayClick: (Int) -> Unit,
   /** 日の見出しの ×（その日を消し、行は前の日の末尾へ）。 */
   val onRemoveDay: (Int) -> Unit,
-  /** 行のタップ（場所の行は地図をその場所へ寄せ、メモの行は編集を開く）。 */
+  /** 行のタップ（場所の行は地図をその場所へ寄せ、予定の行は編集を開く）。 */
   val onItemClick: (PlanItem) -> Unit,
   val onEdit: (PlanItem) -> Unit,
   val onMoveToDay: (PlanItem) -> Unit,
@@ -115,7 +115,7 @@ internal class PlanSheetActions(
 )
 
 /**
- * 計画の詳細のシートの中身: 日付・日数の要約、場所を足す・メモを足す、日ごとの見出しの下に並ぶ行。
+ * 計画の詳細のシートの中身: 日付・日数の要約、場所を足す・予定を足す、日ごとの見出しの下に並ぶ行。
  * 行は左端の取っ手（⋮⋮）に触れて縦に動かすと、長押しなしで掴める（→ adr/0051）。
  */
 @Composable
@@ -204,7 +204,7 @@ internal fun ColumnScope.PlanSheetContent(
       )
     }
     if (detail.items.isEmpty() && plan.isDayTrip) {
-      item(key = "emptyPlan") { EmptyDayLine("場所を足すか、メモの行を足してください") }
+      item(key = "emptyPlan") { EmptyDayLine("場所か予定を足してください") }
     }
     items(rendered, key = { it.key }) { entry ->
       when (entry) {
@@ -501,7 +501,7 @@ private fun PlanSummaryHeader(
       OutlinedButton(onClick = onAddMemo, modifier = Modifier.testTag("planAddMemo")) {
         Icon(painterResource(R.drawable.ic_edit), contentDescription = null, modifier = Modifier.size(18.dp))
         Spacer(modifier = Modifier.width(PathlySpacing.xs))
-        Text("メモを足す")
+        Text("予定を足す")
       }
     }
     // 実際の立ち寄り・経路を、地図とシートの両方で出す・隠す（計画だけを見るとき）。ボタンの並びに入れると折り返すので、1 行に置く。
@@ -579,7 +579,7 @@ private fun EmptyDayLine(text: String) {
 }
 
 /**
- * 計画の 1 行。左から取っ手（⋮⋮）・番号の丸（場所の行。メモの行は小さな点）・名前と時刻とメモ・⋮。
+ * 計画の 1 行。左から取っ手（⋮⋮）・番号の丸（場所の行。予定の行は小さな点）・名前と時刻とメモ・⋮。
  * 名前とメモは 1 行で省略する。
  */
 @Composable

@@ -329,7 +329,7 @@ private fun PlanDateRangeDialog(start: LocalDate, end: LocalDate, onPick: (Local
 }
 
 /**
- * 行の編集・メモの行を足す。[item] が null なら新しいメモの行。場所の行では文言は出さない（名前は場所のもの）。
+ * 行の編集・予定を足す。[item] が null なら新しい予定の行。場所の行では内容は出さない（名前は場所のもの）。
  * 場所の行は、滞在の目安を時間と分で入れる。着く時刻があれば出発の時刻も出し、出発を選ぶと滞在の目安が変わる。
  */
 @Composable
@@ -353,8 +353,8 @@ internal fun PlanItemDialog(
     title = {
       Text(
         text = when {
-          item == null -> "メモの行を足す"
-          isMemo -> "メモの行を編集"
+          item == null -> "予定を足す"
+          isMemo -> "予定を編集"
           else -> item.label
         },
         maxLines = 2,
@@ -369,7 +369,7 @@ internal fun PlanItemDialog(
           OutlinedTextField(
             value = title,
             onValueChange = { title = it },
-            label = { Text("文言（「昼食」「新幹線で移動」など）") },
+            label = { Text("内容（「昼食」「新幹線で移動」など）") },
             singleLine = true,
             modifier = Modifier
               .fillMaxWidth()
