@@ -27,10 +27,10 @@ fun PlanDetail.withPlacesAdded(day: Int, places: List<PlanPlace>, newId: () -> L
   return copy(items = items + added).normalized()
 }
 
-/** メモの行を [day] 日目の末尾に足す。 */
+/** 予定の行を [day] 日目の末尾に足す。 */
 fun PlanDetail.withMemoAdded(day: Int, title: String, plannedTime: Int?, note: String?, id: Long): PlanDetail = copy(items = items + PlanItem(id, plan.id, day, Int.MAX_VALUE, null, title, note?.ifBlank { null }, plannedTime, null)).normalized()
 
-/** 行の予定時刻・滞在の目安・メモ（メモの行は文言も）を変える。場所の行の名前は場所のもの。 */
+/** 行の予定時刻・滞在の目安・メモ（予定の行は内容も）を変える。場所の行の名前は場所のもの。 */
 fun PlanDetail.withItemUpdated(itemId: Long, title: String?, plannedTime: Int?, stayMinutes: Int?, note: String?): PlanDetail = copy(
   items = items.map { item ->
     if (item.id != itemId) {

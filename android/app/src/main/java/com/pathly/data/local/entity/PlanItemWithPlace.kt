@@ -2,7 +2,7 @@ package com.pathly.data.local.entity
 
 import androidx.room.Embedded
 
-/** 計画の行に、場所の名前とアンカーの座標を添えた射影（場所の行だけ。メモの行は place の列が null）。 */
+/** 計画の行に、場所の名前とアンカーの座標を添えた射影（場所の行だけ。予定の行は place の列が null）。 */
 data class PlanItemWithPlace(
   @Embedded val item: PlanItemEntity,
   val placeName: String?,

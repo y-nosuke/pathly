@@ -74,7 +74,7 @@ data class StoredPlanDraft(
 )
 
 /**
- * 計画の行。[place] があれば場所の行、null ならメモの行（文言は [title]）。
+ * 計画の行。[place] があれば場所の行、null なら予定の行（内容は [title]）。
  * [plannedTime] は着く時刻（0 時からの分）、[stayMinutes] は滞在の目安（分）。どちらも任意。
  */
 data class PlanItem(
@@ -93,7 +93,7 @@ data class PlanItem(
   /** 予定の出発時刻（着く時刻 ＋ 滞在の目安。どちらかが無ければ null）。日をまたげば 24 時を超える。 */
   val plannedDeparture: Int? get() = if (plannedTime != null && stayMinutes != null) plannedTime + stayMinutes else null
 
-  /** 行に出す名前（場所の行は場所の表示名、メモの行は文言）。 */
+  /** 行に出す名前（場所の行は場所の表示名、予定の行は内容）。 */
   val label: String get() = place?.name ?: title.orEmpty()
 }
 
@@ -113,7 +113,7 @@ data class PlanDetail(
   /** [day] 日目の行（順番どおり）。 */
   fun itemsOn(day: Int): List<PlanItem> = items.filter { it.dayIndex == day }
 
-  /** 場所の行の日ごとの番号（1 から。メモの行は数えない）。行の id → 番号。 */
+  /** 場所の行の日ごとの番号（1 から。予定の行は数えない）。行の id → 番号。 */
   val placeNumbers: Map<Long, Int> by lazy {
     buildMap {
       items.filter { it.isPlace }.groupBy { it.dayIndex }.values.forEach { dayItems ->

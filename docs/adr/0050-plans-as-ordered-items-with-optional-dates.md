@@ -34,7 +34,7 @@ plans 1 ──< plan_tracks ──── 1 gps_tracks   （結び付いた経路
   - `startDate` は日付（時刻なし）で、**null＝日付なし**。`dayCount` は 1 以上（1＝日帰り）。
   - 日付を付けても外しても、日数と行はそのまま残る。計画の行は「何日目」で持ち、日付は `startDate` から求める。
 - `plan_items(id, planId, dayIndex, position, placeId, title, note, plannedTime, stayMinutes)`
-  - `placeId` があれば**場所の行**、null なら**メモの行**（`title` に文言）。メモの行は地図に出ない。
+  - `placeId` があれば**場所の行**、null なら**メモの行**（`title` に文言）。メモの行は地図に出ない。（画面と specs では、#298 で「予定の行」と呼び名を改めた → specs）
   - `dayIndex` は 1〜`dayCount`、`position` は日の中の順番。`plannedTime`（着く時刻・分）と `stayMinutes` は任意。
   - 計画を消すと行も消える（CASCADE）。
   - **日数を減らしたら、消える日の行は新しい最後の日の末尾へ移す**（消さない）。
