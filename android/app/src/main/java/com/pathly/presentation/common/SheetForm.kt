@@ -8,6 +8,8 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.FlowRowScope
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
@@ -47,20 +49,42 @@ fun ColumnScope.SheetFormLayout(
       .padding(bottom = PathlySpacing.lg),
     content = content,
   )
-  AnimatedVisibility(visible = showActions, enter = expandVertically(), exit = shrinkVertically()) {
+  SheetActionsBar(visible = showActions, actions = actions)
+}
+
+/**
+ * シートの下端に固定する操作の行（区切りの線つき）。[actions] は右寄せ、[leading] は左端に置く。
+ * [visible] が false の間はしまい、その分を上の本文に回す（出し入れは下から伸び縮みする）。
+ *
+ * [SheetFormLayout] のほか、一覧（LazyColumn）を本文にするシート（計画の詳細）でも、一覧の下にそのまま置いて使う。
+ */
+@Composable
+fun ColumnScope.SheetActionsBar(
+  visible: Boolean,
+  modifier: Modifier = Modifier,
+  leading: @Composable RowScope.() -> Unit = {},
+  actions: @Composable FlowRowScope.() -> Unit,
+) {
+  AnimatedVisibility(visible = visible, modifier = modifier, enter = expandVertically(), exit = shrinkVertically()) {
     Column {
       HorizontalDivider()
-      // 文字が大きい設定でボタンが横に収まらないときは、次の行へ折り返す（右寄せのまま）。
-      FlowRow(
+      Row(
         modifier = Modifier
           .fillMaxWidth()
           .testTag("sheetActions")
           .padding(horizontal = SheetContentHorizontalPadding, vertical = PathlySpacing.md),
-        horizontalArrangement = Arrangement.spacedBy(PathlySpacing.sm, Alignment.End),
-        verticalArrangement = Arrangement.spacedBy(PathlySpacing.xs),
-        itemVerticalAlignment = Alignment.CenterVertically,
-        content = actions,
-      )
+        verticalAlignment = Alignment.CenterVertically,
+      ) {
+        leading()
+        // 文字が大きい設定でボタンが横に収まらないときは、次の行へ折り返す（右寄せのまま）。
+        FlowRow(
+          modifier = Modifier.weight(1f),
+          horizontalArrangement = Arrangement.spacedBy(PathlySpacing.sm, Alignment.End),
+          verticalArrangement = Arrangement.spacedBy(PathlySpacing.xs),
+          itemVerticalAlignment = Alignment.CenterVertically,
+          content = actions,
+        )
+      }
     }
   }
 }
