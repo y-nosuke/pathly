@@ -43,7 +43,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
@@ -70,6 +69,9 @@ import com.pathly.presentation.common.MapLayersButton
 import com.pathly.presentation.common.MapMarker
 import com.pathly.presentation.common.MapRegisteredPlaces
 import com.pathly.presentation.common.RegisteredPlacesLayerItems
+import com.pathly.presentation.common.rememberMarkerIconCache
+import com.pathly.presentation.common.rememberStopLabelsVisible
+import com.pathly.presentation.common.stopLabelGlyph
 import com.pathly.presentation.history.formatKm
 import com.pathly.ui.theme.PathlyMapColors
 import com.pathly.ui.theme.PathlySpacing
@@ -154,33 +156,44 @@ internal fun PlanActualTracks(lines: List<Pair<Color, List<List<GpsPoint>>>>, li
 /**
  * 地図に出す実際の立ち寄り（白地の角丸に、日ごとに着いた順の番号）。縁と数字は計画の日の色（[colorOf]）、立ち寄り中は記録画面と同じティール。
  * 計画の番号のマーカーより奥・小さめにする。押すと場所の名前と時刻の吹き出し。
+ * 下に記録画面・経路詳細と同じ名札（業種のアイコン＋名前）を添え、引いた地図では番号だけにする（→ specs/map.md）。
  */
 @Composable
 internal fun PlanActualStops(stops: List<ActualStop>, infoWindow: MapInfoWindowState, colorOf: (ActualStop) -> Color) {
   val zone = remember { ZoneId.systemDefault() }
+  val icons = rememberMarkerIconCache()
+  val showLabels = rememberStopLabelsVisible()
   stops.forEach { actual ->
     val stop = actual.stop
     key(stop.id, actual.live) {
       val state = remember(stop.place.latitude, stop.place.longitude) { MarkerState(LatLng(stop.place.latitude, stop.place.longitude)) }
       val color = if (actual.live) PathlyMapColors.CurrentStop else colorOf(actual)
       val arrival = CLOCK.format(stop.arrivalTime.toInstant().atZone(zone))
+      // 番号の印の真ん中を場所に置く（計画の番号の丸と同じ）。名札を足しても指す点は変えない。
+      val icon = icons.getLabeled(
+        ActualStopIconKey(actual.number, color),
+        stop.place.displayName.takeIf { showLabels },
+        stopLabelGlyph(stop.place),
+        anchorAtCenter = true,
+      ) {
+        ActualStopBadge(number = actual.number, color = color)
+      }
       MapMarker(
-        "plan-actual-stop",
-        stop.id,
-        actual.live,
+        icon = icon.icon,
         infoWindow = infoWindow,
         state = state,
         title = stop.place.displayName,
         snippet = if (actual.live) "$arrival – 滞在中" else "$arrival–${CLOCK.format(stop.departureTime.toInstant().atZone(zone))}",
-        anchor = Offset(0.5f, 0.5f),
+        anchor = icon.anchor,
         zIndex = ACTUAL_STOP_Z_INDEX,
         bubbleColor = color,
-      ) {
-        ActualStopBadge(number = actual.number, color = color)
-      }
+      )
     }
   }
 }
+
+// 実際の立ち寄りの印の画像のキー（[MarkerIconCache]）。見た目を決める値をすべて持つ。
+private data class ActualStopIconKey(val number: Int, val color: Color)
 
 /**
  * 実際の立ち寄りの番号の印。計画の番号（日の色で塗った丸に白い数字）と見分けるよう、白地の角丸に色の縁と数字にする。
