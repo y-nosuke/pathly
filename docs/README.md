@@ -44,7 +44,7 @@
 | [designs/stops.md](designs/stops.md)               | stops         | 増分検出と境界・手直しの実装・孤立回収   |
 | [designs/places.md](designs/places.md)             | places        | 同定・由来・命名（Places API）・表示名   |
 | [designs/ui.md](designs/ui.md)                     | map / screens | 地図描画の共通化・非モーダルシート       |
-| [designs/ui-direction.md](designs/ui-direction.md) | screens       | 画面の型（どこに何を置くか）・棚卸し     |
+| [designs/ui-direction.md](designs/ui-direction.md) | screens       | 画面の型・確認と保存の決まり・棚卸し     |
 | [designs/architecture.md](designs/architecture.md) | —             | レイヤーと依存の向き・構成の判断         |
 | [designs/security.md](designs/security.md)         | security      | 暗号化の可否・鍵・API キー・権限の持ち場 |
 | [designs/logging.md](designs/logging.md)           | —             | ログの規約                               |
