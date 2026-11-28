@@ -29,6 +29,8 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.time.LocalDate
+import java.time.ZoneId
 
 /** 計画に結び付いた経路の 1 本（詳細のシートの「実際のお出掛け」の行）。 */
 data class LinkedTrack(
@@ -37,8 +39,17 @@ data class LinkedTrack(
   val source: PlanTrackSource,
 )
 
-/** 地図に出す実際の立ち寄り。[onRecording] は記録中の経路のもの、[live] は立ち寄り中（まだ確定していない）。 */
-data class ActualStop(val stop: Stop, val onRecording: Boolean, val live: Boolean)
+/**
+ * 地図に出す実際の立ち寄り。[onRecording] は記録中の経路のもの、[live] は立ち寄り中（まだ確定していない）。
+ * [number] は日ごとに着いた順の番号（1 から）、[date] は着いた日（端末の時刻帯）。
+ */
+data class ActualStop(val stop: Stop, val onRecording: Boolean, val live: Boolean, val number: Int = 0, val date: LocalDate? = null)
+
+/** 日ごとに、着いた時刻の順に番号を振る（→ docs/specs/plans.md の「重ねて見る」）。 */
+internal fun List<ActualStop>.numberedByDay(zone: ZoneId = ZoneId.systemDefault()): List<ActualStop> = map { it.copy(date = it.stop.arrivalTime.toInstant().atZone(zone).toLocalDate()) }
+  .groupBy { it.date }
+  .values
+  .flatMap { sameDay -> sameDay.sortedWith(compareBy({ it.stop.arrivalTime }, { it.stop.id })).mapIndexed { i, s -> s.copy(number = i + 1) } }
 
 /** 計画の詳細の「計画と実績」（→ docs/specs/plans.md）。どれも保存せず、読むたびに求める。 */
 data class PlanActualsState(
@@ -123,8 +134,10 @@ internal class PlanDetailActuals(
       combine(ids.map { stopRepository.getStopsForTrack(it) }) { lists -> lists.flatMap { it } }
     }
     combine(confirmed, liveStopRepository.currentStop) { stops, live ->
-      stops.map { ActualStop(it, onRecording = it.trackId == recording, live = false) } +
-        listOfNotNull(live?.takeIf { it.trackId in ids }?.let { ActualStop(it, onRecording = true, live = true) })
+      (
+        stops.map { ActualStop(it, onRecording = it.trackId == recording, live = false) } +
+          listOfNotNull(live?.takeIf { it.trackId in ids }?.let { ActualStop(it, onRecording = true, live = true) })
+        ).numberedByDay()
     }
   }.stateIn(scope, SharingStarted.Eagerly, emptyList())
 

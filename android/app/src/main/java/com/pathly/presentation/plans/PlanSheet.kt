@@ -121,6 +121,8 @@ internal fun ColumnScope.PlanSheetContent(
   actuals: PlanActualsState = PlanActualsState(),
   /** 記録中の経路の今の距離（記録中の行に出す）。 */
   liveDistanceMeters: Double? = null,
+  /** 経路の印の色（計画の日の色）。 */
+  trackColorOf: (GpsTrack) -> Color = { PathlyMapColors.PlanActualTrack },
 ) {
   val plan = detail.plan
   val original = remember(detail) { slotsOf(detail) }
@@ -278,6 +280,7 @@ internal fun ColumnScope.PlanSheetContent(
       LinkedTrackRow(
         linked = linked,
         recording = linked.track.id == actuals.recordingTrackId,
+        color = trackColorOf(linked.track),
         liveDistanceMeters = liveDistanceMeters,
         onOpen = { actions.onOpenTrack(linked.track) },
         onUnlink = { actions.onUnlinkTrack(linked.track) },

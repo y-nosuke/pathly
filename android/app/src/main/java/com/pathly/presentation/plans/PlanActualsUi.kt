@@ -20,6 +20,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.DropdownMenu
@@ -43,10 +44,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -124,39 +128,42 @@ internal fun PlanLayersButton(
  * 計画の直線・マーカーより奥に描く。
  */
 @Composable
-internal fun PlanActualTracks(lines: List<List<List<GpsPoint>>>, liveTrack: GpsTrack?) {
+internal fun PlanActualTracks(lines: List<Pair<Color, List<List<GpsPoint>>>>, liveTrack: Pair<Color, GpsTrack>?) {
   val density = LocalDensity.current
   val width = with(density) { 4.dp.toPx() }
   val casing = with(density) { 7.dp.toPx() }
-  val segments = remember(lines) { lines.flatten().filter { it.size >= 2 }.map { seg -> seg.map { LatLng(it.latitude, it.longitude) } } }
-  segments.forEach { points ->
-    Polyline(points = points, color = PathlyMapColors.OnMarker, width = casing, zIndex = ACTUAL_TRACK_Z_INDEX - 0.1f)
-    Polyline(points = points, color = PathlyMapColors.PlanActualTrack, width = width, zIndex = ACTUAL_TRACK_Z_INDEX)
+  val segments = remember(lines) {
+    lines.flatMap { (color, segs) -> segs.filter { it.size >= 2 }.map { seg -> color to seg.map { LatLng(it.latitude, it.longitude) } } }
   }
-  // 記録中の経路は少し太く、濃くする（いま歩いている所が分かるように）。現在地は地図の青い点。
-  val live = remember(liveTrack) { liveTrack?.smoothedSegments.orEmpty().filter { it.size >= 2 }.map { seg -> seg.map { LatLng(it.latitude, it.longitude) } } }
-  live.forEach { points ->
+  segments.forEach { (color, points) ->
+    Polyline(points = points, color = PathlyMapColors.OnMarker, width = casing, zIndex = ACTUAL_TRACK_Z_INDEX - 0.1f)
+    Polyline(points = points, color = color, width = width, zIndex = ACTUAL_TRACK_Z_INDEX)
+  }
+  // 記録中の経路は少し太くする（いま歩いている所が分かるように）。現在地は地図の青い点。
+  val live = remember(liveTrack) {
+    liveTrack?.let { (color, track) -> track.smoothedSegments.filter { it.size >= 2 }.map { seg -> color to seg.map { LatLng(it.latitude, it.longitude) } } }.orEmpty()
+  }
+  live.forEach { (color, points) ->
     Polyline(points = points, color = PathlyMapColors.OnMarker, width = casing + 2f, zIndex = ACTUAL_TRACK_Z_INDEX - 0.1f)
-    Polyline(points = points, color = PathlyMapColors.PlanLiveTrack, width = width + 2f, zIndex = ACTUAL_TRACK_Z_INDEX)
+    Polyline(points = points, color = color, width = width + 2f, zIndex = ACTUAL_TRACK_Z_INDEX)
   }
 }
 
+/** 実際の経路の線の色: 計画の日の色を一段薄くしたもの（計画の線と同じ日だと分かり、計画の線より控えめに）。 */
+internal fun actualLineColor(dayColor: Color): Color = lerp(dayColor, Color.White, 0.35f)
+
 /**
- * 地図に出す実際の立ち寄り（小さな丸の印）。経路の線と同じ色（記録中は橙、過去は灰青）、立ち寄り中は記録画面と同じティール。
+ * 地図に出す実際の立ち寄り（白地の角丸に、日ごとに着いた順の番号）。縁と数字は計画の日の色（[colorOf]）、立ち寄り中は記録画面と同じティール。
  * 計画の番号のマーカーより奥・小さめにする。押すと場所の名前と時刻の吹き出し。
  */
 @Composable
-internal fun PlanActualStops(stops: List<ActualStop>, infoWindow: MapInfoWindowState) {
+internal fun PlanActualStops(stops: List<ActualStop>, infoWindow: MapInfoWindowState, colorOf: (ActualStop) -> Color) {
   val zone = remember { ZoneId.systemDefault() }
   stops.forEach { actual ->
     val stop = actual.stop
     key(stop.id, actual.live) {
       val state = remember(stop.place.latitude, stop.place.longitude) { MarkerState(LatLng(stop.place.latitude, stop.place.longitude)) }
-      val color = when {
-        actual.live -> PathlyMapColors.CurrentStop
-        actual.onRecording -> PathlyMapColors.PlanLiveTrack
-        else -> PathlyMapColors.PlanActualTrack
-      }
+      val color = if (actual.live) PathlyMapColors.CurrentStop else colorOf(actual)
       val arrival = CLOCK.format(stop.arrivalTime.toInstant().atZone(zone))
       MapMarker(
         "plan-actual-stop",
@@ -170,14 +177,23 @@ internal fun PlanActualStops(stops: List<ActualStop>, infoWindow: MapInfoWindowS
         zIndex = ACTUAL_STOP_Z_INDEX,
         bubbleColor = color,
       ) {
+        // 計画の番号（日の色で塗った丸に白い数字）と見分けるよう、白地の角丸に色の縁と数字にする。
         Box(
           modifier = Modifier
             .size(ACTUAL_STOP_SIZE)
-            .border(2.dp, PathlyMapColors.OnMarker, CircleShape)
-            .padding(2.dp)
-            .clip(CircleShape)
-            .background(color),
-        )
+            .clip(ActualStopShape)
+            .background(PathlyMapColors.OnMarker)
+            .border(2.dp, color, ActualStopShape),
+          contentAlignment = Alignment.Center,
+        ) {
+          Text(
+            text = "${actual.number}",
+            style = MaterialTheme.typography.labelMedium,
+            fontWeight = FontWeight.Bold,
+            color = color,
+            maxLines = 1,
+          )
+        }
       }
     }
   }
@@ -185,7 +201,8 @@ internal fun PlanActualStops(stops: List<ActualStop>, infoWindow: MapInfoWindowS
 
 /** 実際の立ち寄りの印は、ふつうのマーカー（1）より手前、計画の番号のマーカー（5）より奥。 */
 private const val ACTUAL_STOP_Z_INDEX = 2f
-private val ACTUAL_STOP_SIZE = 14.dp
+private val ACTUAL_STOP_SIZE = 22.dp
+private val ActualStopShape = RoundedCornerShape(6.dp)
 
 /** 実際の経路は計画の直線（zIndex 0）より奥。 */
 private const val ACTUAL_TRACK_Z_INDEX = -1f
@@ -362,6 +379,8 @@ private fun TrackPickRow(
 internal fun LinkedTrackRow(
   linked: LinkedTrack,
   recording: Boolean,
+  /** 経路の印の色（計画の日の色。日付の外・日付なしは灰青）。 */
+  color: Color,
   liveDistanceMeters: Double?,
   onOpen: () -> Unit,
   onUnlink: () -> Unit,
@@ -382,7 +401,7 @@ internal fun LinkedTrackRow(
     Icon(
       painter = painterResource(R.drawable.ic_route),
       contentDescription = null,
-      tint = if (recording) PathlyMapColors.PlanLiveTrack else PathlyMapColors.PlanActualTrack,
+      tint = color,
     )
     Spacer(modifier = Modifier.width(PathlySpacing.md))
     Column(modifier = Modifier.weight(1f).padding(vertical = PathlySpacing.sm)) {

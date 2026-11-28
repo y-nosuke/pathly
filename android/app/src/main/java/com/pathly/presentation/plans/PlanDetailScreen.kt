@@ -66,6 +66,7 @@ import com.google.maps.android.compose.Polyline
 import com.google.maps.android.compose.rememberCameraPositionState
 import com.pathly.R
 import com.pathly.domain.model.GeoBounds
+import com.pathly.domain.model.GpsTrack
 import com.pathly.domain.model.MapSurface
 import com.pathly.domain.model.PlanDetail
 import com.pathly.domain.model.PlanItem
@@ -260,6 +261,14 @@ private fun PlanDetailContent(
   val topInset = MapTopBarInset + (if (plan.isDayTrip) 0.dp else DayChipRowHeight) +
     (if (draftUpdatedAt != null) DraftBannerHeight else 0.dp) + (if (showPickBanner) DraftBannerHeight else 0.dp)
   val day = selectedDay?.takeIf { it in 1..plan.dayCount }
+  // 実際の経路・立ち寄りが計画の何日目か（日付の外・日付なしなら null）。日の色で計画の線と対応させる。
+  val zone = remember { ZoneId.systemDefault() }
+  val dayOfDate: (LocalDate?) -> Int? = { date ->
+    val start = plan.startDate
+    if (start == null || date == null) null else (date.toEpochDay() - start.toEpochDay() + 1).toInt().takeIf { it in 1..plan.dayCount }
+  }
+  val trackDayOf: (GpsTrack) -> Int? = { track -> dayOfDate(track.startTime.toInstant().atZone(zone).toLocalDate()) }
+  val actualTrackColor: (Int?) -> Color = { d -> d?.let { actualLineColor(planDayColor(it)) } ?: PathlyMapColors.PlanActualTrack }
 
   // 地図に出す場所の行（選んだ日だけ、または全部）。
   val shownItems = detail.items.filter { it.isPlace && (day == null || it.dayIndex == day) }
@@ -268,7 +277,9 @@ private fun PlanDetailContent(
   // 出ているマーカーがすべて入るように寄せる（開いたとき・日を選び直したとき・行が増減したとき）。
   val fitKey = "$day:" + shownItems.joinToString(",") { "${it.place!!.placeId}" }
   var fittedFor by rememberSaveable { mutableStateOf<String?>(null) }
-  LaunchedEffect(mapLoaded, fitKey) {
+  // 右下の［全体］を押した回数。押すたびに寄せ直す（寄せる先が変わっていなくても）。
+  var fitRequest by remember { mutableIntStateOf(0) }
+  LaunchedEffect(mapLoaded, fitKey, fitRequest) {
     if (!mapLoaded || fittedFor == fitKey) return@LaunchedEffect
     fittedFor = fitKey
     val points = shownItems.map { LatLng(it.place!!.latitude, it.place.longitude) }
@@ -401,12 +412,25 @@ private fun PlanDetailContent(
       // 登録済みの場所（レイヤーで出したとき）。押すと、この計画に足すかを聞く。
       RegisteredPlaceMarkers(registeredPlaces.visible, infoWindow) { dialog = PlanDialog.AddFromMap(it.placeId, it.name ?: "この場所") }
       // 結び付いた経路（レイヤーで重ねたとき）と、記録中の経路（結び付いていればいつも）。計画の線・マーカーより奥に一色で描く。
+      // 線は計画の日の色を一段薄くした色（日付の外・日付なしは灰青）。日を選んでいればその日に始まった経路だけ。
       PlanActualTracks(
-        lines = if (showActualTracks) actuals.linked.mapNotNull { actualLines[it.track.id] } else emptyList(),
-        liveTrack = liveTrack,
+        lines = if (showActualTracks) {
+          actuals.linked.filter { day == null || trackDayOf(it.track) == day }.mapNotNull { linked ->
+            actualLines[linked.track.id]?.let { actualTrackColor(trackDayOf(linked.track)) to it }
+          }
+        } else {
+          emptyList()
+        },
+        liveTrack = liveTrack?.takeIf { day == null || trackDayOf(it) == day }?.let { actualTrackColor(trackDayOf(it)) to it },
       )
       // 実際の立ち寄り（記録中の経路のものはいつも、過去の経路のものは重ねている間だけ）。
-      PlanActualStops(actualStops.filter { it.onRecording || showActualTracks }, infoWindow)
+      // 日を選んでいれば、その日の立ち寄りだけ（番号は日ごとに行った順）。
+      val dayDate = day?.let { plan.dateOf(it) }
+      PlanActualStops(
+        actualStops.filter { (it.onRecording || showActualTracks) && (dayDate == null || it.date == dayDate) },
+        infoWindow,
+        colorOf = { stop -> dayOfDate(stop.date)?.let { planDayColor(it) } ?: PathlyMapColors.PlanActualTrack },
+      )
       // 同じ日の中を順に直線で結ぶ（「すべて」のときは日ごとに色を変える）。
       shownItems.groupBy { it.dayIndex }.forEach { (d, dayItems) ->
         if (dayItems.size >= 2) {
@@ -559,7 +583,10 @@ private fun PlanDetailContent(
           MapRoundButton(
             icon = R.drawable.ic_fit,
             contentDescription = "計画の全体を見る",
-            onClick = { fittedFor = null },
+            onClick = {
+              fittedFor = null
+              fitRequest++
+            },
           )
         }
         if (hasLocationPermission) {
@@ -621,6 +648,7 @@ private fun PlanDetailContent(
           ),
           actuals = actuals,
           liveDistanceMeters = liveTrack?.totalDistanceMeters,
+          trackColorOf = { track -> trackDayOf(track)?.let { planDayColor(it) } ?: PathlyMapColors.PlanActualTrack },
         )
       }
     }
