@@ -229,6 +229,7 @@ private fun PlanDetailContent(
   val liveTrack by viewModel.actuals.liveTrack.collectAsStateWithLifecycle()
   val showActualTracks by viewModel.actuals.showTracks.collectAsStateWithLifecycle()
   val actualLines by viewModel.actuals.lines.collectAsStateWithLifecycle()
+  val actualStops by viewModel.actuals.stops.collectAsStateWithLifecycle()
 
   // 新しく登録する場所（地図のタップ・POI・検索で選んだ施設）。出している間は計画のシートを下げて登録のシートを出す。
   var placeSheetTarget by remember { mutableStateOf<PlaceSheetTarget?>(null) }
@@ -404,6 +405,8 @@ private fun PlanDetailContent(
         lines = if (showActualTracks) actuals.linked.mapNotNull { actualLines[it.track.id] } else emptyList(),
         liveTrack = liveTrack,
       )
+      // 実際の立ち寄り（記録中の経路のものはいつも、過去の経路のものは重ねている間だけ）。
+      PlanActualStops(actualStops.filter { it.onRecording || showActualTracks }, infoWindow)
       // 同じ日の中を順に直線で結ぶ（「すべて」のときは日ごとに色を変える）。
       shownItems.groupBy { it.dayIndex }.forEach { (d, dayItems) ->
         if (dayItems.size >= 2) {

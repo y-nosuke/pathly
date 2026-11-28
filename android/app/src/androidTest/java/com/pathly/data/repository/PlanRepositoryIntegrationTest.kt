@@ -9,15 +9,21 @@ import com.pathly.data.local.entity.GooglePlaceEntity
 import com.pathly.data.local.entity.GpsTrackEntity
 import com.pathly.data.local.entity.PlaceEntity
 import com.pathly.data.local.entity.StopEntity
+import com.pathly.domain.model.Place
 import com.pathly.domain.model.PlaceSource
 import com.pathly.domain.model.PlanTrackLink
 import com.pathly.domain.model.PlanTrackSource
+import com.pathly.domain.model.Stop
 import com.pathly.domain.model.newPlanDetail
 import com.pathly.domain.model.sameContentAs
 import com.pathly.domain.model.withDates
 import com.pathly.domain.model.withMemoAdded
 import com.pathly.domain.model.withPlacesAdded
 import com.pathly.domain.model.withTitleAndNote
+import com.pathly.domain.repository.LiveStopRepository
+import io.mockk.every
+import io.mockk.mockk
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.runTest
@@ -42,13 +48,17 @@ class PlanRepositoryIntegrationTest {
   private lateinit var repository: PlanRepositoryImpl
   private var nextId = -1L
 
+  // 記録中の「立ち寄り中」（テストで差し替える）。
+  private val liveStop = MutableStateFlow<Stop?>(null)
+  private val liveStops = mockk<LiveStopRepository>(relaxed = true).also { every { it.currentStop } returns liveStop }
+
   @Before
   fun setup() = runBlocking {
     val context = ApplicationProvider.getApplicationContext<Context>()
     database = Room.inMemoryDatabaseBuilder(context, PathlyDatabase::class.java)
       .allowMainThreadQueries()
       .build()
-    repository = PlanRepositoryImpl(database.planDao())
+    repository = PlanRepositoryImpl(database.planDao(), liveStops)
   }
 
   @After
@@ -207,6 +217,24 @@ class PlanRepositoryIntegrationTest {
     assertEquals(setOf(1L, 3L), repository.loadDraft(planId, draftId)!!.unlinkTrackIds)
     val plain = repository.saveDraft(draftId, detail)
     assertEquals("選んでいなければ空", emptySet<Long>(), repository.loadDraft(planId, plain)!!.unlinkTrackIds)
+  }
+
+  @Test
+  fun stayingAtAPlace_onTheRecordingTrack_alreadyCountsAsVisited() = runTest {
+    val a = insertPlace(name = "A")
+    val day = LocalDate.now()
+    val planId = repository.savePlan(newPlanDetail("今日").withDates(day, 1).withPlacesAdded(1, listOf(place(a))) { nextId-- }, null)
+    val track = insertTrack(day, active = true)
+    repository.linkTrack(planId, track, PlanTrackSource.START)
+    assertEquals(0, repository.observePlans().first().single().visitedCount)
+
+    // 立ち寄り中（まだ確定していない）でも「行った」。
+    liveStop.value = Stop(1L, Place(a, "A", 35.0, 135.0, null, null, null, null, null, Date(0), Date(0)), track, Date(0), Date(1))
+    assertEquals(1, repository.observePlans().first().single().visitedCount)
+
+    // 立ち寄り中をやめれば外れる。
+    liveStop.value = null
+    assertEquals(0, repository.observePlans().first().single().visitedCount)
   }
 
   @Test

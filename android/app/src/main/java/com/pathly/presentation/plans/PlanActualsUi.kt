@@ -2,6 +2,7 @@ package com.pathly.presentation.plans
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -19,6 +20,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -29,8 +31,10 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -38,6 +42,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
@@ -47,6 +52,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.google.android.gms.maps.model.LatLng
+import com.google.maps.android.compose.MarkerState
 import com.google.maps.android.compose.Polyline
 import com.pathly.R
 import com.pathly.domain.model.GpsPoint
@@ -54,8 +60,10 @@ import com.pathly.domain.model.GpsTrack
 import com.pathly.domain.model.PlanTrackSource
 import com.pathly.presentation.common.ListGroupHeader
 import com.pathly.presentation.common.ListHeader
+import com.pathly.presentation.common.MapInfoWindowState
 import com.pathly.presentation.common.MapLayerDivider
 import com.pathly.presentation.common.MapLayersButton
+import com.pathly.presentation.common.MapMarker
 import com.pathly.presentation.common.MapRegisteredPlaces
 import com.pathly.presentation.common.RegisteredPlacesLayerItems
 import com.pathly.presentation.history.formatKm
@@ -133,6 +141,52 @@ internal fun PlanActualTracks(lines: List<List<List<GpsPoint>>>, liveTrack: GpsT
   }
 }
 
+/**
+ * 地図に出す実際の立ち寄り（小さな丸の印）。経路の線と同じ色（記録中は橙、過去は灰青）、立ち寄り中は記録画面と同じティール。
+ * 計画の番号のマーカーより奥・小さめにする。押すと場所の名前と時刻の吹き出し。
+ */
+@Composable
+internal fun PlanActualStops(stops: List<ActualStop>, infoWindow: MapInfoWindowState) {
+  val zone = remember { ZoneId.systemDefault() }
+  stops.forEach { actual ->
+    val stop = actual.stop
+    key(stop.id, actual.live) {
+      val state = remember(stop.place.latitude, stop.place.longitude) { MarkerState(LatLng(stop.place.latitude, stop.place.longitude)) }
+      val color = when {
+        actual.live -> PathlyMapColors.CurrentStop
+        actual.onRecording -> PathlyMapColors.PlanLiveTrack
+        else -> PathlyMapColors.PlanActualTrack
+      }
+      val arrival = CLOCK.format(stop.arrivalTime.toInstant().atZone(zone))
+      MapMarker(
+        "plan-actual-stop",
+        stop.id,
+        actual.live,
+        infoWindow = infoWindow,
+        state = state,
+        title = stop.place.displayName,
+        snippet = if (actual.live) "$arrival – 滞在中" else "$arrival–${CLOCK.format(stop.departureTime.toInstant().atZone(zone))}",
+        anchor = Offset(0.5f, 0.5f),
+        zIndex = ACTUAL_STOP_Z_INDEX,
+        bubbleColor = color,
+      ) {
+        Box(
+          modifier = Modifier
+            .size(ACTUAL_STOP_SIZE)
+            .border(2.dp, PathlyMapColors.OnMarker, CircleShape)
+            .padding(2.dp)
+            .clip(CircleShape)
+            .background(color),
+        )
+      }
+    }
+  }
+}
+
+/** 実際の立ち寄りの印は、ふつうのマーカー（1）より手前、計画の番号のマーカー（5）より奥。 */
+private const val ACTUAL_STOP_Z_INDEX = 2f
+private val ACTUAL_STOP_SIZE = 14.dp
+
 /** 実際の経路は計画の直線（zIndex 0）より奥。 */
 private const val ACTUAL_TRACK_Z_INDEX = -1f
 
@@ -154,6 +208,8 @@ internal fun PlanTrackPicker(
 ) {
   val all by tracks.collectAsStateWithLifecycle()
   val plansOfTracks by trackPlans.collectAsStateWithLifecycle()
+  // ほかの計画に結び付いている経路を押したときの確認（付け替える経路と、今結び付いている計画の名前）。
+  var reassign by remember { mutableStateOf<Pair<GpsTrack, String>?>(null) }
   var query by rememberSaveable { mutableStateOf("") }
   var searchOpen by rememberSaveable { mutableStateOf(false) }
   // 名前の検索を開いている間の戻るは、検索を閉じる（語も消す）。
@@ -230,7 +286,9 @@ internal fun PlanTrackPicker(
               checked = checked,
               enabled = true,
               supporting = other?.let { "「$it」から付け替えます" },
-              onToggle = { onToggle(track, !checked) },
+              onToggle = {
+                if (!checked && other != null) reassign = track to other else onToggle(track, !checked)
+              },
               zone = zone,
               today = today,
             )
@@ -238,6 +296,21 @@ internal fun PlanTrackPicker(
         }
       }
     }
+  }
+  reassign?.let { (track, otherTitle) ->
+    AlertDialog(
+      onDismissRequest = { reassign = null },
+      modifier = Modifier.testTag("planReassignConfirm"),
+      title = { Text("ほかの計画に結び付いています") },
+      text = { Text("この経路は「$otherTitle」に結び付いています。この計画に付け替えますか？（1 つの経路が結び付く計画は 1 つだけです）") },
+      confirmButton = {
+        TextButton(onClick = {
+          reassign = null
+          onToggle(track, true)
+        }, modifier = Modifier.testTag("planReassignOk")) { Text("付け替える") }
+      },
+      dismissButton = { TextButton(onClick = { reassign = null }) { Text("やめる") } },
+    )
   }
 }
 
@@ -328,8 +401,8 @@ internal fun LinkedTrackRow(
         text = listOfNotNull(
           trackSubtitle(track, zone, distance),
           when (linked.source) {
-            PlanTrackSource.START -> "記録の開始で結び付け"
-            PlanTrackSource.MANUAL -> "手で結び付け"
+            PlanTrackSource.START -> "自動で結び付け"
+            PlanTrackSource.MANUAL -> "手動で結び付け"
           },
         ).joinToString("・"),
         style = MaterialTheme.typography.bodySmall,

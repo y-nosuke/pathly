@@ -9,12 +9,15 @@ import com.pathly.domain.model.PlanTrackLink
 import com.pathly.domain.model.PlanTrackSource
 import com.pathly.domain.model.Priority
 import com.pathly.domain.model.RegisteredPlace
+import com.pathly.domain.model.Stop
 import com.pathly.domain.model.StoredPlanDraft
 import com.pathly.domain.model.TrackStart
 import com.pathly.domain.model.TrackVisit
 import com.pathly.domain.repository.GpsTrackRepository
+import com.pathly.domain.repository.LiveStopRepository
 import com.pathly.domain.repository.PlaceSearchRepository
 import com.pathly.domain.repository.PlanRepository
+import com.pathly.domain.repository.StopRepository
 import com.pathly.domain.repository.WishlistRepository
 import com.pathly.domain.usecase.PlaceEditUseCase
 import io.mockk.coEvery
@@ -52,6 +55,9 @@ class PlanDetailViewModelTest {
   private val wishlistRepository = mockk<WishlistRepository>(relaxed = true)
   private val placeSearchRepository = mockk<PlaceSearchRepository>(relaxed = true)
   private val gpsTrackRepository = mockk<GpsTrackRepository>(relaxed = true)
+  private val stopRepository = mockk<StopRepository>(relaxed = true)
+  private val liveStop = MutableStateFlow<Stop?>(null)
+  private val liveStopRepository = mockk<LiveStopRepository>(relaxed = true).also { every { it.currentStop } returns liveStop }
 
   // 経路・立ち寄り・手の結び付き（DB の購読）。
   private val trackStarts = MutableStateFlow<List<TrackStart>>(emptyList())
@@ -77,6 +83,7 @@ class PlanDetailViewModelTest {
     every { planRepository.observeDatedPlans() } returns datedPlans
     every { planRepository.observeTrackPlans() } returns MutableStateFlow(emptyMap())
     every { gpsTrackRepository.getAllTracks() } returns tracks
+    every { stopRepository.getStopsForTrack(any()) } returns MutableStateFlow(emptyList())
     every { gpsTrackRepository.getActiveTrackRealtime() } returns MutableStateFlow(null)
   }
 
@@ -92,6 +99,8 @@ class PlanDetailViewModelTest {
     wishlistRepository,
     placeSearchRepository,
     gpsTrackRepository,
+    stopRepository,
+    liveStopRepository,
   )
 
   private fun registerReturns(result: PlaceEditUseCase.RegisterResult) {
@@ -297,6 +306,9 @@ class PlanDetailViewModelTest {
     vm.setDates(day.plusDays(7), 1, unlinkOutside = true)
     advanceUntilIdle()
     coVerify(exactly = 0) { planRepository.unlinkTrack(any(), any()) }
+    // 保存の前から見た目では外れる。日付を選び直すときは、隠したものも含めて聞く。
+    assertEquals(emptyList<Long>(), vm.actuals.state.value.linked.map { it.track.id })
+    assertEquals(listOf(20L), vm.tracksOutside(day.plusDays(7), 1).map { it.id })
 
     vm.save()
     advanceUntilIdle()
@@ -330,6 +342,34 @@ class PlanDetailViewModelTest {
     reopened.save()
     advanceUntilIdle()
     coVerify { planRepository.unlinkTrack(1L, 20L) }
+  }
+
+  @Test
+  fun hiddenTracks_comeBack_whenTheChoiceIsUndone() = runTest(testDispatcher) {
+    val day = LocalDate.of(2026, 11, 30)
+    coEvery { planRepository.loadPlan(1L) } returns PlanDetail(Plan(1L, "鎌倉", null, day, 1, Date(0), Date(0)), emptyList())
+    coEvery { planRepository.savePlan(any(), any()) } returns 1L
+    tracks.value = listOf(gpsTrack(20L, Date.from(day.atTime(10, 0).atZone(ZoneId.systemDefault()).toInstant())))
+    links.value = listOf(PlanTrackLink(20L, 1L, PlanTrackSource.START))
+    val vm = viewModel()
+    backgroundScope.launch { vm.actuals.state.collect {} }
+    advanceUntilIdle()
+
+    vm.setDates(day.plusDays(7), 1, unlinkOutside = true)
+    advanceUntilIdle()
+    assertEquals(0, vm.actuals.state.value.linked.size)
+
+    // 日付を戻せば、外す予定も無くなって見える。
+    vm.setDates(day, 1)
+    advanceUntilIdle()
+    assertEquals(listOf(20L), vm.actuals.state.value.linked.map { it.track.id })
+
+    // 外す予定のものを結び付け直したら、保存しても外さない。
+    vm.setDates(day.plusDays(7), 1, unlinkOutside = true)
+    vm.setTrackLinked(20L, linked = true)
+    vm.save()
+    advanceUntilIdle()
+    coVerify(exactly = 0) { planRepository.unlinkTrack(any(), any()) }
   }
 
   @Test

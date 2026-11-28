@@ -5,8 +5,11 @@ import com.pathly.domain.model.GpsTrack
 import com.pathly.domain.model.PlanActuals
 import com.pathly.domain.model.PlanTrackLink
 import com.pathly.domain.model.PlanTrackSource
+import com.pathly.domain.model.Stop
 import com.pathly.domain.repository.GpsTrackRepository
+import com.pathly.domain.repository.LiveStopRepository
 import com.pathly.domain.repository.PlanRepository
+import com.pathly.domain.repository.StopRepository
 import com.pathly.util.Logger
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
@@ -34,6 +37,9 @@ data class LinkedTrack(
   val source: PlanTrackSource,
 )
 
+/** 地図に出す実際の立ち寄り。[onRecording] は記録中の経路のもの、[live] は立ち寄り中（まだ確定していない）。 */
+data class ActualStop(val stop: Stop, val onRecording: Boolean, val live: Boolean)
+
 /** 計画の詳細の「計画と実績」（→ docs/specs/plans.md）。どれも保存せず、読むたびに求める。 */
 data class PlanActualsState(
   /** 結び付いた経路（新しい順）。 */
@@ -44,6 +50,8 @@ data class PlanActualsState(
   val visitedPlaceIds: Set<Long> = emptySet(),
   /** 結び付いた経路のうち記録中のもの。 */
   val recordingTrackId: Long? = null,
+  /** 保存済みの結び付きのすべて（外す予定で見た目から隠したものも含む。日付の外になる経路を求めるのに使う）。 */
+  val savedLinked: List<LinkedTrack> = emptyList(),
 )
 
 /**
@@ -53,8 +61,12 @@ data class PlanActualsState(
 internal class PlanDetailActuals(
   /** 保存済みの計画の id（一度も保存していなければ 0）。 */
   savedPlanId: Flow<Long>,
+  /** 日付の変更で「外す」を選んだ経路（保存まで見た目から隠す。実際に外すのは保存のとき）。 */
+  hiddenTrackIds: Flow<Set<Long>>,
   private val planRepository: PlanRepository,
   private val gpsTrackRepository: GpsTrackRepository,
+  private val stopRepository: StopRepository,
+  private val liveStopRepository: LiveStopRepository,
   private val scope: CoroutineScope,
   // 線の点を読んで区間に分ける計算を主スレッドから外す。テストでは差し替える。
   private val computeDispatcher: () -> CoroutineDispatcher,
@@ -78,15 +90,20 @@ internal class PlanDetailActuals(
     planRepository.observeTrackStarts(),
     planRepository.observeTrackVisits(),
     gpsTrackRepository.getAllTracks(),
-  ) { links, starts, visits, tracks ->
-    val linked = links.mapTo(LinkedHashSet()) { it.trackId }
+    hiddenTrackIds,
+  ) { links, starts, visits, tracks, hidden ->
     val byId = tracks.associateBy { it.id }
+    val saved = links.mapNotNull { link -> byId[link.trackId]?.let { LinkedTrack(it, link.source) } }
+      .sortedByDescending { it.track.startTime }
+    // 外す予定のものは、保存の前から見た目では外す（シートの一覧・線・立ち寄りの印・「行った」）。
+    val shown = saved.filter { it.track.id !in hidden }
+    val linked = links.mapTo(LinkedHashSet()) { it.trackId } - hidden
     PlanActualsState(
-      linked = links.mapNotNull { link -> byId[link.trackId]?.let { LinkedTrack(it, link.source) } }
-        .sortedByDescending { it.track.startTime },
+      linked = shown,
       linkedTrackIds = linked,
       visitedPlaceIds = PlanActuals.visitedPlaceIds(linked, visits),
       recordingTrackId = PlanActuals.recordingTrackId(linked, starts),
+      savedLinked = saved,
     )
   }.stateIn(scope, SharingStarted.Eagerly, PlanActualsState())
 
@@ -94,6 +111,22 @@ internal class PlanDetailActuals(
   val liveTrack: StateFlow<GpsTrack?> = state.map { it.recordingTrackId }.distinctUntilChanged().flatMapLatest { id ->
     if (id == null) flowOf(null) else gpsTrackRepository.getActiveTrackRealtime().map { it?.takeIf { t -> t.id == id } }
   }.stateIn(scope, SharingStarted.Eagerly, null)
+
+  /**
+   * 地図に出す立ち寄り（結び付いた経路の確定した立ち寄りと、記録中の「立ち寄り中」）。
+   * 記録中の経路のものはいつも、過去の経路のものはレイヤーで「結び付いた経路」を重ねている間だけ出す（画面で絞る）。
+   */
+  val stops: StateFlow<List<ActualStop>> = state.map { it.linkedTrackIds to it.recordingTrackId }.distinctUntilChanged().flatMapLatest { (ids, recording) ->
+    val confirmed: Flow<List<Stop>> = if (ids.isEmpty()) {
+      flowOf(emptyList())
+    } else {
+      combine(ids.map { stopRepository.getStopsForTrack(it) }) { lists -> lists.flatMap { it } }
+    }
+    combine(confirmed, liveStopRepository.currentStop) { stops, live ->
+      stops.map { ActualStop(it, onRecording = it.trackId == recording, live = false) } +
+        listOfNotNull(live?.takeIf { it.trackId in ids }?.let { ActualStop(it, onRecording = true, live = true) })
+    }
+  }.stateIn(scope, SharingStarted.Eagerly, emptyList())
 
   private val _showTracks = MutableStateFlow(false)
 

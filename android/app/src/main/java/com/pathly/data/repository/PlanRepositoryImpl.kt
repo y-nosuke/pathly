@@ -20,6 +20,7 @@ import com.pathly.domain.model.StoredPlanDraft
 import com.pathly.domain.model.TrackStart
 import com.pathly.domain.model.TrackVisit
 import com.pathly.domain.model.normalized
+import com.pathly.domain.repository.LiveStopRepository
 import com.pathly.domain.repository.PlanRepository
 import com.pathly.util.Logger
 import kotlinx.coroutines.flow.Flow
@@ -35,6 +36,8 @@ import javax.inject.Singleton
 @Singleton
 class PlanRepositoryImpl @Inject constructor(
   private val planDao: PlanDao,
+  // 記録中の「立ち寄り中」も「行った」に数える（立ち寄った時点で付くように → docs/specs/plans.md の「行った」）。
+  private val liveStopRepository: LiveStopRepository,
 ) : PlanRepository {
 
   private val logger = Logger("PlanRepository")
@@ -69,9 +72,8 @@ class PlanRepositoryImpl @Inject constructor(
       saved + unsaved
     }
     // 行った・記録中は保存せず、結び付いた経路（plan_tracks）からここで求める（→ adr/0050）。
-    return combine(base, planDao.observeTrackStarts(), planDao.observeAllPlanTracks(), planDao.observeTrackVisits()) { listed, startRows, links, visitRows ->
+    return combine(base, planDao.observeTrackStarts(), planDao.observeAllPlanTracks(), observeTrackVisits()) { listed, startRows, links, visits ->
       val tracks = startRows.map { it.toTrackStart() }
-      val visits = visitRows.map { TrackVisit(it.trackId, it.placeId) }
       val linkedByPlan = links.groupBy({ it.planId }, { it.trackId })
       listed.map { (summary, itemPlaceIds) ->
         // 一度も保存していない計画（id が 0）には結び付かない。
@@ -91,7 +93,10 @@ class PlanRepositoryImpl @Inject constructor(
 
   override fun observeTrackStarts(): Flow<List<TrackStart>> = planDao.observeTrackStarts().map { rows -> rows.map { it.toTrackStart() } }
 
-  override fun observeTrackVisits(): Flow<List<TrackVisit>> = planDao.observeTrackVisits().map { rows -> rows.map { TrackVisit(it.trackId, it.placeId) } }
+  /** 確定した立ち寄りと、記録中の「立ち寄り中」。 */
+  override fun observeTrackVisits(): Flow<List<TrackVisit>> = combine(planDao.observeTrackVisits(), liveStopRepository.currentStop) { rows, live ->
+    rows.map { TrackVisit(it.trackId, it.placeId) } + listOfNotNull(live?.let { TrackVisit(it.trackId, it.place.id) })
+  }
 
   override fun observePlanTracks(planId: Long): Flow<List<PlanTrackLink>> = planDao.observePlanTracks(planId).map { rows -> rows.map { it.toLink() } }
 
