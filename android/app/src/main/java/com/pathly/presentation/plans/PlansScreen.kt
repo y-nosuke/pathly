@@ -39,6 +39,7 @@ import com.pathly.R
 import com.pathly.domain.model.PlanGroup
 import com.pathly.domain.model.PlanSummary
 import com.pathly.presentation.common.ListGroupHeader
+import com.pathly.presentation.common.ListGroupIndent
 import com.pathly.presentation.common.ListHeader
 import com.pathly.presentation.common.ScrollToTopButton
 import com.pathly.presentation.common.ScrollToTopButtonClearance
@@ -172,7 +173,7 @@ internal fun PlansContent(
   }
 }
 
-/** 一覧の 1 行（1 行目に名前、2 行目に日付か日数と場所の数）。名前は 1 行で省略する。 */
+/** 一覧の 1 行（1 行目に名前、2 行目に日付か日数と場所の数）。名前は 1 行で省略する。区分の見出しより一段下げる。 */
 @Composable
 private fun PlanRow(summary: PlanSummary, onClick: () -> Unit) {
   Column(
@@ -181,7 +182,15 @@ private fun PlanRow(summary: PlanSummary, onClick: () -> Unit) {
       .clickable(onClick = onClick)
       .testTag("planRow:${summary.key}"),
   ) {
-    Column(modifier = Modifier.padding(horizontal = PathlySpacing.screenEdge, vertical = PathlySpacing.md)) {
+    // 区分の見出しの下の行なので一段下げる（履歴・場所の分けた一覧と同じ字下げ）。区切りの線は端から端まで。
+    Column(
+      modifier = Modifier.padding(
+        start = PathlySpacing.screenEdge + ListGroupIndent,
+        end = PathlySpacing.screenEdge,
+        top = PathlySpacing.md,
+        bottom = PathlySpacing.md,
+      ),
+    ) {
       Row(verticalAlignment = Alignment.CenterVertically) {
         Text(
           text = summary.plan.title,
