@@ -101,6 +101,9 @@ class PlanDetailViewModelTest {
     gpsTrackRepository,
     stopRepository,
     liveStopRepository,
+    // 線の読み込みもテストのディスパッチャーで走らせる（Dispatchers.Default だと、テストが終わった後に
+    // Main へ戻ろうとして次のテストを落とす）。
+    testDispatcher,
   )
 
   private fun registerReturns(result: PlaceEditUseCase.RegisterResult) {

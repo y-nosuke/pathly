@@ -3,6 +3,7 @@ package com.pathly.presentation.plans
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.pathly.di.ComputeDispatcher
 import com.pathly.domain.model.GeoBounds
 import com.pathly.domain.model.GpsTrack
 import com.pathly.domain.model.MapRegion
@@ -38,7 +39,7 @@ import com.pathly.presentation.tracking.RegionMarkerActions
 import com.pathly.util.Logger
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -130,6 +131,7 @@ class PlanDetailViewModel @Inject constructor(
   gpsTrackRepository: GpsTrackRepository,
   stopRepository: StopRepository,
   liveStopRepository: LiveStopRepository,
+  @ComputeDispatcher computeDispatcher: CoroutineDispatcher,
 ) : ViewModel() {
 
   private val logger = Logger("PlanDetailViewModel")
@@ -156,7 +158,7 @@ class PlanDetailViewModel @Inject constructor(
     stopRepository = stopRepository,
     liveStopRepository = liveStopRepository,
     scope = viewModelScope,
-    computeDispatcher = { Dispatchers.Default },
+    computeDispatcher = { computeDispatcher },
   )
 
   /** 選んでいる日（null は「すべて」）。 */
