@@ -48,6 +48,8 @@ import com.pathly.presentation.common.MapMarker
 import com.pathly.presentation.common.RouteBadgeMarker
 import com.pathly.presentation.common.SheetContentHorizontalPadding
 import com.pathly.presentation.common.rememberMarkerIconCache
+import com.pathly.presentation.common.rememberStopLabelsVisible
+import com.pathly.presentation.common.stopLabelGlyph
 import com.pathly.presentation.history.listTitleOf
 import com.pathly.ui.theme.PathlyElevation
 import com.pathly.ui.theme.PathlyMapColors
@@ -91,6 +93,7 @@ internal fun TrackFocusEffect(
 @GoogleMapComposable
 internal fun TrackOverlayContent(tracks: List<OverlayTrack>, infoWindow: MapInfoWindowState) {
   val icons = rememberMarkerIconCache()
+  val showStopLabels = rememberStopLabelsVisible()
   tracks.forEach { overlay ->
     key(overlay.track.id) {
       val color = PathlyMapColors.Overlay[overlay.colorIndex]
@@ -108,7 +111,11 @@ internal fun TrackOverlayContent(tracks: List<OverlayTrack>, infoWindow: MapInfo
             MarkerState(position = LatLng(stop.place.latitude, stop.place.longitude))
           }
           val number = index + 1
-          val icon = icons.getLabeled(OverlayStopIconKey(overlay.colorIndex, number), stop.place.displayName) {
+          val icon = icons.getLabeled(
+            OverlayStopIconKey(overlay.colorIndex, number),
+            stop.place.displayName.takeIf { showStopLabels },
+            stopLabelGlyph(stop.place),
+          ) {
             RouteBadgeMarker(bg = color, size = 28.dp) {
               Text(text = "$number", color = PathlyMapColors.OnMarker, fontWeight = FontWeight.Bold, fontSize = 12.sp)
             }

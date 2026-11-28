@@ -303,6 +303,12 @@ private fun PlanDetailContent(
   // 出ているマーカーがすべて入るように寄せる（開いたとき・日を選び直したとき・行が増減したとき）。
   val fitKey = "$day:$showActualTracks:" + shownItems.joinToString(",") { "${it.place!!.placeId}" }
   var fittedFor by rememberSaveable { mutableStateOf<String?>(null) }
+  // 右下の［全体］は、寄せる先（下の LaunchedEffect の points と同じもの）が 1 つでもあれば出す。
+  // 場所の行が無い計画でも、結び付けた経路・立ち寄りがあればそこへ寄せられるようにする。
+  val hasFitTarget = shownItems.isNotEmpty() ||
+    shownLines.any { (_, line) -> line.second.any { it.isNotEmpty() } } ||
+    !shownLive?.smoothedPoints.isNullOrEmpty() ||
+    shownStops.isNotEmpty()
   // 右下の［全体］を押した回数。押すたびに寄せ直す（寄せる先が変わっていなくても）。
   var fitRequest by remember { mutableIntStateOf(0) }
   LaunchedEffect(mapLoaded, fitKey, fitRequest) {
@@ -612,10 +618,10 @@ private fun PlanDetailContent(
         bottomInset = if (activeSheet.detent == SheetDetent.HIDDEN) SheetRestoreButtonInset else mapBottomPadding,
         modifier = Modifier.align(Alignment.BottomEnd),
       ) {
-        if (shownItems.isNotEmpty()) {
+        if (hasFitTarget) {
           MapRoundButton(
             icon = R.drawable.ic_fit,
-            contentDescription = "計画の全体を見る",
+            contentDescription = "全体を見る",
             onClick = {
               fittedFor = null
               fitRequest++

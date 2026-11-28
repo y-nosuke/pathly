@@ -17,6 +17,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
@@ -47,6 +48,7 @@ import com.google.maps.android.compose.currentCameraPositionState
 import com.pathly.R
 import com.pathly.domain.model.GpsPoint
 import com.pathly.domain.model.GpsTrack
+import com.pathly.domain.model.Place
 import com.pathly.domain.model.PlaceCategoryGroup
 import com.pathly.domain.model.RegisteredPlace
 import com.pathly.domain.model.Stop
@@ -94,6 +96,35 @@ internal fun categoryGlyph(group: PlaceCategoryGroup): Int = when (group) {
   // 業種が分からない場所は、これまでどおりの場所ピン。
   PlaceCategoryGroup.OTHER -> R.drawable.ic_place
 }
+
+/**
+ * 立ち寄りの名札の頭に付ける業種のアイコン（→ specs/map.md）。業種が分からない場所は null（名前だけ）。
+ * 場所ピンを出しても何の場所かは分からず、番号のバッジと紛らわしいだけなので付けない。
+ */
+@DrawableRes
+internal fun stopLabelGlyph(place: Place): Int? = PlaceCategoryGroup.of(place.category).takeIf { it != PlaceCategoryGroup.OTHER }?.let(::categoryGlyph)
+
+/**
+ * 立ち寄りの名札（業種のアイコン＋名前）を出すか。ズームが [STOP_LABEL_MIN_ZOOM] 以上のときだけ出す（→ specs/map.md）。
+ * 引いた地図では立ち寄りが寄り集まって名札どうしが重なり、読めないうえに番号まで隠すため。
+ *
+ * 切り替えるのは地図が止まったときだけ（[RegisteredPlaceMarkers] のまとめ直しと同じ）。ピンチの途中で
+ * 段をまたぐたびにマーカーの画像を差し替えると、ちらつく。GoogleMap の content 内で呼ぶ。
+ */
+@Composable
+internal fun rememberStopLabelsVisible(): Boolean {
+  val cameraPositionState = currentCameraPositionState
+  var visible by remember(cameraPositionState) { mutableStateOf(cameraPositionState.position.zoom >= STOP_LABEL_MIN_ZOOM) }
+  LaunchedEffect(cameraPositionState) {
+    snapshotFlow { if (cameraPositionState.isMoving) null else cameraPositionState.position.zoom >= STOP_LABEL_MIN_ZOOM }
+      .filterNotNull()
+      .collect { visible = it }
+  }
+  return visible
+}
+
+// 立ち寄りの名札を出す最小のズーム。15 で画面の幅がおよそ 1.5km（街の一角が入るくらい）。
+private const val STOP_LABEL_MIN_ZOOM = 15f
 
 // ピンの寸法。頭は丸バッジと同じ直径にして、並んだときに大きさが揃って見えるようにする。
 private val PinWidth = 38.dp
@@ -543,12 +574,13 @@ internal fun RouteMapContent(
 
   // マーカーの画像のキャッシュは GoogleMap 1 つにつき 1 つ。登録済みの場所と立ち寄りで共有する。
   val icons = rememberMarkerIconCache()
+  val showStopLabels = rememberStopLabelsVisible()
 
   // 登録済みの場所（トグルON時）。立ち寄りマーカーの下に敷き、重なりでは立ち寄りを前面にする。
   RegisteredPlaceMarkers(registeredPlaces, infoWindow, icons = icons, onRegisteredPlaceClick = onRegisteredPlaceClick)
 
-  // 立ち寄りのマーカーも、登録済みの場所と同じくバッジの下に名前を添える（→ specs/map.md）。
-  // 確定した立ち寄りのバッジは番号ごとに 1 回だけ描き、名前はキャッシュが Canvas で書き足す。
+  // 立ち寄りのマーカーには、バッジの下に名札（業種のアイコン＋名前）を添える。引いた地図では番号だけ（→ specs/map.md）。
+  // 確定した立ち寄りのバッジは番号ごとに 1 回だけ描き、名札はキャッシュが Canvas で書き足す。
   // 立ち寄り中は滞在時間で見た目が変わり続けるので、キャッシュに入れずに描く（下）。
 
   // 立ち寄り場所（訪問順の番号つき紫バッジ）。番号でルートの順序が読める。
@@ -563,7 +595,8 @@ internal fun RouteMapContent(
         MarkerState(position = LatLng(stop.place.latitude, stop.place.longitude))
       }
       val number = index + 1
-      val icon = icons.getLabeled(StopIconKey(number), stop.place.displayName) {
+      val label = stop.place.displayName.takeIf { showStopLabels }
+      val icon = icons.getLabeled(StopIconKey(number), label, stopLabelGlyph(stop.place)) {
         RouteBadgeMarker(bg = PathlyMapColors.Stop) {
           Text(
             text = "$number",
@@ -595,8 +628,10 @@ internal fun RouteMapContent(
       MarkerState(position = LatLng(stop.place.latitude, stop.place.longitude))
     }
     val name = stop.place.name ?: stop.place.googleName ?: stop.place.googleAddress
+    val label = name?.takeIf { showStopLabels }
+    val glyph = stopLabelGlyph(stop.place)
     // 滞在時間が 1 分ごとに変わるので、キャッシュには入れず、変わったときだけ描き直す。
-    val icon = remember(icons, stop.durationMinutes, name) { icons.createLabeled(name) { CurrentStopBadge(stop.durationMinutes) } }
+    val icon = remember(icons, stop.durationMinutes, label, glyph) { icons.createLabeled(label, glyph) { CurrentStopBadge(stop.durationMinutes) } }
     MapMarker(
       icon = icon.icon,
       infoWindow = infoWindow,
