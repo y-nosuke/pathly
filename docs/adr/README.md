@@ -68,3 +68,4 @@
 | [0050](0050-plans-as-ordered-items-with-optional-dates.md)  | 計画は場所を参照する行の並びとして別のテーブルに持ち、日付は後から付け、「行った」は立ち寄りから求める（v22・v23）         | Accepted |
 | [0051](0051-plan-tab-and-overlay-on-maps.md)                | 計画のタブを足して 5 つにし、計画は番号と直線で地図に描き、記録画面と計画の詳細で記録中の経路と重ねて見る                  | Accepted |
 | [0052](0052-plan-edits-saved-explicitly-with-drafts.md)     | 計画の編集は「保存」で確定し、途中は下書きとして残せる                                                                     | Accepted |
+| [0053](0053-confirm-only-what-cannot-be-undone.md)          | 確認ダイアログは戻せない操作だけに出し、戻せる削除は取り消しのスナックバーで、組み立てる編集は「保存」で確定する           | Accepted |
