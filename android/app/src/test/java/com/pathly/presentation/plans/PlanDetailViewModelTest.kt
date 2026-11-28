@@ -373,6 +373,31 @@ class PlanDetailViewModelTest {
   }
 
   @Test
+  fun choosingToUnlink_withoutChangingTheDates_canBeSaved_andAsksOnLeave() = runTest(testDispatcher) {
+    val day = LocalDate.of(2026, 11, 30)
+    coEvery { planRepository.loadPlan(1L) } returns PlanDetail(Plan(1L, "鎌倉", null, day, 1, Date(0), Date(0)), emptyList())
+    coEvery { planRepository.savePlan(any(), any()) } returns 1L
+    // 最初から計画の日付の外にある経路（手動で結び付けた前の週の経路）。
+    tracks.value = listOf(gpsTrack(20L, Date.from(day.minusDays(7).atTime(10, 0).atZone(ZoneId.systemDefault()).toInstant())))
+    links.value = listOf(PlanTrackLink(20L, 1L, PlanTrackSource.MANUAL))
+    val vm = viewModel()
+    backgroundScope.launch { vm.actuals.state.collect {} }
+    advanceUntilIdle()
+    assertEquals(listOf(20L), vm.tracksOutside(day, 1).map { it.id })
+
+    // 日付は変えずに「外す」だけを選んで決める。
+    vm.setDates(day, 1, unlinkOutside = true)
+    advanceUntilIdle()
+    val edit = (vm.state.value as PlanDetailState.Loaded).edit
+    assertTrue("保存を押せる", edit.canSave)
+    assertTrue("戻るときに聞く", edit.hasUnsavedChanges)
+
+    vm.save()
+    advanceUntilIdle()
+    coVerify { planRepository.unlinkTrack(1L, 20L) }
+  }
+
+  @Test
   fun keepingTracksOutside_doesNotUnlink() = runTest(testDispatcher) {
     val day = LocalDate.of(2026, 11, 30)
     coEvery { planRepository.loadPlan(1L) } returns PlanDetail(Plan(1L, "鎌倉", null, day, 1, Date(0), Date(0)), emptyList())

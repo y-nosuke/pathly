@@ -71,14 +71,20 @@ data class PlanEditState(
   /** 下書きの id と保存した日時（下書きが無ければ null）。 */
   val draftId: Long? = null,
   val draftUpdatedAt: Date? = null,
+  /**
+   * 日付の変更で「結び付きを外す」を選んだ経路（見た目では外し、「保存」で実際に外す）。結び付きの変更も編集に数える。
+   */
+  val unlinkTrackIds: Set<Long> = emptySet(),
+  /** 最後に書いた（下書きに残した）ときの [unlinkTrackIds]。 */
+  val persistedUnlinkTrackIds: Set<Long> = emptySet(),
 ) {
   val isNew: Boolean get() = saved == null
 
-  /** 保存できる（保存済みと違う。新しい計画は中身があれば）。 */
-  val canSave: Boolean get() = saved?.let { !detail.sameContentAs(it) } ?: (draftId != null || !detail.sameContentAs(persisted))
+  /** 保存できる（保存済みと違う・外す経路がある。新しい計画は中身があれば）。 */
+  val canSave: Boolean get() = saved?.let { !detail.sameContentAs(it) || unlinkTrackIds.isNotEmpty() } ?: (draftId != null || !detail.sameContentAs(persisted))
 
-  /** 戻るときに聞く（最後に書いた中身から変えた）。 */
-  val hasUnsavedChanges: Boolean get() = !detail.sameContentAs(persisted)
+  /** 戻るときに聞く（最後に書いた中身・外す経路から変えた）。 */
+  val hasUnsavedChanges: Boolean get() = !detail.sameContentAs(persisted) || unlinkTrackIds != persistedUnlinkTrackIds
 }
 
 /** 計画の詳細の読み込みの状態。 */
@@ -129,9 +135,6 @@ class PlanDetailViewModel @Inject constructor(
 
   private val _state = MutableStateFlow<PlanDetailState>(PlanDetailState.Loading)
 
-  // 日付を変えて日付の外になった結び付きのうち、「外す」を選んだもの。日付の変更と同じく、保存のときに外す。
-  // 下書きに残すときは下書きにも持つ（下書きから保存したときに外すため）。init の load より前に置く。
-  private val pendingUnlinks = MutableStateFlow<Set<Long>>(emptySet())
   val state: StateFlow<PlanDetailState> = _state.asStateFlow()
 
   /** 場所の名前とアンカーの座標（足した場所を名前・地図に出すのに使う）。 */
@@ -144,7 +147,7 @@ class PlanDetailViewModel @Inject constructor(
    */
   internal val actuals = PlanDetailActuals(
     savedPlanId = _state.map { (it as? PlanDetailState.Loaded)?.edit?.saved?.plan?.id ?: 0L },
-    hiddenTrackIds = pendingUnlinks,
+    hiddenTrackIds = _state.map { (it as? PlanDetailState.Loaded)?.edit?.unlinkTrackIds ?: emptySet() },
     planRepository = planRepository,
     gpsTrackRepository = gpsTrackRepository,
     stopRepository = stopRepository,
@@ -236,8 +239,9 @@ class PlanDetailViewModel @Inject constructor(
       val draft = if (planIdArg != 0L || draftIdArg != null) planRepository.loadDraft(planIdArg, draftIdArg) else null
       _state.value = when {
         draft != null -> {
-          pendingUnlinks.value = draft.unlinkTrackIds
-          PlanDetailState.Loaded(PlanEditState(draft.detail, saved, draft.detail, draft.draftId, draft.updatedAt))
+          PlanDetailState.Loaded(
+            PlanEditState(draft.detail, saved, draft.detail, draft.draftId, draft.updatedAt, draft.unlinkTrackIds, draft.unlinkTrackIds),
+          )
         }
 
         saved != null -> PlanDetailState.Loaded(PlanEditState(saved, saved, saved))
@@ -280,8 +284,8 @@ class PlanDetailViewModel @Inject constructor(
   }
 
   fun setDates(startDate: LocalDate?, dayCount: Int, unlinkOutside: Boolean = false) {
-    pendingUnlinks.value = if (unlinkOutside) tracksOutside(startDate, dayCount).mapTo(HashSet()) { it.id } else emptySet()
-    change { it.withDates(startDate, dayCount) }
+    val unlink = if (unlinkOutside) tracksOutside(startDate, dayCount).mapTo(HashSet()) { it.id } else emptySet()
+    _state.update { s -> if (s is PlanDetailState.Loaded) s.copy(edit = s.edit.copy(detail = s.edit.detail.withDates(startDate, dayCount), unlinkTrackIds = unlink)) else s }
     // 選んでいた日が無くなったら「すべて」に戻す。
     val day = selectedDay.value
     if (day != null && day > dayCount) selectDay(null)
@@ -383,8 +387,7 @@ class PlanDetailViewModel @Inject constructor(
     io("保存できませんでした") {
       val planId = planRepository.savePlan(e.detail, e.draftId)
       // 日付の変更で「外す」を選んだ結び付きを外す。
-      pendingUnlinks.value.forEach { planRepository.unlinkTrack(planId, it) }
-      pendingUnlinks.value = emptySet()
+      e.unlinkTrackIds.forEach { planRepository.unlinkTrack(planId, it) }
       // 新しい計画を保存したら、この画面はその計画を指す（アプリが裏で落とされて戻ったときに、保存した計画を開くように）。
       savedStateHandle[ARG_PLAN_ID] = planId
       savedStateHandle[ARG_DRAFT_ID] = 0L
@@ -398,10 +401,10 @@ class PlanDetailViewModel @Inject constructor(
   fun saveDraft(leave: Boolean = false) {
     val e = edit ?: return
     io("下書きに残せませんでした") {
-      val draftId = planRepository.saveDraft(e.draftId, e.detail, pendingUnlinks.value)
+      val draftId = planRepository.saveDraft(e.draftId, e.detail, e.unlinkTrackIds)
       savedStateHandle[ARG_DRAFT_ID] = draftId
       // 書いている間に続けた編集は残す（detail は今のまま、persisted だけ書いた中身にする）。
-      _state.update { s -> if (s is PlanDetailState.Loaded) s.copy(edit = s.edit.copy(persisted = e.detail, draftId = draftId, draftUpdatedAt = Date())) else s }
+      _state.update { s -> if (s is PlanDetailState.Loaded) s.copy(edit = s.edit.copy(persisted = e.detail, persistedUnlinkTrackIds = e.unlinkTrackIds, draftId = draftId, draftUpdatedAt = Date())) else s }
       _events.tryEmit(if (leave) PlanDetailEvent.Leave else PlanDetailEvent.Message("下書きに残しました"))
     }
   }
@@ -409,7 +412,6 @@ class PlanDetailViewModel @Inject constructor(
   /** 下書きを捨てて、保存済みの中身に戻す（一度も保存していなければ画面を離れる）。 */
   fun discardDraft() {
     val e = edit ?: return
-    pendingUnlinks.value = emptySet()
     io("下書きを捨てられませんでした") {
       e.draftId?.let { planRepository.deleteDraft(it) }
       val saved = e.saved
@@ -429,7 +431,9 @@ class PlanDetailViewModel @Inject constructor(
   fun setTrackLinked(trackId: Long, linked: Boolean) {
     val planId = edit?.saved?.plan?.id ?: return
     // 外す予定で隠していた経路を結び付け直したら、外す予定からも外す（保存で外れないように）。
-    if (linked) pendingUnlinks.update { it - trackId }
+    if (linked) {
+      _state.update { s -> if (s is PlanDetailState.Loaded) s.copy(edit = s.edit.copy(unlinkTrackIds = s.edit.unlinkTrackIds - trackId)) else s }
+    }
     io(if (linked) "経路を結び付けられませんでした" else "結び付きを外せませんでした") {
       if (linked) planRepository.linkTrack(planId, trackId, PlanTrackSource.MANUAL) else planRepository.unlinkTrack(planId, trackId)
     }
