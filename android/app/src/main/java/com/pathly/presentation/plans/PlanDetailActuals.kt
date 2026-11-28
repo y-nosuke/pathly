@@ -159,6 +159,14 @@ internal class PlanDetailActuals(
         if (show) ids else emptyList()
       }.collect { ids -> ids.filter { it !in _lines.value }.forEach { loadLine(it) } }
     }
+    // 記録が終わった経路は、確定した形で読み直す（記録中に読んだ形を取っておかない）。
+    scope.launch {
+      var previous: Long? = null
+      state.map { it.recordingTrackId }.distinctUntilChanged().collect { recording ->
+        previous?.takeIf { it != recording }?.let { ended -> _lines.update { it - ended } }
+        previous = recording
+      }
+    }
   }
 
   private suspend fun loadLine(trackId: Long) {

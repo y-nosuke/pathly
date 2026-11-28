@@ -70,7 +70,7 @@ class PlanLinkPromptViewModel @Inject constructor(
   private var job: Job? = null
 
   /** 記録の開始を押した。経路ができるのを待ち、今日の計画があれば聞く。 */
-  fun onTrackingStarted(today: LocalDate = LocalDate.now()) {
+  fun onTrackingStarted(today: LocalDate = LocalDate.now(), startedAtMillis: Long = System.currentTimeMillis()) {
     job?.cancel()
     job = viewModelScope.launch {
       try {
@@ -78,7 +78,10 @@ class PlanLinkPromptViewModel @Inject constructor(
         if (plans.isEmpty()) return@launch
         // 経路はサービスが作るので、記録中の経路が出てくるのを待つ（開始できなかったら出てこないので、待つのをやめる）。
         val trackId = withTimeoutOrNull(TRACK_WAIT_MILLIS) {
-          gpsTrackRepository.getActiveTrackRealtime().mapNotNull { it?.id }.first()
+          // 押す前から残っていた記録中の経路（中断したものなど）ではなく、押した後に始まった経路を待つ。
+          gpsTrackRepository.getActiveTrackRealtime()
+            .mapNotNull { track -> track?.takeIf { it.startTime.time >= startedAtMillis - START_SLACK_MILLIS }?.id }
+            .first()
         } ?: return@launch
         val sorted = plans.sortedWith(compareBy({ it.startDate }, { it.dayCount }, { it.id }))
         // 最初の計画にもう結び付けておく（聞くのに答えなくても、結び付いた状態になる）。
@@ -126,6 +129,9 @@ class PlanLinkPromptViewModel @Inject constructor(
 
   private companion object {
     const val TRACK_WAIT_MILLIS = 15_000L
+
+    /** 押した時刻と経路の開始の時刻のずれ（端末の時計の読み方の差）を見込む幅。 */
+    const val START_SLACK_MILLIS = 5_000L
   }
 }
 

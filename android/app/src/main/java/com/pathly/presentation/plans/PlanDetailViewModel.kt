@@ -431,8 +431,10 @@ class PlanDetailViewModel @Inject constructor(
   fun setTrackLinked(trackId: Long, linked: Boolean) {
     val planId = edit?.saved?.plan?.id ?: return
     // 外す予定で隠していた経路を結び付け直したら、外す予定からも外す（保存で外れないように）。
-    if (linked) {
+    // 外す予定で隠していた経路は、外す予定から外すだけ（結び付きは残っているので書き直さない。結び付き方も変えない）。
+    if (linked && edit?.unlinkTrackIds?.contains(trackId) == true) {
       _state.update { s -> if (s is PlanDetailState.Loaded) s.copy(edit = s.edit.copy(unlinkTrackIds = s.edit.unlinkTrackIds - trackId)) else s }
+      return
     }
     io(if (linked) "経路を結び付けられませんでした" else "結び付きを外せませんでした") {
       if (linked) planRepository.linkTrack(planId, trackId, PlanTrackSource.MANUAL) else planRepository.unlinkTrack(planId, trackId)

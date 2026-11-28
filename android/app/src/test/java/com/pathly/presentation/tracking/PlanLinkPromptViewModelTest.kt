@@ -54,7 +54,7 @@ class PlanLinkPromptViewModelTest {
     coEvery { planRepository.plansOn(today) } returns listOf(plan(2, today), plan(1, today.minusDays(1), days = 3))
     val vm = PlanLinkPromptViewModel(planRepository, gpsTrackRepository)
 
-    vm.onTrackingStarted(today)
+    vm.onTrackingStarted(today, startedAtMillis = 0L)
     // advanceUntilIdle だと待ちの上限（15 秒）まで時計が進むので、今できることだけ進める。
     runCurrent()
     assertNull("経路ができるまでは聞かない", vm.prompt.value)
@@ -79,14 +79,14 @@ class PlanLinkPromptViewModelTest {
     coEvery { planRepository.plansOn(today) } returns emptyList()
     val vm = PlanLinkPromptViewModel(planRepository, gpsTrackRepository)
     activeTrack.value = GpsTrack(id = 40L, startTime = Date(0), endTime = null, isActive = true, createdAt = Date(0), updatedAt = Date(0))
-    vm.onTrackingStarted(today)
+    vm.onTrackingStarted(today, startedAtMillis = 0L)
     advanceUntilIdle()
     assertNull(vm.prompt.value)
 
     // 開始できなかった（経路ができない）ときは、待つのをやめて聞かない。
     activeTrack.value = null
     coEvery { planRepository.plansOn(today) } returns listOf(plan(1, today))
-    vm.onTrackingStarted(today)
+    vm.onTrackingStarted(today, startedAtMillis = 0L)
     advanceTimeBy(20_000)
     advanceUntilIdle()
     assertNull(vm.prompt.value)
@@ -97,7 +97,7 @@ class PlanLinkPromptViewModelTest {
     coEvery { planRepository.plansOn(today) } returns listOf(plan(1, today))
     activeTrack.value = GpsTrack(id = 40L, startTime = Date(0), endTime = null, isActive = true, createdAt = Date(0), updatedAt = Date(0))
     val vm = PlanLinkPromptViewModel(planRepository, gpsTrackRepository)
-    vm.onTrackingStarted(today)
+    vm.onTrackingStarted(today, startedAtMillis = 0L)
     advanceUntilIdle()
 
     vm.close()
@@ -105,7 +105,7 @@ class PlanLinkPromptViewModelTest {
     assertNull(vm.prompt.value)
     coVerify(exactly = 0) { planRepository.unlinkTrack(any(), any()) }
 
-    vm.onTrackingStarted(today)
+    vm.onTrackingStarted(today, startedAtMillis = 0L)
     advanceUntilIdle()
     vm.unlink()
     advanceUntilIdle()
@@ -113,11 +113,27 @@ class PlanLinkPromptViewModelTest {
   }
 
   @Test
+  fun anActiveTrackFromBeforeTheStart_isNotLinked() = runTest(testDispatcher) {
+    coEvery { planRepository.plansOn(today) } returns listOf(plan(1, today))
+    // 押す前から残っていた記録中の経路（開始が押した時刻より前）。
+    activeTrack.value = GpsTrack(id = 30L, startTime = Date(1_000L), endTime = null, isActive = true, createdAt = Date(0), updatedAt = Date(0))
+    val vm = PlanLinkPromptViewModel(planRepository, gpsTrackRepository)
+
+    vm.onTrackingStarted(today, startedAtMillis = 100_000L)
+    runCurrent()
+    assertNull(vm.prompt.value)
+
+    activeTrack.value = GpsTrack(id = 40L, startTime = Date(100_500L), endTime = null, isActive = true, createdAt = Date(0), updatedAt = Date(0))
+    advanceUntilIdle()
+    assertEquals(40L, vm.prompt.value!!.trackId)
+  }
+
+  @Test
   fun choosingTheSamePlan_doesNotWriteAgain() = runTest(testDispatcher) {
     coEvery { planRepository.plansOn(today) } returns listOf(plan(1, today))
     activeTrack.value = GpsTrack(id = 40L, startTime = Date(0), endTime = null, isActive = true, createdAt = Date(0), updatedAt = Date(0))
     val vm = PlanLinkPromptViewModel(planRepository, gpsTrackRepository)
-    vm.onTrackingStarted(today)
+    vm.onTrackingStarted(today, startedAtMillis = 0L)
     advanceUntilIdle()
 
     vm.choose(1L)
