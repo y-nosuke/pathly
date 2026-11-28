@@ -9,20 +9,20 @@
 
 位置に関するデータは、段階を追って「点の集まり」から「意味のある場所」へ変換される。
 
-| 日本語           | 英語（コード）      | 意味                                                                                         | 実体                                                             |
-| ---------------- | ------------------- | -------------------------------------------------------------------------------------------- | ---------------------------------------------------------------- |
-| 軌跡（経路）     | track               | 1回の記録（GPSの点列＋期間）                                                                 | `GpsTrack` / `gps_tracks`                                        |
-| 生データ（生点） | raw point           | 端末が記録したそのままの座標。ノイズを含む                                                   | `GpsPoint` / `gps_points`                                        |
-| 補正後の点列     | smoothed point(s)   | 生データを補正した軌跡の点。「**どこを通ったか**」                                           | `SmoothedPoint` / `smoothed_points`（`GpsTrack.smoothedPoints`） |
-| 検出された滞在   | detected stop       | 補正後点列で立ち寄りの条件を満たした箇所（[stops.md](stops.md)）。**一時結果・非永続**       | `DetectedStop`                                                   |
-| 場所             | place               | 場所そのもの（座標＋**自分で付けた名前**・メモ）。経路から独立                               | `Place` / `places`                                               |
-| 施設（Google）   | google place        | Google 由来の情報（施設名・住所・カテゴリ）。place に 1:0..1                                 | `google_places`（`Place.googleName` など）                       |
-| 立ち寄り（訪問） | stop                | どの経路でどの場所にいつ居たか（place × track）                                              | `Stop` / `stops`                                                 |
-| 解決記録         | resolution (record) | 場所名を Google に問い合わせた記録（叩いたか・結果）                                         | `PlaceResolution` / `place_resolutions`                          |
-| 計画             | plan                | これからのお出掛けの予定。日付は任意で、日数と、日ごとに並ぶ行を持つ（[plans.md](plans.md)） | `Plan` / `plans`                                                 |
-| 計画の下書き     | plan draft          | 保存していない計画の編集の途中。「下書きに残す」で端末に残る（[plans.md](plans.md)）         | `plan_drafts`                                                    |
-| 計画の行         | plan item           | 計画に並ぶ 1 行。**場所の行**（place を参照）か**メモの行**（文言だけ・地図に出ない）        | `PlanItem` / `plan_items`                                        |
-| 結び付いた経路   | linked track        | 計画の実績として見る経路。日付で自動（保存しない）＋手で結び付けたもの                       | `plan_tracks`（手の分。#273 で作る）                             |
+| 日本語           | 英語（コード）      | 意味                                                                                                      | 実体                                                             |
+| ---------------- | ------------------- | --------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------- |
+| 軌跡（経路）     | track               | 1回の記録（GPSの点列＋期間）                                                                              | `GpsTrack` / `gps_tracks`                                        |
+| 生データ（生点） | raw point           | 端末が記録したそのままの座標。ノイズを含む                                                                | `GpsPoint` / `gps_points`                                        |
+| 補正後の点列     | smoothed point(s)   | 生データを補正した軌跡の点。「**どこを通ったか**」                                                        | `SmoothedPoint` / `smoothed_points`（`GpsTrack.smoothedPoints`） |
+| 検出された滞在   | detected stop       | 補正後点列で立ち寄りの条件を満たした箇所（[stops.md](stops.md)）。**一時結果・非永続**                    | `DetectedStop`                                                   |
+| 場所             | place               | 場所そのもの（座標＋**自分で付けた名前**・メモ）。経路から独立                                            | `Place` / `places`                                               |
+| 施設（Google）   | google place        | Google 由来の情報（施設名・住所・カテゴリ）。place に 1:0..1                                              | `google_places`（`Place.googleName` など）                       |
+| 立ち寄り（訪問） | stop                | どの経路でどの場所にいつ居たか（place × track）                                                           | `Stop` / `stops`                                                 |
+| 解決記録         | resolution (record) | 場所名を Google に問い合わせた記録（叩いたか・結果）                                                      | `PlaceResolution` / `place_resolutions`                          |
+| 計画             | plan                | これからのお出掛けの予定。日付は任意で、日数と、日ごとに並ぶ行を持つ（[plans.md](plans.md)）              | `Plan` / `plans`                                                 |
+| 計画の下書き     | plan draft          | 保存していない計画の編集の途中。「下書きに残す」で端末に残る（[plans.md](plans.md)）                      | `plan_drafts`                                                    |
+| 計画の行         | plan item           | 計画に並ぶ 1 行。**場所の行**（place を参照）か**メモの行**（文言だけ・地図に出ない）                     | `PlanItem` / `plan_items`                                        |
+| 結び付いた経路   | linked track        | 計画の実績として見る経路。記録の開始で自動で結び付けるか、手動で結び付ける（1 つの経路は 1 つの計画だけ） | `plan_tracks`                                                    |
 
 データの流れ:
 

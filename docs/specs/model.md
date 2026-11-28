@@ -26,6 +26,8 @@ erDiagram
   plans ||--o{ plan_items : "行"
   plans |o--o| plan_drafts : "下書き"
   places |o--o{ plan_items : "場所の行"
+  plans ||--o{ plan_tracks : "結び付いた経路"
+  gps_tracks ||--o| plan_tracks : "結び付いた計画"
   gps_points |o--o{ smoothed_points : "由来(sourcePointId)"
 
   gps_tracks {
@@ -131,6 +133,11 @@ erDiagram
     String json
     Date updatedAt
   }
+  plan_tracks {
+    Long trackId PK
+    Long planId FK
+    String source
+  }
   plan_items {
     Long id PK
     Long planId FK
@@ -162,6 +169,7 @@ erDiagram
 | **plans**                   | 計画（→ [plans.md](plans.md)・[ADR-0050](../adr/0050-plans-as-ordered-items-with-optional-dates.md)）。`startDate` は開始日（エポック日。null＝日付なし）、`dayCount` は 1 以上（1＝日帰り）                                                                                                                                              | plan_items を従える                                    |
 | **plan_items**              | 計画の行。`placeId` があれば場所の行、null ならメモの行（文言は `title`）。`dayIndex`（何日目）と `position`（日の中の順）で並ぶ。`plannedTime`（着く時刻・0 時からの分）・`stayMinutes`（滞在の目安）は任意                                                                                                                              | plans に属す／places を参照する                        |
 | **plan_drafts**             | 計画の下書き（保存していない編集の途中）。`planId` は保存済みの計画（null＝一度も保存していない）で、計画ごとに 1 つ（UNIQUE）。中身は計画と行の JSON（行は場所を id で指す）                                                                                                                                                             | plans に 0..1（計画の削除で消える）                    |
+| **plan_tracks**             | 計画に結び付いた経路（計画:経路 ＝ 1:多。主キーは経路）。`source` は結び付き方（`START`＝記録の開始で選んだ・`MANUAL`＝手で → [ADR-0050](../adr/0050-plans-as-ordered-items-with-optional-dates.md)）。「行った」は保存せず、結び付いた経路の stops から求める                                                                            | plans と gps_tracks を結ぶ（どちらの削除でも消える）   |
 
 ### 関連と削除規則（要点）
 

@@ -191,11 +191,13 @@ private fun PlanRow(summary: PlanSummary, onClick: () -> Unit) {
           modifier = Modifier.weight(1f, fill = false),
         )
         if (summary.hasDraft) DraftMark(modifier = Modifier.padding(start = PathlySpacing.sm))
+        // 記録中の経路が結び付いている（→ docs/specs/plans.md の「重ねて見る」）。
+        if (summary.isRecording) RecordingMark(modifier = Modifier.padding(start = PathlySpacing.sm))
       }
       Text(
         // 日付なしの区分の中なので「日付なし」は繰り返さない。
         text = (summary.plan.startDate?.let { planDateSummary(summary.plan) } ?: dayCountLabel(summary.plan.dayCount)) +
-          "・場所 ${summary.placeCount}",
+          "・" + planProgressLabel(summary),
         style = MaterialTheme.typography.bodyMedium,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
         maxLines = 1,
@@ -205,6 +207,9 @@ private fun PlanRow(summary: PlanSummary, onClick: () -> Unit) {
     HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
   }
 }
+
+/** 一覧の行の「場所 N」（結び付いた経路があれば「行った N/M」）。 */
+internal fun planProgressLabel(summary: PlanSummary): String = if (summary.linkedTrackCount > 0 && summary.placeCount > 0) "行った ${summary.visitedCount}/${summary.placeCount}" else "場所 ${summary.placeCount}"
 
 /** 右下の（＋）が下端から占める高さ（丸と下の余白）に、上に置くものとの間を足したもの。 */
 private val PlanAddButtonClearance = 56.dp + PathlySpacing.screenEdge + PathlySpacing.sm

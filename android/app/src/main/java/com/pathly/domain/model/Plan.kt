@@ -51,6 +51,12 @@ data class PlanSummary(
   val placeCount: Int,
   /** 下書きの id（下書きが無ければ null）。 */
   val draftId: Long? = null,
+  /** 結び付いた経路の数（日付で自動 ＋ 手で結び付け → [PlanActuals]）。 */
+  val linkedTrackCount: Int = 0,
+  /** 場所の行のうち「行った」の数。 */
+  val visitedCount: Int = 0,
+  /** 記録中の経路が結び付いている。 */
+  val isRecording: Boolean = false,
 ) {
   val hasDraft: Boolean get() = draftId != null
 
@@ -63,6 +69,8 @@ data class StoredPlanDraft(
   val draftId: Long,
   val detail: PlanDetail,
   val updatedAt: Date,
+  /** 日付の変更で「結び付きを外す」を選んだ経路（下書きから保存したときに外す）。 */
+  val unlinkTrackIds: Set<Long> = emptySet(),
 )
 
 /**

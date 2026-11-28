@@ -56,6 +56,8 @@ import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.google.android.gms.maps.CameraUpdateFactory
 import com.google.android.gms.maps.model.CameraPosition
+import com.google.android.gms.maps.model.Dash
+import com.google.android.gms.maps.model.Gap
 import com.google.android.gms.maps.model.LatLng
 import com.google.android.gms.maps.model.LatLngBounds
 import com.google.maps.android.compose.GoogleMap
@@ -66,6 +68,7 @@ import com.google.maps.android.compose.Polyline
 import com.google.maps.android.compose.rememberCameraPositionState
 import com.pathly.R
 import com.pathly.domain.model.GeoBounds
+import com.pathly.domain.model.GpsTrack
 import com.pathly.domain.model.MapSurface
 import com.pathly.domain.model.PlanDetail
 import com.pathly.domain.model.PlanItem
@@ -116,6 +119,9 @@ import com.pathly.ui.theme.PathlyMapColors
 import com.pathly.ui.theme.PathlySpacing
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
+import java.time.LocalDate
+import java.time.ZoneId
 
 /** 計画の詳細（地図の型 → docs/specs/plans.md の「計画の詳細」）。計画が消えたら [onBack]。 */
 @Composable
@@ -124,6 +130,7 @@ fun PlanDetailRoute(
   onBack: () -> Unit,
   onDeleted: (title: String) -> Unit,
   onOpenPlace: (placeId: Long) -> Unit,
+  onOpenTrack: (trackId: Long) -> Unit,
   modifier: Modifier = Modifier,
 ) {
   val state by viewModel.state.collectAsStateWithLifecycle()
@@ -164,6 +171,7 @@ fun PlanDetailRoute(
         onSelectDay = viewModel::selectDay,
         onBack = onBack,
         onOpenPlace = onOpenPlace,
+        onOpenTrack = onOpenTrack,
         viewModel = viewModel,
         snackbarHost = { SwipeDismissSnackbarHost(snackbarHostState, modifier = it) },
         onDismissSnackbar = { snackbarHostState.currentSnackbarData?.dismiss() },
@@ -177,6 +185,7 @@ private sealed interface PlanDialog {
   data object Title : PlanDialog
   data object Dates : PlanDialog
   data object Places : PlanDialog
+  data object Tracks : PlanDialog
   data object NewMemo : PlanDialog
   data object Leave : PlanDialog
   data object DiscardDraft : PlanDialog
@@ -192,6 +201,7 @@ private fun PlanDetailContent(
   onSelectDay: (Int?) -> Unit,
   onBack: () -> Unit,
   onOpenPlace: (Long) -> Unit,
+  onOpenTrack: (Long) -> Unit,
   viewModel: PlanDetailViewModel,
   snackbarHost: @Composable (Modifier) -> Unit,
   onDismissSnackbar: () -> Unit,
@@ -216,7 +226,14 @@ private fun PlanDetailContent(
   var dialog by remember { mutableStateOf<PlanDialog?>(null) }
   // 保存していない変更があれば、戻る前に保存・下書き・破棄を聞く。
   val requestBack = { if (edit.hasUnsavedChanges) dialog = PlanDialog.Leave else onBack() }
-  BackHandler(enabled = edit.hasUnsavedChanges && dialog != PlanDialog.Places) { dialog = PlanDialog.Leave }
+  BackHandler(enabled = edit.hasUnsavedChanges && dialog != PlanDialog.Places && dialog != PlanDialog.Tracks) { dialog = PlanDialog.Leave }
+
+  // 計画と実績（結び付いた経路・行った・記録中の経路 → docs/specs/plans.md の「計画と実績」）。
+  val actuals by viewModel.actuals.state.collectAsStateWithLifecycle()
+  val liveTrack by viewModel.actuals.liveTrack.collectAsStateWithLifecycle()
+  val showActualTracks by viewModel.actuals.showTracks.collectAsStateWithLifecycle()
+  val actualLines by viewModel.actuals.lines.collectAsStateWithLifecycle()
+  val actualStops by viewModel.actuals.stops.collectAsStateWithLifecycle()
 
   // 新しく登録する場所（地図のタップ・POI・検索で選んだ施設）。出している間は計画のシートを下げて登録のシートを出す。
   var placeSheetTarget by remember { mutableStateOf<PlaceSheetTarget?>(null) }
@@ -247,18 +264,47 @@ private fun PlanDetailContent(
   val topInset = MapTopBarInset + (if (plan.isDayTrip) 0.dp else DayChipRowHeight) +
     (if (draftUpdatedAt != null) DraftBannerHeight else 0.dp) + (if (showPickBanner) DraftBannerHeight else 0.dp)
   val day = selectedDay?.takeIf { it in 1..plan.dayCount }
+  // 実際の経路・立ち寄りが計画の何日目か（日付の外・日付なしなら null）。日の色で計画の線と対応させる。
+  val zone = remember { ZoneId.systemDefault() }
+  val dayOfDate: (LocalDate?) -> Int? = { date ->
+    val start = plan.startDate
+    if (start == null || date == null) null else (date.toEpochDay() - start.toEpochDay() + 1).toInt().takeIf { it in 1..plan.dayCount }
+  }
+  val trackDayOf: (GpsTrack) -> Int? = { track -> dayOfDate(track.startTime.toInstant().atZone(zone).toLocalDate()) }
+  // 実際の経路・立ち寄りの色は、その日の色そのもの（計画の線とは線の形で分ける）。日付の外・日付なしは灰青。
+  val actualColor: (Int?) -> Color = { d -> d?.let { planDayColor(it) } ?: PathlyMapColors.PlanActualTrack }
+  // 地図に出す実際の経路と立ち寄り（「実際も見る」の間だけ。日を選んでいればその日の分だけ）。
+  val dayDate = day?.let { plan.dateOf(it) }
+  val shownLines = if (showActualTracks) {
+    actuals.linked.filter { day == null || trackDayOf(it.track) == day }.mapNotNull { linked ->
+      actualLines[linked.track.id]?.let { linked.track.id to (actualColor(trackDayOf(linked.track)) to it) }
+    }
+  } else {
+    emptyList()
+  }
+  val shownLive = liveTrack?.takeIf { showActualTracks && (day == null || trackDayOf(it) == day) }
+  val shownStops = if (showActualTracks) actualStops.filter { dayDate == null || it.date == dayDate } else emptyList()
+  // 押した経路・立ち寄りへ地図を寄せる（線を読み終えてから寄せるので、寄せる先の経路の id を持っておく）。
+  // 押すたびに寄せ直すよう、押した回数も持つ（同じ経路を続けて押しても寄せる）。
+  var focusRequest by remember { mutableStateOf<Pair<Long, Int>?>(null) }
 
   // 地図に出す場所の行（選んだ日だけ、または全部）。
   val shownItems = detail.items.filter { it.isPlace && (day == null || it.dayIndex == day) }
   val numbers = detail.placeNumbers
 
   // 出ているマーカーがすべて入るように寄せる（開いたとき・日を選び直したとき・行が増減したとき）。
-  val fitKey = "$day:" + shownItems.joinToString(",") { "${it.place!!.placeId}" }
+  val fitKey = "$day:$showActualTracks:" + shownItems.joinToString(",") { "${it.place!!.placeId}" }
   var fittedFor by rememberSaveable { mutableStateOf<String?>(null) }
-  LaunchedEffect(mapLoaded, fitKey) {
+  // 右下の［全体］を押した回数。押すたびに寄せ直す（寄せる先が変わっていなくても）。
+  var fitRequest by remember { mutableIntStateOf(0) }
+  LaunchedEffect(mapLoaded, fitKey, fitRequest) {
     if (!mapLoaded || fittedFor == fitKey) return@LaunchedEffect
     fittedFor = fitKey
-    val points = shownItems.map { LatLng(it.place!!.latitude, it.place.longitude) }
+    // 計画の場所と、出している実際の経路・立ち寄り（「実際も見る」の間）が全部入るように寄せる。
+    val points = shownItems.map { LatLng(it.place!!.latitude, it.place.longitude) } +
+      shownLines.flatMap { (_, line) -> line.second.flatten().map { LatLng(it.latitude, it.longitude) } } +
+      shownLive?.smoothedPoints.orEmpty().map { LatLng(it.latitude, it.longitude) } +
+      shownStops.map { LatLng(it.stop.place.latitude, it.stop.place.longitude) }
     when {
       points.isEmpty() -> Unit
 
@@ -269,6 +315,32 @@ private fun PlanDetailContent(
         cameraPositionState.animate(CameraUpdateFactory.newLatLngBounds(bounds, with(density) { FitPadding.roundToPx() }))
       }
     }
+  }
+  // 「実際のお出掛け」の行を押したら、その経路へ寄せる（線を読み終えるのを待つ。待ちきれなければ寄せない）。
+  // 寄せる途中で鍵が変わると寄せるのが止まるので、鍵は押したことだけにし、線は中で待つ。
+  LaunchedEffect(focusRequest) {
+    val id = focusRequest?.first ?: return@LaunchedEffect
+    val points = withTimeoutOrNull(FOCUS_WAIT_MILLIS) {
+      snapshotFlow {
+        (if (liveTrack?.id == id) liveTrack?.smoothedPoints.orEmpty() else actualLines[id]?.flatten().orEmpty())
+          .map { LatLng(it.latitude, it.longitude) }
+      }.first { it.isNotEmpty() }
+    } ?: return@LaunchedEffect
+    if (points.distinct().size == 1) {
+      cameraPositionState.animate(CameraUpdateFactory.newLatLngZoom(points.first(), PLACE_ZOOM))
+    } else {
+      val bounds = points.fold(LatLngBounds.builder()) { b, p -> b.include(p) }.build()
+      cameraPositionState.animate(CameraUpdateFactory.newLatLngBounds(bounds, with(density) { FitPadding.roundToPx() }))
+    }
+  }
+  // 場所の行が無い計画で記録中の経路が結び付いていれば、記録中の経路へ寄せる（開いたとき 1 回。重ねた線が見えるように）。
+  var fittedLive by rememberSaveable { mutableStateOf(false) }
+  val livePoints = liveTrack?.smoothedPoints.orEmpty()
+  LaunchedEffect(mapLoaded, livePoints.isNotEmpty(), shownItems.isEmpty()) {
+    if (!mapLoaded || fittedLive || livePoints.isEmpty() || shownItems.isNotEmpty()) return@LaunchedEffect
+    val bounds = livePoints.fold(LatLngBounds.builder()) { b, p -> b.include(LatLng(p.latitude, p.longitude)) }.build()
+    cameraPositionState.move(CameraUpdateFactory.newLatLngBounds(bounds, with(density) { FitPadding.roundToPx() }))
+    fittedLive = true
   }
   // 足した後は、足した日の見出しへ寄せる（足した行が見える所へ。日帰りは末尾へ）。行が増えてから動かす。
   var scrollToDay by remember { mutableStateOf<Int?>(null) }
@@ -378,13 +450,22 @@ private fun PlanDetailContent(
     ) {
       // 登録済みの場所（レイヤーで出したとき）。押すと、この計画に足すかを聞く。
       RegisteredPlaceMarkers(registeredPlaces.visible, infoWindow) { dialog = PlanDialog.AddFromMap(it.placeId, it.name ?: "この場所") }
-      // 同じ日の中を順に直線で結ぶ（「すべて」のときは日ごとに色を変える）。
+      // 実際の経路（「実際も見る」の間）。その日の色の実線で、道に沿って描く。計画の線（点線の直線）・マーカーより奥。
+      PlanActualTracks(
+        lines = shownLines.map { it.second },
+        liveTrack = shownLive?.let { actualColor(trackDayOf(it)) to it },
+      )
+      // 実際の立ち寄り（番号は日ごとに行った順）。
+      PlanActualStops(shownStops, infoWindow, colorOf = { stop -> actualColor(dayOfDate(stop.date)) })
+      // 同じ日の中を順に点線の直線で結ぶ（「すべて」のときは日ごとに色を変える）。予定なので点線にし、実際の経路（実線）と見分ける。
+      val planDash = with(density) { listOf(Dash(PlanDash.toPx()), Gap(PlanGap.toPx())) }
       shownItems.groupBy { it.dayIndex }.forEach { (d, dayItems) ->
         if (dayItems.size >= 2) {
           Polyline(
             points = dayItems.map { LatLng(it.place!!.latitude, it.place.longitude) },
             color = planDayColor(d),
             width = with(density) { RouteWidth.toPx() },
+            pattern = planDash,
           )
         }
       }
@@ -392,6 +473,7 @@ private fun PlanDetailContent(
         val place = item.place!!
         val number = numbers[item.id] ?: return@forEach
         val markerState = remember(place.latitude, place.longitude) { MarkerState(LatLng(place.latitude, place.longitude)) }
+        // シートの番号の丸と同じ日の色（行ったかは、シートの ✓ と実際の立ち寄りの印で分かる）。
         val color = planDayColor(item.dayIndex)
         MapMarker(
           "plan-item",
@@ -462,7 +544,12 @@ private fun PlanDetailContent(
           // 一度も保存していない計画だけ、画面を閉じずに下書きに残せる（保存済みの計画は「保存」で足りる）。
           if (edit.isNew) DraftSaveButton(enabled = edit.hasUnsavedChanges, onClick = { viewModel.saveDraft() })
           SaveButton(enabled = edit.canSave, onClick = { viewModel.save() })
-          RegisteredPlacesLayerButton(registeredPlaces)
+          PlanLayersButton(
+            registeredPlaces = registeredPlaces,
+            linkedTrackCount = actuals.linked.size,
+            showTracks = showActualTracks,
+            onToggleTracks = viewModel.actuals::toggleShowTracks,
+          )
           MapOverflowMenuButton { close ->
             DropdownMenuItem(text = { Text("名前とメモ") }, onClick = {
               close()
@@ -472,6 +559,13 @@ private fun PlanDetailContent(
               close()
               dialog = PlanDialog.Dates
             }, modifier = Modifier.testTag("planMenuDates"))
+            // 結び付きは保存を待たずに入るので、まだ作られていない（一度も保存していない）計画には出さない。
+            if (!edit.isNew) {
+              DropdownMenuItem(text = { Text("経路を結び付ける") }, onClick = {
+                close()
+                dialog = PlanDialog.Tracks
+              }, modifier = Modifier.testTag("planMenuLinkTracks"))
+            }
             if (edit.draftId != null) {
               DropdownMenuItem(text = { Text("下書きを捨てる") }, onClick = {
                 close()
@@ -517,7 +611,10 @@ private fun PlanDetailContent(
           MapRoundButton(
             icon = R.drawable.ic_fit,
             contentDescription = "計画の全体を見る",
-            onClick = { fittedFor = null },
+            onClick = {
+              fittedFor = null
+              fitRequest++
+            },
           )
         }
         if (hasLocationPermission) {
@@ -573,7 +670,29 @@ private fun PlanDetailContent(
             onOpenPlace = { item -> item.place?.let { onOpenPlace(it.placeId) } },
             onRemove = { viewModel.removeItem(it.id) },
             onReorder = viewModel::reorder,
+            onOpenTrack = { onOpenTrack(it.id) },
+            onFocusTrack = { track ->
+              // 隠していれば出してから寄せる。別の日を選んでいれば、その経路の日（計画の日の外なら「すべて」）に切り替える
+              // （選んだ日の経路しか出さないので、そのままだと線の無い所へ寄るだけになる）。
+              if (!showActualTracks) viewModel.actuals.toggleShowTracks()
+              if (day != null && trackDayOf(track) != day) onSelectDay(trackDayOf(track))
+              focusRequest = track.id to ((focusRequest?.second ?: 0) + 1)
+            },
+            onStopClick = { stop ->
+              scope.launch { cameraPositionState.animate(CameraUpdateFactory.newLatLngZoom(LatLng(stop.stop.place.latitude, stop.stop.place.longitude), PLACE_ZOOM)) }
+            },
+            onToggleActuals = viewModel.actuals::toggleShowTracks,
+            onUnlinkTrack = { viewModel.setTrackLinked(it.id, linked = false) },
+            onLinkTracks = { dialog = PlanDialog.Tracks }.takeIf { !edit.isNew },
           ),
+          actuals = actuals,
+          liveDistanceMeters = liveTrack?.totalDistanceMeters,
+          trackColorOf = { track -> actualColor(trackDayOf(track)) },
+          showActuals = showActualTracks,
+          actualStops = actualStops,
+          // 日付の無い日帰りは、立ち寄りをすべて 1 日目に出す。
+          sheetDayOf = { date -> if (plan.startDate == null && plan.isDayTrip) 1 else dayOfDate(date) },
+          stopColorOf = { stop -> if (stop.live) PathlyMapColors.CurrentStop else actualColor(dayOfDate(stop.date)) },
         )
       }
     }
@@ -622,6 +741,18 @@ private fun PlanDetailContent(
     }
 
     // 場所を選ぶ（場所タブの一覧・地図を選ぶモードで、詳細の上に全画面で重ねる）。
+    // 経路を結び付ける（全画面。押したらすぐ結び付く・外れる）。
+    if (dialog == PlanDialog.Tracks) {
+      PlanTrackPicker(
+        tracks = viewModel.actuals.allTracks,
+        linkedTrackIds = actuals.linkedTrackIds,
+        trackPlans = viewModel.actuals.trackPlans,
+        planId = edit.saved?.plan?.id ?: 0L,
+        onToggle = { track, linked -> viewModel.setTrackLinked(track.id, linked) },
+        onClose = { dialog = null },
+      )
+    }
+
     if (dialog == PlanDialog.Places) {
       PlacePickerRoute(
         viewModel = placesViewModel,
@@ -636,7 +767,7 @@ private fun PlanDetailContent(
   }
 
   when (val d = dialog) {
-    null, PlanDialog.Places -> Unit
+    null, PlanDialog.Places, PlanDialog.Tracks -> Unit
 
     PlanDialog.Title -> PlanTitleDialog(plan = plan, onSave = viewModel::updateTitleAndNote, onDismiss = { dialog = null })
 
@@ -645,6 +776,8 @@ private fun PlanDetailContent(
       slots = detail.items.map { PlanSlot(it.id, it.dayIndex, it.position) },
       onSave = viewModel::setDates,
       onDismiss = { dialog = null },
+      overlapOf = viewModel::overlappingPlan,
+      outsideTracksOf = { start, days -> viewModel.tracksOutside(start, days).map { trackTitle(it, ZoneId.systemDefault(), LocalDate.now()) } },
     )
 
     PlanDialog.NewMemo -> PlanItemDialog(
@@ -855,6 +988,13 @@ private val DraftBannerHeight = 48.dp
 
 // 計画の番号のマーカーは、登録済みの場所のマーカーより上に描く。
 private const val PLAN_MARKER_Z_INDEX = 5f
+
+/** 押した経路の線を読み終えるのを待つ長さ。 */
+private const val FOCUS_WAIT_MILLIS = 5_000L
+
+/** 計画の線（点線）の線と間の長さ。 */
+private val PlanDash = 10.dp
+private val PlanGap = 6.dp
 
 /** 下書きを残した日時（「11/27 0:23」）。 */
 private fun draftStamp(date: java.util.Date): String = java.time.format.DateTimeFormatter.ofPattern("M/d H:mm")

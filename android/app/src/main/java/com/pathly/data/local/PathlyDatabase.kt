@@ -30,6 +30,7 @@ import com.pathly.data.local.entity.PlaceResolutionEntity
 import com.pathly.data.local.entity.PlanDraftEntity
 import com.pathly.data.local.entity.PlanEntity
 import com.pathly.data.local.entity.PlanItemEntity
+import com.pathly.data.local.entity.PlanTrackEntity
 import com.pathly.data.local.entity.SmoothedPointEntity
 import com.pathly.data.local.entity.StopEntity
 import com.pathly.data.local.entity.VisitedPlaceEntity
@@ -54,6 +55,7 @@ import com.pathly.util.Logger
     PlanEntity::class,
     PlanItemEntity::class,
     PlanDraftEntity::class,
+    PlanTrackEntity::class,
   ],
   version = PathlyDatabase.VERSION,
   exportSchema = true,
@@ -80,7 +82,7 @@ abstract class PathlyDatabase : RoomDatabase() {
     const val DATABASE_NAME = "pathly_database"
 
     /** スキーマのバージョン。上げるときは DatabaseMigrations にマイグレーションを足す。 */
-    const val VERSION = 22
+    const val VERSION = 23
     private val logger = Logger("PathlyDatabase")
 
     @Volatile

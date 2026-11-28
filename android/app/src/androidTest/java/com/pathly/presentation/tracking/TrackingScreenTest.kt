@@ -68,6 +68,7 @@ class TrackingScreenTest {
   private lateinit var mockOnRequestPermission: () -> Unit
   private lateinit var mockViewModel: TrackingViewModel
   private lateinit var overlayViewModel: TrackOverlayViewModel
+  private lateinit var planLinkPromptViewModel: PlanLinkPromptViewModel
   private lateinit var uiStateFlow: MutableStateFlow<TrackingState>
   private lateinit var placeEdit: PlaceEditActions
   private lateinit var regionMarkers: RegionMarkerActions
@@ -92,6 +93,7 @@ class TrackingScreenTest {
     mockOnRequestPermission = mockk(relaxed = true)
     mockViewModel = mockk(relaxed = true)
     overlayViewModel = TrackOverlayViewModel(mockk(relaxed = true), mockk(relaxed = true))
+    planLinkPromptViewModel = PlanLinkPromptViewModel(mockk(relaxed = true), mockk(relaxed = true))
 
     uiStateFlow = MutableStateFlow(
       TrackingState(
@@ -142,6 +144,7 @@ class TrackingScreenTest {
           onRequestPermission = mockOnRequestPermission,
           viewModel = mockViewModel,
           trackOverlayViewModel = overlayViewModel,
+          planLinkPromptViewModel = planLinkPromptViewModel,
           mapContent = {},
         )
       }
@@ -171,6 +174,7 @@ class TrackingScreenTest {
           onRequestPermission = mockOnRequestPermission,
           viewModel = mockViewModel,
           trackOverlayViewModel = overlayViewModel,
+          planLinkPromptViewModel = planLinkPromptViewModel,
           mapContent = {},
         )
       }
@@ -193,6 +197,7 @@ class TrackingScreenTest {
           onRequestPermission = mockOnRequestPermission,
           viewModel = mockViewModel,
           trackOverlayViewModel = overlayViewModel,
+          planLinkPromptViewModel = planLinkPromptViewModel,
           mapContent = {},
         )
       }
@@ -219,6 +224,7 @@ class TrackingScreenTest {
           onRequestPermission = mockOnRequestPermission,
           viewModel = mockViewModel,
           trackOverlayViewModel = overlayViewModel,
+          planLinkPromptViewModel = planLinkPromptViewModel,
           mapContent = {},
         )
       }
@@ -241,6 +247,7 @@ class TrackingScreenTest {
           onRequestPermission = mockOnRequestPermission,
           viewModel = mockViewModel,
           trackOverlayViewModel = overlayViewModel,
+          planLinkPromptViewModel = planLinkPromptViewModel,
           mapContent = {},
         )
       }
@@ -274,6 +281,7 @@ class TrackingScreenTest {
           onRequestPermission = mockOnRequestPermission,
           viewModel = mockViewModel,
           trackOverlayViewModel = overlayViewModel,
+          planLinkPromptViewModel = planLinkPromptViewModel,
           mapContent = {},
         )
       }
@@ -305,6 +313,7 @@ class TrackingScreenTest {
           onRequestPermission = mockOnRequestPermission,
           viewModel = mockViewModel,
           trackOverlayViewModel = overlayViewModel,
+          planLinkPromptViewModel = planLinkPromptViewModel,
           mapContent = {},
         )
       }
@@ -328,6 +337,7 @@ class TrackingScreenTest {
           onRequestPermission = mockOnRequestPermission,
           viewModel = mockViewModel,
           trackOverlayViewModel = overlayViewModel,
+          planLinkPromptViewModel = planLinkPromptViewModel,
           mapContent = {},
         )
       }
@@ -360,6 +370,7 @@ class TrackingScreenTest {
           onRequestPermission = mockOnRequestPermission,
           viewModel = mockViewModel,
           trackOverlayViewModel = overlayViewModel,
+          planLinkPromptViewModel = planLinkPromptViewModel,
           mapContent = {},
         )
       }
@@ -402,6 +413,7 @@ class TrackingScreenTest {
           onRequestPermission = mockOnRequestPermission,
           viewModel = mockViewModel,
           trackOverlayViewModel = overlayViewModel,
+          planLinkPromptViewModel = planLinkPromptViewModel,
           mapContent = {},
         )
       }
@@ -440,6 +452,7 @@ class TrackingScreenTest {
           onRequestPermission = mockOnRequestPermission,
           viewModel = mockViewModel,
           trackOverlayViewModel = overlayViewModel,
+          planLinkPromptViewModel = planLinkPromptViewModel,
           mapContent = {},
         )
       }
@@ -708,6 +721,7 @@ class TrackingScreenTest {
           onRequestPermission = mockOnRequestPermission,
           viewModel = mockViewModel,
           trackOverlayViewModel = overlayViewModel,
+          planLinkPromptViewModel = planLinkPromptViewModel,
           mapContent = {},
         )
       }
@@ -741,6 +755,7 @@ class TrackingScreenTest {
           onRequestPermission = mockOnRequestPermission,
           viewModel = mockViewModel,
           trackOverlayViewModel = overlayViewModel,
+          planLinkPromptViewModel = planLinkPromptViewModel,
           mapContent = {},
         )
       }
@@ -766,6 +781,7 @@ class TrackingScreenTest {
           onRequestPermission = mockOnRequestPermission,
           viewModel = mockViewModel,
           trackOverlayViewModel = overlayViewModel,
+          planLinkPromptViewModel = planLinkPromptViewModel,
           mapContent = {},
         )
       }
@@ -799,6 +815,7 @@ class TrackingScreenTest {
           onRequestPermission = mockOnRequestPermission,
           viewModel = mockViewModel,
           trackOverlayViewModel = overlayViewModel,
+          planLinkPromptViewModel = planLinkPromptViewModel,
           mapContent = {},
         )
       }
@@ -830,6 +847,7 @@ class TrackingScreenTest {
           onRequestPermission = mockOnRequestPermission,
           viewModel = mockViewModel,
           trackOverlayViewModel = overlayViewModel,
+          planLinkPromptViewModel = planLinkPromptViewModel,
           mapContent = {},
         )
       }
@@ -853,6 +871,7 @@ class TrackingScreenTest {
           onRequestPermission = mockOnRequestPermission,
           viewModel = mockViewModel,
           trackOverlayViewModel = overlayViewModel,
+          planLinkPromptViewModel = planLinkPromptViewModel,
           mapContent = {},
         )
       }
@@ -885,6 +904,7 @@ class TrackingScreenTest {
           onRequestPermission = mockOnRequestPermission,
           viewModel = mockViewModel,
           trackOverlayViewModel = overlayViewModel,
+          planLinkPromptViewModel = planLinkPromptViewModel,
           mapContent = {},
         )
       }
@@ -929,6 +949,7 @@ class TrackingScreenTest {
           onRequestPermission = mockOnRequestPermission,
           viewModel = mockViewModel,
           trackOverlayViewModel = overlayViewModel,
+          planLinkPromptViewModel = planLinkPromptViewModel,
           mapContent = {},
         )
       }
@@ -974,6 +995,7 @@ class TrackingScreenTest {
           onRequestPermission = mockOnRequestPermission,
           viewModel = mockViewModel,
           trackOverlayViewModel = overlayViewModel,
+          planLinkPromptViewModel = planLinkPromptViewModel,
           mapContent = {},
         )
       }
@@ -999,6 +1021,7 @@ class TrackingScreenTest {
           onOpenSettings = onOpenSettings,
           viewModel = mockViewModel,
           trackOverlayViewModel = overlayViewModel,
+          planLinkPromptViewModel = planLinkPromptViewModel,
           mapContent = {},
         )
       }

@@ -582,6 +582,23 @@ object DatabaseMigrations {
     db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS `index_plan_drafts_planId` ON `plan_drafts` (`planId`)")
   }
 
+  /**
+   * v22 → v23: 計画に結び付いた経路（`plan_tracks`）を足す（→ adr/0050）。1 つの経路は 1 つの計画だけ（経路が主キー）。
+   * 計画はまだリリースしていないので、今ある計画と経路の結び付きは書かない。既存のデータは変えない。
+   */
+  val MIGRATION_22_23 = loggedMigration(22, 23) { db ->
+    db.execSQL(
+      "CREATE TABLE IF NOT EXISTS `plan_tracks` (" +
+        "`trackId` INTEGER NOT NULL, " +
+        "`planId` INTEGER NOT NULL, " +
+        "`source` TEXT NOT NULL, " +
+        "PRIMARY KEY(`trackId`), " +
+        "FOREIGN KEY(`trackId`) REFERENCES `gps_tracks`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE , " +
+        "FOREIGN KEY(`planId`) REFERENCES `plans`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+    )
+    db.execSQL("CREATE INDEX IF NOT EXISTS `index_plan_tracks_planId` ON `plan_tracks` (`planId`)")
+  }
+
   val ALL_MIGRATIONS = arrayOf(
     MIGRATION_1_2,
     MIGRATION_2_3,
@@ -604,6 +621,7 @@ object DatabaseMigrations {
     MIGRATION_19_20,
     MIGRATION_20_21,
     MIGRATION_21_22,
+    MIGRATION_22_23,
     // 将来のマイグレーションをここに追加
   )
 }
